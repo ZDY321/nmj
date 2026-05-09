@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>课薪记录 UI 预览</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="app-shell">
+      <aside class="sidebar" aria-label="主导航">
+        <button class="brand sidebar-toggle" type="button" data-sidebar-toggle aria-label="折叠或展开侧边栏">
+          <div class="brand-mark">课</div>
+          <div class="brand-copy">
+            <div class="brand-name">课薪记录</div>
+            <div class="brand-subtitle">Teacher Pay</div>
+          </div>
+        </button>
+
+        <nav class="nav-list" aria-label="界面预览">
+          <button class="nav-item is-active" type="button" data-view-target="login">
+            <span class="nav-icon" aria-hidden="true">01</span>
+            登录页
+          </button>
+          <button class="nav-item" type="button" data-view-target="teacher">
+            <span class="nav-icon" aria-hidden="true">02</span>
+            老师工作台
+          </button>
+          <button class="nav-item" type="button" data-view-target="admin">
+            <span class="nav-icon" aria-hidden="true">03</span>
+            管理后台
+          </button>
+        </nav>
+
+        <div class="sidebar-note">
+          <span class="note-dot" aria-hidden="true"></span>
+          <div class="note-copy">
+            <strong>隐私提示</strong>
+            <span>课程、学生、费用和排课信息只在本人浏览器解密。</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">UI Preview</p>
+            <h1 id="view-title">登录页</h1>
+          </div>
+          <div class="topbar-actions">
+            <div class="top-notice" aria-label="系统公告">
+              <span>系统公告</span>
+              <strong>月底核对前请确认请假与补课记录</strong>
+            </div>
+            <button class="ghost-button" type="button">导出</button>
+          </div>
+        </header>
+
+        <section class="view is-active" id="view-login" aria-labelledby="login-title">
+          <div class="login-grid">
+            <section class="notice-panel">
+              <div class="section-label">系统提示</div>
+              <h2 id="login-title">5 月课时记录提醒</h2>
+              <p id="login-notice-preview">
+                请在每次课程结束后当天记录课时，月底结算以前检查金额和备注。课程内容与费用仅在本人浏览器中解密。
+              </p>
+              <div class="notice-meta">
+                <span>发布人：管理员</span>
+                <span>更新：2026-05-10</span>
+              </div>
+            </section>
+
+            <section class="auth-panel" aria-label="登录表单">
+              <div class="auth-header">
+                <h2>登录</h2>
+                <span>用户名和密码</span>
+              </div>
+              <label class="field">
+                <span>用户名</span>
+                <input type="text" value="teacher_chen" />
+              </label>
+              <label class="field">
+                <span>登录密码</span>
+                <input type="password" value="12345678" />
+              </label>
+              <button class="primary-button" type="button">进入系统</button>
+              <p class="security-copy">
+                登录密码同时用于解锁本人的加密数据，服务器不保存课程和工资明文。
+              </p>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-teacher" aria-labelledby="teacher-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Teacher Dashboard</p>
+              <h2 id="teacher-title">陈老师，晚上好</h2>
+            </div>
+            <div class="segmented-control" aria-label="统计周期">
+              <button class="is-selected" type="button">本月</button>
+              <button type="button">本周</button>
+              <button type="button">全年</button>
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric-card">
+              <span>本月收入</span>
+              <strong>¥ 12,680</strong>
+              <small>较上月 +8.4%</small>
+            </article>
+            <article class="metric-card">
+              <span>上课节数</span>
+              <strong>46</strong>
+              <small>已记录 18 天</small>
+            </article>
+            <article class="metric-card">
+              <span>总课时</span>
+              <strong>72.5 h</strong>
+              <small>平均每节 1.6 h</small>
+            </article>
+            <article class="metric-card">
+              <span>待核对</span>
+              <strong>3</strong>
+              <small>月底前处理</small>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <section class="work-panel">
+              <div class="panel-title-row">
+                <h3>新增课程</h3>
+                <button class="small-button" type="button">保存</button>
+              </div>
+              <div class="form-grid">
+                <label class="field">
+                  <span>日期</span>
+                  <input type="date" value="2026-05-10" />
+                </label>
+                <label class="field">
+                  <span>课程</span>
+                  <input type="text" value="高中数学" />
+                </label>
+                <label class="field">
+                  <span>课时</span>
+                  <input type="number" value="2" />
+                </label>
+                <label class="field">
+                  <span>单价</span>
+                  <input type="number" value="220" />
+                </label>
+              </div>
+            </section>
+
+            <section class="work-panel">
+              <div class="panel-title-row">
+                <h3>排课与到课</h3>
+                <span class="muted-text">自动生成 / 手动确认</span>
+              </div>
+              <div class="schedule-list">
+                <div class="schedule-row">
+                  <div>
+                    <strong>学生 A</strong>
+                    <span>周三 19:00-21:00 · 一对一</span>
+                  </div>
+                  <mark>固定</mark>
+                </div>
+                <div class="schedule-row">
+                  <div>
+                    <strong>数学班课</strong>
+                    <span>周六 09:00-11:00 · 基础 80 + 人头 10</span>
+                  </div>
+                  <mark class="mark-soft">班课</mark>
+                </div>
+                <div class="schedule-row">
+                  <div>
+                    <strong>补课待排</strong>
+                    <span>学生 C 请假，待安排班课补课</span>
+                  </div>
+                  <mark class="mark-warm">待处理</mark>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="work-panel trend-panel">
+            <div class="panel-title-row">
+              <h3>年度变化</h3>
+              <span class="muted-text">收入 / 节数</span>
+            </div>
+            <div class="bar-chart" aria-label="年度收入变化图">
+              <div style="--bar: 44%"><span>1月</span></div>
+              <div style="--bar: 58%"><span>2月</span></div>
+              <div style="--bar: 52%"><span>3月</span></div>
+              <div style="--bar: 70%"><span>4月</span></div>
+              <div style="--bar: 82%"><span>5月</span></div>
+              <div style="--bar: 63%"><span>6月</span></div>
+            </div>
+          </section>
+
+          <section class="table-panel">
+            <div class="panel-title-row">
+              <h3>最近课程</h3>
+              <button class="ghost-button" type="button">筛选</button>
+            </div>
+            <div class="data-table" role="table" aria-label="最近课程">
+              <div class="table-row table-head" role="row">
+                <span role="columnheader">日期</span>
+                <span role="columnheader">课程</span>
+                <span role="columnheader">课时</span>
+                <span role="columnheader">金额</span>
+                <span role="columnheader">状态</span>
+              </div>
+              <div class="table-row" role="row">
+                <span>05-10</span>
+                <span>高中数学</span>
+                <span>2.0 h</span>
+                <span>¥ 440</span>
+                <span><mark>已确认</mark></span>
+              </div>
+              <div class="table-row" role="row">
+                <span>05-09</span>
+                <span>初三物理</span>
+                <span>1.5 h</span>
+                <span>¥ 300</span>
+                <span><mark>已确认</mark></span>
+              </div>
+              <div class="table-row" role="row">
+                <span>05-08</span>
+                <span>数学班课 · C 请假</span>
+                <span>2.0 h</span>
+                <span>¥ 110</span>
+                <span><mark class="mark-soft">待核对</mark></span>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-admin" aria-labelledby="admin-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Admin</p>
+              <h2 id="admin-title">管理后台</h2>
+            </div>
+            <button class="primary-button compact" type="button">保存公告</button>
+          </div>
+
+          <div class="metric-grid admin-metrics">
+            <article class="metric-card">
+              <span>注册老师</span>
+              <strong>18</strong>
+              <small>仅显示账号信息</small>
+            </article>
+            <article class="metric-card">
+              <span>正常账号</span>
+              <strong>16</strong>
+              <small>2 个已停用</small>
+            </article>
+            <article class="metric-card">
+              <span>本周登录</span>
+              <strong>12</strong>
+              <small>不统计课程明细</small>
+            </article>
+          </div>
+
+          <div class="content-grid admin-grid">
+            <section class="work-panel">
+              <div class="panel-title-row">
+                <h3>登录页公告</h3>
+                <span class="muted-text">所有用户可见</span>
+              </div>
+              <label class="field">
+                <span>标题</span>
+                <input id="notice-title-input" type="text" value="5 月课时记录提醒" />
+              </label>
+              <label class="field">
+                <span>内容</span>
+                <textarea id="notice-content-input" rows="5">请在每次课程结束后当天记录课时，月底结算以前检查金额和备注。课程内容与费用仅在本人浏览器中解密。</textarea>
+              </label>
+              <label class="toggle-row">
+                <input type="checkbox" checked />
+                <span>启用公告</span>
+              </label>
+            </section>
+
+            <section class="work-panel">
+              <div class="panel-title-row">
+                <h3>用户列表</h3>
+                <button class="ghost-button" type="button">新增</button>
+              </div>
+              <div class="user-list">
+                <div class="user-row">
+                  <div>
+                    <strong>teacher_chen</strong>
+                    <span>2026-04-18 注册</span>
+                  </div>
+                  <button class="small-button muted" type="button">停用</button>
+                </div>
+                <div class="user-row">
+                  <div>
+                    <strong>teacher_li</strong>
+                    <span>2026-04-21 注册</span>
+                  </div>
+                  <button class="small-button muted" type="button">停用</button>
+                </div>
+                <div class="user-row">
+                  <div>
+                    <strong>teacher_wang</strong>
+                    <span>2026-05-01 注册</span>
+                  </div>
+                  <button class="small-button danger" type="button">删除</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
