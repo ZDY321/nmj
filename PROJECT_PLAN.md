@@ -48,6 +48,9 @@ Layout rules:
 - Left sidebar contains the main navigation and can be collapsed/expanded by clicking the app name or collapse control.
 - Important privacy reminders should stay visible near the bottom-left area of the interface.
 - System notices should be shown near the top-right area after login, and also be visible on the login page before login.
+- Login-page notices should wrap naturally and split at sentence boundaries instead of appearing as one long line.
+- Top-right notices must stay inside their notice box and support two-line wrapping.
+- Sidebar collapse/expand should feel smooth, including the bottom-left privacy reminder.
 - Admin screens should look like operational tools, not promotional pages.
 - Tables and schedules should prioritize scanning, filtering, and quick editing.
 
@@ -228,6 +231,8 @@ Required scheduling abilities:
 - Support irregular/ad-hoc lessons.
 - Support backfilling lessons for previous dates.
 - Generate draft scheduled lessons for a selected date range or month.
+- Generate draft scheduled lessons by selecting a start date, end date, and selected weekdays.
+- Allow manual scheduling by clicking a calendar date after selecting student/class, start time, and end time.
 - Let the teacher confirm, edit, cancel, or mark attendance for generated lessons.
 - Show today's scheduled lessons as reminders.
 - Show campus/location in lesson reminders.
@@ -270,6 +275,19 @@ Reminder requirements:
 - Let the teacher open the lesson record directly from the reminder.
 
 Because the data is encrypted, reminder generation happens in the browser after decrypting schedule and lesson documents.
+
+## 4.4.2 Calendar Overview
+
+The app should include a calendar overview.
+
+Calendar overview requirements:
+
+- Show all scheduled and completed lessons on calendar days.
+- Show day-level status such as completed, pending confirmation, leave, absence, or makeup pending.
+- Show daily lesson count and daily salary amount when available.
+- Let the teacher click a date to see day details.
+- Provide daily, weekly, and monthly summaries near the calendar.
+- Use the calendar for both review and scheduling workflows where practical.
 
 ## 4.5 Makeup Lessons
 
@@ -391,6 +409,20 @@ Suggested model:
 4. Browser decrypts lesson data locally after login.
 
 Implementation detail can be refined later. For the first implementation, Web Crypto API with PBKDF2 + AES-GCM is acceptable. If a well-maintained Argon2id browser package is added later, it can improve password-hardening.
+
+Registration flow:
+
+- First-time users should register before login.
+- Registration asks for username, password, and password confirmation.
+- Password fields should have a show/hide visibility button.
+- After successful registration, the user returns to the login screen and logs in.
+
+Admin role setup:
+
+- Users must not be able to choose "admin" during normal registration.
+- In local demo mode, the first registered account can be treated as admin for testing.
+- In production, admin status should be controlled by the D1 `users.role` field or by a protected initialization script/command.
+- Admin assignment must not depend on a public UI control.
 
 ## 6. Recovery Code
 
@@ -625,6 +657,7 @@ Teacher features:
 - Configure course fee rules
 - Configure recurring schedule rules
 - View today's lesson reminders
+- View calendar overview with daily, weekly, and monthly information
 - Generate draft scheduled lessons
 - Confirm scheduled lessons as completed
 - Add lesson

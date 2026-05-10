@@ -1,0 +1,13 @@
+name = "teacher-salary-tracker"
+main = "src/worker/index.ts"
+compatibility_date = "2026-05-10"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "teacher_salary_tracker"
+database_id = "replace-with-cloudflare-d1-database-id"
