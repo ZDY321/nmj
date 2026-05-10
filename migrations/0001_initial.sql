@@ -39,3 +39,10 @@ VALUES (
   '{"enabled":true,"title":"系统提示","content":"请及时核对课时、请假、补课和工资明细。课程、学生、费用和排课信息会加密保存。","updatedAt":"2026-05-10T00:00:00.000Z"}',
   '2026-05-10T00:00:00.000Z'
 );
+
+INSERT OR IGNORE INTO app_settings (key, value, updated_at)
+VALUES (
+  'registration_enabled',
+  'true',
+  '2026-05-10T00:00:00.000Z'
+);

@@ -19,6 +19,10 @@ type EncryptedDocumentRequest = {
   encryptedPayload: string;
 };
 
+type PublicSettings = {
+  registrationEnabled: boolean;
+};
+
 const jsonHeaders = {
   "content-type": "application/json; charset=utf-8"
 };
@@ -68,6 +72,36 @@ async function getLoginNotice(env: Env): Promise<Response> {
   } catch {
     return json(defaultNotice);
   }
+}
+
+async function getSetting(env: Env, key: string): Promise<string | undefined> {
+  const row = await env.DB.prepare("SELECT value FROM app_settings WHERE key = ?")
+    .bind(key)
+    .first<{ value: string }>();
+  return row?.value;
+}
+
+async function upsertSetting(env: Env, key: string, value: string): Promise<void> {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  )
+    .bind(key, value, now)
+    .run();
+}
+
+async function getPublicSettings(env: Env): Promise<Response> {
+  const registrationEnabled = (await getSetting(env, "registration_enabled")) !== "false";
+  return json({ registrationEnabled } satisfies PublicSettings);
+}
+
+async function updateRegistrationSetting(request: Request, env: Env): Promise<Response> {
+  const body = await readJson<{ enabled?: unknown }>(request);
+  const enabled = Boolean(body.enabled);
+  await upsertSetting(env, "registration_enabled", enabled ? "true" : "false");
+  return json({ registrationEnabled: enabled } satisfies PublicSettings);
 }
 
 async function updateLoginNotice(request: Request, env: Env): Promise<Response> {
@@ -122,11 +156,18 @@ async function listUsers(env: Env): Promise<Response> {
 async function registerUser(request: Request, env: Env): Promise<Response> {
   const body = await readJson<RegisterRequest>(request);
   const now = new Date().toISOString();
+  const registrationEnabled = (await getSetting(env, "registration_enabled")) !== "false";
+
+  if (!registrationEnabled) {
+    return json({ error: "Registration is closed" }, 403);
+  }
 
   if (!body.username || !body.passwordVerifier || !body.passwordSalt) {
     return json({ error: "Missing required registration fields" }, 400);
   }
 
+  const existingUsers = await env.DB.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>();
+  const role = (existingUsers?.total ?? 0) === 0 ? "admin" : "teacher";
   const id = crypto.randomUUID();
   await env.DB.prepare(
     `INSERT INTO users (
@@ -140,7 +181,7 @@ async function registerUser(request: Request, env: Env): Promise<Response> {
       status,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, 'teacher', 'active', ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
   )
     .bind(
       id,
@@ -149,12 +190,13 @@ async function registerUser(request: Request, env: Env): Promise<Response> {
       body.passwordSalt,
       body.encryptedDataKeyByPassword,
       body.encryptedDataKeyByRecovery,
+      role,
       now,
       now
     )
     .run();
 
-  return json({ id, username: body.username, role: "teacher", status: "active" }, 201);
+  return json({ id, username: body.username, role, status: "active" }, 201);
 }
 
 async function getEncryptedDocument(pathname: string, request: Request, env: Env): Promise<Response> {
@@ -223,6 +265,10 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
     return getLoginNotice(env);
   }
 
+  if (request.method === "GET" && pathname === "/api/public/settings") {
+    return getPublicSettings(env);
+  }
+
   if (request.method === "POST" && pathname === "/api/auth/register") {
     return registerUser(request, env);
   }
@@ -237,6 +283,10 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
 
   if (request.method === "PUT" && pathname === "/api/admin/login-notice") {
     return updateLoginNotice(request, env);
+  }
+
+  if (request.method === "PUT" && pathname === "/api/admin/registration") {
+    return updateRegistrationSetting(request, env);
   }
 
   if (pathname.startsWith("/api/encrypted-documents/")) {

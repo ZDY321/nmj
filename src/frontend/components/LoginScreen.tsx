@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, CalendarDays, Eye, EyeOff, GraduationCap, Lock, ShieldCheck, WalletCards } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { hasAnyAccount } from "@/frontend/lib/storage";
 import type { UserRole } from "@/shared/types";
 import { privacyNoticeLines } from "@/frontend/lib/helpers";
+
+type PublicSettings = {
+  registrationEnabled: boolean;
+};
 
 function PasswordField({
   label,
@@ -55,9 +59,30 @@ export function LoginScreen({
   const [username, setUsername] = useState("teacher_chen");
   const [password, setPassword] = useState("demo-password");
   const [confirmPassword, setConfirmPassword] = useState("demo-password");
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/public/settings")
+      .then((response) => (response.ok ? response.json() as Promise<PublicSettings> : undefined))
+      .then((settings) => {
+        if (cancelled || !settings) return;
+        setRegistrationEnabled(settings.registrationEnabled);
+        if (!settings.registrationEnabled) {
+          setMode("login");
+        }
+      })
+      .catch(() => {
+        setRegistrationEnabled(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -66,6 +91,10 @@ export function LoginScreen({
     setSuccess("");
     try {
       if (mode === "register") {
+        if (!registrationEnabled) {
+          setError("当前暂未开放注册，请联系管理员。");
+          return;
+        }
         if (password.length < 8) {
           setError("密码至少需要 8 位。");
           return;
@@ -78,7 +107,7 @@ export function LoginScreen({
         setMode("login");
         setSuccess(
           role === "admin"
-            ? "注册成功。当前本地演示的第一位注册用户会成为管理员，请登录。"
+            ? "注册成功。第一位注册用户已设为管理员，请登录。"
             : "注册成功，请登录。"
         );
         return;
@@ -170,21 +199,24 @@ export function LoginScreen({
                   <Lock size={17} />
                   {busy ? "处理中..." : mode === "login" ? "登录并解锁" : "注册账号"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full text-[#1557c2]"
-                  onClick={() => {
-                    setMode((c) => (c === "login" ? "register" : "login"));
-                    setError("");
-                    setSuccess("");
-                  }}
-                >
-                  {mode === "login" ? "还没有账号？先注册" : "已有账号？返回登录"}
-                </Button>
-                <p className="pt-2 text-center text-xs leading-relaxed text-[#64748b]">
-                  本地演示第一位注册用户为管理员；正式部署时由 users.role 或初始化脚本指定。
-                </p>
+                {registrationEnabled || mode === "register" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full text-[#1557c2]"
+                    onClick={() => {
+                      setMode((c) => (c === "login" ? "register" : "login"));
+                      setError("");
+                      setSuccess("");
+                    }}
+                  >
+                    {mode === "login" ? "还没有账号？先注册" : "已有账号？返回登录"}
+                  </Button>
+                ) : (
+                  <div className="rounded-[12px] bg-[#f8fbff] px-4 py-3 text-center text-sm font-semibold text-[#64748b]">
+                    当前暂未开放注册，请联系管理员开通。
+                  </div>
+                )}
               </form>
             </CardContent>
           </Card>
