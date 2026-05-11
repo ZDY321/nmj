@@ -43,7 +43,8 @@ function translateApiError(error: string): string {
     Forbidden: "账号当前不可用。",
     "Not found": "没有找到对应数据。",
     "Registration is closed": "当前暂未开放注册，请联系管理员。",
-    "Account already exists": "账号已存在。"
+    "Account already exists": "账号已存在。",
+    "Invalid username": "用户名请使用英文字母、数字、下划线、短横线或点，3-32 位，首尾必须是英文字母或数字。"
   };
   return messages[error] ?? error;
 }

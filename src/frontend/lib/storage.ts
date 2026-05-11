@@ -12,6 +12,7 @@ import { createSampleVault } from "./sampleData";
 const storagePrefix = "teacher-salary-tracker:vault:";
 const accountsKey = "teacher-salary-tracker:accounts";
 const sessionKey = "teacher-salary-tracker:session";
+const usernamePattern = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,30}[A-Za-z0-9])$/;
 
 type LookupResponse = {
   username: string;
@@ -149,6 +150,9 @@ export async function registerAccount(
 
   if (!normalizedUsername) {
     throw new Error("请输入用户名。");
+  }
+  if (!usernamePattern.test(normalizedUsername)) {
+    throw new Error("用户名请使用英文字母、数字、下划线、短横线或点，3-32 位，首尾必须是英文字母或数字。");
   }
 
   const passwordSalt = createPasswordSalt();

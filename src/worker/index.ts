@@ -94,6 +94,10 @@ function normalizeUsername(username: string): string {
   return username.trim();
 }
 
+function isValidUsername(username: string): boolean {
+  return /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,30}[A-Za-z0-9])$/.test(username);
+}
+
 function isUserRole(value: string): value is UserRole {
   return value === "teacher" || value === "admin";
 }
@@ -476,6 +480,10 @@ async function registerUser(request: Request, env: Env): Promise<Response> {
     !body.encryptedDataKeyByRecovery
   ) {
     return json({ error: "Missing required registration fields" }, 400);
+  }
+
+  if (!isValidUsername(username)) {
+    return json({ error: "Invalid username" }, 400);
   }
 
   const existingUsers = await env.DB.prepare("SELECT COUNT(*) AS total FROM users WHERE status != 'deleted'").first<{

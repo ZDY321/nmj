@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, CalendarDays, Eye, EyeOff, GraduationCap, Lock, ShieldCheck, WalletCards } from "lucide-react";
+import { AlertTriangle, BookOpen, CalendarDays, Eye, EyeOff, GraduationCap, Lock, ShieldCheck, WalletCards } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 import type { UserRole } from "@/shared/types";
 import { privacyNoticeLines } from "@/frontend/lib/helpers";
 import { getPublicSettings } from "@/frontend/lib/cloud";
+
+const usernamePattern = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,30}[A-Za-z0-9])$/;
+const usernameRuleText = "用户名请使用英文字母、数字、下划线、短横线或点，3-32 位，首尾必须是英文字母或数字。";
 
 function PasswordField({
   label,
@@ -88,6 +91,10 @@ export function LoginScreen({
       if (mode === "register") {
         if (!registrationEnabled) {
           setError("当前暂未开放注册，请联系管理员。");
+          return;
+        }
+        if (!usernamePattern.test(username.trim())) {
+          setError(usernameRuleText);
           return;
         }
         if (password.length < 8) {
@@ -180,12 +187,31 @@ export function LoginScreen({
             <CardContent className="px-0">
               <form onSubmit={submit} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-[#25324a]">用户名</label>
-                  <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+                  <label className="text-sm font-bold text-[#25324a]">
+                    {mode === "register" ? "用户名（英文账号）" : "用户名"}
+                  </label>
+                  <Input
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder={mode === "register" ? "例如 teacher_chen 或 teacher.chen" : undefined}
+                  />
+                  {mode === "register" && (
+                    <p className="text-xs font-semibold leading-5 text-[#64748b]">
+                      {usernameRuleText}
+                    </p>
+                  )}
                 </div>
                 <PasswordField label="登录密码 / 数据密码" value={password} onChange={setPassword} />
                 {mode === "register" && (
-                  <PasswordField label="再次确认密码" value={confirmPassword} onChange={setConfirmPassword} />
+                  <>
+                    <PasswordField label="再次确认密码" value={confirmPassword} onChange={setConfirmPassword} />
+                    <div className="flex gap-3 rounded-[14px] border border-[#fdba74] bg-[#fff7ed] p-4 text-[#9a3412]">
+                      <AlertTriangle size={20} className="mt-0.5 shrink-0" />
+                      <div className="text-sm font-bold leading-6">
+                        请务必严肃保存登录密码 / 数据密码。该密码用于解锁你的加密数据，丢失后无法从云端找回或解密。
+                      </div>
+                    </div>
+                  </>
                 )}
                 {error && <p className="rounded-[12px] bg-[#fee2e2] px-4 py-3 text-sm font-bold text-[#dc2626]">{error}</p>}
                 {success && <p className="rounded-[12px] bg-[#e8f8ef] px-4 py-3 text-sm font-bold text-[#16a34a]">{success}</p>}
