@@ -347,7 +347,7 @@ export function AdminView({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1240px] border-separate border-spacing-y-2 text-left text-sm">
+            <table className="w-full min-w-[1080px] border-separate border-spacing-y-2 text-left text-sm">
               <thead>
                 <tr className="text-xs font-extrabold uppercase text-[#64748b]">
                   <th className="px-3 py-2">账号</th>
@@ -387,14 +387,14 @@ export function AdminView({
                     </td>
                     <td className="rounded-r-[12px] px-3 py-3">
                       {user.status === "active" && (
-                        <div className="flex min-w-[520px] flex-col gap-2 xl:flex-row xl:items-center">
+                        <div className="flex w-[300px] max-w-full flex-col gap-2 2xl:w-[380px] 2xl:flex-row 2xl:items-center">
                           <Input
                             value={deleteReasons[user.id] ?? ""}
                             onChange={(event) =>
                               setDeleteReasons((current) => ({ ...current, [user.id]: event.target.value }))
                             }
                             placeholder="删除原因"
-                            className="h-9 min-w-0 flex-1"
+                            className="h-9 min-w-0 2xl:w-[126px] 2xl:flex-none"
                           />
                           <Input
                             type="password"
@@ -404,7 +404,7 @@ export function AdminView({
                             }
                             placeholder="被删除账号密码"
                             autoComplete="new-password"
-                            className="h-9 min-w-0 flex-1"
+                            className="h-9 min-w-0 2xl:w-[142px] 2xl:flex-none"
                           />
                           <Button
                             size="sm"

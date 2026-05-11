@@ -116,6 +116,7 @@ export function ScheduleView({
   const [customPresetEnd, setCustomPresetEnd] = useState("10:00");
   const [temporaryStudentId, setTemporaryStudentId] = useState("");
   const [makeupDate, setMakeupDate] = useState(todayIso());
+  const [scheduleError, setScheduleError] = useState("");
   const { confirm, dialog } = useConfirmDialog();
 
   const weekStartPreference = weekStartsOn(vault);
@@ -160,6 +161,11 @@ export function ScheduleView({
     { label: "昨天", value: offsetDate(-1) },
     { label: "前天", value: offsetDate(-2) }
   ];
+  const isSingleTimeValid = isOrderedTimeRange(singleStartTime, singleEndTime);
+  const isCustomPresetTimeValid = isOrderedTimeRange(customPresetStart, customPresetEnd);
+  const isBatchTimeValid = isOrderedTimeRange(ruleStartTime, ruleEndTime);
+  const isBatchDateRangeValid = isOrderedDateRange(rangeStart, rangeEnd);
+  const isCalendarTimeValid = isOrderedTimeRange(calendarStartTime, calendarEndTime);
 
   function addSingleLesson(status: "scheduled" | "completed") {
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
@@ -173,8 +179,10 @@ export function ScheduleView({
     status: "scheduled" | "completed",
     force = false
   ) {
+    if (!validateTimeRange(lessonStartTime, lessonEndTime)) return;
     const course = getCourse(vault, courseGroupId);
     if (!course) return;
+    setScheduleError("");
     const conflict = findTimeConflict(lessonDate, lessonStartTime, lessonEndTime);
     if (conflict && !force) {
       confirm({
@@ -205,7 +213,9 @@ export function ScheduleView({
 
   function addCustomPreset() {
     if (!customPresetStart || !customPresetEnd) return;
+    if (!validateTimeRange(customPresetStart, customPresetEnd, "自定义时段的结束时间必须晚于开始时间。")) return;
     const label = `${customPresetStart}-${customPresetEnd}`;
+    setScheduleError("");
     onAddCustomTimePreset({
       id: makeId("time"),
       label,
@@ -367,10 +377,30 @@ export function ScheduleView({
   }
 
   function hasBatchConflicts(): boolean {
+    if (!isBatchDateRangeValid || !isBatchTimeValid) return false;
     const dates = datesBetweenLocal(rangeStart, rangeEnd).filter((item) =>
       selectedWeekdays.includes(weekdayOfDateIso(item))
     );
     return dates.some((item) => findTimeConflict(item, ruleStartTime, ruleEndTime));
+  }
+
+  function showScheduleError(message: string) {
+    setScheduleError(message);
+    window.setTimeout(() => {
+      setScheduleError((current) => (current === message ? "" : current));
+    }, 3200);
+  }
+
+  function validateTimeRange(startTime: string, endTime: string, message = "结束时间必须晚于开始时间。"): boolean {
+    if (isOrderedTimeRange(startTime, endTime)) return true;
+    showScheduleError(message);
+    return false;
+  }
+
+  function validateDateRange(startDate: string, endDate: string): boolean {
+    if (isOrderedDateRange(startDate, endDate)) return true;
+    showScheduleError("范围结束日期不能早于范围开始日期。");
+    return false;
   }
 
   return (
@@ -394,6 +424,11 @@ export function ScheduleView({
           </button>
         ))}
       </div>
+      {scheduleError && (
+        <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-4 py-3 text-sm font-extrabold text-[#b91c1c]">
+          {scheduleError}
+        </div>
+      )}
 
       {schedulePanel === "schedule" && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -421,11 +456,11 @@ export function ScheduleView({
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">开始时间</label>
-                <Input type="time" value={singleStartTime} onChange={(event) => setSingleStartTime(event.target.value)} />
+                <Input type="time" value={singleStartTime} max={singleEndTime} onChange={(event) => setSingleStartTime(event.target.value)} />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">结束时间</label>
-                <Input type="time" value={singleEndTime} onChange={(event) => setSingleEndTime(event.target.value)} />
+                <Input type="time" value={singleEndTime} min={singleStartTime} onChange={(event) => setSingleEndTime(event.target.value)} className={!isSingleTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
               </div>
             </div>
 
@@ -480,9 +515,9 @@ export function ScheduleView({
             <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
               <div className="mb-3 text-sm font-medium">自定义常用时段</div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,140px)_minmax(0,140px)_minmax(122px,auto)]">
-                <Input type="time" value={customPresetStart} onChange={(event) => setCustomPresetStart(event.target.value)} />
-                <Input type="time" value={customPresetEnd} onChange={(event) => setCustomPresetEnd(event.target.value)} />
-                <Button type="button" variant="outline" onClick={addCustomPreset} className="w-full">
+                <Input type="time" value={customPresetStart} max={customPresetEnd} onChange={(event) => setCustomPresetStart(event.target.value)} />
+                <Input type="time" value={customPresetEnd} min={customPresetStart} onChange={(event) => setCustomPresetEnd(event.target.value)} className={!isCustomPresetTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                <Button type="button" variant="outline" onClick={addCustomPreset} className="w-full" disabled={!isCustomPresetTimeValid}>
                   <Plus size={15} /> 保存时段
                 </Button>
               </div>
@@ -512,10 +547,10 @@ export function ScheduleView({
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Button type="button" onClick={() => addSingleLesson("scheduled")} disabled={!singleCourseGroupId}>
+              <Button type="button" onClick={() => addSingleLesson("scheduled")} disabled={!singleCourseGroupId || !isSingleTimeValid}>
                 <CalendarCheck size={16} /> 添加待上课
               </Button>
-              <Button type="button" variant="outline" onClick={() => addSingleLesson("completed")} disabled={!singleCourseGroupId}>
+              <Button type="button" variant="outline" onClick={() => addSingleLesson("completed")} disabled={!singleCourseGroupId || !isSingleTimeValid}>
                 <CheckCircle2 size={16} /> 补录已完成
               </Button>
             </div>
@@ -542,19 +577,19 @@ export function ScheduleView({
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">开始</label>
-                  <Input type="time" value={ruleStartTime} onChange={(event) => setRuleStartTime(event.target.value)} />
+                  <Input type="time" value={ruleStartTime} max={ruleEndTime} onChange={(event) => setRuleStartTime(event.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">结束</label>
-                  <Input type="time" value={ruleEndTime} onChange={(event) => setRuleEndTime(event.target.value)} />
+                  <Input type="time" value={ruleEndTime} min={ruleStartTime} onChange={(event) => setRuleEndTime(event.target.value)} className={!isBatchTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">范围开始</label>
-                  <Input type="date" value={rangeStart} onChange={(event) => setRangeStart(event.target.value)} />
+                  <Input type="date" value={rangeStart} max={rangeEnd} onChange={(event) => setRangeStart(event.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">范围结束</label>
-                  <Input type="date" value={rangeEnd} onChange={(event) => setRangeEnd(event.target.value)} />
+                  <Input type="date" value={rangeEnd} min={rangeStart} onChange={(event) => setRangeEnd(event.target.value)} className={!isBatchDateRangeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
                 </div>
               </div>
 
@@ -580,8 +615,11 @@ export function ScheduleView({
                 type="button"
                 variant="outline"
                 className="w-full"
-                disabled={!ruleCourseGroupId || selectedWeekdays.length === 0}
+                disabled={!ruleCourseGroupId || selectedWeekdays.length === 0 || !isBatchTimeValid || !isBatchDateRangeValid}
                 onClick={() => {
+                  if (!validateDateRange(rangeStart, rangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
+                    return;
+                  }
                   if (hasBatchConflicts()) {
                     confirm({
                       title: "批量排课中存在时间冲突",
@@ -649,8 +687,8 @@ export function ScheduleView({
                   <option key={course.id} value={course.id}>{course.name}</option>
                 ))}
               </Select>
-              <Input type="time" value={calendarStartTime} onChange={(event) => setCalendarStartTime(event.target.value)} />
-              <Input type="time" value={calendarEndTime} onChange={(event) => setCalendarEndTime(event.target.value)} />
+              <Input type="time" value={calendarStartTime} max={calendarEndTime} onChange={(event) => setCalendarStartTime(event.target.value)} />
+              <Input type="time" value={calendarEndTime} min={calendarStartTime} onChange={(event) => setCalendarEndTime(event.target.value)} className={!isCalendarTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
             </div>
             <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {visibleWeekdayLabels.map((day) => (
@@ -804,12 +842,12 @@ export function ScheduleView({
               {lessonScope === "month" ? (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">月份</label>
-                  <Input type="month" value={lessonMonth} onChange={(event) => setLessonMonth(event.target.value)} />
+                  <Input type="month" value={lessonMonth} onChange={(event) => setLessonMonth(event.target.value)} className="compact-date-input min-w-0 text-[11px]" />
                 </div>
               ) : (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">周</label>
-                  <Input type="week" value={lessonWeek} onChange={(event) => setLessonWeek(event.target.value)} />
+                  <Input type="week" value={lessonWeek} onChange={(event) => setLessonWeek(event.target.value)} className="compact-date-input min-w-0 text-[11px]" />
                 </div>
               )}
               <div className="space-y-2">
@@ -936,11 +974,29 @@ export function ScheduleView({
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">开始</label>
-                      <Input type="time" value={selected.startTime} onChange={(event) => updateSelected({ startTime: event.target.value }, true)} />
+                      <Input
+                        type="time"
+                        value={selected.startTime}
+                        max={selected.endTime}
+                        onChange={(event) => {
+                          const nextStart = event.target.value;
+                          if (!validateTimeRange(nextStart, selected.endTime)) return;
+                          updateSelected({ startTime: nextStart }, true);
+                        }}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">结束</label>
-                      <Input type="time" value={selected.endTime} onChange={(event) => updateSelected({ endTime: event.target.value }, true)} />
+                      <Input
+                        type="time"
+                        value={selected.endTime}
+                        min={selected.startTime}
+                        onChange={(event) => {
+                          const nextEnd = event.target.value;
+                          if (!validateTimeRange(selected.startTime, nextEnd)) return;
+                          updateSelected({ endTime: nextEnd }, true);
+                        }}
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -1142,6 +1198,15 @@ function parseDateOnlyUtc(dateIso: string): Date {
 
 function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
   return timeToMinutes(aStart) < timeToMinutes(bEnd) && timeToMinutes(bStart) < timeToMinutes(aEnd);
+}
+
+function isOrderedTimeRange(startTime: string, endTime: string): boolean {
+  if (!startTime || !endTime) return false;
+  return timeToMinutes(startTime) < timeToMinutes(endTime);
+}
+
+function isOrderedDateRange(startDate: string, endDate: string): boolean {
+  return Boolean(startDate && endDate && startDate <= endDate);
 }
 
 function timeToMinutes(value: string): number {

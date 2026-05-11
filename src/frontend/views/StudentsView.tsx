@@ -54,6 +54,7 @@ export function StudentsView({
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
+  const [flashingArchiveItem, setFlashingArchiveItem] = useState<{ panel: ArchivePanel; id: string } | null>(null);
   const [archivePanel, setArchivePanel] = useState<ArchivePanel>("campuses");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
@@ -74,6 +75,8 @@ export function StudentsView({
   const activeStudents = vault.students.filter((student) => student.status === "active").length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
   const obligationCampusId = vault.profile.obligationCampusId ?? "";
+  const obligationMode = vault.profile.obligationDeductionMode ?? "auto_gap";
+  const isManualObligationMode = obligationMode === "manual";
   const obligationCourses = vault.courseGroups.filter((course) => !obligationCampusId || course.defaultCampusId === obligationCampusId);
 
   function addCampus(e: FormEvent) {
@@ -182,12 +185,34 @@ export function StudentsView({
 
   function saveCourseDraft() {
     if (!editingCourse?.name.trim()) return;
+    const courseId = editingCourse.id;
     onUpdateCourse({
       ...editingCourse,
       name: editingCourse.name.trim(),
       subject: editingCourse.subject.trim() || "未设置"
     });
     setEditingCourse(null);
+    flashArchiveRow("courses", courseId);
+  }
+
+  function cancelCourseDraft() {
+    if (editingCourse) {
+      flashArchiveRow("courses", editingCourse.id);
+    }
+    setEditingCourse(null);
+  }
+
+  function flashArchiveRow(panel: ArchivePanel, id: string) {
+    setFlashingArchiveItem({ panel, id });
+    window.setTimeout(() => {
+      setFlashingArchiveItem((current) => (current?.panel === panel && current.id === id ? null : current));
+    }, 1800);
+  }
+
+  function archiveRowClass(panel: ArchivePanel, id: string): string {
+    return `border-b border-[#e8eef6] bg-white px-3 py-3 last:border-b-0 ${
+      flashingArchiveItem?.panel === panel && flashingArchiveItem.id === id ? "archive-row-flash" : ""
+    }`;
   }
 
   return (
@@ -259,7 +284,7 @@ export function StudentsView({
           <div className="space-y-2">
             <label className="text-sm font-medium">扣费方式</label>
             <Select
-              value={vault.profile.obligationDeductionMode ?? "auto_gap"}
+              value={obligationMode}
               onChange={(event) => updateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
             >
               <option value="auto_gap">按缺少义务小时自动扣</option>
@@ -284,6 +309,7 @@ export function StudentsView({
               type="number"
               value={vault.profile.monthlyObligationHours ?? 0}
               onChange={(event) => updateProfile({ monthlyObligationHours: Number(event.target.value) })}
+              disabled={isManualObligationMode}
             />
           </div>
           <div className="space-y-2">
@@ -292,6 +318,7 @@ export function StudentsView({
               type="number"
               value={vault.profile.obligationHourlyDeduction ?? 0}
               onChange={(event) => updateProfile({ obligationHourlyDeduction: Number(event.target.value) })}
+              disabled={isManualObligationMode}
             />
           </div>
           <div className="space-y-2">
@@ -478,7 +505,7 @@ export function StudentsView({
                   key={campus.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="border-b border-[#e8eef6] bg-white px-3 py-3 last:border-b-0"
+                  className={archiveRowClass("campuses", campus.id)}
                 >
                   {isEditing && editingCampus ? (
                     <div className="space-y-3">
@@ -500,12 +527,17 @@ export function StudentsView({
                       <div className="grid grid-cols-2 gap-2">
                         <Button type="button" size="sm" onClick={() => {
                           if (!editingCampus.name.trim()) return;
+                          const campusId = editingCampus.id;
                           onUpdateCampus({ ...editingCampus, name: editingCampus.name.trim() });
                           setEditingCampus(null);
+                          flashArchiveRow("campuses", campusId);
                         }}>
                           <Save size={14} /> 保存
                         </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => setEditingCampus(null)}>
+                        <Button type="button" size="sm" variant="outline" onClick={() => {
+                          flashArchiveRow("campuses", editingCampus.id);
+                          setEditingCampus(null);
+                        }}>
                           <X size={14} /> 取消
                         </Button>
                       </div>
@@ -544,7 +576,7 @@ export function StudentsView({
                           variant="destructive"
                           className="h-8 w-8 rounded-[9px] p-0"
                           disabled={used}
-                          title={used ? "已有学生、课程、规则或课时引用，不能直接删除" : "删除校区"}
+                          title={used ? "已有学生、课程或课时引用，不能直接删除" : "删除校区"}
                           aria-label={`删除校区 ${campus.name}`}
                           onClick={() =>
                             confirm({
@@ -609,7 +641,7 @@ export function StudentsView({
                   key={student.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="border-b border-[#e8eef6] bg-white px-3 py-3 last:border-b-0"
+                  className={archiveRowClass("students", student.id)}
                 >
                   {isEditing && editingStudent ? (
                     <div className="space-y-3">
@@ -672,16 +704,21 @@ export function StudentsView({
                       <div className="grid grid-cols-2 gap-2">
                         <Button type="button" size="sm" onClick={() => {
                           if (!editingStudent.name.trim()) return;
+                          const studentId = editingStudent.id;
                           onUpdateStudent({
                             ...editingStudent,
                             name: editingStudent.name.trim(),
                             grade: editingStudent.grade === "__custom__" ? undefined : editingStudent.grade
                           });
                           setEditingStudent(null);
+                          flashArchiveRow("students", studentId);
                         }}>
                           <Save size={14} /> 保存
                         </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => setEditingStudent(null)}>
+                        <Button type="button" size="sm" variant="outline" onClick={() => {
+                          flashArchiveRow("students", editingStudent.id);
+                          setEditingStudent(null);
+                        }}>
                           <X size={14} /> 取消
                         </Button>
                       </div>
@@ -776,7 +813,7 @@ export function StudentsView({
                   key={course.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="border-b border-[#e8eef6] bg-white px-3 py-3 last:border-b-0"
+                  className={archiveRowClass("courses", course.id)}
                 >
                   {isEditing && editingCourse ? (
                     <div className="space-y-3">
@@ -881,7 +918,7 @@ export function StudentsView({
                         <Button type="button" size="sm" onClick={saveCourseDraft}>
                           <Save size={14} /> 保存
                         </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => setEditingCourse(null)}>
+                        <Button type="button" size="sm" variant="outline" onClick={cancelCourseDraft}>
                           <X size={14} /> 取消
                         </Button>
                       </div>
@@ -920,7 +957,7 @@ export function StudentsView({
                           variant="destructive"
                           className="h-8 w-8 rounded-[9px] p-0"
                           disabled={used}
-                          title={used ? "已有规则或课时引用，不能直接删除" : "删除课程"}
+                          title={used ? "已有课时引用，不能直接删除" : "删除课程"}
                           aria-label={`删除课程 ${course.name}`}
                           onClick={() =>
                             confirm({
