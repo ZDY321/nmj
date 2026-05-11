@@ -33,16 +33,21 @@ export function presentCount(lesson: Lesson): number {
   return lesson.attendance.filter((entry) => entry.status === "attended").length;
 }
 
+export function temporaryFeeTotal(lesson: Lesson): number {
+  return lesson.attendance.reduce((sum, entry) => sum + Math.max(entry.temporaryFee ?? 0, 0), 0);
+}
+
 export function calculateFee(rule: FeeRule, lesson: Lesson): number {
+  const temporaryFee = temporaryFeeTotal(lesson);
   if (rule.mode === "hourly") {
-    return Math.round((rule.hourlyRate ?? 0) * hoursBetween(lesson.startTime, lesson.endTime));
+    return Math.round((rule.hourlyRate ?? 0) * hoursBetween(lesson.startTime, lesson.endTime) + temporaryFee);
   }
 
   if (rule.mode === "fixed") {
-    return rule.fixedFee ?? 0;
+    return Math.round((rule.fixedFee ?? 0) + temporaryFee);
   }
 
-  return Math.round((rule.baseFee ?? 0) + presentCount(lesson) * (rule.perPresentStudentFee ?? 0));
+  return Math.round((rule.baseFee ?? 0) + presentCount(lesson) * (rule.perPresentStudentFee ?? 0) + temporaryFee);
 }
 
 export function getCourse(vault: TeacherVault, courseId: string): CourseGroup | undefined {

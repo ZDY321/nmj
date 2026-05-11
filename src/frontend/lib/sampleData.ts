@@ -37,7 +37,7 @@ export function createSampleVault(): TeacherVault {
     students: [
       { id: "student_a", name: "学生 A", grade: "初三", school: "第一中学", defaultCampusId: "campus_main", status: "active" },
       { id: "student_b", name: "学生 B", grade: "初二", school: "实验中学", defaultCampusId: "campus_main", status: "active" },
-      { id: "student_c", name: "学生 C", grade: "初二", school: "实验中学", defaultCampusId: "campus_west", status: "active" },
+      { id: "student_c", name: "学生 C", grade: "初二", school: "实验中学", defaultCampusId: "campus_west", temporaryTrial: true, status: "active" },
       { id: "student_d", name: "学生 D", grade: "初三", school: "外国语学校", defaultCampusId: "campus_main", status: "active" }
     ],
     courseGroups: [
@@ -180,6 +180,19 @@ export function createSampleVault(): TeacherVault {
         status: "open",
         priority: "high",
         createdAt: "2026-05-10T00:00:00.000Z"
+      }
+    ],
+    gradeRecords: [
+      {
+        id: "grade_student_a_mid",
+        studentId: "student_a",
+        subject: "数学",
+        examName: "期中考试",
+        date: "2026-05-08",
+        score: 86,
+        fullScore: 100,
+        rank: "班级前 20%",
+        note: "函数题稳定，几何证明还要加强。"
       }
     ]
   };

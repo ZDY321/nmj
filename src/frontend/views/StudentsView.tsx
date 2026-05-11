@@ -45,6 +45,7 @@ export function StudentsView({
   const [studentGradeInput, setStudentGradeInput] = useState("");
   const [customGradeInput, setCustomGradeInput] = useState("");
   const [studentSchoolInput, setStudentSchoolInput] = useState("");
+  const [studentTemporaryTrialInput, setStudentTemporaryTrialInput] = useState(false);
   const [studentCampusInput, setStudentCampusInput] = useState(vault.campuses[0]?.id ?? "");
   const [studentNoteInput, setStudentNoteInput] = useState("");
   const [courseNameInput, setCourseNameInput] = useState("");
@@ -90,6 +91,7 @@ export function StudentsView({
       name: studentNameInput.trim(),
       grade: resolvedGrade || undefined,
       school: studentSchoolInput.trim() || undefined,
+      temporaryTrial: studentTemporaryTrialInput,
       defaultCampusId: studentCampusInput || vault.campuses[0]?.id,
       note: studentNoteInput.trim() || undefined,
       status: "active"
@@ -98,6 +100,7 @@ export function StudentsView({
     setStudentGradeInput("");
     setCustomGradeInput("");
     setStudentSchoolInput("");
+    setStudentTemporaryTrialInput(false);
     setStudentNoteInput("");
   }
 
@@ -388,6 +391,15 @@ export function StudentsView({
                 onChange={(e) => setStudentNoteInput(e.target.value)}
                 placeholder="档案备注，可选"
               />
+              <label className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
+                <input
+                  type="checkbox"
+                  checked={studentTemporaryTrialInput}
+                  onChange={(event) => setStudentTemporaryTrialInput(event.target.checked)}
+                  className="h-4 w-4 accent-[#ff8617]"
+                />
+                临时试听学生
+              </label>
               <Button type="submit" className="w-full">
                 <Plus size={15} /> 添加学生
               </Button>
@@ -612,6 +624,15 @@ export function StudentsView({
                         <option value="active">正常</option>
                         <option value="paused">暂停</option>
                       </Select>
+                      <label className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editingStudent.temporaryTrial)}
+                          onChange={(event) => setEditingStudent({ ...editingStudent, temporaryTrial: event.target.checked })}
+                          className="h-4 w-4 accent-[#ff8617]"
+                        />
+                        临时试听学生
+                      </label>
                       <Textarea
                         value={editingStudent.note ?? ""}
                         onChange={(event) => setEditingStudent({ ...editingStudent, note: event.target.value })}
@@ -648,6 +669,7 @@ export function StudentsView({
                               <span className="flex items-center gap-1"><MapPin size={10} /> {campusName(vault, student.defaultCampusId)}</span>
                               <span>{student.grade || "未设置年级"}</span>
                               <span>{student.school || "未填写学校"}</span>
+                              {student.temporaryTrial && <span className="font-bold text-[#5161d6]">临时试听</span>}
                             </div>
                           </div>
                         </div>
@@ -760,29 +782,40 @@ export function StudentsView({
                       </Select>
                       {editingCourse.type === "class" ? (
                         <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            type="number"
-                            value={editingCourse.feeRule.baseFee ?? 0}
-                            onChange={(event) => updateEditingCourseFee({ baseFee: Number(event.target.value) })}
-                            placeholder="基础费用"
-                          />
-                          <Input
-                            type="number"
-                            value={editingCourse.feeRule.perPresentStudentFee ?? 0}
-                            onChange={(event) => updateEditingCourseFee({ perPresentStudentFee: Number(event.target.value) })}
-                            placeholder="每人费用"
-                          />
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-[#64748b]">班课基础费用</label>
+                            <Input
+                              type="number"
+                              value={editingCourse.feeRule.baseFee ?? 0}
+                              onChange={(event) => updateEditingCourseFee({ baseFee: Number(event.target.value) })}
+                              placeholder="基础费用"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-[#64748b]">每名到课学生费用</label>
+                            <Input
+                              type="number"
+                              value={editingCourse.feeRule.perPresentStudentFee ?? 0}
+                              onChange={(event) => updateEditingCourseFee({ perPresentStudentFee: Number(event.target.value) })}
+                              placeholder="每人费用"
+                            />
+                          </div>
                         </div>
                       ) : (
-                        <Input
-                          type="number"
-                          value={editingCourse.feeRule.hourlyRate ?? 0}
-                          onChange={(event) => updateEditingCourseFee({ hourlyRate: Number(event.target.value) })}
-                          placeholder={editingCourse.type === "trial" ? "试听每小时费用" : "每小时费用"}
-                        />
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-[#64748b]">
+                            {editingCourse.type === "trial" ? "试听每小时费用" : "每小时费用"}
+                          </label>
+                          <Input
+                            type="number"
+                            value={editingCourse.feeRule.hourlyRate ?? 0}
+                            onChange={(event) => updateEditingCourseFee({ hourlyRate: Number(event.target.value) })}
+                            placeholder={editingCourse.type === "trial" ? "试听每小时费用" : "每小时费用"}
+                          />
+                        </div>
                       )}
                       <div className="space-y-2">
-                        <div className="text-sm font-medium">关联学生</div>
+                        <div className="text-sm font-medium">关联学生（{editingCourse.studentIds.length} / {vault.students.length}）</div>
                         <div className="grid grid-cols-2 gap-2">
                           {vault.students.map((student) => (
                             <button
@@ -792,10 +825,12 @@ export function StudentsView({
                               className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
                                 editingCourse.studentIds.includes(student.id)
                                   ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
+                                  : student.temporaryTrial
+                                  ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
                                   : "border-[#dbe4ef] bg-white text-[#25324a]"
                               }`}
                             >
-                              {student.name}
+                              {student.name}{student.temporaryTrial ? " · 试听" : ""}
                             </button>
                           ))}
                         </div>

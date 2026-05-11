@@ -728,7 +728,16 @@ async function requestDeleteUser(request: Request, env: Env, actor: AuthContext,
   return json(adminUser(updated!));
 }
 
-async function confirmDeleteUser(env: Env, actor: AuthContext, targetUserId: string): Promise<Response> {
+async function confirmDeleteUser(request: Request, env: Env, actor: AuthContext, targetUserId: string): Promise<Response> {
+  const body = await readJson<{ passwordVerifier?: unknown }>(request).catch((): { passwordVerifier?: unknown } => ({}));
+  const passwordVerifier = typeof body.passwordVerifier === "string" ? body.passwordVerifier : "";
+  if (!passwordVerifier) {
+    return json({ error: "Password confirmation required" }, 400);
+  }
+  if (passwordVerifier !== actor.user.password_verifier) {
+    return json({ error: "Password confirmation failed" }, 401);
+  }
+
   const target = await getUserById(env, targetUserId);
   if (!target || target.status === "deleted") {
     return notFound();
@@ -914,7 +923,7 @@ async function handleAdminRequest(request: Request, env: Env): Promise<Response 
       return requestDeleteUser(request, env, context, userId);
     }
     if (action === "confirm") {
-      return confirmDeleteUser(env, context, userId);
+      return confirmDeleteUser(request, env, context, userId);
     }
     if (action === "cancel") {
       return cancelDeleteUser(env, context, userId);

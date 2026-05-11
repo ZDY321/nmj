@@ -25,6 +25,8 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
   const [campusFilter, setCampusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
 
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
   const filteredLessons = monthLessons
@@ -32,7 +34,10 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
       const campusId = lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
       const matchesCampus = campusFilter === "all" || campusId === campusFilter;
       const matchesType = typeFilter === "all" || lesson.type === typeFilter;
-      return matchesCampus && matchesType;
+      const matchesGrade =
+        gradeFilter === "all" ||
+        lesson.expectedStudentIds.some((studentId) => vault.students.find((student) => student.id === studentId)?.grade === gradeFilter);
+      return matchesCampus && matchesType && matchesGrade;
     })
     .sort(sortLessons);
 
@@ -87,7 +92,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
               先选月份和校区，再核对每节课的状态、班型、学生和扣费后小计。
             </CardDescription>
           </div>
-          <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3 lg:w-auto lg:min-w-[560px]">
+          <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-auto lg:min-w-[720px] xl:grid-cols-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">月份</label>
               <Input type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} />
@@ -110,21 +115,31 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
                 <option value="trial">试听</option>
               </Select>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">年级</label>
+              <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
+                <option value="all">全部年级</option>
+                {gradeOptions.map((grade) => (
+                  <option key={grade} value={grade}>{grade}</option>
+                ))}
+              </Select>
+            </div>
           </div>
         </CardHeader>
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
+          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `有效课时：${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatMoney(campusLessonFee), hint: "仅统计已完成/补课完成", icon: Banknote },
           {
             label: "义务课时扣费",
             value: `-${formatMoney(campusDeduction)}`,
             hint: currentCampusObligation.mode === "manual"
               ? "手动填写扣费"
-              : `缺口 ${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0} 小时`,
-            icon: SlidersHorizontal
+              : `缺口小时：${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0}`,
+            icon: SlidersHorizontal,
+            danger: true
           },
           { label: "当前校区扣后", value: formatMoney(campusNet), hint: campusFilter === "all" ? "全部校区扣后课时费" : campusName(vault, campusFilter), icon: FileCheck2 }
         ].map((item) => {
@@ -137,7 +152,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-[#64748b]">{item.label}</div>
-                  <div className="mt-1 text-2xl font-extrabold text-[#061226]">{item.value}</div>
+                  <div className={`mt-1 text-2xl font-extrabold ${"danger" in item && item.danger ? "text-[#b91c1c]" : "text-[#061226]"}`}>{item.value}</div>
                   <div className="mt-1 truncate text-xs font-bold text-[#94a3b8]">{item.hint}</div>
                 </div>
               </CardContent>
@@ -243,7 +258,11 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.02 }}
-              className={`rounded-[14px] border p-4 ${lessonStatusSurfaceClass(lesson.status)}`}
+              className={`rounded-[14px] border p-4 ${
+                lesson.attendance.some((entry) => entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending")
+                  ? "border-[#fed7aa] bg-[#fff7ed]"
+                  : lessonStatusSurfaceClass(lesson.status)
+              }`}
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
@@ -256,6 +275,17 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
                     {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
                   </div>
                   <div className="mt-1 text-sm text-[#64748b]">{studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}</div>
+                  {lesson.attendance.some((entry) => entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending") && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {lesson.attendance
+                        .filter((entry) => entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending")
+                        .map((entry) => (
+                          <Badge key={entry.studentId} variant="amber">
+                            {studentNames(vault, [entry.studentId])} · 请假/待补
+                          </Badge>
+                        ))}
+                    </div>
+                  )}
                   {lesson.note && (
                     <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-sm font-semibold text-[#7f1d1d]">
                       备注：{lesson.note}

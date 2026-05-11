@@ -131,7 +131,7 @@ export function LoginScreen({
       <div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1280px] grid-cols-1 overflow-hidden rounded-[28px] border border-[#dbe4ef] bg-white shadow-[0_24px_70px_rgba(15,35,66,0.14)] lg:grid-cols-[0.95fr_1.05fr]">
         <section className="navy-gradient relative flex min-h-[520px] flex-col justify-between overflow-hidden p-8 text-white sm:p-12">
           <div>
-            <div className="mb-14 flex items-center gap-4">
+            <div className="mb-8 flex items-center gap-4">
               <div className="orange-gradient flex h-14 w-14 items-center justify-center rounded-[16px] shadow-[0_14px_28px_rgba(255,134,23,0.28)]">
                 <GraduationCap size={32} />
               </div>
@@ -145,7 +145,7 @@ export function LoginScreen({
             </div>
 
             <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}>
-              <Badge className="mb-6 bg-white/12 px-4 py-1.5 text-white" variant="outline">
+              <Badge className="mb-4 bg-white/12 px-4 py-1.5 text-white" variant="outline">
                 Private Workspace
               </Badge>
               <h1 className="max-w-[520px] text-[38px] font-extrabold leading-tight sm:text-[48px]">

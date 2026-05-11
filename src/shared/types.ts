@@ -48,6 +48,7 @@ export type Student = {
   name: string;
   grade?: string;
   school?: string;
+  temporaryTrial?: boolean;
   defaultCampusId?: string;
   note?: string;
   status: "active" | "paused";
@@ -92,6 +93,7 @@ export type AttendanceEntry = {
   status: AttendanceStatus;
   note?: string;
   temporary?: boolean;
+  temporaryFee?: number;
 };
 
 export type FeeSnapshot = {
@@ -168,6 +170,18 @@ export type TodoItem = {
   createdAt: string;
 };
 
+export type GradeRecord = {
+  id: string;
+  studentId: string;
+  subject: string;
+  examName: string;
+  date: string;
+  score: number;
+  fullScore?: number;
+  rank?: string;
+  note?: string;
+};
+
 export type TimePreset = {
   id: string;
   label: string;
@@ -191,6 +205,7 @@ export type TeacherVault = {
   lessons: Lesson[];
   salaryAdjustments: SalaryAdjustment[];
   todoItems?: TodoItem[];
+  gradeRecords?: GradeRecord[];
   notice: Notice;
 };
 

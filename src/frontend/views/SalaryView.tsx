@@ -60,7 +60,9 @@ export function SalaryView({
   const year = selectedMonth.slice(0, 4);
   const breakdown = salaryBreakdown(vault, selectedMonth);
   const summary = attendanceSummary(vault, selectedMonth);
-  const trend = yearlyTrend(vault, year);
+  const currentMonth = todayIso().slice(0, 7);
+  const currentYear = currentMonth.slice(0, 4);
+  const trend = yearlyTrend(vault, year).filter((item) => year < currentYear || item.month <= currentMonth);
   const maxTotal = Math.max(...trend.map((item) => item.total), 1);
   const maxCount = Math.max(...trend.map((item) => item.count), 1);
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
@@ -139,7 +141,7 @@ export function SalaryView({
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
                   { label: "补课", value: breakdown.makeup, icon: Clock, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "其他加减项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" },
-                  { label: "义务课时扣费", value: -breakdown.obligationDeduction, icon: FileCheck2, color: "text-[#b91c1c] bg-[#fff1f2]" }
+                  { label: "义务课时扣费", value: -breakdown.obligationDeduction, icon: FileCheck2, color: "text-[#b91c1c] bg-[#fff1f2]", danger: true }
                 ].map((item) => (
                   <motion.div
                     key={item.label}
@@ -151,7 +153,9 @@ export function SalaryView({
                     </div>
                     <div className="min-w-0 flex-1">
                       <span className="block text-xs text-[#64748b]">{item.label}</span>
-                      <span className="text-sm font-bold">{formatMoney(item.value)}</span>
+                      <span className={`text-sm font-bold ${"danger" in item && item.danger ? "text-[#b91c1c]" : "text-[#061226]"}`}>
+                        {formatMoney(item.value)}
+                      </span>
                     </div>
                   </motion.div>
                 ))}
@@ -263,16 +267,16 @@ export function SalaryView({
                 </defs>
                 {(() => {
                   const points = trend.map((item, index) => {
-                    const x = (index / 11) * 700 + 10;
+                    const x = trend.length <= 1 ? 360 : (index / (trend.length - 1)) * 700 + 10;
                     const y = 198 - (item.total / maxTotal) * 172;
                     return { x, y, month: item.month };
                   });
                   const line = points.map((point) => `${point.x},${point.y}`).join(" ");
-                  const area = `10,202 ${line} 710,202`;
+                  const area = points.length ? `${points[0].x},202 ${line} ${points.at(-1)?.x ?? 710},202` : "";
                   return (
                     <>
-                      <polygon points={area} fill="url(#salaryFill)" />
-                      <polyline points={line} fill="none" stroke="#1557c2" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                      {area && <polygon points={area} fill="url(#salaryFill)" />}
+                      {line && <polyline points={line} fill="none" stroke="#1557c2" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}
                       {points.map((point, index) => (
                         <circle
                           key={index}
@@ -290,61 +294,58 @@ export function SalaryView({
                   );
                 })()}
               </svg>
-              <div className="absolute bottom-1 left-16 right-5 grid grid-cols-12 gap-1 text-center text-xs font-medium text-[#64748b]">
-                {monthNames.map((item, index) => {
-                  const value = `${year}-${String(index + 1).padStart(2, "0")}`;
+              <div
+                className="absolute bottom-1 left-16 right-5 grid gap-1 text-center text-xs font-medium text-[#64748b]"
+                style={{ gridTemplateColumns: `repeat(${Math.max(trend.length, 1)}, minmax(0, 1fr))` }}
+              >
+                {trend.map((item) => {
+                  const monthIndex = Number(item.month.slice(5)) - 1;
                   return (
                     <button
-                      key={item}
+                      key={item.month}
                       type="button"
-                      onClick={() => setSelectedMonth(value)}
-                      className={`rounded-[6px] py-0.5 ${selectedMonth === value ? "bg-[#ff8617] text-white" : ""}`}
+                      onClick={() => setSelectedMonth(item.month)}
+                      className={`rounded-[6px] py-0.5 ${selectedMonth === item.month ? "bg-[#ff8617] text-white" : ""}`}
                     >
-                      {item}
+                      {monthNames[monthIndex]}
                     </button>
                   );
                 })}
+              </div>
+            </div>
+            <div className="mt-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-extrabold text-[#061226]">本年每月课次</div>
+                  <div className="mt-1 text-xs font-semibold text-[#64748b]">仅显示已发生或当前月份，避免未来月份干扰判断。</div>
+                </div>
+              </div>
+              <div className="soft-grid flex h-[220px] items-end gap-2 rounded-[12px] px-3 pb-8 pt-6 sm:gap-3 sm:px-4">
+                {trend.map((item, index) => (
+                  <button
+                    key={item.month}
+                    type="button"
+                    onClick={() => setSelectedMonth(item.month)}
+                    className={`flex h-full flex-1 flex-col justify-end gap-2 rounded-[8px] ${selectedMonth === item.month ? "bg-[#fff7ed]" : ""}`}
+                  >
+                    <span className="text-center text-xs font-extrabold text-[#25324a]">{item.count}</span>
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: `${Math.max((item.count / maxCount) * 150, item.count ? 24 : 8)}px` }}
+                      transition={{ delay: index * 0.035, type: "spring", stiffness: 110, damping: 18 }}
+                      className="blue-gradient mx-auto w-full max-w-[28px] rounded-t-[5px] shadow-[0_10px_18px_rgba(21,87,194,0.18)]"
+                      title={`${item.month}: ${item.count} 节`}
+                    />
+                    <span className="text-center text-[11px] font-medium text-[#64748b]">{Number(item.month.slice(5))}月</span>
+                  </button>
+                ))}
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card className="overflow-hidden">
-          <CardHeader>
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
-              <Clock size={14} /> 授课频率
-            </div>
-            <CardTitle>本年每月课次</CardTitle>
-            <CardDescription>用于核对课程数量是否漏录</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="soft-grid flex h-[260px] items-end gap-2 rounded-[12px] px-3 pb-8 pt-6 sm:gap-3 sm:px-4">
-              {trend.map((item, index) => (
-                <button
-                  key={item.month}
-                  type="button"
-                  onClick={() => setSelectedMonth(item.month)}
-                  className={`flex h-full flex-1 flex-col justify-end gap-2 rounded-[8px] ${selectedMonth === item.month ? "bg-[#fff7ed]" : ""}`}
-                >
-                  <span className="text-center text-xs font-extrabold text-[#25324a]">
-                    {item.count}
-                  </span>
-                  <motion.div
-                    initial={{ height: 0 }}
-                    animate={{ height: `${Math.max((item.count / maxCount) * 180, item.count ? 24 : 8)}px` }}
-                    transition={{ delay: index * 0.035, type: "spring", stiffness: 110, damping: 18 }}
-                    className="blue-gradient mx-auto w-full max-w-[28px] rounded-t-[5px] shadow-[0_10px_18px_rgba(21,87,194,0.18)]"
-                    title={`${item.month}: ${item.count} 节`}
-                  />
-                  <span className="text-center text-[11px] font-medium text-[#64748b]">{Number(item.month.slice(5))}月</span>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
+      <div>
         <Card className="overflow-hidden">
           <CardHeader>
             <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">

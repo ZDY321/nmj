@@ -31,7 +31,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type { AttendanceStatus, CourseType, Lesson, ScheduleRule, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
-import { calculateFee, getCourse, hoursBetween, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { calculateFee, getCourse, hoursBetween, presentCount, temporaryFeeTotal, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
@@ -186,13 +186,35 @@ export function ScheduleView({
   }
 
   function addSingleLesson(status: "scheduled" | "completed") {
-    const course = getCourse(vault, singleCourseGroupId);
+    addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
+  }
+
+  function addLessonFromCourse(
+    courseGroupId: string,
+    lessonDate: string,
+    lessonStartTime: string,
+    lessonEndTime: string,
+    status: "scheduled" | "completed",
+    force = false
+  ) {
+    const course = getCourse(vault, courseGroupId);
     if (!course) return;
+    const conflict = findTimeConflict(lessonDate, lessonStartTime, lessonEndTime);
+    if (conflict && !force) {
+      confirm({
+        title: "这个时间段已有课程",
+        description: `${lessonDate} ${lessonStartTime}-${lessonEndTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要添加。`,
+        confirmLabel: "仍然添加",
+        tone: "danger",
+        onConfirm: () => addLessonFromCourse(courseGroupId, lessonDate, lessonStartTime, lessonEndTime, status, true)
+      });
+      return;
+    }
     onAddLesson(
       createLessonFromCourse(vault, course, {
-        date: singleDate,
-        startTime: singleStartTime,
-        endTime: singleEndTime,
+        date: lessonDate,
+        startTime: lessonStartTime,
+        endTime: lessonEndTime,
         campusId: course.defaultCampusId,
         status
       })
@@ -240,6 +262,7 @@ export function ScheduleView({
         perPresentStudentFee: course.feeRule.perPresentStudentFee,
         presentStudentCount: presentCount(lesson),
         hours: hoursBetween(lesson.startTime, lesson.endTime),
+        manualAdjustment: temporaryFeeTotal(lesson),
         amount: calculateFee(course.feeRule, lesson)
       }
     };
@@ -277,7 +300,7 @@ export function ScheduleView({
     const nextLesson: Lesson = {
       ...selected,
       attendance: selected.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, status } : entry
+        entry.studentId === studentId ? { ...entry, status, note: status === "attended" ? undefined : entry.note } : entry
       )
     };
     const recalculated = recalculateLessonFee(nextLesson);
@@ -297,12 +320,23 @@ export function ScheduleView({
     });
   }
 
+  function updateTemporaryFee(studentId: string, value: number) {
+    if (!selected) return;
+    const nextLesson: Lesson = {
+      ...selected,
+      attendance: selected.attendance.map((entry) =>
+        entry.studentId === studentId ? { ...entry, temporaryFee: Number.isFinite(value) ? value : 0 } : entry
+      )
+    };
+    onUpdateLesson(recalculateLessonFee(nextLesson));
+  }
+
   function addTemporaryStudent() {
     if (!selected || !temporaryStudentId || selected.expectedStudentIds.includes(temporaryStudentId)) return;
     const next: Lesson = {
       ...selected,
       expectedStudentIds: [...selected.expectedStudentIds, temporaryStudentId],
-      attendance: [...selected.attendance, { studentId: temporaryStudentId, status: "attended", temporary: true, note: "临时添加" }]
+      attendance: [...selected.attendance, { studentId: temporaryStudentId, status: "attended", temporary: true, temporaryFee: 0, note: "临时添加" }]
     };
     onUpdateLesson(recalculateLessonFee(next));
     setTemporaryStudentId("");
@@ -355,6 +389,22 @@ export function ScheduleView({
       tone: "danger",
       onConfirm: () => onDeleteLesson(lesson.id)
     });
+  }
+
+  function findTimeConflict(lessonDate: string, lessonStartTime: string, lessonEndTime: string): Lesson | undefined {
+    return vault.lessons.find(
+      (lesson) =>
+        lesson.date === lessonDate &&
+        lesson.status !== "cancelled" &&
+        timesOverlap(lesson.startTime, lesson.endTime, lessonStartTime, lessonEndTime)
+    );
+  }
+
+  function hasBatchConflicts(): boolean {
+    const dates = datesBetweenLocal(rangeStart, rangeEnd).filter((item) =>
+      selectedWeekdays.includes(new Date(`${item}T00:00:00`).getDay() as Weekday)
+    );
+    return dates.some((item) => findTimeConflict(item, ruleStartTime, ruleEndTime));
   }
 
   return (
@@ -560,7 +610,18 @@ export function ScheduleView({
                 variant="outline"
                 className="w-full"
                 disabled={!ruleCourseGroupId || selectedWeekdays.length === 0}
-                onClick={() => onGenerateDrafts(rangeStart, rangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime)}
+                onClick={() => {
+                  if (hasBatchConflicts()) {
+                    confirm({
+                      title: "批量排课中存在时间冲突",
+                      description: "系统会跳过已经有课的时间段，只生成没有冲突的课程。",
+                      confirmLabel: "跳过冲突并生成",
+                      onConfirm: () => onGenerateDrafts(rangeStart, rangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime)
+                    });
+                    return;
+                  }
+                  onGenerateDrafts(rangeStart, rangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime);
+                }}
               >
                 <CalendarCheck size={16} /> 按日期范围生成待上课
               </Button>
@@ -569,7 +630,7 @@ export function ScheduleView({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
         <Card className="h-fit overflow-hidden">
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -637,7 +698,7 @@ export function ScheduleView({
                     onClick={() => {
                       setSelectedCalendarDate(calendarDate);
                       if (calendarMode === "schedule") {
-                        onAddScheduledLesson(calendarDate, calendarCourseGroupId, calendarStartTime, calendarEndTime);
+                        addLessonFromCourse(calendarCourseGroupId, calendarDate, calendarStartTime, calendarEndTime, "scheduled");
                       }
                     }}
                     disabled={calendarMode === "schedule" && !calendarCourseGroupId}
@@ -704,6 +765,43 @@ export function ScheduleView({
               {selectedCalendarLessons.length === 0 && (
                 <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
                   这一天没有课程
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <CardHeader>
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
+                <RotateCcw size={14} /> 补课跟进
+              </div>
+              <CardTitle>需要补课的学生</CardTitle>
+              <CardDescription>从缺课记录直接生成新的补课课时。</CardDescription>
+            </CardHeader>
+            <CardContent className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">新补课日期</label>
+                <Input type="date" value={makeupDate} onChange={(event) => setMakeupDate(event.target.value)} />
+              </div>
+              {makeupEntries.map(({ lesson, entry }) => (
+                <div key={`${lesson.id}-${entry.studentId}`} className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3">
+                  <div className="flex flex-col gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-extrabold text-[#061226]">{findStudent(vault, entry.studentId)?.name ?? "未知学生"}</div>
+                      <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                        原课：{lesson.date} · {lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}
+                      </div>
+                      {entry.note && <div className="mt-2 text-xs font-semibold text-[#9a3412]">备注：{entry.note}</div>}
+                    </div>
+                    <Button type="button" size="sm" onClick={() => createMakeupLesson(lesson, entry.studentId)}>
+                      <Plus size={14} /> 安排补课
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {makeupEntries.length === 0 && (
+                <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+                  暂无待补课学生
                 </div>
               )}
             </CardContent>
@@ -809,47 +907,6 @@ export function ScheduleView({
         </div>
       </div>
 
-      {makeupEntries.length > 0 && (
-        <Card className="overflow-hidden">
-          <CardHeader>
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
-              <RotateCcw size={14} /> 补课跟进
-            </div>
-            <CardTitle>需要补课的学生</CardTitle>
-            <CardDescription>从缺课记录直接生成新的补课课时，会保留原课程日期和新安排日期。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">新补课日期</label>
-                <Input type="date" value={makeupDate} onChange={(event) => setMakeupDate(event.target.value)} />
-              </div>
-              <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3 text-sm font-semibold leading-6 text-[#9a3412]">
-                生成后会在课时列表里出现一条关联原课的待上课记录，月底核对时能看到原日期与补课日期。
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {makeupEntries.map(({ lesson, entry }) => (
-                <div key={`${lesson.id}-${entry.studentId}`} className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-extrabold text-[#061226]">{findStudent(vault, entry.studentId)?.name ?? "未知学生"}</div>
-                      <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        原课：{lesson.date} · {lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}
-                      </div>
-                      {entry.note && <div className="mt-2 text-xs font-semibold text-[#9a3412]">备注：{entry.note}</div>}
-                    </div>
-                    <Button type="button" size="sm" onClick={() => createMakeupLesson(lesson, entry.studentId)}>
-                      <Plus size={14} /> 安排补课
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader>
@@ -953,8 +1010,8 @@ export function ScheduleView({
 
         {selected && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
-            <Card className="overflow-hidden">
-              <CardHeader className="flex flex-row items-start justify-between gap-3">
+            <Card className="overflow-hidden border-[#ff8617] bg-[#fffaf5] shadow-[0_18px_48px_rgba(255,134,23,0.14)]">
+              <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-[#fed7aa] bg-[#fff7ed]">
                 <div>
                   <CardTitle>课程详情</CardTitle>
                   <CardDescription>{selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
@@ -1056,7 +1113,9 @@ export function ScheduleView({
                       {vault.students
                         .filter((student) => !selected.expectedStudentIds.includes(student.id))
                         .map((student) => (
-                          <option key={student.id} value={student.id}>{student.name}</option>
+                          <option key={student.id} value={student.id}>
+                            {student.name}{student.temporaryTrial ? "（临时试听）" : ""}
+                          </option>
                         ))}
                     </Select>
                     <Button type="button" variant="outline" onClick={addTemporaryStudent} disabled={!temporaryStudentId}>
@@ -1064,15 +1123,21 @@ export function ScheduleView({
                     </Button>
                   </div>
                   {selected.attendance.map((entry) => {
-                    const isTemporary = entry.temporary || !selectedCourse?.studentIds.includes(entry.studentId);
+                    const student = findStudent(vault, entry.studentId);
+                    const isTemporary = entry.temporary || student?.temporaryTrial || !selectedCourse?.studentIds.includes(entry.studentId);
                     return (
-                      <motion.div key={entry.studentId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`rounded-[14px] border p-3 ${isTemporary ? "border-[#c7d2fe] bg-[#eef0ff]" : "border-[#dbe4ef] bg-[#f8fbff]"}`}>
+                      <motion.div
+                        key={entry.studentId}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className={`rounded-[14px] border p-3 ${attendanceSurfaceClass(entry.status, isTemporary)}`}
+                      >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex min-w-0 items-center gap-2">
                             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#fff1e2]">
-                              <span className="text-xs font-bold text-[#ff8617]">{(findStudent(vault, entry.studentId)?.name ?? "未知").slice(0, 1)}</span>
+                              <span className="text-xs font-bold text-[#ff8617]">{(student?.name ?? "未知").slice(0, 1)}</span>
                             </div>
-                            <span className="truncate text-sm font-medium">{findStudent(vault, entry.studentId)?.name ?? "未知学生"}</span>
+                            <span className="truncate text-sm font-medium">{student?.name ?? "未知学生"}</span>
                             {isTemporary && <Badge variant="plum" className="shrink-0">临时试听</Badge>}
                           </div>
                           <div className="flex items-center gap-2">
@@ -1088,6 +1153,23 @@ export function ScheduleView({
                             )}
                           </div>
                         </div>
+                        {isTemporary && (
+                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px]">
+                            <div className="rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
+                              临时学生费用会在正常排课费用基础上额外相加。
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                              <Input
+                                type="number"
+                                value={entry.temporaryFee ?? 0}
+                                onChange={(event) => updateTemporaryFee(entry.studentId, Number(event.target.value))}
+                                className="bg-white pl-10"
+                                placeholder="临时费用"
+                              />
+                            </div>
+                          </div>
+                        )}
                         {(entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending" || entry.note) && (
                           <Input
                             className="mt-3 bg-white"
@@ -1163,4 +1245,39 @@ function datesForIsoWeekValue(value: string): string[] {
     date.setDate(monday.getDate() + index);
     return formatDateIso(date);
   });
+}
+
+function datesBetweenLocal(startDate: string, endDate: string): string[] {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
+  const dates: string[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    dates.push(formatDateIso(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return timeToMinutes(aStart) < timeToMinutes(bEnd) && timeToMinutes(bStart) < timeToMinutes(aEnd);
+}
+
+function timeToMinutes(value: string): number {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function attendanceSurfaceClass(status: AttendanceStatus, isTemporary: boolean): string {
+  if (status === "leave_requested" || status === "makeup_pending") {
+    return "border-[#fed7aa] bg-[#fff7ed]";
+  }
+  if (status === "absent" || status === "cancelled") {
+    return "border-[#fecaca] bg-[#fff1f2]";
+  }
+  if (isTemporary) {
+    return "border-[#c7d2fe] bg-[#eef0ff]";
+  }
+  return "border-[#dbe4ef] bg-[#f8fbff]";
 }

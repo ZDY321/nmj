@@ -14,6 +14,7 @@ import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { AdminView } from "@/frontend/views/AdminView";
 import { CalendarView } from "@/frontend/views/CalendarView";
+import { GradesView } from "@/frontend/views/GradesView";
 import { PayrollReviewView } from "@/frontend/views/PayrollReviewView";
 import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
@@ -32,6 +33,7 @@ import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } fro
 import type {
   Campus,
   CourseGroup,
+  GradeRecord,
   Lesson,
   SalaryAdjustment,
   ScheduleRule,
@@ -280,10 +282,23 @@ export function App() {
     });
   }
 
+  function addGradeRecord(record: GradeRecord) {
+    updateVault((draft) => {
+      draft.gradeRecords = [record, ...(draft.gradeRecords ?? [])];
+    });
+  }
+
+  function deleteGradeRecord(recordId: string) {
+    updateVault((draft) => {
+      draft.gradeRecords = (draft.gradeRecords ?? []).filter((record) => record.id !== recordId);
+    });
+  }
+
   function addScheduledLesson(date: string, courseGroupId: string, startTime: string, endTime: string) {
     if (!vault) return;
     const course = getCourse(vault, courseGroupId);
     if (!course) return;
+    if (hasLessonConflict(vault.lessons, date, startTime, endTime)) return;
     addLesson(
       createLessonFromCourse(vault, course, {
         date,
@@ -313,9 +328,9 @@ export function App() {
       dates.forEach((date) => {
         const exists = draft.lessons.some(
           (lesson) =>
-            lesson.courseGroupId === courseGroupId &&
             lesson.date === date &&
-            lesson.startTime === startTime
+            lesson.status !== "cancelled" &&
+            timesOverlap(lesson.startTime, lesson.endTime, startTime, endTime)
         );
         if (!exists) {
           draft.lessons.push(
@@ -560,7 +575,7 @@ export function App() {
         </motion.header>
 
         {deletion && (
-          <div className="mb-6 flex flex-col gap-4 rounded-[16px] border border-[#fed7aa] bg-[#fff7ed] p-4 text-[#9a3412] sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-6 flex flex-col gap-4 rounded-[16px] border border-[#fecaca] bg-[#fff1f2] p-4 text-[#991b1b] sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 gap-3">
               <AlertTriangle size={22} className="mt-0.5 shrink-0" />
               <div className="min-w-0">
@@ -570,7 +585,7 @@ export function App() {
                 </div>
               </div>
             </div>
-            <Button variant="outline" className="shrink-0 border-[#fdba74] bg-white" onClick={cancelDeletionRequest}>
+            <Button variant="outline" className="shrink-0 border-[#fca5a5] bg-white text-[#991b1b]" onClick={cancelDeletionRequest}>
               撤销删除申请
             </Button>
           </div>
@@ -690,6 +705,13 @@ export function App() {
                 onDeleteCourse={deleteCourse}
               />
             )}
+            {view === "grades" && (
+              <GradesView
+                vault={vault}
+                onAddGradeRecord={addGradeRecord}
+                onDeleteGradeRecord={deleteGradeRecord}
+              />
+            )}
             {view === "payroll" && (
               <PayrollReviewView vault={vault} />
             )}
@@ -709,6 +731,7 @@ export function App() {
               <AdminView
                 vault={vault}
                 token={token}
+                adminUsername={username}
                 onNoticeChange={(notice) =>
                   updateVault((draft) => {
                     draft.notice = notice;
@@ -737,6 +760,7 @@ const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
   { key: "calendar", label: viewTitles.calendar },
   { key: "schedule", label: viewTitles.schedule },
   { key: "students", label: viewTitles.students },
+  { key: "grades", label: viewTitles.grades },
   { key: "payroll", label: viewTitles.payroll },
   { key: "salary", label: viewTitles.salary }
 ];
@@ -766,4 +790,22 @@ function greetingFor(date: Date): string {
   if (hour >= 11 && hour < 14) return "中午好";
   if (hour >= 14 && hour < 18) return "下午好";
   return "晚上好";
+}
+
+function hasLessonConflict(lessons: Lesson[], date: string, startTime: string, endTime: string): boolean {
+  return lessons.some(
+    (lesson) =>
+      lesson.date === date &&
+      lesson.status !== "cancelled" &&
+      timesOverlap(lesson.startTime, lesson.endTime, startTime, endTime)
+  );
+}
+
+function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return timeToMinutes(aStart) < timeToMinutes(bEnd) && timeToMinutes(bStart) < timeToMinutes(aEnd);
+}
+
+function timeToMinutes(value: string): number {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bell, Database, Lock, RefreshCw, Save, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Bell, Database, KeyRound, Lock, RefreshCw, Save, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -13,11 +13,13 @@ import {
   confirmUserDeletion,
   getAdminSummary,
   getAdminUsers,
+  lookupPasswordSalt,
   requestUserDeletion,
   runDueDeletions,
   updateAdminNotice,
   updateRegistrationEnabled
 } from "@/frontend/lib/cloud";
+import { derivePasswordVerifier } from "@/frontend/lib/crypto";
 
 const statusLabels: Record<UserStatus, string> = {
   active: "正常",
@@ -37,11 +39,13 @@ function statusVariant(status: UserStatus): "sage" | "amber" | "destructive" | "
 export function AdminView({
   vault,
   token,
+  adminUsername,
   onNoticeChange,
   onClearData
 }: {
   vault: TeacherVault;
   token: string;
+  adminUsername: string;
   onNoticeChange: (notice: Notice) => void;
   onClearData: () => void;
 }) {
@@ -51,6 +55,10 @@ export function AdminView({
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [deleteReasons, setDeleteReasons] = useState<Record<string, string>>({});
+  const [confirmingDeleteUser, setConfirmingDeleteUser] = useState<AdminUser | null>(null);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmError, setConfirmError] = useState("");
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -140,6 +148,47 @@ export function AdminView({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "自动删除执行失败。");
     } finally {
+      setBusy(false);
+    }
+  }
+
+  function openDeleteConfirm(user: AdminUser) {
+    setConfirmingDeleteUser(user);
+    setConfirmPassword("");
+    setConfirmError("");
+  }
+
+  function closeDeleteConfirm() {
+    if (confirmBusy) return;
+    setConfirmingDeleteUser(null);
+    setConfirmPassword("");
+    setConfirmError("");
+  }
+
+  async function submitDeleteConfirm() {
+    if (!confirmingDeleteUser) return;
+    const nextPassword = confirmPassword;
+    if (!nextPassword) {
+      setConfirmError("请输入当前管理员密码。");
+      return;
+    }
+
+    setBusy(true);
+    setConfirmBusy(true);
+    setConfirmError("");
+    setMessage("");
+    try {
+      const lookup = await lookupPasswordSalt(adminUsername);
+      const passwordVerifier = await derivePasswordVerifier(nextPassword, lookup.passwordSalt);
+      const updated = await confirmUserDeletion(token, confirmingDeleteUser.id, passwordVerifier);
+      setUsers((current) => current.map((user) => (user.id === updated.id ? updated : user)));
+      setConfirmingDeleteUser(null);
+      setConfirmPassword("");
+      await refresh();
+    } catch (error) {
+      setConfirmError(error instanceof Error ? error.message : "删除确认失败。");
+    } finally {
+      setConfirmBusy(false);
       setBusy(false);
     }
   }
@@ -308,7 +357,7 @@ export function AdminView({
                               setDeleteReasons((current) => ({ ...current, [user.id]: event.target.value }))
                             }
                             placeholder="删除原因"
-                            className="min-w-0 flex-1"
+                            className="h-9 min-w-0 flex-1"
                           />
                           <Button
                             size="sm"
@@ -330,7 +379,7 @@ export function AdminView({
                               size="sm"
                               variant="destructive"
                               disabled={busy}
-                              onClick={() => updateUser(confirmUserDeletion(token, user.id))}
+                              onClick={() => openDeleteConfirm(user)}
                             >
                               二次确认
                             </Button>
@@ -360,6 +409,57 @@ export function AdminView({
           </div>
         </CardContent>
       </Card>
+
+      {confirmingDeleteUser && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/40 p-4 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            className="w-full max-w-[460px] overflow-hidden rounded-[20px] border border-[#fecaca] bg-white shadow-[0_30px_80px_rgba(6,18,38,0.24)]"
+          >
+            <div className="border-b border-[#fee2e2] bg-[#fff1f2] p-5">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dc2626]">
+                <KeyRound size={14} /> 密码确认
+              </div>
+              <div className="text-xl font-extrabold text-[#7f1d1d]">确认删除申请</div>
+              <div className="mt-2 text-sm font-semibold leading-6 text-[#991b1b]">
+                将账号「{confirmingDeleteUser.username}」进入正式删除计划前，需要输入当前管理员密码。
+              </div>
+            </div>
+            <div className="space-y-4 p-5">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-[#25324a]">当前管理员密码</label>
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="输入当前登录管理员密码"
+                  autoFocus
+                />
+              </div>
+              {confirmError && (
+                <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
+                  {confirmError}
+                </div>
+              )}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button type="button" variant="outline" disabled={confirmBusy} onClick={closeDeleteConfirm}>
+                  取消
+                </Button>
+                <Button type="button" variant="destructive" disabled={confirmBusy} onClick={submitDeleteConfirm}>
+                  <Trash2 size={15} /> 确认删除
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 }

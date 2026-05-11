@@ -54,9 +54,10 @@ export function TodayView({
   const waitingLessons = selectedDateLessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "draft");
   const cancelledLessons = selectedDateLessons.filter((lesson) => lesson.status === "cancelled");
   const campusCounts = vault.campuses
-    .map((campus) => ({
+    .map((campus, index) => ({
       campus,
-      count: selectedDateLessons.filter((lesson) => lesson.campusId === campus.id).length
+      count: selectedDateLessons.filter((lesson) => lesson.campusId === campus.id).length,
+      tone: campusColorClass(index)
     }))
     .filter((item) => item.count > 0);
   const todos = [...(vault.todoItems ?? [])].sort((a, b) => {
@@ -125,9 +126,9 @@ export function TodayView({
             </div>
             <div className="flex flex-wrap gap-2">
               {campusCounts.length > 0 ? campusCounts.map((item) => (
-                <Badge key={item.campus.id} variant="sky" className="px-3 py-1">
+                <span key={item.campus.id} className={`rounded-full px-3 py-1 text-xs font-extrabold ${item.tone}`}>
                   {item.campus.name} · {item.count} 节
-                </Badge>
+                </span>
               )) : (
                 <Badge variant="secondary" className="px-3 py-1">暂无校区课程</Badge>
               )}
