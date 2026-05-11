@@ -52,7 +52,8 @@ export function SalaryView({
   const [adjustmentTitle, setAdjustmentTitle] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
-  const [detailDateFilter, setDetailDateFilter] = useState("");
+  const [detailStartDateFilter, setDetailStartDateFilter] = useState("");
+  const [detailEndDateFilter, setDetailEndDateFilter] = useState("");
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailCampusFilter, setDetailCampusFilter] = useState("all");
@@ -71,7 +72,9 @@ export function SalaryView({
   const totalHours = monthLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? 0), 0);
   const recentLessons = [...monthLessons]
     .filter((lesson) => {
-      const matchesDate = !detailDateFilter || lesson.date === detailDateFilter;
+      const matchesDate =
+        (!detailStartDateFilter || lesson.date >= detailStartDateFilter) &&
+        (!detailEndDateFilter || lesson.date <= detailEndDateFilter);
       const matchesCourse = detailCourseFilter === "all" || lesson.courseGroupId === detailCourseFilter;
       const matchesStudent =
         !detailStudentFilter.trim() ||
@@ -397,10 +400,14 @@ export function SalaryView({
             ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-5">
             <div className="space-y-2">
-              <label className="text-sm font-medium">日期筛选</label>
-              <Input type="date" value={detailDateFilter} onChange={(event) => setDetailDateFilter(event.target.value)} />
+              <label className="text-sm font-medium">开始日期</label>
+              <Input type="date" value={detailStartDateFilter} onChange={(event) => setDetailStartDateFilter(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">结束日期</label>
+              <Input type="date" value={detailEndDateFilter} onChange={(event) => setDetailEndDateFilter(event.target.value)} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">课程筛选</label>

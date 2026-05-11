@@ -219,6 +219,10 @@ export function StudentsView({
         })}
       </div>
 
+      <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] px-4 py-3 text-sm font-semibold leading-6 text-[#9a3412]">
+        删除限制说明：已有学生、课程、排课规则或历史课时引用的数据不能直接删除，建议改为暂停状态，以免影响工资和课时核对。
+      </div>
+
       <Card className="overflow-hidden">
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
@@ -895,10 +899,6 @@ export function StudentsView({
             )}
           </CardContent>
         </Card>
-      </div>
-
-      <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] px-4 py-3 text-sm font-semibold leading-6 text-[#9a3412]">
-        删除限制说明：已有学生、课程、排课规则或历史课时引用的数据不能直接删除，建议改为暂停状态，以免影响工资和课时核对。
       </div>
 
       <Card className="overflow-hidden">

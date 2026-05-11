@@ -145,7 +145,6 @@ export function TodayView({
                 <NotebookPen size={14} /> 待办事项
               </div>
               <CardTitle className="text-xl">今天要跟进的事</CardTitle>
-              <CardDescription className="mt-2">放在今日提醒里，避免为零散事项单独增加一个低频页面。</CardDescription>
             </div>
             <Badge variant={openTodoCount ? "amber" : "secondary"} className="w-fit">
               {openTodoCount ? `${openTodoCount} 条待办` : "已清空"}

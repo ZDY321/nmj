@@ -130,14 +130,14 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `有效课时：${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
+          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `有效课时：仅已完成/补课完成，${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatMoney(campusLessonFee), hint: "仅统计已完成/补课完成", icon: Banknote },
           {
             label: "义务课时扣费",
             value: `-${formatMoney(campusDeduction)}`,
             hint: currentCampusObligation.mode === "manual"
-              ? "手动填写扣费"
-              : `缺口小时：${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0}`,
+              ? "义务课时扣费：手动填写扣除金额"
+              : `义务课时扣费：缺口 ${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0} 小时`,
             icon: SlidersHorizontal,
             danger: true
           },

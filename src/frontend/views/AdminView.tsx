@@ -342,9 +342,11 @@ export function AdminView({
                       {user.deletion ? (
                         <div className="space-y-1">
                           <div>{new Date(user.deletion.scheduledAt).toLocaleString("zh-CN")}</div>
-                          <div className="text-xs font-semibold text-[#9a3412]">
-                            已提醒 {user.deletion.noticeCount} 次
-                          </div>
+                          {user.deletion.noticeCount > 0 && !user.deletion.cancelledAt && (
+                            <div className="text-xs font-semibold text-[#9a3412]">
+                              已提醒 {user.deletion.noticeCount} 次
+                            </div>
+                          )}
                         </div>
                       ) : "无"}
                     </td>

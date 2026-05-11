@@ -119,7 +119,6 @@ export function ScheduleView({
   const [lessonMonth, setLessonMonth] = useState(todayIso().slice(0, 7));
   const [lessonWeek, setLessonWeek] = useState(isoWeekValue(todayIso()));
   const [showOnlyMakeup, setShowOnlyMakeup] = useState(false);
-  const [customPresetLabel, setCustomPresetLabel] = useState("");
   const [customPresetStart, setCustomPresetStart] = useState("08:00");
   const [customPresetEnd, setCustomPresetEnd] = useState("10:00");
   const [temporaryStudentId, setTemporaryStudentId] = useState("");
@@ -228,15 +227,14 @@ export function ScheduleView({
   }
 
   function addCustomPreset() {
-    const label = customPresetLabel.trim() || `${customPresetStart}-${customPresetEnd}`;
     if (!customPresetStart || !customPresetEnd) return;
+    const label = `${customPresetStart}-${customPresetEnd}`;
     onAddCustomTimePreset({
       id: makeId("time"),
-      label: label.slice(0, 12),
+      label,
       startTime: customPresetStart,
       endTime: customPresetEnd
     });
-    setCustomPresetLabel("");
   }
 
   function saveRuleDraft() {
@@ -493,8 +491,7 @@ export function ScheduleView({
 
             <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
               <div className="mb-3 text-sm font-medium">自定义常用时段</div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,140px)_minmax(0,140px)_minmax(122px,auto)]">
-                <Input value={customPresetLabel} onChange={(event) => setCustomPresetLabel(event.target.value)} placeholder="时段名称" />
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,140px)_minmax(0,140px)_minmax(122px,auto)]">
                 <Input type="time" value={customPresetStart} onChange={(event) => setCustomPresetStart(event.target.value)} />
                 <Input type="time" value={customPresetEnd} onChange={(event) => setCustomPresetEnd(event.target.value)} />
                 <Button type="button" variant="outline" onClick={addCustomPreset} className="w-full">
@@ -519,7 +516,7 @@ export function ScheduleView({
                       className="rounded-full border border-[#dbe4ef] bg-white px-3 py-1.5 text-xs font-bold text-[#25324a] transition-colors hover:border-[#fecaca] hover:bg-[#fff1f2] hover:text-[#b91c1c]"
                       title="点击删除自定义时段"
                     >
-                      {preset.label} {preset.startTime}-{preset.endTime} ×
+                      {preset.label === `${preset.startTime}-${preset.endTime}` ? preset.label : `${preset.label} ${preset.startTime}-${preset.endTime}`} ×
                     </button>
                   ))}
                 </div>
@@ -907,8 +904,8 @@ export function ScheduleView({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card className="overflow-hidden">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
+        <Card className="h-fit overflow-hidden">
           <CardHeader>
             <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
               <Clock size={14} /> 课程记录
@@ -978,7 +975,7 @@ export function ScheduleView({
                   onClick={() => setSelectedId(lesson.id)}
                   className={`flex w-full items-center justify-between rounded-[14px] border p-3 text-left transition-all duration-200 ${
                     selected?.id === lesson.id
-                      ? "border-[#ff8617]/45 bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.12)]"
+                      ? "border-[#93c5fd] bg-[#eaf2ff] shadow-[0_10px_24px_rgba(21,87,194,0.12)]"
                       : lessonStatusSurfaceClass(lesson.status)
                   }`}
                 >
@@ -1010,8 +1007,8 @@ export function ScheduleView({
 
         {selected && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
-            <Card className="overflow-hidden border-[#ff8617] bg-[#fffaf5] shadow-[0_18px_48px_rgba(255,134,23,0.14)]">
-              <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-[#fed7aa] bg-[#fff7ed]">
+            <Card className="overflow-hidden">
+              <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-[#e8eef6] bg-white">
                 <div>
                   <CardTitle>课程详情</CardTitle>
                   <CardDescription>{selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
