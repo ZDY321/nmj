@@ -57,6 +57,7 @@ export function SalaryView({
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailCampusFilter, setDetailCampusFilter] = useState("all");
+  const [hoveredTrendMonth, setHoveredTrendMonth] = useState<string | null>(null);
   const { confirm, dialog } = useConfirmDialog();
   const year = selectedMonth.slice(0, 4);
   const breakdown = salaryBreakdown(vault, selectedMonth);
@@ -65,10 +66,10 @@ export function SalaryView({
   const currentYear = currentMonth.slice(0, 4);
   const trend = yearlyTrend(vault, year).filter((item) => year < currentYear || item.month <= currentMonth);
   const maxTotal = Math.max(...trend.map((item) => item.total), 1);
+  const chartMaxTotal = niceChartMax(maxTotal);
   const maxCount = Math.max(...trend.map((item) => item.count), 1);
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
-  const pendingMakeups = monthLessons.filter((lesson) => lesson.status === "makeup_pending");
   const totalHours = monthLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? 0), 0);
   const recentLessons = [...monthLessons]
     .filter((lesson) => {
@@ -144,7 +145,8 @@ export function SalaryView({
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
                   { label: "补课", value: breakdown.makeup, icon: Clock, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "其他加减项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" },
-                  { label: "义务课时扣费", value: -breakdown.obligationDeduction, icon: FileCheck2, color: "text-[#b91c1c] bg-[#fff1f2]", danger: true }
+                  { label: "义务课时扣费", value: -breakdown.obligationDeduction, icon: FileCheck2, color: "text-[#b91c1c] bg-[#fff1f2]", danger: true },
+                  { label: "本月工资合计", value: breakdown.total, icon: Banknote, color: "text-[#061226] bg-[#eef0ff]", total: true }
                 ].map((item) => (
                   <motion.div
                     key={item.label}
@@ -253,15 +255,8 @@ export function SalaryView({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="soft-grid relative h-[280px] rounded-[12px] px-4 pb-9 pt-4">
-              <div className="absolute left-4 top-3 flex h-[212px] flex-col justify-between text-xs font-medium text-[#64748b]">
-                <span>{formatMoney(maxTotal)}</span>
-                <span>{formatMoney(maxTotal * 0.75)}</span>
-                <span>{formatMoney(maxTotal * 0.5)}</span>
-                <span>{formatMoney(maxTotal * 0.25)}</span>
-                <span>¥0</span>
-              </div>
-              <svg viewBox="0 0 720 210" className="absolute left-16 right-5 top-8 h-[210px] w-[calc(100%-5.25rem)] overflow-visible">
+            <div className="soft-grid rounded-[12px] px-3 pb-3 pt-3">
+              <svg viewBox="0 0 760 230" className="h-[260px] w-full overflow-visible">
                 <defs>
                   <linearGradient id="salaryFill" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0%" stopColor="#1557c2" stopOpacity="0.22" />
@@ -269,36 +264,87 @@ export function SalaryView({
                   </linearGradient>
                 </defs>
                 {(() => {
+                  const plotLeft = 84;
+                  const plotRight = 744;
+                  const plotTop = 18;
+                  const plotBottom = 190;
+                  const gridLines = [1, 0.75, 0.5, 0.25, 0];
                   const points = trend.map((item, index) => {
-                    const x = trend.length <= 1 ? 360 : (index / (trend.length - 1)) * 700 + 10;
-                    const y = 198 - (item.total / maxTotal) * 172;
-                    return { x, y, month: item.month };
+                    const x = trend.length <= 1 ? (plotLeft + plotRight) / 2 : plotLeft + (index / (trend.length - 1)) * (plotRight - plotLeft);
+                    const y = plotTop + (1 - item.total / chartMaxTotal) * (plotBottom - plotTop);
+                    return { x, y, month: item.month, total: item.total };
                   });
                   const line = points.map((point) => `${point.x},${point.y}`).join(" ");
-                  const area = points.length ? `${points[0].x},202 ${line} ${points.at(-1)?.x ?? 710},202` : "";
+                  const area = points.length ? `${points[0].x},${plotBottom} ${line} ${points.at(-1)?.x ?? plotRight},${plotBottom}` : "";
+                  const hoveredPoint = points.find((point) => point.month === hoveredTrendMonth);
                   return (
                     <>
+                      {gridLines.map((ratio) => {
+                        const y = plotTop + (1 - ratio) * (plotBottom - plotTop);
+                        return (
+                          <g key={ratio}>
+                            <line x1={plotLeft} x2={plotRight} y1={y} y2={y} stroke="#dbe4ef" strokeDasharray={ratio === 0 ? "0" : "4 6"} />
+                            <text x="4" y={y + 4} className="fill-[#64748b] text-[12px] font-semibold">
+                              {ratio === 0 ? "¥0" : formatMoney(chartMaxTotal * ratio)}
+                            </text>
+                          </g>
+                        );
+                      })}
                       {area && <polygon points={area} fill="url(#salaryFill)" />}
                       {line && <polyline points={line} fill="none" stroke="#1557c2" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}
-                      {points.map((point, index) => (
-                        <circle
-                          key={index}
-                          cx={point.x}
-                          cy={point.y}
-                          r="7"
-                          fill={selectedMonth === point.month ? "#ff8617" : "#fff"}
-                          stroke={selectedMonth === point.month ? "#ff8617" : "#1557c2"}
-                          strokeWidth="5"
+                      {points.map((point) => (
+                        <g
+                          key={point.month}
                           className="cursor-pointer"
                           onClick={() => setSelectedMonth(point.month)}
-                        />
+                          onMouseEnter={() => setHoveredTrendMonth(point.month)}
+                          onMouseLeave={() => setHoveredTrendMonth(null)}
+                        >
+                          <circle
+                            cx={point.x}
+                            cy={point.y}
+                            r="12"
+                            fill="transparent"
+                          />
+                          <circle
+                            cx={point.x}
+                            cy={point.y}
+                            r="7"
+                            fill={selectedMonth === point.month ? "#ff8617" : "#fff"}
+                            stroke={selectedMonth === point.month ? "#ff8617" : "#1557c2"}
+                            strokeWidth="5"
+                          >
+                            <title>{`${point.month}：${formatMoney(point.total)}`}</title>
+                          </circle>
+                        </g>
                       ))}
+                      {hoveredPoint && (
+                        <g>
+                          <rect
+                            x={Math.min(Math.max(hoveredPoint.x - 54, plotLeft), plotRight - 108)}
+                            y={Math.max(hoveredPoint.y - 48, 4)}
+                            width="108"
+                            height="34"
+                            rx="10"
+                            fill="#061226"
+                            opacity="0.92"
+                          />
+                          <text
+                            x={Math.min(Math.max(hoveredPoint.x, plotLeft + 54), plotRight - 54)}
+                            y={Math.max(hoveredPoint.y - 27, 25)}
+                            textAnchor="middle"
+                            className="fill-white text-[12px] font-extrabold"
+                          >
+                            {formatMoney(hoveredPoint.total)}
+                          </text>
+                        </g>
+                      )}
                     </>
                   );
                 })()}
               </svg>
               <div
-                className="absolute bottom-1 left-16 right-5 grid gap-1 text-center text-xs font-medium text-[#64748b]"
+                className="ml-[84px] grid gap-1 text-center text-xs font-medium text-[#64748b]"
                 style={{ gridTemplateColumns: `repeat(${Math.max(trend.length, 1)}, minmax(0, 1fr))` }}
               >
                 {trend.map((item) => {
@@ -348,55 +394,35 @@ export function SalaryView({
         </Card>
       </div>
 
-      <div>
-        <Card className="overflow-hidden">
-          <CardHeader>
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-              <Users size={14} /> 到课情况
-            </div>
-            <CardTitle>{selectedMonth} 出勤统计</CardTitle>
-            <CardDescription>和授课频率放在一起，方便先核对课次和到课。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {Object.entries(summary).map(([key, value], index) => (
-                <motion.div
-                  key={key}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.05 }}
-                  whileHover={{ y: -2 }}
-                  className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4 text-center"
-                >
-                  <span className="mb-2 block text-xs text-[#64748b]">{attendanceLabels[key as keyof typeof attendanceLabels]}</span>
-                  <strong className="text-2xl font-extrabold">{value}</strong>
-                </motion.div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="overflow-hidden">
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <FileCheck2 size={14} /> 数据核对
           </div>
-          <CardTitle>{selectedMonth} 教学数据核对</CardTitle>
-          <CardDescription>点击上方年度趋势中的月份，可切换这里的核对月份。</CardDescription>
+          <CardTitle>{selectedMonth} 教学数据与到课核对</CardTitle>
+          <CardDescription>点击上方年度趋势中的月份，可切换这里的核对月份；到课情况已合并在同一组数据卡片中。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-9">
             {[
               { label: "总收入", value: formatMoney(breakdown.total) },
-              { label: "课时", value: `${totalHours || completedThisMonth.length * 2}` },
+              { label: "课时", value: `${(totalHours || completedThisMonth.length * 2).toFixed(1)} 小时` },
               { label: "课程", value: `${monthLessons.length} 节` },
-              { label: "待补课", value: `${pendingMakeups.length} 个` }
-            ].map((item) => (
-              <div key={item.label} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+              ...Object.entries(summary).map(([key, value]) => ({
+                label: attendanceLabels[key as keyof typeof attendanceLabels],
+                value: `${value}`
+              }))
+            ].map((item, index) => (
+              <motion.div
+                key={item.label}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.025 }}
+                className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-3"
+              >
                 <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
-                <div className="mt-2 break-words text-xl font-extrabold text-[#061226]">{item.value}</div>
-              </div>
+                <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
+              </motion.div>
             ))}
           </div>
 
@@ -499,4 +525,12 @@ export function SalaryView({
       </Card>
     </div>
   );
+}
+
+function niceChartMax(value: number): number {
+  if (value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10].find((candidate) => normalized <= candidate) ?? 10;
+  return step * magnitude;
 }

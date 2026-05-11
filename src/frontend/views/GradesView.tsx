@@ -32,6 +32,7 @@ export function GradesView({
   const [note, setNote] = useState("");
   const [studentFilter, setStudentFilter] = useState("all");
   const [subjectFilter, setSubjectFilter] = useState("all");
+  const [trendMetric, setTrendMetric] = useState<"score" | "rank">("score");
   const { confirm, dialog } = useConfirmDialog();
 
   const records = [...(vault.gradeRecords ?? [])].sort((a, b) => `${b.date} ${b.examName}`.localeCompare(`${a.date} ${a.examName}`));
@@ -43,8 +44,13 @@ export function GradesView({
   const subjects = Array.from(new Set(records.map((record) => record.subject).filter(Boolean)));
   const selectedStudentRecords = useMemo(() => {
     const targetId = studentFilter === "all" ? studentId : studentFilter;
-    return records.filter((record) => record.studentId === targetId).sort((a, b) => a.date.localeCompare(b.date));
-  }, [records, studentFilter, studentId]);
+    return records
+      .filter((record) => record.studentId === targetId && (subjectFilter === "all" || record.subject === subjectFilter))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [records, studentFilter, studentId, subjectFilter]);
+  const trendRecords = selectedStudentRecords.slice(-10);
+  const rankValues = trendRecords.map((record) => parseRankNumber(record.rank)).filter((value): value is number => value !== null);
+  const maxRank = Math.max(...rankValues, 1);
   const average =
     filteredRecords.length > 0
       ? filteredRecords.reduce((sum, record) => sum + normalizedScore(record), 0) / filteredRecords.length
@@ -81,7 +87,7 @@ export function GradesView({
         <Metric label="涉及学生" value={`${new Set(filteredRecords.map((record) => record.studentId)).size} 人`} hint="成绩档案" icon={CalendarDays} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+      <div className="space-y-6">
         <Card className="h-fit overflow-hidden">
           <CardHeader>
             <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
@@ -200,21 +206,64 @@ export function GradesView({
             </div>
 
             <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-              <div className="mb-3 text-sm font-extrabold text-[#061226]">学生成绩走势</div>
-              <div className="flex h-[150px] items-end gap-2">
-                {selectedStudentRecords.slice(-10).map((record, index) => (
-                  <div key={record.id} className="flex h-full flex-1 flex-col justify-end gap-2">
-                    <motion.div
-                      initial={{ height: 0 }}
-                      animate={{ height: `${Math.max(normalizedScore(record) * 1.1, 6)}%` }}
-                      transition={{ delay: index * 0.04 }}
-                      className="mx-auto w-full max-w-[30px] rounded-t-[6px] bg-[#1557c2]"
-                      title={`${record.examName}: ${normalizedScore(record).toFixed(1)}%`}
-                    />
-                    <span className="truncate text-center text-[10px] font-semibold text-[#64748b]">{record.date.slice(5)}</span>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-extrabold text-[#061226]">学生成绩走势</div>
+                  <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                    {trendMetric === "score" ? "按百分制折算显示，越高越好。" : "按排名数值显示，数值越小越靠前。"}
                   </div>
-                ))}
-                {selectedStudentRecords.length === 0 && (
+                </div>
+                <div className="grid w-full grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1 sm:w-[180px]">
+                  <button
+                    type="button"
+                    onClick={() => setTrendMetric("score")}
+                    className={`rounded-[9px] px-3 py-2 text-xs font-bold ${trendMetric === "score" ? "bg-[#1557c2] text-white" : "text-[#25324a]"}`}
+                  >
+                    成绩
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrendMetric("rank")}
+                    className={`rounded-[9px] px-3 py-2 text-xs font-bold ${trendMetric === "rank" ? "bg-[#1557c2] text-white" : "text-[#25324a]"}`}
+                  >
+                    排名
+                  </button>
+                </div>
+              </div>
+              <div className="flex h-[190px] items-end gap-2">
+                {trendRecords.map((record, index) => {
+                  const rankValue = parseRankNumber(record.rank);
+                  const value = trendMetric === "score" ? normalizedScore(record) : rankValue;
+                  const height =
+                    trendMetric === "score"
+                      ? Math.max(Math.min(normalizedScore(record), 100), 4)
+                      : rankValue
+                        ? Math.max(((maxRank - rankValue + 1) / maxRank) * 100, 8)
+                        : 4;
+                  const label = trendMetric === "score"
+                    ? `${normalizedScore(record).toFixed(1)}%`
+                    : rankValue
+                      ? formatRankLabel(record.rank, rankValue)
+                      : "未填";
+                  return (
+                    <div key={record.id} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-2">
+                      <div className="truncate text-center text-[11px] font-extrabold text-[#25324a]" title={`${record.examName}: ${label}`}>
+                        {label}
+                      </div>
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${height}%` }}
+                        transition={{ delay: index * 0.04 }}
+                        className={`mx-auto w-full max-w-[34px] rounded-t-[6px] ${
+                          value === null ? "bg-[#cbd5e1]" : trendMetric === "score" ? "bg-[#1557c2]" : "bg-[#ff8617]"
+                        }`}
+                        title={`${record.examName}: ${label}`}
+                      />
+                      <span className="truncate text-center text-[10px] font-semibold text-[#64748b]">{record.date.slice(5)}</span>
+                    </div>
+                  );
+                })}
+                {trendRecords.length === 0 && (
                   <div className="flex h-full flex-1 items-center justify-center text-sm font-semibold text-[#64748b]">
                     选择学生后查看走势
                   </div>
@@ -231,6 +280,21 @@ export function GradesView({
 function normalizedScore(record: GradeRecord): number {
   if (!record.fullScore || record.fullScore <= 0) return record.score;
   return (record.score / record.fullScore) * 100;
+}
+
+function parseRankNumber(rank?: string): number | null {
+  if (!rank) return null;
+  const match = rank.match(/\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const value = Number(match[0]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function formatRankLabel(rank: string | undefined, value: number): string {
+  const trimmed = rank?.trim();
+  if (!trimmed) return `第${value}名`;
+  if (trimmed.includes("%") || /[名前]/.test(trimmed)) return trimmed;
+  return `第${value}名`;
 }
 
 function Metric({
