@@ -277,6 +277,10 @@ export function SalaryView({
                   const line = points.map((point) => `${point.x},${point.y}`).join(" ");
                   const area = points.length ? `${points[0].x},${plotBottom} ${line} ${points.at(-1)?.x ?? plotRight},${plotBottom}` : "";
                   const hoveredPoint = points.find((point) => point.month === hoveredTrendMonth);
+                  const tooltipWidth = 136;
+                  const tooltipHeight = 42;
+                  const tooltipX = hoveredPoint ? Math.min(Math.max(hoveredPoint.x - tooltipWidth / 2, plotLeft), plotRight - tooltipWidth) : 0;
+                  const tooltipY = hoveredPoint ? Math.max(hoveredPoint.y - 56, 4) : 0;
                   return (
                     <>
                       {gridLines.map((ratio) => {
@@ -321,19 +325,20 @@ export function SalaryView({
                       {hoveredPoint && (
                         <g>
                           <rect
-                            x={Math.min(Math.max(hoveredPoint.x - 54, plotLeft), plotRight - 108)}
-                            y={Math.max(hoveredPoint.y - 48, 4)}
-                            width="108"
-                            height="34"
+                            x={tooltipX}
+                            y={tooltipY}
+                            width={tooltipWidth}
+                            height={tooltipHeight}
                             rx="10"
                             fill="#061226"
                             opacity="0.92"
                           />
                           <text
-                            x={Math.min(Math.max(hoveredPoint.x, plotLeft + 54), plotRight - 54)}
-                            y={Math.max(hoveredPoint.y - 27, 25)}
+                            x={tooltipX + tooltipWidth / 2}
+                            y={tooltipY + 27}
                             textAnchor="middle"
-                            className="fill-white text-[12px] font-extrabold"
+                            className="fill-white font-extrabold"
+                            fontSize="17"
                           >
                             {formatMoney(hoveredPoint.total)}
                           </text>

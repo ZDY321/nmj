@@ -694,7 +694,9 @@ async function upsertEncryptedPayload(
 }
 
 async function requestDeleteUser(request: Request, env: Env, actor: AuthContext, targetUserId: string): Promise<Response> {
-  const body = await readJson<{ reason?: unknown }>(request).catch(() => ({ reason: "" }));
+  const body = await readJson<{ reason?: unknown; targetPasswordVerifier?: unknown }>(request).catch(
+    (): { reason?: unknown; targetPasswordVerifier?: unknown } => ({ reason: "" })
+  );
   const target = await getUserById(env, targetUserId);
   if (!target || target.status === "deleted") {
     return notFound();
@@ -706,24 +708,42 @@ async function requestDeleteUser(request: Request, env: Env, actor: AuthContext,
   const now = new Date().toISOString();
   const scheduledAt = daysFrom(now, deletionGraceDays);
   const reason = String(body.reason ?? "").slice(0, 500);
+  const targetPasswordVerifier = typeof body.targetPasswordVerifier === "string" ? body.targetPasswordVerifier : "";
+  const targetPasswordConfirmed = Boolean(targetPasswordVerifier);
+
+  if (targetPasswordConfirmed && targetPasswordVerifier !== target.password_verifier) {
+    return json({ error: "Target password confirmation failed" }, 401);
+  }
 
   await env.DB.prepare(
     `UPDATE users SET
-      status = 'delete_requested',
+      status = ?,
       delete_requested_at = ?,
       delete_requested_by = ?,
       delete_notice_count = 0,
-      delete_second_confirmed_at = NULL,
+      delete_second_confirmed_at = ?,
       delete_scheduled_at = ?,
       delete_cancelled_at = NULL,
       delete_reason = ?,
       updated_at = ?
      WHERE id = ?`
   )
-    .bind(now, actor.user.id, scheduledAt, reason, now, targetUserId)
+    .bind(
+      targetPasswordConfirmed ? "delete_scheduled" : "delete_requested",
+      now,
+      actor.user.id,
+      targetPasswordConfirmed ? now : null,
+      scheduledAt,
+      reason,
+      now,
+      targetUserId
+    )
     .run();
 
   await addDeletionEvent(env, targetUserId, actor.user.id, "request", reason);
+  if (targetPasswordConfirmed) {
+    await addDeletionEvent(env, targetUserId, actor.user.id, "confirm", null);
+  }
   const updated = await getUserById(env, targetUserId);
   return json(adminUser(updated!));
 }

@@ -55,6 +55,7 @@ export function AdminView({
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [deleteReasons, setDeleteReasons] = useState<Record<string, string>>({});
+  const [deletePasswords, setDeletePasswords] = useState<Record<string, string>>({});
   const [confirmingDeleteUser, setConfirmingDeleteUser] = useState<AdminUser | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmError, setConfirmError] = useState("");
@@ -147,6 +148,39 @@ export function AdminView({
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "自动删除执行失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitVerifiedDeleteRequest(user: AdminUser) {
+    const targetPassword = deletePasswords[user.id] ?? "";
+    if (!targetPassword) {
+      setMessage(`请先输入账号「${user.username}」的登录密码。`);
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+    try {
+      const lookup = await lookupPasswordSalt(user.username);
+      const targetPasswordVerifier = await derivePasswordVerifier(targetPassword, lookup.passwordSalt);
+      const updated = await requestUserDeletion(token, user.id, deleteReasons[user.id] ?? "", targetPasswordVerifier);
+      setUsers((current) => current.map((currentUser) => (currentUser.id === updated.id ? updated : currentUser)));
+      setDeleteReasons((current) => {
+        const next = { ...current };
+        delete next[user.id];
+        return next;
+      });
+      setDeletePasswords((current) => {
+        const next = { ...current };
+        delete next[user.id];
+        return next;
+      });
+      await refresh();
+      setMessage(`账号「${user.username}」已通过密码验证并进入删除计划。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除申请验证失败。");
     } finally {
       setBusy(false);
     }
@@ -312,7 +346,7 @@ export function AdminView({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] border-separate border-spacing-y-2 text-left text-sm">
+            <table className="w-full min-w-[1240px] border-separate border-spacing-y-2 text-left text-sm">
               <thead>
                 <tr className="text-xs font-extrabold uppercase text-[#64748b]">
                   <th className="px-3 py-2">账号</th>
@@ -352,7 +386,7 @@ export function AdminView({
                     </td>
                     <td className="rounded-r-[12px] px-3 py-3">
                       {user.status === "active" && (
-                        <div className="flex min-w-[330px] items-center gap-2">
+                        <div className="flex min-w-[520px] flex-col gap-2 xl:flex-row xl:items-center">
                           <Input
                             value={deleteReasons[user.id] ?? ""}
                             onChange={(event) =>
@@ -361,16 +395,24 @@ export function AdminView({
                             placeholder="删除原因"
                             className="h-9 min-w-0 flex-1"
                           />
+                          <Input
+                            type="password"
+                            value={deletePasswords[user.id] ?? ""}
+                            onChange={(event) =>
+                              setDeletePasswords((current) => ({ ...current, [user.id]: event.target.value }))
+                            }
+                            placeholder="被删除账号密码"
+                            autoComplete="new-password"
+                            className="h-9 min-w-0 flex-1"
+                          />
                           <Button
                             size="sm"
                             variant="destructive"
                             disabled={busy}
                             className="shrink-0"
-                            onClick={() =>
-                              updateUser(requestUserDeletion(token, user.id, deleteReasons[user.id] ?? ""))
-                            }
+                            onClick={() => void submitVerifiedDeleteRequest(user)}
                           >
-                            申请删除
+                            <Trash2 size={14} /> 验证删除
                           </Button>
                         </div>
                       )}

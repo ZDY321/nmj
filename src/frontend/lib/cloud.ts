@@ -52,6 +52,7 @@ function translateApiError(error: string): string {
     "Invalid username": "用户名请使用英文字母、数字、下划线、短横线或点，3-32 位，首尾必须是英文字母或数字。",
     "Password confirmation required": "请先输入当前管理员密码。",
     "Password confirmation failed": "管理员密码确认失败。",
+    "Target password confirmation failed": "被删除账号密码验证失败。",
     "Database migration required": "数据库还没执行 0002 云端多用户迁移。请先在 D1 执行 migrations/0002_cloud_multi_user.sql。"
   };
   return messages[error] ?? error;
@@ -93,11 +94,11 @@ export async function updateRegistrationEnabled(token: string, enabled: boolean)
   });
 }
 
-export async function requestUserDeletion(token: string, userId: string, reason: string): Promise<AdminUser> {
+export async function requestUserDeletion(token: string, userId: string, reason: string, targetPasswordVerifier?: string): Promise<AdminUser> {
   return apiRequest<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/delete-request`, {
     method: "POST",
     token,
-    body: JSON.stringify({ reason })
+    body: JSON.stringify({ reason, targetPasswordVerifier })
   });
 }
 
