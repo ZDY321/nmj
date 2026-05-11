@@ -13,4 +13,4 @@ not_found_handling = "single-page-application"
 [[d1_databases]]
 binding = "DB"
 database_name = "teacher_salary_tracker"
-database_id = "138a4c6a-0d05-47b1-a89c-965e03de560b"
+database_id = "ded4cba9-a992-46d6-8c32-1961b8905299"
