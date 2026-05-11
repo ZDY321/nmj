@@ -158,7 +158,7 @@ export async function registerAccount(
   const passwordSalt = createPasswordSalt();
   const passwordVerifier = await derivePasswordVerifier(password, passwordSalt);
   const vault = createSampleVault();
-  vault.profile.displayName = normalizedUsername;
+  vault.profile.displayName = "牛马";
   const notice = await cloudNoticeFallback();
   if (notice) {
     vault.notice = notice;

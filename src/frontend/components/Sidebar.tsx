@@ -9,16 +9,22 @@ export function Sidebar({
   view,
   collapsed,
   role,
+  username,
+  displayName,
   onViewChange,
   onToggle
 }: {
   view: ViewKey;
   collapsed: boolean;
   role: UserRole;
+  username: string;
+  displayName: string;
   onViewChange: (view: ViewKey) => void;
   onToggle: () => void;
 }) {
   const items = role === "admin" ? [...navItems, { key: "admin" as ViewKey, icon: ShieldCheck, label: "管理后台" }] : navItems;
+  const profileName = displayName.trim() || username || "Teacher";
+  const avatarText = profileName.slice(0, 1).toUpperCase();
 
   return (
     <aside
@@ -113,12 +119,12 @@ export function Sidebar({
             <div className="rounded-[16px] border border-white/12 bg-white/[0.045] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.12)]">
               <div className="flex items-center gap-3">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-lg font-extrabold text-[#0a3a68]">
-                  陈
+                  {avatarText}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-base font-bold">陈老师</div>
+                  <div className="truncate text-base font-bold">{profileName}</div>
                   <div className="truncate text-sm text-white/60">
-                    {role === "admin" ? "Administrator" : "Teacher"}
+                    {username}
                   </div>
                 </div>
                 <ChevronRight size={18} className="text-white/52" />

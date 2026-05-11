@@ -11,7 +11,7 @@ export function createSampleVault(): TeacherVault {
   return {
     version: 1,
     profile: {
-      displayName: "陈老师",
+      displayName: "牛马",
       baseSalary: 3200,
       currency: "CNY"
     },

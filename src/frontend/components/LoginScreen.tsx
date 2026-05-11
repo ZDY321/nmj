@@ -58,6 +58,7 @@ export function LoginScreen({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordAcknowledged, setPasswordAcknowledged] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -103,6 +104,10 @@ export function LoginScreen({
         }
         if (password !== confirmPassword) {
           setError("两次输入的密码不一致。");
+          return;
+        }
+        if (!passwordAcknowledged) {
+          setError("请先勾选确认：你已经阅读提醒，并且已经严肃保存登录密码 / 数据密码。");
           return;
         }
         const role = await onRegister(username.trim(), password);
@@ -193,7 +198,7 @@ export function LoginScreen({
                   <Input
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder={mode === "register" ? "例如 teacher_chen 或 teacher.chen" : undefined}
+                    placeholder={mode === "register" ? "例如 teacher_niuma 或 teacher.niuma" : undefined}
                   />
                   {mode === "register" && (
                     <p className="text-xs font-semibold leading-5 text-[#64748b]">
@@ -211,11 +216,26 @@ export function LoginScreen({
                         请务必严肃保存登录密码 / 数据密码。该密码用于解锁你的加密数据，丢失后无法从云端找回或解密。
                       </div>
                     </div>
+                    <label className="flex items-start gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4 text-sm font-bold leading-6 text-[#25324a]">
+                      <input
+                        type="checkbox"
+                        checked={passwordAcknowledged}
+                        onChange={(event) => setPasswordAcknowledged(event.target.checked)}
+                        className="mt-1 h-4 w-4 shrink-0 accent-[#ff8617]"
+                      />
+                      <span>
+                        我已阅读提醒，并确认已经保存好登录密码 / 数据密码；我知道密码丢失后无法找回，也无法解密云端数据。
+                      </span>
+                    </label>
                   </>
                 )}
                 {error && <p className="rounded-[12px] bg-[#fee2e2] px-4 py-3 text-sm font-bold text-[#dc2626]">{error}</p>}
                 {success && <p className="rounded-[12px] bg-[#e8f8ef] px-4 py-3 text-sm font-bold text-[#16a34a]">{success}</p>}
-                <Button type="submit" disabled={busy} className="h-12 w-full rounded-[14px] text-base">
+                <Button
+                  type="submit"
+                  disabled={busy || (mode === "register" && !passwordAcknowledged)}
+                  className="h-12 w-full rounded-[14px] text-base"
+                >
                   <Lock size={17} />
                   {busy ? "处理中..." : mode === "login" ? "登录并解锁" : "注册账号"}
                 </Button>
@@ -228,6 +248,7 @@ export function LoginScreen({
                       setMode((c) => (c === "login" ? "register" : "login"));
                       setError("");
                       setSuccess("");
+                      setPasswordAcknowledged(false);
                     }}
                   >
                     {mode === "login" ? "还没有账号？先注册" : "已有账号？返回登录"}

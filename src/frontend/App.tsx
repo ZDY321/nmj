@@ -212,6 +212,8 @@ export function App() {
         view={view}
         collapsed={collapsed}
         role={role}
+        username={username}
+        displayName={vault.profile.displayName}
         onViewChange={setView}
         onToggle={() => setCollapsed((v) => !v)}
       />
@@ -275,7 +277,7 @@ export function App() {
                 <span>{activeTitle}</span>
               </div>
               <h1 className="text-[30px] font-extrabold leading-tight text-[#050b18] sm:text-[38px]">
-                Welcome back, {vault.profile.displayName || "Teacher"}
+                welcome back,{vault.profile.displayName || "Teacher"}
               </h1>
               <p className="mt-2 text-base text-[#475569] sm:text-lg">
                 今天的课时、收入、排课和待处理事项已汇总在这里。
