@@ -118,7 +118,14 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
         {[
           { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatMoney(campusLessonFee), hint: "仅统计已完成/补课完成", icon: Banknote },
-          { label: "义务课时扣费", value: `-${formatMoney(campusDeduction)}`, hint: `${currentCampusObligation.deductedHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0} 小时`, icon: SlidersHorizontal },
+          {
+            label: "义务课时扣费",
+            value: `-${formatMoney(campusDeduction)}`,
+            hint: currentCampusObligation.mode === "manual"
+              ? "手动填写扣费"
+              : `缺口 ${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0} 小时`,
+            icon: SlidersHorizontal
+          },
           { label: "当前校区扣后", value: formatMoney(campusNet), hint: campusFilter === "all" ? "全部校区扣后课时费" : campusName(vault, campusFilter), icon: FileCheck2 }
         ].map((item) => {
           const Icon = item.icon;
@@ -146,7 +153,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
               <MapPin size={14} /> 校区合并统计
             </div>
             <CardTitle>{selectedMonth} 校区汇总</CardTitle>
-            <CardDescription>义务课时扣费只作用于个人设置的义务校区。</CardDescription>
+            <CardDescription>义务课时按缺口扣费；选择了对应班级时，只核算该班级的完成小时。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {campusSummaries.map((item) => (

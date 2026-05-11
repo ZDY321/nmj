@@ -31,7 +31,7 @@ export const viewTitles: Record<ViewKey, string> = {
   today: "今日提醒",
   calendar: "日历总览",
   schedule: "排课与课时",
-  students: "学生档案",
+  students: "档案信息",
   payroll: "工资核对",
   salary: "数据统计",
   admin: "管理后台"
@@ -41,7 +41,7 @@ export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: s
   { key: "today", icon: Bell, label: "今日提醒" },
   { key: "calendar", icon: CalendarCheck, label: "日历总览" },
   { key: "schedule", icon: CalendarDays, label: "排课与课时" },
-  { key: "students", icon: Users, label: "学生档案" },
+  { key: "students", icon: Users, label: "档案信息" },
   { key: "payroll", icon: FileCheck2, label: "工资核对" },
   { key: "salary", icon: WalletCards, label: "数据统计" }
 ];

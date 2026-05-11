@@ -39,6 +39,7 @@ import type {
   TeacherVault,
   TeacherProfile,
   TimePreset,
+  TodoItem,
   UserDeletionState,
   UserRole,
   WeekStart
@@ -63,6 +64,7 @@ export function App() {
   const [role, setRole] = useState<UserRole>("teacher");
   const [deletion, setDeletion] = useState<UserDeletionState | null>(null);
   const [vault, setVault] = useState<TeacherVault | null>(null);
+  const [bootstrapped, setBootstrapped] = useState(false);
   const [view, setView] = useState<ViewKey>("today");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -260,6 +262,24 @@ export function App() {
     });
   }
 
+  function addTodo(todo: TodoItem) {
+    updateVault((draft) => {
+      draft.todoItems = [todo, ...(draft.todoItems ?? [])];
+    });
+  }
+
+  function updateTodo(todo: TodoItem) {
+    updateVault((draft) => {
+      draft.todoItems = (draft.todoItems ?? []).map((item) => (item.id === todo.id ? todo : item));
+    });
+  }
+
+  function deleteTodo(todoId: string) {
+    updateVault((draft) => {
+      draft.todoItems = (draft.todoItems ?? []).filter((todo) => todo.id !== todoId);
+    });
+  }
+
   function addScheduledLesson(date: string, courseGroupId: string, startTime: string, endTime: string) {
     if (!vault) return;
     const course = getCourse(vault, courseGroupId);
@@ -314,27 +334,29 @@ export function App() {
 
   useEffect(() => {
     const stored = readUnlockedSession();
-    if (!stored) return;
-    try {
-      const session = JSON.parse(stored) as UnlockedSession;
-      if (!session.username || !session.password || !session.token || !session.vault) {
+    if (stored) {
+      try {
+        const session = JSON.parse(stored) as UnlockedSession;
+        if (!session.username || !session.password || !session.token || !session.vault) {
+          clearUnlockedSession();
+        } else {
+          setUsername(session.username);
+          setPassword(session.password);
+          setToken(session.token);
+          setRole(session.role);
+          setDeletion(session.deletion);
+          setVault(session.vault);
+          setSelectedDate(session.selectedDate || todayIso());
+          writeUnlockedSession({
+            ...session,
+            selectedDate: session.selectedDate || todayIso()
+          });
+        }
+      } catch {
         clearUnlockedSession();
-        return;
       }
-      setUsername(session.username);
-      setPassword(session.password);
-      setToken(session.token);
-      setRole(session.role);
-      setDeletion(session.deletion);
-      setVault(session.vault);
-      setSelectedDate(session.selectedDate || todayIso());
-      writeUnlockedSession({
-        ...session,
-        selectedDate: session.selectedDate || todayIso()
-      });
-    } catch {
-      clearUnlockedSession();
     }
+    setBootstrapped(true);
   }, []);
 
   useEffect(() => {
@@ -365,6 +387,20 @@ export function App() {
     if (!token) return;
     await cancelOwnDeletion(token);
     setDeletion(null);
+  }
+
+  if (!bootstrapped) {
+    return (
+      <div className="dashboard-shell flex min-h-screen items-center justify-center p-6">
+        <div className="rounded-[18px] border border-[#dbe4ef] bg-white px-6 py-5 text-center shadow-[0_18px_50px_rgba(15,35,66,0.1)]">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-[14px] bg-[#fff1e2] text-[#ff8617]">
+            <GraduationCap size={24} />
+          </div>
+          <div className="text-base font-extrabold text-[#061226]">正在恢复会话</div>
+          <div className="mt-1 text-sm font-semibold text-[#64748b]">请稍候</div>
+        </div>
+      </div>
+    );
   }
 
   if (!vault) {
@@ -595,7 +631,14 @@ export function App() {
             transition={{ duration: 0.25 }}
           >
             {view === "today" && (
-              <TodayView vault={vault} selectedDate={selectedDate} onUpdateLesson={updateLesson} />
+              <TodayView
+                vault={vault}
+                selectedDate={selectedDate}
+                onUpdateLesson={updateLesson}
+                onAddTodo={addTodo}
+                onUpdateTodo={updateTodo}
+                onDeleteTodo={deleteTodo}
+              />
             )}
             {view === "calendar" && (
               <CalendarView vault={vault} onWeekStartChange={updateWeekStart} />

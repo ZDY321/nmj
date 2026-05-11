@@ -444,7 +444,7 @@ export function ScheduleView({
             <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
               <div className="mb-3 text-sm font-medium">自定义常用时段</div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,140px)_minmax(0,140px)_minmax(122px,auto)]">
-                <Input value={customPresetLabel} onChange={(event) => setCustomPresetLabel(event.target.value)} placeholder="例如：晚 8:10" />
+                <Input value={customPresetLabel} onChange={(event) => setCustomPresetLabel(event.target.value)} placeholder="时段名称" />
                 <Input type="time" value={customPresetStart} onChange={(event) => setCustomPresetStart(event.target.value)} />
                 <Input type="time" value={customPresetEnd} onChange={(event) => setCustomPresetEnd(event.target.value)} />
                 <Button type="button" variant="outline" onClick={addCustomPreset} className="w-full">
@@ -569,8 +569,8 @@ export function ScheduleView({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card className="overflow-hidden">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
+        <Card className="h-fit overflow-hidden">
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
@@ -909,7 +909,7 @@ export function ScheduleView({
               </Button>
             </div>
 
-            <div className="max-h-[460px] space-y-1 overflow-y-auto pr-2">
+            <div className="max-h-[620px] space-y-1 overflow-y-auto pr-2">
               {lessons.map((lesson, index) => (
                 <motion.button
                   key={lesson.id}

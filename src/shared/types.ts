@@ -47,6 +47,7 @@ export type Student = {
   id: string;
   name: string;
   grade?: string;
+  school?: string;
   defaultCampusId?: string;
   note?: string;
   status: "active" | "paused";
@@ -149,9 +150,22 @@ export type TeacherProfile = {
   email?: string;
   homeCampusId?: string;
   obligationCampusId?: string;
+  obligationCourseGroupId?: string;
+  obligationDeductionMode?: "auto_gap" | "manual";
   monthlyObligationHours?: number;
   obligationHourlyDeduction?: number;
+  manualObligationDeduction?: number;
   note?: string;
+};
+
+export type TodoItem = {
+  id: string;
+  title: string;
+  dueDate?: string;
+  status: "open" | "done";
+  priority?: "normal" | "high";
+  note?: string;
+  createdAt: string;
 };
 
 export type TimePreset = {
@@ -176,6 +190,7 @@ export type TeacherVault = {
   scheduleRules: ScheduleRule[];
   lessons: Lesson[];
   salaryAdjustments: SalaryAdjustment[];
+  todoItems?: TodoItem[];
   notice: Notice;
 };
 

@@ -65,29 +65,47 @@ function completedHours(lesson: Lesson): number {
 
 export type ObligationSummary = {
   campus?: Campus;
+  course?: CourseGroup;
+  mode: "auto_gap" | "manual";
   requiredHours: number;
   completedHours: number;
   deductedHours: number;
+  missingHours: number;
   hourlyDeduction: number;
+  manualAmount: number;
   amount: number;
 };
 
 export function obligationSummary(vault: TeacherVault, month: string, campusId = vault.profile.obligationCampusId): ObligationSummary {
+  const courseId = vault.profile.obligationCourseGroupId;
+  const mode = vault.profile.obligationDeductionMode ?? "auto_gap";
   const requiredHours = Math.max(vault.profile.monthlyObligationHours ?? 0, 0);
   const hourlyDeduction = Math.max(vault.profile.obligationHourlyDeduction ?? 0, 0);
+  const manualAmount = Math.max(vault.profile.manualObligationDeduction ?? 0, 0);
   const campus = vault.campuses.find((item) => item.id === campusId);
+  const course = vault.courseGroups.find((item) => item.id === courseId);
   const completedAtCampus = vault.lessons
-    .filter((lesson) => monthOf(lesson.date) === month && (lesson.campusId ?? getCourse(vault, lesson.courseGroupId)?.defaultCampusId) === campusId)
+    .filter((lesson) => {
+      const lessonCampusId = lesson.campusId ?? getCourse(vault, lesson.courseGroupId)?.defaultCampusId;
+      const matchesCampus = !campusId || lessonCampusId === campusId;
+      const matchesCourse = !courseId || lesson.courseGroupId === courseId;
+      return monthOf(lesson.date) === month && matchesCampus && matchesCourse;
+    })
     .reduce((sum, lesson) => sum + completedHours(lesson), 0);
-  const deductedHours = campusId ? Math.min(requiredHours, completedAtCampus) : 0;
+  const missingHours = Math.max(requiredHours - completedAtCampus, 0);
+  const autoAmount = Math.round(missingHours * hourlyDeduction);
 
   return {
     campus,
+    course,
+    mode,
     requiredHours,
     completedHours: completedAtCampus,
-    deductedHours,
+    deductedHours: mode === "manual" ? 0 : missingHours,
+    missingHours,
     hourlyDeduction,
-    amount: Math.round(deductedHours * hourlyDeduction)
+    manualAmount,
+    amount: mode === "manual" ? manualAmount : autoAmount
   };
 }
 

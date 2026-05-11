@@ -16,8 +16,11 @@ export function createSampleVault(): TeacherVault {
       currency: "CNY",
       homeCampusId: "campus_main",
       obligationCampusId: "campus_main",
+      obligationCourseGroupId: "course_class_math",
+      obligationDeductionMode: "auto_gap",
       monthlyObligationHours: 8,
       obligationHourlyDeduction: 80,
+      manualObligationDeduction: 0,
       phone: "",
       email: "",
       note: "中心校区承担义务课时核扣。"
@@ -32,10 +35,10 @@ export function createSampleVault(): TeacherVault {
       { id: "campus_west", name: "西区校区", address: "教学楼 202" }
     ],
     students: [
-      { id: "student_a", name: "学生 A", grade: "高一", defaultCampusId: "campus_main", status: "active" },
-      { id: "student_b", name: "学生 B", grade: "初二", defaultCampusId: "campus_main", status: "active" },
-      { id: "student_c", name: "学生 C", grade: "初二", defaultCampusId: "campus_west", status: "active" },
-      { id: "student_d", name: "学生 D", grade: "初三", defaultCampusId: "campus_main", status: "active" }
+      { id: "student_a", name: "学生 A", grade: "初三", school: "第一中学", defaultCampusId: "campus_main", status: "active" },
+      { id: "student_b", name: "学生 B", grade: "初二", school: "实验中学", defaultCampusId: "campus_main", status: "active" },
+      { id: "student_c", name: "学生 C", grade: "初二", school: "实验中学", defaultCampusId: "campus_west", status: "active" },
+      { id: "student_d", name: "学生 D", grade: "初三", school: "外国语学校", defaultCampusId: "campus_main", status: "active" }
     ],
     courseGroups: [
       {
@@ -167,6 +170,16 @@ export function createSampleVault(): TeacherVault {
         title: "交通补贴",
         amount: 120,
         note: "跨校区补贴"
+      }
+    ],
+    todoItems: [
+      {
+        id: "todo_month_check",
+        title: "月底前核对补课与取消备注",
+        dueDate: "2026-05-31",
+        status: "open",
+        priority: "high",
+        createdAt: "2026-05-10T00:00:00.000Z"
       }
     ]
   };

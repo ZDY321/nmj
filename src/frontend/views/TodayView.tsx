@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -6,6 +7,8 @@ import {
   Clock3,
   MapPin,
   NotebookPen,
+  Plus,
+  Trash2,
   Users,
   XCircle
 } from "lucide-react";
@@ -13,7 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { Lesson, TeacherVault } from "@/shared/types";
+import type { Lesson, TeacherVault, TodoItem } from "@/shared/types";
+import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
   campusName,
@@ -32,12 +36,20 @@ import {
 export function TodayView({
   vault,
   selectedDate,
-  onUpdateLesson
+  onUpdateLesson,
+  onAddTodo,
+  onUpdateTodo,
+  onDeleteTodo
 }: {
   vault: TeacherVault;
   selectedDate: string;
   onUpdateLesson: (lesson: Lesson) => void;
+  onAddTodo: (todo: TodoItem) => void;
+  onUpdateTodo: (todo: TodoItem) => void;
+  onDeleteTodo: (todoId: string) => void;
 }) {
+  const [todoTitle, setTodoTitle] = useState("");
+  const [todoDueDate, setTodoDueDate] = useState(selectedDate);
   const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
   const waitingLessons = selectedDateLessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "draft");
   const cancelledLessons = selectedDateLessons.filter((lesson) => lesson.status === "cancelled");
@@ -47,7 +59,11 @@ export function TodayView({
       count: selectedDateLessons.filter((lesson) => lesson.campusId === campus.id).length
     }))
     .filter((item) => item.count > 0);
-  const homeworkReminderCount = selectedDateLessons.filter((lesson) => previousHomework(vault, lesson).trim()).length;
+  const todos = [...(vault.todoItems ?? [])].sort((a, b) => {
+    if (a.status !== b.status) return a.status === "open" ? -1 : 1;
+    return `${a.dueDate ?? "9999-99-99"} ${a.createdAt}`.localeCompare(`${b.dueDate ?? "9999-99-99"} ${b.createdAt}`);
+  });
+  const openTodoCount = todos.filter((todo) => todo.status === "open").length;
   const selectedDateLabel = new Intl.DateTimeFormat("zh-CN", {
     month: "long",
     day: "numeric",
@@ -58,13 +74,27 @@ export function TodayView({
     onUpdateLesson({ ...lesson, status });
   }
 
+  function addTodo() {
+    const title = todoTitle.trim();
+    if (!title) return;
+    onAddTodo({
+      id: makeId("todo"),
+      title,
+      dueDate: todoDueDate || undefined,
+      status: "open",
+      priority: "normal",
+      createdAt: new Date().toISOString()
+    });
+    setTodoTitle("");
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[ 
           { label: isToday(selectedDate) ? "今日课程" : "选中日期课程", value: `${selectedDateLessons.length} 节`, icon: CalendarDays },
           { label: "待上课", value: `${waitingLessons.length} 节`, icon: Clock3 },
-          { label: "作业提醒", value: `${homeworkReminderCount} 条`, icon: NotebookPen },
+          { label: "待办事项", value: `${openTodoCount} 条`, icon: NotebookPen },
           { label: "已取消", value: `${cancelledLessons.length} 条`, icon: XCircle }
         ].map((item) => {
           const Icon = item.icon;
@@ -102,6 +132,67 @@ export function TodayView({
                 <Badge variant="secondary" className="px-3 py-1">暂无校区课程</Badge>
               )}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-[#e8eef6] pb-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
+                <NotebookPen size={14} /> 待办事项
+              </div>
+              <CardTitle className="text-xl">今天要跟进的事</CardTitle>
+              <CardDescription className="mt-2">放在今日提醒里，避免为零散事项单独增加一个低频页面。</CardDescription>
+            </div>
+            <Badge variant={openTodoCount ? "amber" : "secondary"} className="w-fit">
+              {openTodoCount ? `${openTodoCount} 条待办` : "已清空"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4 sm:p-6">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_auto]">
+            <Input value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} placeholder="例如：联系家长确认补课时间" />
+            <Input type="date" value={todoDueDate} onChange={(event) => setTodoDueDate(event.target.value)} />
+            <Button type="button" onClick={addTodo}>
+              <Plus size={15} /> 添加待办
+            </Button>
+          </div>
+          <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
+            {todos.map((todo) => (
+              <div
+                key={todo.id}
+                className={`flex flex-col gap-3 rounded-[14px] border p-3 sm:flex-row sm:items-center sm:justify-between ${
+                  todo.status === "done" ? "border-[#dbe4ef] bg-[#f8fbff] opacity-70" : "border-[#fed7aa] bg-[#fff7ed]"
+                }`}
+              >
+                <label className="flex min-w-0 flex-1 items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={todo.status === "done"}
+                    onChange={(event) => onUpdateTodo({ ...todo, status: event.target.checked ? "done" : "open" })}
+                    className="mt-1 h-4 w-4 accent-[#ff8617]"
+                  />
+                  <span className="min-w-0">
+                    <span className={`block text-sm font-extrabold ${todo.status === "done" ? "text-[#64748b] line-through" : "text-[#061226]"}`}>
+                      {todo.title}
+                    </span>
+                    <span className="mt-1 block text-xs font-semibold text-[#64748b]">
+                      {todo.dueDate ? `截止：${todo.dueDate}` : "未设置截止日期"}
+                    </span>
+                  </span>
+                </label>
+                <Button type="button" size="sm" variant="destructive" onClick={() => onDeleteTodo(todo.id)}>
+                  <Trash2 size={14} /> 删除
+                </Button>
+              </div>
+            ))}
+            {todos.length === 0 && (
+              <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
+                暂无待办事项
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

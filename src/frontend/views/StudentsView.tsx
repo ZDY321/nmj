@@ -12,7 +12,8 @@ import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
 import { campusName, courseName, courseTypeLabels, studentNames, weekdayLabels } from "@/frontend/lib/helpers";
 
-const gradeOptions = ["未设置", "幼儿园", "一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "初一", "初二", "初三", "高一", "高二", "高三"];
+const fixedGradeOptions = ["初一", "初二", "初三"];
+const gradeOptions = ["未设置", ...fixedGradeOptions, "自定义"];
 
 export function StudentsView({
   vault,
@@ -42,6 +43,8 @@ export function StudentsView({
   const [campusNameInput, setCampusNameInput] = useState("");
   const [studentNameInput, setStudentNameInput] = useState("");
   const [studentGradeInput, setStudentGradeInput] = useState("");
+  const [customGradeInput, setCustomGradeInput] = useState("");
+  const [studentSchoolInput, setStudentSchoolInput] = useState("");
   const [studentCampusInput, setStudentCampusInput] = useState(vault.campuses[0]?.id ?? "");
   const [studentNoteInput, setStudentNoteInput] = useState("");
   const [courseNameInput, setCourseNameInput] = useState("");
@@ -60,6 +63,7 @@ export function StudentsView({
     const matchesSearch =
       !normalizedArchiveSearch ||
       student.name.toLowerCase().includes(normalizedArchiveSearch) ||
+      (student.school ?? "").toLowerCase().includes(normalizedArchiveSearch) ||
       (student.note ?? "").toLowerCase().includes(normalizedArchiveSearch);
     return matchesGrade && matchesCampus && matchesSearch;
   });
@@ -67,6 +71,8 @@ export function StudentsView({
   const activeStudents = vault.students.filter((student) => student.status === "active").length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
   const scheduleRuleCount = vault.scheduleRules.length;
+  const obligationCampusId = vault.profile.obligationCampusId ?? "";
+  const obligationCourses = vault.courseGroups.filter((course) => !obligationCampusId || course.defaultCampusId === obligationCampusId);
 
   function addCampus(e: FormEvent) {
     e.preventDefault();
@@ -78,16 +84,20 @@ export function StudentsView({
   function addStudent(e: FormEvent) {
     e.preventDefault();
     if (!studentNameInput.trim()) return;
+    const resolvedGrade = studentGradeInput === "自定义" ? customGradeInput.trim() : studentGradeInput;
     onAddStudent({
       id: makeId("student"),
       name: studentNameInput.trim(),
-      grade: studentGradeInput || undefined,
+      grade: resolvedGrade || undefined,
+      school: studentSchoolInput.trim() || undefined,
       defaultCampusId: studentCampusInput || vault.campuses[0]?.id,
       note: studentNoteInput.trim() || undefined,
       status: "active"
     });
     setStudentNameInput("");
     setStudentGradeInput("");
+    setCustomGradeInput("");
+    setStudentSchoolInput("");
     setStudentNoteInput("");
   }
 
@@ -152,6 +162,12 @@ export function StudentsView({
     });
   }
 
+  function gradeSelectValue(grade?: string): string {
+    if (!grade) return "";
+    if (grade === "__custom__") return "自定义";
+    return fixedGradeOptions.includes(grade) ? grade : "自定义";
+  }
+
   function toggleCourseStudent(studentId: string) {
     setEditingCourse((current) => {
       if (!current) return current;
@@ -177,7 +193,7 @@ export function StudentsView({
       {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "学生档案", value: `${vault.students.length} 人`, hint: `正常 ${activeStudents} 人`, icon: Users },
+          { label: "档案信息", value: `${vault.students.length} 人`, hint: `正常学生 ${activeStudents} 人`, icon: Users },
           { label: "校区", value: `${vault.campuses.length} 个`, hint: "教学地点", icon: Building2 },
           { label: "课程/班课", value: `${vault.courseGroups.length} 个`, hint: `启用 ${activeCourses} 个`, icon: GraduationCap },
           { label: "固定规则", value: `${scheduleRuleCount} 条`, hint: "排课规则归档", icon: CalendarCheck }
@@ -224,10 +240,40 @@ export function StudentsView({
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">义务课时扣费校区</label>
-            <Select value={vault.profile.obligationCampusId ?? ""} onChange={(event) => updateProfile({ obligationCampusId: event.target.value || undefined })}>
+            <Select
+              value={vault.profile.obligationCampusId ?? ""}
+              onChange={(event) =>
+                updateProfile({
+                  obligationCampusId: event.target.value || undefined,
+                  obligationCourseGroupId: undefined
+                })
+              }
+            >
               <option value="">不扣义务课时</option>
               {vault.campuses.map((campus) => (
                 <option key={campus.id} value={campus.id}>{campus.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">扣费方式</label>
+            <Select
+              value={vault.profile.obligationDeductionMode ?? "auto_gap"}
+              onChange={(event) => updateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
+            >
+              <option value="auto_gap">按缺少义务小时自动扣</option>
+              <option value="manual">手动填写扣除金额</option>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">对应班级 / 课程</label>
+            <Select
+              value={vault.profile.obligationCourseGroupId ?? ""}
+              onChange={(event) => updateProfile({ obligationCourseGroupId: event.target.value || undefined })}
+            >
+              <option value="">扣费校区全部课程</option>
+              {obligationCourses.map((course) => (
+                <option key={course.id} value={course.id}>{course.name}</option>
               ))}
             </Select>
           </div>
@@ -245,6 +291,15 @@ export function StudentsView({
               type="number"
               value={vault.profile.obligationHourlyDeduction ?? 0}
               onChange={(event) => updateProfile({ obligationHourlyDeduction: Number(event.target.value) })}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">手动扣除金额</label>
+            <Input
+              type="number"
+              value={vault.profile.manualObligationDeduction ?? 0}
+              onChange={(event) => updateProfile({ manualObligationDeduction: Number(event.target.value) })}
+              disabled={(vault.profile.obligationDeductionMode ?? "auto_gap") !== "manual"}
             />
           </div>
           <div className="space-y-2">
@@ -310,6 +365,18 @@ export function StudentsView({
                   <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
                 ))}
               </Select>
+              {studentGradeInput === "自定义" && (
+                <Input
+                  value={customGradeInput}
+                  onChange={(e) => setCustomGradeInput(e.target.value)}
+                  placeholder="输入自定义年级"
+                />
+              )}
+              <Input
+                value={studentSchoolInput}
+                onChange={(e) => setStudentSchoolInput(e.target.value)}
+                placeholder="所在学校，例如：实验中学"
+              />
               <Select value={studentCampusInput} onChange={(e) => setStudentCampusInput(e.target.value)}>
                 <option value="">未设置校区</option>
                 {vault.campuses.map((campus) => (
@@ -343,7 +410,7 @@ export function StudentsView({
               <Input
                 value={courseNameInput}
                 onChange={(e) => setCourseNameInput(e.target.value)}
-                placeholder="例如：高一数学班"
+                placeholder="例如：初三数学班"
               />
               <Select
                 value={courseType}
@@ -361,8 +428,8 @@ export function StudentsView({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <Card className="overflow-hidden">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 xl:items-start">
+        <Card className="h-fit overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <Building2 size={18} className="text-[#ff8617]" />
@@ -370,7 +437,7 @@ export function StudentsView({
             </div>
             <Badge variant="secondary">{vault.campuses.length} 个</Badge>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
             {vault.campuses.map((campus) => {
               const isEditing = editingCampus?.id === campus.id;
               const used = campusInUse(campus.id);
@@ -379,7 +446,7 @@ export function StudentsView({
                   key={campus.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3"
+                  className="border-b border-[#e8eef6] bg-white px-3 py-3 last:border-b-0"
                 >
                   {isEditing && editingCampus ? (
                     <div className="space-y-3">
@@ -452,9 +519,6 @@ export function StudentsView({
                           <Trash2 size={14} /> 删除
                         </Button>
                       </div>
-                      {used && (
-                        <p className="text-xs font-semibold text-[#f97316]">已有学生、课程、规则或课时引用，暂不能删除。</p>
-                      )}
                     </div>
                   )}
                 </motion.div>
@@ -466,7 +530,7 @@ export function StudentsView({
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden">
+        <Card className="h-fit overflow-hidden">
           <CardHeader className="gap-3">
             <div className="flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
@@ -477,7 +541,7 @@ export function StudentsView({
             </div>
             <label className="relative block">
               <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-              <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名或备注" />
+              <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名、学校或备注" />
             </label>
             <div className="grid grid-cols-2 gap-2">
               <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} className="h-10">
@@ -494,7 +558,7 @@ export function StudentsView({
               </Select>
             </div>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
             {visibleStudents.map((student) => {
               const isEditing = editingStudent?.id === student.id;
               const used = studentInUse(student.id);
@@ -503,7 +567,7 @@ export function StudentsView({
                   key={student.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3"
+                  className="border-b border-[#e8eef6] bg-white px-3 py-3 last:border-b-0"
                 >
                   {isEditing && editingStudent ? (
                     <div className="space-y-3">
@@ -513,13 +577,25 @@ export function StudentsView({
                         placeholder="学生姓名"
                       />
                       <Select
-                        value={editingStudent.grade ?? ""}
-                        onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value || undefined })}
+                        value={gradeSelectValue(editingStudent.grade)}
+                        onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value === "自定义" ? "__custom__" : event.target.value || undefined })}
                       >
                         {gradeOptions.map((grade) => (
                           <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
                         ))}
                       </Select>
+                      {gradeSelectValue(editingStudent.grade) === "自定义" && (
+                        <Input
+                          value={editingStudent.grade === "__custom__" ? "" : editingStudent.grade ?? ""}
+                          onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value })}
+                          placeholder="输入自定义年级"
+                        />
+                      )}
+                      <Input
+                        value={editingStudent.school ?? ""}
+                        onChange={(event) => setEditingStudent({ ...editingStudent, school: event.target.value || undefined })}
+                        placeholder="所在学校"
+                      />
                       <Select
                         value={editingStudent.defaultCampusId ?? ""}
                         onChange={(event) => setEditingStudent({ ...editingStudent, defaultCampusId: event.target.value || undefined })}
@@ -545,7 +621,11 @@ export function StudentsView({
                       <div className="grid grid-cols-2 gap-2">
                         <Button type="button" size="sm" onClick={() => {
                           if (!editingStudent.name.trim()) return;
-                          onUpdateStudent({ ...editingStudent, name: editingStudent.name.trim() });
+                          onUpdateStudent({
+                            ...editingStudent,
+                            name: editingStudent.name.trim(),
+                            grade: editingStudent.grade === "__custom__" ? undefined : editingStudent.grade
+                          });
                           setEditingStudent(null);
                         }}>
                           <Save size={14} /> 保存
@@ -567,6 +647,7 @@ export function StudentsView({
                             <div className="mt-1 flex flex-wrap gap-1 text-xs text-(--color-muted-foreground)">
                               <span className="flex items-center gap-1"><MapPin size={10} /> {campusName(vault, student.defaultCampusId)}</span>
                               <span>{student.grade || "未设置年级"}</span>
+                              <span>{student.school || "未填写学校"}</span>
                             </div>
                           </div>
                         </div>
@@ -593,7 +674,7 @@ export function StudentsView({
                           onClick={() =>
                             confirm({
                               title: `删除学生「${student.name}」？`,
-                              description: "已有历史课时建议保留为暂停状态，确认删除后将从学生档案移除。",
+                              description: "已有历史课时建议保留为暂停状态，确认删除后将从档案信息移除。",
                               confirmLabel: "删除",
                               tone: "danger",
                               onConfirm: () => onDeleteStudent(student.id)
@@ -603,9 +684,6 @@ export function StudentsView({
                           <Trash2 size={14} /> 删除
                         </Button>
                       </div>
-                      {used && (
-                        <p className="text-xs font-semibold text-[#f97316]">已有课程或课时引用，暂不能删除。</p>
-                      )}
                     </div>
                   )}
                 </motion.div>
@@ -617,7 +695,7 @@ export function StudentsView({
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden">
+        <Card className="h-fit overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <GraduationCap size={18} className="text-[#ff8617]" />
@@ -625,7 +703,7 @@ export function StudentsView({
             </div>
             <Badge variant="secondary">{vault.courseGroups.length} 个</Badge>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
             {vault.courseGroups.map((course) => {
               const isEditing = editingCourse?.id === course.id;
               const used = courseInUse(course.id);
@@ -634,7 +712,7 @@ export function StudentsView({
                   key={course.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3"
+                  className="border-b border-[#e8eef6] bg-white px-3 py-3 last:border-b-0"
                 >
                   {isEditing && editingCourse ? (
                     <div className="space-y-3">
@@ -772,9 +850,6 @@ export function StudentsView({
                           <Trash2 size={14} /> 删除
                         </Button>
                       </div>
-                      {used && (
-                        <p className="text-xs font-semibold text-[#f97316]">已有规则或课时引用，暂不能删除。</p>
-                      )}
                     </div>
                   )}
                 </motion.div>
@@ -787,13 +862,17 @@ export function StudentsView({
         </Card>
       </div>
 
+      <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] px-4 py-3 text-sm font-semibold leading-6 text-[#9a3412]">
+        删除限制说明：已有学生、课程、排课规则或历史课时引用的数据不能直接删除，建议改为暂停状态，以免影响工资和课时核对。
+      </div>
+
       <Card className="overflow-hidden">
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <CalendarCheck size={14} /> 教务规则归档
           </div>
-          <CardTitle>学生档案中的排课规则</CardTitle>
-          <CardDescription>固定排课仍在排课页编辑，这里按课程归档查看，方便核对学生档案和教务配置。</CardDescription>
+          <CardTitle>档案信息中的排课规则</CardTitle>
+          <CardDescription>固定排课仍在排课页编辑，这里按课程归档查看，方便核对档案和教务配置。</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {vault.scheduleRules.map((rule) => (
