@@ -1,50 +1,178 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bell, Database, Lock, Save, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Bell, Database, Lock, RefreshCw, Save, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { TeacherVault } from "@/shared/types";
+import type { AdminSummary, AdminUser, Notice, TeacherVault, UserStatus } from "@/shared/types";
 import { MetricCard } from "@/frontend/components/MetricCard";
+import {
+  cancelUserDeletion,
+  confirmUserDeletion,
+  getAdminSummary,
+  getAdminUsers,
+  requestUserDeletion,
+  runDueDeletions,
+  updateAdminNotice,
+  updateRegistrationEnabled
+} from "@/frontend/lib/cloud";
+
+const statusLabels: Record<UserStatus, string> = {
+  active: "正常",
+  disabled: "停用",
+  delete_requested: "删除申请中",
+  delete_scheduled: "等待自动删除",
+  deleted: "已删除"
+};
+
+function statusVariant(status: UserStatus): "sage" | "amber" | "destructive" | "secondary" {
+  if (status === "active") return "sage";
+  if (status === "delete_requested" || status === "delete_scheduled") return "amber";
+  if (status === "deleted") return "destructive";
+  return "secondary";
+}
 
 export function AdminView({
   vault,
+  token,
   onNoticeChange,
   onClearData
 }: {
   vault: TeacherVault;
-  onNoticeChange: (title: string, content: string) => void;
+  token: string;
+  onNoticeChange: (notice: Notice) => void;
   onClearData: () => void;
 }) {
   const [title, setTitle] = useState(vault.notice.title);
   const [content, setContent] = useState(vault.notice.content);
+  const [summary, setSummary] = useState<AdminSummary | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [deleteReasons, setDeleteReasons] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setTitle(vault.notice.title);
     setContent(vault.notice.content);
   }, [vault.notice.title, vault.notice.content]);
 
+  useEffect(() => {
+    void refresh();
+  }, [token]);
+
+  async function refresh() {
+    if (!token) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const [nextSummary, nextUsers] = await Promise.all([
+        getAdminSummary(token),
+        getAdminUsers(token)
+      ]);
+      setSummary(nextSummary);
+      setUsers(nextUsers);
+      setRegistrationEnabled(nextSummary.registrationEnabled);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "管理员数据加载失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveNotice() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const updated = await updateAdminNotice(token, {
+        enabled: true,
+        title,
+        content,
+        updatedAt: new Date().toISOString()
+      });
+      onNoticeChange(updated);
+      setMessage("系统公告已更新。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "公告保存失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleRegistration() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const next = await updateRegistrationEnabled(token, !registrationEnabled);
+      setRegistrationEnabled(next.registrationEnabled);
+      setSummary((current) => current ? { ...current, registrationEnabled: next.registrationEnabled } : current);
+      setMessage(next.registrationEnabled ? "注册入口已开启。" : "注册入口已关闭。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "注册开关更新失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateUser(nextUser: Promise<AdminUser>) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const updated = await nextUser;
+      setUsers((current) => current.map((user) => (user.id === updated.id ? updated : user)));
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "用户操作失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteDueUsers() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await runDueDeletions(token);
+      setMessage(`已自动删除 ${result.deleted} 个到期账号。`);
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "自动删除执行失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const activeUsers = summary?.users.active ?? 0;
+  const pendingDeletion = summary?.users.pendingDeletion ?? 0;
+  const encryptedDocuments = summary?.encryptedDocuments ?? 0;
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <MetricCard label="注册用户" value="演示 1" hint="正式版只显示账号" variant={1} index={0} />
-        <MetricCard label="校区数量" value={`${vault.campuses.length}`} hint="管理员不看明细" variant={2} index={1} />
-        <MetricCard label="加密文档" value="本地 1 份" hint="D1 接入后显示状态" variant={3} index={2} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <MetricCard label="活跃用户" value={`${activeUsers}`} hint={`总账号 ${summary?.users.total ?? 0}`} variant={1} index={0} />
+        <MetricCard label="待删除" value={`${pendingDeletion}`} hint="10 天到期后自动删除" variant={2} index={1} />
+        <MetricCard label="加密文档" value={`${encryptedDocuments}`} hint="仅保存密文" variant={3} index={2} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      {message && (
+        <div className="rounded-[14px] border border-[#dbe4ef] bg-white px-4 py-3 text-sm font-bold text-[#25324a]">
+          {message}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
-              <div className="flex items-center gap-2 text-[#ff8617] text-xs font-bold uppercase tracking-widest mb-1">
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                 <Bell size={14} /> 公告设置
               </div>
               <CardTitle>系统公告</CardTitle>
-              <CardDescription>公告会在登录页和右上角展示</CardDescription>
+              <CardDescription>公告从 D1 统一读取，所有用户登录后都会看到</CardDescription>
             </div>
-            <Button size="sm" onClick={() => onNoticeChange(title, content)}>
+            <Button size="sm" disabled={busy} onClick={saveNotice}>
               <Save size={15} /> 保存
             </Button>
           </CardHeader>
@@ -66,19 +194,31 @@ export function AdminView({
 
         <Card className="overflow-hidden">
           <CardHeader>
-            <div className="flex items-center gap-2 text-[#1557c2] text-xs font-bold uppercase tracking-widest mb-1">
-              <ShieldCheck size={14} /> 用户管理边界
+            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+              <ShieldCheck size={14} /> 系统设置
             </div>
-            <CardTitle>隐私策略</CardTitle>
-            <CardDescription>管理员只看账户状态，不看老师明细</CardDescription>
+            <CardTitle>注册与隐私边界</CardTitle>
+            <CardDescription>管理员只能看账号元数据，不能查看老师明文数据</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="font-extrabold text-[#061226]">用户注册</div>
+                <div className="mt-1 text-sm font-semibold text-[#64748b]">
+                  当前状态：{registrationEnabled ? "允许新用户注册" : "已关闭注册入口"}
+                </div>
+              </div>
+              <Button variant={registrationEnabled ? "destructive" : "default"} disabled={busy} onClick={toggleRegistration}>
+                {registrationEnabled ? "关闭注册" : "开启注册"}
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
                 { icon: Lock, text: "不显示课程内容" },
                 { icon: Users, text: "不显示学生姓名" },
                 { icon: Database, text: "不显示课时费明细" },
-                { icon: ShieldCheck, text: "不显示校区排课" }
+                { icon: ShieldCheck, text: "只管理账号状态" }
               ].map((item, i) => (
                 <motion.div
                   key={item.text}
@@ -86,9 +226,9 @@ export function AdminView({
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.1 }}
                   whileHover={{ x: 4 }}
-                  className="flex items-center gap-3 p-4 rounded-[14px] bg-[#f8fbff] border border-[#dbe4ef]"
+                  className="flex items-center gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4"
                 >
-                  <div className="w-8 h-8 rounded-[10px] bg-[#eaf2ff] flex items-center justify-center shrink-0">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[#eaf2ff]">
                     <item.icon size={14} className="text-[#1557c2]" />
                   </div>
                   <span className="text-sm font-medium">{item.text}</span>
@@ -97,11 +237,127 @@ export function AdminView({
             </div>
 
             <Button variant="destructive" className="w-full" onClick={onClearData}>
-              <Trash2 size={15} /> 删除当前本地演示数据
+              <Trash2 size={15} /> 删除当前本地缓存
             </Button>
           </CardContent>
         </Card>
       </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+              <Users size={14} /> 用户列表
+            </div>
+            <CardTitle>真实云端用户</CardTitle>
+            <CardDescription>删除流程：申请、二次确认、撤销或 10 天到期自动删除</CardDescription>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" disabled={busy} onClick={refresh}>
+              <RefreshCw size={15} /> 刷新
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={deleteDueUsers}>
+              <Trash2 size={15} /> 执行到期删除
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] border-separate border-spacing-y-2 text-left text-sm">
+              <thead>
+                <tr className="text-xs font-extrabold uppercase text-[#64748b]">
+                  <th className="px-3 py-2">账号</th>
+                  <th className="px-3 py-2">角色</th>
+                  <th className="px-3 py-2">状态</th>
+                  <th className="px-3 py-2">最近登录</th>
+                  <th className="px-3 py-2">删除计划</th>
+                  <th className="px-3 py-2">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id} className="bg-[#f8fbff] align-top">
+                    <td className="rounded-l-[12px] px-3 py-3 font-extrabold text-[#061226]">{user.username}</td>
+                    <td className="px-3 py-3">
+                      <Badge variant={user.role === "admin" ? "plum" : "sky"}>
+                        {user.role === "admin" ? "管理员" : "老师"}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-3">
+                      <Badge variant={statusVariant(user.status)}>{statusLabels[user.status]}</Badge>
+                    </td>
+                    <td className="px-3 py-3 text-[#475569]">
+                      {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("zh-CN") : "未登录"}
+                    </td>
+                    <td className="px-3 py-3 text-[#475569]">
+                      {user.deletion ? (
+                        <div className="space-y-1">
+                          <div>{new Date(user.deletion.scheduledAt).toLocaleString("zh-CN")}</div>
+                          <div className="text-xs font-semibold text-[#9a3412]">
+                            已提醒 {user.deletion.noticeCount} 次
+                          </div>
+                        </div>
+                      ) : "无"}
+                    </td>
+                    <td className="rounded-r-[12px] px-3 py-3">
+                      {user.status === "active" && (
+                        <div className="flex min-w-[260px] flex-col gap-2">
+                          <Input
+                            value={deleteReasons[user.id] ?? ""}
+                            onChange={(event) =>
+                              setDeleteReasons((current) => ({ ...current, [user.id]: event.target.value }))
+                            }
+                            placeholder="删除原因"
+                          />
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={busy}
+                            onClick={() =>
+                              updateUser(requestUserDeletion(token, user.id, deleteReasons[user.id] ?? ""))
+                            }
+                          >
+                            申请删除
+                          </Button>
+                        </div>
+                      )}
+                      {(user.status === "delete_requested" || user.status === "delete_scheduled") && (
+                        <div className="flex flex-wrap gap-2">
+                          {user.status === "delete_requested" && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={busy}
+                              onClick={() => updateUser(confirmUserDeletion(token, user.id))}
+                            >
+                              二次确认
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => updateUser(cancelUserDeletion(token, user.id))}
+                          >
+                            撤销
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="rounded-[14px] bg-[#f8fbff] px-4 py-8 text-center font-semibold text-[#64748b]">
+                      暂无用户
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

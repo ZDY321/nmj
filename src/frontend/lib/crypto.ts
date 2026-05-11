@@ -4,7 +4,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const iterations = 210_000;
 
-function bytesToBase64(bytes: Uint8Array): string {
+export function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   bytes.forEach((byte) => {
     binary += String.fromCharCode(byte);
@@ -12,7 +12,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function base64ToBytes(value: string): Uint8Array {
+export function base64ToBytes(value: string): Uint8Array {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
@@ -29,6 +29,10 @@ function randomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
   return bytes;
+}
+
+export function randomBase64(length: number): string {
+  return bytesToBase64(randomBytes(length));
 }
 
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
@@ -52,6 +56,38 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     false,
     ["encrypt", "decrypt"]
   );
+}
+
+async function deriveVerifierBytes(password: string, salt: Uint8Array): Promise<Uint8Array> {
+  const material = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: bufferSource(salt),
+      iterations
+    },
+    material,
+    256
+  );
+
+  return new Uint8Array(bits);
+}
+
+export function createPasswordSalt(): string {
+  return randomBase64(16);
+}
+
+export async function derivePasswordVerifier(password: string, salt: string): Promise<string> {
+  const bytes = await deriveVerifierBytes(password, base64ToBytes(salt));
+  return bytesToBase64(bytes);
 }
 
 export async function encryptJson<T>(

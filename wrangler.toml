@@ -2,6 +2,9 @@ name = "teacher-salary-tracker"
 main = "src/worker/index.ts"
 compatibility_date = "2026-05-10"
 
+[triggers]
+crons = ["0 3 * * *"]
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"

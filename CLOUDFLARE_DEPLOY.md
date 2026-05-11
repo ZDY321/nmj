@@ -23,25 +23,27 @@ Vectorize
 现在已经完成：
 
 - 前端 UI
-- 本地浏览器加密存储
+- 浏览器端加密、D1 只保存密文
+- 云端注册和登录
+- 换设备后从 D1 拉取加密数据并在浏览器解密
+- 用户数据自动同步到 D1
 - Worker 静态资源部署配置
-- D1 数据库表结构
-- 基础 API 骨架
-- 管理 API 的 `ADMIN_API_TOKEN` 保护
-- 注册开关 API
+- D1 数据库表结构和升级迁移
+- 登录会话 API
+- 管理员真实用户列表
+- 注册开关 API 和后台按钮
+- 系统公告从 D1 统一读取和更新
+- 删除用户申请、二次确认、撤销、10 天到期自动删除流程
 - 正式版第一位注册用户自动成为管理员
 
 还没有完成：
 
-- 云端登录完整接入
-- 换设备后从云端拉取加密数据
-- 用户数据自动同步到 D1
-- 管理员真实用户列表
-- 删除用户申请、确认、撤销、10 天自动删除流程
-- 系统公告从云端 D1 统一读取和更新
-- 管理员后台里的注册开关按钮
+- 密码找回和恢复码 UI
+- 邮件邀请、邮箱验证或短信验证
+- 更细的审计日志查看界面
+- 多管理员权限分级
 
-也就是说：**现在可以上线页面，但完整云端多用户体验还需要下一步继续开发。**
+也就是说：**当前版本已经接入完整云端多用户主流程，可以按 Cloudflare Workers + D1 形态上线测试。**
 
 ## 1. 提交到 GitHub 前检查
 
@@ -193,20 +195,24 @@ database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
 ```text
 migrations/0001_initial.sql
+migrations/0002_cloud_multi_user.sql
 ```
 
-执行：
+新数据库按顺序执行：
 
 ```bash
 npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0001_initial.sql
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0002_cloud_multi_user.sql
 ```
 
-这一步会创建：
+这会创建：
 
 ```text
 users
 encrypted_documents
 app_settings
+user_sessions
+user_deletion_events
 ```
 
 同时会写入默认设置：
@@ -222,9 +228,17 @@ registration_enabled = true
 
 如果你把数据库名称改成了别的，命令里的 `teacher_salary_tracker` 也要改成你的数据库名。
 
+如果线上库已经执行过 `0001_initial.sql`，只需要补执行：
+
+```bash
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0002_cloud_multi_user.sql
+```
+
 ## 7. 设置后台 API Secret
 
-项目里 `/api/admin/*` 已经要求 Bearer Token。
+管理员后台现在使用登录后的管理员会话，不需要把 `ADMIN_API_TOKEN` 放进浏览器。
+
+`ADMIN_API_TOKEN` 仍可作为命令行维护入口，用于公告、注册开关和到期删除补跑。建议生产环境继续设置。
 
 必须设置 Worker Secret：
 
@@ -402,33 +416,31 @@ Value: 你的长随机密钥
 现在部署后可以体验：
 
 - 页面 UI
-- 本地注册/登录
-- 本地加密保存
+- 云端注册/登录
+- 浏览器端加密、D1 密文保存
+- 换设备登录后拉取云端密文并解密
+- 用户数据变更后自动同步到 D1
+- 管理员后台真实用户列表
+- 注册开关
+- 系统公告统一读取和更新
+- 删除申请、二次确认、撤销、10 天自动删除
 - 日历、课时、工资等前端功能
 
-但目前这些数据仍主要存在当前浏览器里。
+浏览器仍会保留一份本地加密缓存。缓存只作为网络失败时的兜底，不再是主存储。
 
-换设备、换浏览器、清空浏览器数据后，当前本地数据不会自动回来。
+## 15. 云端多用户机制
 
-## 15. 下一步要做的云端多用户功能
+当前实现：
 
-下一步建议开发：
-
-```text
-云端账号 + 端到端加密文档同步 + 管理员账号管理
-```
-
-具体包括：
-
-1. 登录时从 D1 校验账号。
-2. 用户的课程、学生、工资、排课等数据在浏览器加密。
-3. 只把密文保存到 D1 的 `encrypted_documents` 表。
-4. 用户换设备登录后，拉取密文，在浏览器里用密码解密。
-5. 管理员后台只显示账号元数据。
-6. 管理员不能查看用户明文内容。
-7. 管理员后台增加注册开关按钮。
-8. 系统公告从 D1 的 `app_settings` 读取。
-9. 用户删除申请流程写入 D1。
+1. 登录前先通过 `/api/auth/lookup` 获取账号登录盐。
+2. 浏览器用密码派生登录校验值，服务端不接收明文密码。
+3. 登录成功后返回会话 token。
+4. 课程、学生、工资、排课等业务数据先在浏览器加密。
+5. D1 的 `encrypted_documents` 只保存密文。
+6. 换设备登录后，浏览器从 `/api/me/vault` 拉取密文并用密码解密。
+7. 管理员后台只显示账号元数据和删除状态。
+8. 系统公告从 D1 的 `app_settings` 统一读取。
+9. 到期删除由 Worker cron 每天 03:00 UTC 自动补跑，也可以在后台手动执行。
 
 ## 15.1 正式版第一位用户是不是管理员
 
@@ -451,7 +463,9 @@ D1 users 表已有用户时，后续注册用户默认为 teacher。
 
 ## 15.2 如何开启或关闭注册
 
-当前前端后台还没有注册开关按钮，但 Worker API 已经支持。
+管理员登录后可以在“管理后台”里直接开启或关闭注册。
+
+命令行也可以用 `ADMIN_API_TOKEN` 操作。
 
 关闭注册：
 
@@ -487,7 +501,7 @@ https://你的-worker地址/api/public/settings
 
 ## 16. 管理员删除用户建议流程
 
-推荐字段可以后续加到 `users` 表：
+当前 `0002_cloud_multi_user.sql` 已增加这些字段：
 
 ```text
 delete_requested_at
@@ -504,12 +518,10 @@ delete_reason
 1. 管理员发起删除。
 2. 用户状态变为 `delete_requested`。
 3. 用户下次登录必须看到删除提醒。
-4. 用户确认后立即删除账号和密文。
-5. 如果 3 天内用户无回应，管理员可以二次确认。
-6. 二次确认后进入 7 天倒计时。
-7. 合计 10 天无回应，系统自动删除账号和密文。
-8. 10 天内用户登录可以撤销删除。
-9. 管理员只能看到账号状态，不能查看课程、学生、工资等明文内容。
+4. 管理员可二次确认，将状态变为 `delete_scheduled`。
+5. 10 天内管理员或用户本人都可以撤销。
+6. 到期后 Worker cron 自动删除密文、会话和可登录账号信息。
+7. 管理员只能看到账号状态，不能查看课程、学生、工资等明文内容。
 
 这样能兼顾：
 
@@ -561,23 +573,22 @@ env.ASSETS.fetch(request)
 
 正常。
 
-管理 API 需要请求头：
+浏览器后台会在管理员登录后自动带上会话 token。你直接打开 API 地址没有登录会话，所以会返回 401。
+
+请求头格式是：
 
 ```text
-Authorization: Bearer 你的 ADMIN_API_TOKEN
+Authorization: Bearer 登录后返回的 session token
 ```
 
-浏览器直接打开会返回 401。
+### ADMIN_API_TOKEN 还能做什么？
 
-### 部署后数据为什么没有跨设备？
+它现在只作为命令行维护入口保留，适合用来关闭注册、更新公告或手动执行到期删除。
 
-因为云端同步还没接完。
-
-现在仍主要是本地浏览器加密存储。下一步需要把前端存储层接到 Worker/D1。
+管理员日常操作建议直接使用前端管理后台。
 
 ## 18. 官方文档
 
 - Workers Static Assets: https://developers.cloudflare.com/workers/static-assets/binding/
 - D1 Wrangler commands: https://developers.cloudflare.com/d1/wrangler-commands/
 - Workers Secrets: https://developers.cloudflare.com/workers/configuration/secrets/
-

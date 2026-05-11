@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  AlertTriangle,
   Bell,
   Calendar,
   ChevronDown,
@@ -20,6 +21,7 @@ import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
 import { getCourse } from "@/frontend/lib/calculations";
+import { cancelOwnDeletion } from "@/frontend/lib/cloud";
 import {
   cloneVault,
   type ViewKey,
@@ -27,48 +29,58 @@ import {
   datesBetween,
   createLessonFromCourse
 } from "@/frontend/lib/helpers";
-import { clearVault, getAccount, loadVault, registerAccount, saveVault } from "@/frontend/lib/storage";
-import type { Lesson, TeacherVault, UserRole } from "@/shared/types";
+import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
+import type { Lesson, TeacherVault, UserDeletionState, UserRole } from "@/shared/types";
 
 export function App() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [token, setToken] = useState("");
   const [role, setRole] = useState<UserRole>("teacher");
+  const [deletion, setDeletion] = useState<UserDeletionState | null>(null);
   const [vault, setVault] = useState<TeacherVault | null>(null);
   const [view, setView] = useState<ViewKey>("today");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   async function login(nextUsername: string, nextPassword: string) {
-    const account = getAccount(nextUsername);
-    if (!account) {
-      throw new Error("账号不存在，请先注册。");
-    }
-    const loaded = await loadVault(nextUsername, nextPassword);
-    setUsername(nextUsername);
+    const result = await loginAccount(nextUsername, nextPassword);
+    setUsername(result.account.username);
     setPassword(nextPassword);
-    setRole(account.role);
-    setVault(loaded);
-    if (view === "admin" && account.role !== "admin") {
+    setToken(result.token);
+    setRole(result.account.role);
+    setDeletion(result.deletion);
+    setVault(result.vault);
+    if (view === "admin" && result.account.role !== "admin") {
       setView("today");
     }
   }
 
   async function register(nextUsername: string, nextPassword: string): Promise<UserRole> {
-    const account = await registerAccount(nextUsername, nextPassword);
-    return account.role;
+    const result = await registerAccount(nextUsername, nextPassword);
+    setUsername(result.account.username);
+    setPassword(nextPassword);
+    setToken(result.token);
+    setRole(result.account.role);
+    setDeletion(result.deletion);
+    setVault(result.vault);
+    return result.account.role;
   }
 
   async function persist(nextVault: TeacherVault) {
     if (!username || !password) return;
     setVault(nextVault);
     setSaveState("saving");
-    await saveVault(username, password, nextVault);
-    setSaveState("saved");
-    window.setTimeout(() => setSaveState("idle"), 900);
+    try {
+      await saveVault(username, password, nextVault, token);
+      setSaveState("saved");
+      window.setTimeout(() => setSaveState("idle"), 900);
+    } catch {
+      setSaveState("error");
+    }
   }
 
   function updateVault(updater: (draft: TeacherVault) => void) {
@@ -162,6 +174,12 @@ export function App() {
     setNoticeModalOpen(false);
   }
 
+  async function cancelDeletionRequest() {
+    if (!token) return;
+    await cancelOwnDeletion(token);
+    setDeletion(null);
+  }
+
   if (!vault) {
     return (<LoginScreen
       onLogin={login}
@@ -181,6 +199,12 @@ export function App() {
     ? [...viewTitlesList, { key: "admin" as ViewKey, label: viewTitles.admin }]
     : viewTitlesList;
   const hasUnreadNotice = vault.notice.enabled && noticeReadVersion !== vault.notice.updatedAt;
+  const saveBadgeVariant =
+    saveState === "saved" ? "sage" : saveState === "saving" ? "amber" : saveState === "error" ? "destructive" : "secondary";
+  const saveCompactLabel =
+    saveState === "saving" ? "同步中" : saveState === "saved" ? "已同步" : saveState === "error" ? "同步失败" : "云端";
+  const saveFullLabel =
+    saveState === "saving" ? "同步中..." : saveState === "saved" ? "已加密同步" : saveState === "error" ? "云端同步失败" : "云端加密";
 
   return (
     <div className="dashboard-shell flex min-h-screen">
@@ -209,8 +233,8 @@ export function App() {
               </div>
               <div className="truncate text-lg font-extrabold text-[#061226]">TeachPro</div>
             </div>
-            <Badge variant={saveState === "saved" ? "sage" : saveState === "saving" ? "amber" : "secondary"}>
-              {saveState === "saving" ? "保存中" : saveState === "saved" ? "已保存" : "本地"}
+            <Badge variant={saveBadgeVariant}>
+              {saveCompactLabel}
             </Badge>
           </div>
 
@@ -294,21 +318,43 @@ export function App() {
 
               <div className="hidden items-center gap-2 md:flex">
                 <Button variant="outline" className="h-[58px] rounded-[16px]" onClick={() => {
+                  if (token) {
+                    void logoutCloud(token);
+                  }
                   setVault(null);
                   setPassword("");
+                  setToken("");
+                  setDeletion(null);
                 }}>
                   <LogOut size={18} /> 退出
                 </Button>
               </div>
 
               <Badge
-                variant={saveState === "saved" ? "sage" : saveState === "saving" ? "amber" : "secondary"}
+                variant={saveBadgeVariant}
                 className="hidden h-[58px] items-center rounded-[16px] px-4 text-sm md:inline-flex"
               >
-                {saveState === "saving" ? "保存中..." : saveState === "saved" ? "已加密保存" : "本地加密"}
+                {saveFullLabel}
               </Badge>
             </div>
         </motion.header>
+
+        {deletion && (
+          <div className="mb-6 flex flex-col gap-4 rounded-[16px] border border-[#fed7aa] bg-[#fff7ed] p-4 text-[#9a3412] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 gap-3">
+              <AlertTriangle size={22} className="mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <div className="font-extrabold">账号删除申请待处理</div>
+                <div className="mt-1 text-sm font-semibold leading-6">
+                  删除计划时间：{new Date(deletion.scheduledAt).toLocaleString("zh-CN")}。在此之前可撤销申请。
+                </div>
+              </div>
+            </div>
+            <Button variant="outline" className="shrink-0 border-[#fdba74] bg-white" onClick={cancelDeletionRequest}>
+              撤销删除申请
+            </Button>
+          </div>
+        )}
 
         <AnimatePresence>
           {noticeModalOpen && vault.notice.enabled && (
@@ -423,20 +469,18 @@ export function App() {
             {view === "admin" && role === "admin" && (
               <AdminView
                 vault={vault}
-                onNoticeChange={(title, content) =>
+                token={token}
+                onNoticeChange={(notice) =>
                   updateVault((draft) => {
-                    draft.notice = {
-                      enabled: true,
-                      title,
-                      content,
-                      updatedAt: new Date().toISOString()
-                    };
+                    draft.notice = notice;
                   })
                 }
                 onClearData={() => {
                   clearVault(username);
                   setVault(null);
                   setPassword("");
+                  setToken("");
+                  setDeletion(null);
                 }}
               />
             )}

@@ -5,13 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { hasAnyAccount } from "@/frontend/lib/storage";
 import type { UserRole } from "@/shared/types";
 import { privacyNoticeLines } from "@/frontend/lib/helpers";
-
-type PublicSettings = {
-  registrationEnabled: boolean;
-};
+import { getPublicSettings } from "@/frontend/lib/cloud";
 
 function PasswordField({
   label,
@@ -55,10 +51,10 @@ export function LoginScreen({
   onLogin: (username: string, password: string) => Promise<void>;
   onRegister: (username: string, password: string) => Promise<UserRole>;
 }) {
-  const [mode, setMode] = useState<"login" | "register">(hasAnyAccount() ? "login" : "register");
-  const [username, setUsername] = useState("teacher_chen");
-  const [password, setPassword] = useState("demo-password");
-  const [confirmPassword, setConfirmPassword] = useState("demo-password");
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -66,10 +62,9 @@ export function LoginScreen({
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/public/settings")
-      .then((response) => (response.ok ? response.json() as Promise<PublicSettings> : undefined))
+    getPublicSettings()
       .then((settings) => {
-        if (cancelled || !settings) return;
+        if (cancelled) return;
         setRegistrationEnabled(settings.registrationEnabled);
         if (!settings.registrationEnabled) {
           setMode("login");
@@ -104,11 +99,10 @@ export function LoginScreen({
           return;
         }
         const role = await onRegister(username.trim(), password);
-        setMode("login");
         setSuccess(
           role === "admin"
-            ? "注册成功。第一位注册用户已设为管理员，请登录。"
-            : "注册成功，请登录。"
+            ? "注册成功。第一位注册用户已设为管理员，正在进入工作台。"
+            : "注册成功，正在进入工作台。"
         );
         return;
       }
@@ -179,8 +173,8 @@ export function LoginScreen({
               <CardTitle className="text-[30px]">{mode === "login" ? "登录工作台" : "首次注册"}</CardTitle>
               <CardDescription className="text-base">
                 {mode === "login"
-                  ? "输入用户名和数据密码，解锁本地加密数据。"
-                  : "首次使用请创建账号，注册完成后回到登录界面。"}
+                  ? "输入用户名和数据密码，解锁云端加密数据。"
+                  : "首次使用请创建账号，注册完成后进入工作台。"}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">

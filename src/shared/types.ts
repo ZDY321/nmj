@@ -1,5 +1,12 @@
 export type UserRole = "teacher" | "admin";
 
+export type UserStatus =
+  | "active"
+  | "disabled"
+  | "delete_requested"
+  | "delete_scheduled"
+  | "deleted";
+
 export type CourseType = "one_on_one" | "class";
 
 export type LessonStatus =
@@ -146,9 +153,49 @@ export type TeacherVault = {
 };
 
 export type SessionUser = {
+  id: string;
   username: string;
   role: UserRole;
   displayName: string;
+  status: UserStatus;
+  deletion: UserDeletionState | null;
+};
+
+export type UserDeletionState = {
+  requestedAt: string;
+  requestedBy: string | null;
+  noticeCount: number;
+  secondConfirmedAt: string | null;
+  scheduledAt: string;
+  cancelledAt: string | null;
+  reason: string | null;
+};
+
+export type CloudSession = {
+  token: string;
+  user: SessionUser;
+};
+
+export type AdminUser = {
+  id: string;
+  username: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+  deletion: UserDeletionState | null;
+};
+
+export type AdminSummary = {
+  users: {
+    total: number;
+    active: number;
+    pendingDeletion: number;
+    disabled: number;
+  };
+  encryptedDocuments: number;
+  registrationEnabled: boolean;
 };
 
 export type EncryptedBox = {
