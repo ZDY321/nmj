@@ -33,6 +33,7 @@ export function GradesView({
   const [studentFilter, setStudentFilter] = useState("all");
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [trendMetric, setTrendMetric] = useState<"score" | "rank">("score");
+  const [scoreLabelModes, setScoreLabelModes] = useState<Record<string, "ratio" | "raw">>({});
   const { confirm, dialog } = useConfirmDialog();
 
   const records = [...(vault.gradeRecords ?? [])].sort((a, b) => `${b.date} ${b.examName}`.localeCompare(`${a.date} ${a.examName}`));
@@ -76,6 +77,13 @@ export function GradesView({
     setScore("");
     setRank("");
     setNote("");
+  }
+
+  function toggleScoreLabelMode(recordId: string) {
+    setScoreLabelModes((current) => ({
+      ...current,
+      [recordId]: current[recordId] === "raw" ? "ratio" : "raw"
+    }));
   }
 
   return (
@@ -234,30 +242,45 @@ export function GradesView({
                 {trendRecords.map((record, index) => {
                   const rankValue = parseRankNumber(record.rank);
                   const value = trendMetric === "score" ? normalizedScore(record) : rankValue;
+                  const scoreMode = scoreLabelModes[record.id] ?? "ratio";
+                  const ratioLabel = `${normalizedScore(record).toFixed(1)}%`;
+                  const rawScoreLabel = record.fullScore ? `${record.score}/${record.fullScore}` : `${record.score}分`;
                   const height =
                     trendMetric === "score"
                       ? Math.max(Math.min(normalizedScore(record), 100), 4)
-                      : rankValue
-                        ? Math.max(((maxRank - rankValue + 1) / maxRank) * 100, 8)
-                        : 4;
+                        : rankValue
+                          ? Math.max(((maxRank - rankValue + 1) / maxRank) * 100, 8)
+                          : 4;
                   const label = trendMetric === "score"
-                    ? `${normalizedScore(record).toFixed(1)}%`
+                    ? scoreMode === "raw" ? rawScoreLabel : ratioLabel
                     : rankValue
                       ? formatRankLabel(record.rank, rankValue)
                       : "未填";
+                  const chartTitle = trendMetric === "score"
+                    ? `${record.examName}: ${ratioLabel} · ${rawScoreLabel}`
+                    : `${record.examName}: ${label}`;
                   return (
                     <div key={record.id} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-2">
-                      <div className="truncate text-center text-[11px] font-extrabold text-[#25324a]" title={`${record.examName}: ${label}`}>
+                      <div className="truncate text-center text-[11px] font-extrabold text-[#25324a]" title={chartTitle}>
                         {label}
                       </div>
-                      <motion.div
+                      <motion.button
+                        type="button"
                         initial={{ height: 0 }}
                         animate={{ height: `${height}%` }}
                         transition={{ delay: index * 0.04 }}
-                        className={`mx-auto w-full max-w-[34px] rounded-t-[6px] ${
+                        onClick={() => {
+                          if (trendMetric === "score") {
+                            toggleScoreLabelMode(record.id);
+                          }
+                        }}
+                        className={`mx-auto w-full max-w-[34px] rounded-t-[6px] border-0 p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff8617] focus-visible:ring-offset-2 ${
+                          trendMetric === "score" ? "cursor-pointer" : "cursor-default"
+                        } ${
                           value === null ? "bg-[#cbd5e1]" : trendMetric === "score" ? "bg-[#1557c2]" : "bg-[#ff8617]"
                         }`}
-                        title={`${record.examName}: ${label}`}
+                        title={chartTitle}
+                        aria-label={chartTitle}
                       />
                       <span className="truncate text-center text-[10px] font-semibold text-[#64748b]">{record.date.slice(5)}</span>
                     </div>

@@ -515,33 +515,41 @@ export function StudentsView({
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
-                          <Building2 size={16} className="text-[#1557c2]" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">{campus.name}</span>
-                          <span className="mt-1 flex items-center gap-1 text-xs text-(--color-muted-foreground)">
-                            <MapPin size={10} /> {campus.address || "未填写地址"}
-                          </span>
-                          {campus.note && (
-                            <span className="mt-1 block text-xs leading-5 text-(--color-muted-foreground)">
-                              {campus.note}
-                            </span>
-                          )}
-                        </div>
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
+                        <Building2 size={16} className="text-[#1557c2]" />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => setEditingCampus(campus)}>
-                          <Pencil size={14} /> 编辑
+                      <div className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{campus.name}</span>
+                        <span className="mt-1 flex items-center gap-1 text-xs text-(--color-muted-foreground)">
+                          <MapPin size={10} /> {campus.address || "未填写地址"}
+                        </span>
+                        {campus.note && (
+                          <span className="mt-1 block text-xs leading-5 text-(--color-muted-foreground)">
+                            {campus.note}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 w-8 rounded-[9px] p-0"
+                          title="编辑校区"
+                          aria-label={`编辑校区 ${campus.name}`}
+                          onClick={() => setEditingCampus(campus)}
+                        >
+                          <Pencil size={13} />
                         </Button>
                         <Button
                           type="button"
                           size="sm"
                           variant="destructive"
+                          className="h-8 w-8 rounded-[9px] p-0"
                           disabled={used}
                           title={used ? "已有学生、课程、规则或课时引用，不能直接删除" : "删除校区"}
+                          aria-label={`删除校区 ${campus.name}`}
                           onClick={() =>
                             confirm({
                               title: `删除校区「${campus.name}」？`,
@@ -552,7 +560,7 @@ export function StudentsView({
                             })
                           }
                         >
-                          <Trash2 size={14} /> 删除
+                          <Trash2 size={13} />
                         </Button>
                       </div>
                     </div>
@@ -684,7 +692,7 @@ export function StudentsView({
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#fff1e2]">
                             <span className="text-xs font-bold text-[#ff8617]">{student.name.slice(0, 1)}</span>
@@ -699,9 +707,42 @@ export function StudentsView({
                             </div>
                           </div>
                         </div>
-                        <Badge variant={student.status === "active" ? "sage" : "secondary"}>
-                          {student.status === "active" ? "正常" : "暂停"}
-                        </Badge>
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                          <Badge variant={student.status === "active" ? "sage" : "secondary"}>
+                            {student.status === "active" ? "正常" : "暂停"}
+                          </Badge>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-8 rounded-[9px] p-0"
+                            title="编辑学生"
+                            aria-label={`编辑学生 ${student.name}`}
+                            onClick={() => setEditingStudent(student)}
+                          >
+                            <Pencil size={13} />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            className="h-8 w-8 rounded-[9px] p-0"
+                            disabled={used}
+                            title={used ? "已有课程或课时引用，不能直接删除" : "删除学生"}
+                            aria-label={`删除学生 ${student.name}`}
+                            onClick={() =>
+                              confirm({
+                                title: `删除学生「${student.name}」？`,
+                                description: "已有历史课时建议保留为暂停状态，确认删除后将从档案信息移除。",
+                                confirmLabel: "删除",
+                                tone: "danger",
+                                onConfirm: () => onDeleteStudent(student.id)
+                              })
+                            }
+                          >
+                            <Trash2 size={13} />
+                          </Button>
+                        </div>
                       </div>
                       {student.note && (
                         <div className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
@@ -709,29 +750,6 @@ export function StudentsView({
                           {student.note}
                         </div>
                       )}
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => setEditingStudent(student)}>
-                          <Pencil size={14} /> 编辑
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          disabled={used}
-                          title={used ? "已有课程或课时引用，不能直接删除" : "删除学生"}
-                          onClick={() =>
-                            confirm({
-                              title: `删除学生「${student.name}」？`,
-                              description: "已有历史课时建议保留为暂停状态，确认删除后将从档案信息移除。",
-                              confirmLabel: "删除",
-                              tone: "danger",
-                              onConfirm: () => onDeleteStudent(student.id)
-                            })
-                          }
-                        >
-                          <Trash2 size={14} /> 删除
-                        </Button>
-                      </div>
                     </div>
                   )}
                 </motion.div>
@@ -873,33 +891,41 @@ export function StudentsView({
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
-                            <GraduationCap size={16} className="text-[#1557c2]" />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="block truncate text-sm font-medium">{course.name}</span>
-                            <span className="text-xs text-(--color-muted-foreground)">
-                              {courseTypeLabels[course.type]} · {studentNames(vault, course.studentIds) || "未关联学生"}
-                            </span>
-                          </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
+                          <GraduationCap size={16} className="text-[#1557c2]" />
                         </div>
-                        <span className="shrink-0 text-xs text-(--color-muted-foreground)">
+                        <div className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{course.name}</span>
+                          <span className="text-xs text-(--color-muted-foreground)">
+                            {courseTypeLabels[course.type]} · {studentNames(vault, course.studentIds) || "未关联学生"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span className="mr-1 max-w-[96px] truncate text-xs text-(--color-muted-foreground)" title={campusName(vault, course.defaultCampusId)}>
                           {campusName(vault, course.defaultCampusId)}
                         </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => setEditingCourse(course)}>
-                          <Pencil size={14} /> 编辑
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 w-8 rounded-[9px] p-0"
+                          title="编辑课程"
+                          aria-label={`编辑课程 ${course.name}`}
+                          onClick={() => setEditingCourse(course)}
+                        >
+                          <Pencil size={13} />
                         </Button>
                         <Button
                           type="button"
                           size="sm"
                           variant="destructive"
+                          className="h-8 w-8 rounded-[9px] p-0"
                           disabled={used}
                           title={used ? "已有规则或课时引用，不能直接删除" : "删除课程"}
+                          aria-label={`删除课程 ${course.name}`}
                           onClick={() =>
                             confirm({
                               title: `删除课程「${course.name}」？`,
@@ -910,7 +936,7 @@ export function StudentsView({
                             })
                           }
                         >
-                          <Trash2 size={14} /> 删除
+                          <Trash2 size={13} />
                         </Button>
                       </div>
                     </div>

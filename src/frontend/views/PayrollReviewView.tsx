@@ -20,6 +20,13 @@ import {
 } from "@/frontend/lib/helpers";
 
 type TypeFilter = "all" | CourseType;
+type OverviewCampusKey = "oneOnOne" | "classLessons" | "makeup";
+type CampusAmountDetail = {
+  key: string;
+  campus: string;
+  amount: number;
+  count: number;
+};
 
 export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
@@ -50,6 +57,46 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
   }, 0);
   const campusDeduction = campusFilter === "all" || campusFilter === vault.profile.obligationCampusId ? currentCampusObligation.amount : 0;
   const campusNet = campusLessonFee - campusDeduction;
+
+  const lessonCampusAmounts = useMemo<Record<OverviewCampusKey, CampusAmountDetail[]>>(() => {
+    const buckets: Record<OverviewCampusKey, Record<string, CampusAmountDetail>> = {
+      oneOnOne: {},
+      classLessons: {},
+      makeup: {}
+    };
+
+    function addDetail(bucket: OverviewCampusKey, campusId: string | undefined, amount: number) {
+      const key = campusId || "__unset";
+      buckets[bucket][key] ??= {
+        key,
+        campus: campusName(vault, campusId),
+        amount: 0,
+        count: 0
+      };
+      buckets[bucket][key].amount += amount;
+      buckets[bucket][key].count += 1;
+    }
+
+    monthLessons.forEach((lesson) => {
+      if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return;
+      const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
+      const campusId = lesson.campusId ?? course?.defaultCampusId;
+      const amount = completedAmount(lesson);
+      if (lesson.status === "makeup_completed") {
+        addDetail("makeup", campusId, amount);
+      } else if (lesson.type === "class") {
+        addDetail("classLessons", campusId, amount);
+      } else {
+        addDetail("oneOnOne", campusId, amount);
+      }
+    });
+
+    return {
+      oneOnOne: Object.values(buckets.oneOnOne).sort((a, b) => b.amount - a.amount),
+      classLessons: Object.values(buckets.classLessons).sort((a, b) => b.amount - a.amount),
+      makeup: Object.values(buckets.makeup).sort((a, b) => b.amount - a.amount)
+    };
+  }, [monthLessons, vault]);
 
   const campusSummaries = useMemo(() => {
     return vault.campuses.map((campus) => {
@@ -213,19 +260,45 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
             <div className="grid grid-cols-2 gap-3">
               {[
                 { label: "基础工资", value: breakdown.baseSalary },
-                { label: "一对一", value: breakdown.oneOnOne },
-                { label: "班课", value: breakdown.classLessons },
-                { label: "补课", value: breakdown.makeup },
+                { label: "一对一", value: breakdown.oneOnOne, details: lessonCampusAmounts.oneOnOne },
+                { label: "班课", value: breakdown.classLessons, details: lessonCampusAmounts.classLessons },
+                { label: "补课", value: breakdown.makeup, details: lessonCampusAmounts.makeup },
                 { label: "其他加减项", value: breakdown.adjustments },
                 { label: "义务课时扣费", value: -breakdown.obligationDeduction }
-              ].map((item) => (
-                <div key={item.label} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-                  <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
-                  <div className={`mt-2 text-xl font-extrabold ${item.value < 0 ? "text-[#b91c1c]" : "text-[#061226]"}`}>
-                    {formatMoney(item.value)}
+              ].map((item) => {
+                const details = "details" in item ? item.details ?? [] : [];
+                return (
+                  <div key={item.label} className="min-h-[112px] rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
+                        <div className={`mt-2 text-xl font-extrabold ${item.value < 0 ? "text-[#b91c1c]" : "text-[#061226]"}`}>
+                          {formatMoney(item.value)}
+                        </div>
+                      </div>
+                      {details.length > 0 && (
+                        <Badge variant="secondary" className="shrink-0">
+                          {details.length} 校区
+                        </Badge>
+                      )}
+                    </div>
+                    {details.length > 0 && (
+                      <div className="mt-3 grid max-h-[86px] grid-cols-1 gap-1 overflow-y-auto pr-1">
+                        {details.map((detail) => (
+                          <div
+                            key={detail.key}
+                            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[9px] border border-[#e8eef6] bg-white px-2.5 py-1.5"
+                            title={`${detail.campus} · ${detail.count} 节 · ${formatMoney(detail.amount)}`}
+                          >
+                            <span className="truncate text-[11px] font-bold text-[#64748b]">{detail.campus}</span>
+                            <span className="text-[11px] font-extrabold text-[#061226]">{formatMoney(detail.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="rounded-[16px] border border-[#bfdbfe] bg-[#eaf2ff] p-5">
               <div className="text-sm font-bold text-[#1557c2]">本月收入总和</div>
