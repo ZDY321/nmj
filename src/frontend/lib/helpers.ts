@@ -74,9 +74,10 @@ export const lessonStatusLabels: Record<LessonStatus, string> = {
 export const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 export const privacyNoticeLines = [
   "课程、学生、费用、校区、排课和作业信息会先在你的浏览器中加密。",
-  "登录密码 / 数据密码必须由你自己严肃保存，丢失后无法找回，也无法解析云端密文。",
-  "管理员后台无法查看老师课程明细和工资明细。",
-  "如果直接查看数据库，敏感内容也只会是密文。"
+  "管理员后台无法查看老师课程明细和工资明细等隐私信息。",
+  "管理员后台只能看到账号的角色、状态、注册时间、最近登录时间和删除流程状态。",
+  "如果直接查看数据库，敏感内容也只会是密文。",
+  "登录密码/数据密码必须由你自己严肃保存，丢失后无法找回，也无法解析云端密文。"
 ];
 
 export function formatMoney(value: number): string {
