@@ -14,12 +14,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { Lesson, TeacherVault } from "@/shared/types";
 import {
+  attendanceLabels,
   campusName,
   courseName,
+  findStudent,
   formatMoney,
   isToday,
   lessonStatusLabels,
   previousHomework,
+  previousLesson,
   sortLessons,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -35,6 +38,7 @@ export function TodayView({
 }) {
   const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
   const waitingLessons = selectedDateLessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "draft");
+  const cancelledLessons = selectedDateLessons.filter((lesson) => lesson.status === "cancelled");
   const homeworkReminderCount = selectedDateLessons.filter((lesson) => previousHomework(vault, lesson).trim()).length;
   const selectedDateLabel = new Intl.DateTimeFormat("zh-CN", {
     month: "long",
@@ -48,11 +52,12 @@ export function TodayView({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: isToday(selectedDate) ? "今日课程" : "选中日期课程", value: `${selectedDateLessons.length} 节`, icon: CalendarDays },
           { label: "待上课", value: `${waitingLessons.length} 节`, icon: Clock3 },
-          { label: "作业提醒", value: `${homeworkReminderCount} 条`, icon: NotebookPen }
+          { label: "作业提醒", value: `${homeworkReminderCount} 条`, icon: NotebookPen },
+          { label: "已取消", value: `${cancelledLessons.length} 条`, icon: XCircle }
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -99,6 +104,8 @@ export function TodayView({
           ) : (
             selectedDateLessons.map((lesson, index) => {
               const homework = previousHomework(vault, lesson).trim();
+              const previous = previousLesson(vault, lesson);
+              const campusTone = campusColorClass(vault.campuses.findIndex((campus) => campus.id === lesson.campusId));
               return (
                 <motion.article
                   key={lesson.id}
@@ -116,7 +123,7 @@ export function TodayView({
                         <span className="flex items-center gap-1 rounded-full bg-[#f3f7fb] px-2.5 py-1">
                           <Clock3 size={13} /> {lesson.startTime}-{lesson.endTime}
                         </span>
-                        <span className="flex items-center gap-1 rounded-full bg-[#f3f7fb] px-2.5 py-1">
+                        <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 ${campusTone}`}>
                           <MapPin size={13} /> {campusName(vault, lesson.campusId)}
                         </span>
                         <span className="flex items-center gap-1 rounded-full bg-[#f3f7fb] px-2.5 py-1">
@@ -129,14 +136,39 @@ export function TodayView({
                     </Badge>
                   </div>
 
-                  <div className="mt-4 rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-4">
-                    <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
-                      <NotebookPen size={16} className="text-[#ff8617]" />
-                      上节课作业提醒
+                  <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                    <div className="rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-4">
+                      <div className="mb-2 text-sm font-extrabold text-[#25324a]">学生情况</div>
+                      <div className="flex flex-wrap gap-2">
+                        {lesson.attendance.length > 0 ? lesson.attendance.map((entry) => (
+                          <span key={entry.studentId} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#475569] ring-1 ring-[#dbe4ef]">
+                            {findStudent(vault, entry.studentId)?.name ?? "未知学生"} · {attendanceLabels[entry.status]}
+                          </span>
+                        )) : lesson.expectedStudentIds.map((studentId) => (
+                          <span key={studentId} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#475569] ring-1 ring-[#dbe4ef]">
+                            {findStudent(vault, studentId)?.name ?? "未知学生"}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <p className="whitespace-pre-wrap text-sm leading-6 text-[#475569]">
-                      {homework || "上一节课没有记录作业。"}
-                    </p>
+                    <div className="rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
+                        <BookOpen size={16} className="text-[#1557c2]" />
+                        上节课内容
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-[#475569]">
+                        {previous?.content.taught.trim() || "上一节课没有记录内容。"}
+                      </p>
+                    </div>
+                    <div className="rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
+                        <NotebookPen size={16} className="text-[#ff8617]" />
+                        上节课作业
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-[#475569]">
+                        {homework || "上一节课没有记录作业。"}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -160,4 +192,15 @@ export function TodayView({
       </Card>
     </div>
   );
+}
+
+function campusColorClass(index: number): string {
+  const tones = [
+    "bg-[#eaf2ff] text-[#1557c2] ring-1 ring-[#bfdbfe]",
+    "bg-[#fff3e4] text-[#c2410c] ring-1 ring-[#fed7aa]",
+    "bg-[#e8f8ef] text-[#15803d] ring-1 ring-[#bbf7d0]",
+    "bg-[#eef0ff] text-[#5161d6] ring-1 ring-[#c7d2fe]",
+    "bg-[#fef2f2] text-[#dc2626] ring-1 ring-[#fecaca]"
+  ];
+  return tones[Math.max(index, 0) % tones.length];
 }

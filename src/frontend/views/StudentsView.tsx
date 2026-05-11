@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { Campus, CourseGroup, CourseType, Student, TeacherVault } from "@/shared/types";
+import type { Campus, CourseGroup, CourseType, FeeRule, Student, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
-import { campusName, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseTypeLabels, studentNames } from "@/frontend/lib/helpers";
+
+const gradeOptions = ["未设置", "幼儿园", "一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "初一", "初二", "初三", "高一", "高二", "高三"];
 
 export function StudentsView({
   vault,
@@ -35,11 +37,15 @@ export function StudentsView({
 }) {
   const [campusNameInput, setCampusNameInput] = useState("");
   const [studentNameInput, setStudentNameInput] = useState("");
+  const [studentGradeInput, setStudentGradeInput] = useState("");
   const [courseNameInput, setCourseNameInput] = useState("");
   const [courseType, setCourseType] = useState<CourseType>("one_on_one");
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const visibleStudents = vault.students.filter((student) => gradeFilter === "all" || (student.grade || "") === gradeFilter);
+  const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
 
   function addCampus(e: FormEvent) {
     e.preventDefault();
@@ -54,10 +60,12 @@ export function StudentsView({
     onAddStudent({
       id: makeId("student"),
       name: studentNameInput.trim(),
+      grade: studentGradeInput || undefined,
       defaultCampusId: vault.campuses[0]?.id,
       status: "active"
     });
     setStudentNameInput("");
+    setStudentGradeInput("");
   }
 
   function addCourse(e: FormEvent) {
@@ -71,10 +79,7 @@ export function StudentsView({
       subject: "未设置",
       defaultCampusId: vault.campuses[0]?.id,
       studentIds: firstStudent ? [firstStudent] : [],
-      feeRule:
-        courseType === "class"
-          ? { mode: "class_headcount", baseFee: 80, perPresentStudentFee: 10, makeupFeeMode: "perStudentFee" }
-          : { mode: "hourly", hourlyRate: 200 },
+      feeRule: defaultFeeRule(courseType),
       status: "active"
     });
     setCourseNameInput("");
@@ -181,6 +186,11 @@ export function StudentsView({
                 onChange={(e) => setStudentNameInput(e.target.value)}
                 placeholder="例如：学生 E"
               />
+              <Select value={studentGradeInput} onChange={(e) => setStudentGradeInput(e.target.value)}>
+                {gradeOptions.map((grade) => (
+                  <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
+                ))}
+              </Select>
               <Button type="submit" className="w-full">
                 <Plus size={15} /> 添加学生
               </Button>
@@ -211,6 +221,7 @@ export function StudentsView({
               >
                 <option value="one_on_one">一对一</option>
                 <option value="class">班课</option>
+                <option value="trial">试听</option>
               </Select>
               <Button type="submit" className="w-full">
                 <Plus size={15} /> 添加课程
@@ -298,11 +309,18 @@ export function StudentsView({
                           variant="destructive"
                           disabled={used}
                           title={used ? "已有学生、课程、规则或课时引用，不能直接删除" : "删除校区"}
-                          onClick={() => onDeleteCampus(campus.id)}
+                          onClick={() => {
+                            if (window.confirm(`确认删除校区「${campus.name}」吗？`)) {
+                              onDeleteCampus(campus.id);
+                            }
+                          }}
                         >
                           <Trash2 size={14} /> 删除
                         </Button>
                       </div>
+                      {used && (
+                        <p className="text-xs font-semibold text-[#f97316]">已有学生、课程、规则或课时引用，暂不能删除。</p>
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -315,15 +333,23 @@ export function StudentsView({
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users size={18} className="text-[#ff8617]" />
-              <CardTitle className="text-lg">学生列表</CardTitle>
+          <CardHeader className="gap-3">
+            <div className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users size={18} className="text-[#ff8617]" />
+                <CardTitle className="text-lg">学生列表</CardTitle>
+              </div>
+              <Badge variant="secondary">{visibleStudents.length} / {vault.students.length} 人</Badge>
             </div>
-            <Badge variant="secondary">{vault.students.length} 人</Badge>
+            <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} className="h-10">
+              <option value="all">全部年级</option>
+              {gradeFilterOptions.map((grade) => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
+            </Select>
           </CardHeader>
           <CardContent className="space-y-2">
-            {vault.students.map((student) => {
+            {visibleStudents.map((student) => {
               const isEditing = editingStudent?.id === student.id;
               const used = studentInUse(student.id);
               return (
@@ -340,6 +366,14 @@ export function StudentsView({
                         onChange={(event) => setEditingStudent({ ...editingStudent, name: event.target.value })}
                         placeholder="学生姓名"
                       />
+                      <Select
+                        value={editingStudent.grade ?? ""}
+                        onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value || undefined })}
+                      >
+                        {gradeOptions.map((grade) => (
+                          <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
+                        ))}
+                      </Select>
                       <Select
                         value={editingStudent.defaultCampusId ?? ""}
                         onChange={(event) => setEditingStudent({ ...editingStudent, defaultCampusId: event.target.value || undefined })}
@@ -378,9 +412,10 @@ export function StudentsView({
                           </div>
                           <div className="min-w-0">
                             <span className="block truncate text-sm font-medium">{student.name}</span>
-                            <span className="flex items-center gap-1 text-xs text-(--color-muted-foreground)">
-                              <MapPin size={10} /> {campusName(vault, student.defaultCampusId)}
-                            </span>
+                            <div className="mt-1 flex flex-wrap gap-1 text-xs text-(--color-muted-foreground)">
+                              <span className="flex items-center gap-1"><MapPin size={10} /> {campusName(vault, student.defaultCampusId)}</span>
+                              <span>{student.grade || "未设置年级"}</span>
+                            </div>
                           </div>
                         </div>
                         <Badge variant={student.status === "active" ? "sage" : "secondary"}>
@@ -397,17 +432,24 @@ export function StudentsView({
                           variant="destructive"
                           disabled={used}
                           title={used ? "已有课程或课时引用，不能直接删除" : "删除学生"}
-                          onClick={() => onDeleteStudent(student.id)}
+                          onClick={() => {
+                            if (window.confirm(`确认删除学生「${student.name}」吗？`)) {
+                              onDeleteStudent(student.id);
+                            }
+                          }}
                         >
                           <Trash2 size={14} /> 删除
                         </Button>
                       </div>
+                      {used && (
+                        <p className="text-xs font-semibold text-[#f97316]">已有课程或课时引用，暂不能删除。</p>
+                      )}
                     </div>
                   )}
                 </motion.div>
               );
             })}
-            {vault.students.length === 0 && (
+            {visibleStudents.length === 0 && (
               <p className="py-8 text-center text-sm text-(--color-muted-foreground)">还没有学生</p>
             )}
           </CardContent>
@@ -451,15 +493,13 @@ export function StudentsView({
                             const nextType = event.target.value as CourseType;
                             updateEditingCourse({
                               type: nextType,
-                              feeRule:
-                                nextType === "class"
-                                  ? { mode: "class_headcount", baseFee: 80, perPresentStudentFee: 10, makeupFeeMode: "perStudentFee" }
-                                  : { mode: "hourly", hourlyRate: 200 }
+                              feeRule: defaultFeeRule(nextType)
                             });
                           }}
                         >
                           <option value="one_on_one">一对一</option>
                           <option value="class">班课</option>
+                          <option value="trial">试听</option>
                         </Select>
                         <Select
                           value={editingCourse.defaultCampusId ?? ""}
@@ -498,7 +538,7 @@ export function StudentsView({
                           type="number"
                           value={editingCourse.feeRule.hourlyRate ?? 0}
                           onChange={(event) => updateEditingCourseFee({ hourlyRate: Number(event.target.value) })}
-                          placeholder="每小时费用"
+                          placeholder={editingCourse.type === "trial" ? "试听每小时费用" : "每小时费用"}
                         />
                       )}
                       <div className="space-y-2">
@@ -539,7 +579,7 @@ export function StudentsView({
                           <div className="min-w-0">
                             <span className="block truncate text-sm font-medium">{course.name}</span>
                             <span className="text-xs text-(--color-muted-foreground)">
-                              {course.type === "class" ? "班课" : "一对一"} · {studentNames(vault, course.studentIds) || "未关联学生"}
+                              {courseTypeLabels[course.type]} · {studentNames(vault, course.studentIds) || "未关联学生"}
                             </span>
                           </div>
                         </div>
@@ -557,11 +597,18 @@ export function StudentsView({
                           variant="destructive"
                           disabled={used}
                           title={used ? "已有规则或课时引用，不能直接删除" : "删除课程"}
-                          onClick={() => onDeleteCourse(course.id)}
+                          onClick={() => {
+                            if (window.confirm(`确认删除课程「${course.name}」吗？`)) {
+                              onDeleteCourse(course.id);
+                            }
+                          }}
                         >
                           <Trash2 size={14} /> 删除
                         </Button>
                       </div>
+                      {used && (
+                        <p className="text-xs font-semibold text-[#f97316]">已有规则或课时引用，暂不能删除。</p>
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -575,4 +622,11 @@ export function StudentsView({
       </div>
     </div>
   );
+}
+
+function defaultFeeRule(type: CourseType): FeeRule {
+  if (type === "class") {
+    return { mode: "class_headcount", baseFee: 80, perPresentStudentFee: 10, makeupFeeMode: "perStudentFee" };
+  }
+  return { mode: "hourly", hourlyRate: type === "trial" ? 0 : 200 };
 }

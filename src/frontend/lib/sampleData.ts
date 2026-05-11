@@ -16,7 +16,8 @@ export function createSampleVault(): TeacherVault {
       currency: "CNY"
     },
     preferences: {
-      weekStartsOn: 0
+      weekStartsOn: 0,
+      customTimePresets: []
     },
     notice: defaultNotice,
     campuses: [
@@ -24,10 +25,10 @@ export function createSampleVault(): TeacherVault {
       { id: "campus_west", name: "西区校区", address: "教学楼 202" }
     ],
     students: [
-      { id: "student_a", name: "学生 A", defaultCampusId: "campus_main", status: "active" },
-      { id: "student_b", name: "学生 B", defaultCampusId: "campus_main", status: "active" },
-      { id: "student_c", name: "学生 C", defaultCampusId: "campus_west", status: "active" },
-      { id: "student_d", name: "学生 D", defaultCampusId: "campus_main", status: "active" }
+      { id: "student_a", name: "学生 A", grade: "高一", defaultCampusId: "campus_main", status: "active" },
+      { id: "student_b", name: "学生 B", grade: "初二", defaultCampusId: "campus_main", status: "active" },
+      { id: "student_c", name: "学生 C", grade: "初二", defaultCampusId: "campus_west", status: "active" },
+      { id: "student_d", name: "学生 D", grade: "初三", defaultCampusId: "campus_main", status: "active" }
     ],
     courseGroups: [
       {

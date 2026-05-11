@@ -10,7 +10,6 @@ export function Sidebar({
   collapsed,
   role,
   username,
-  displayName,
   onViewChange,
   onToggle
 }: {
@@ -18,12 +17,11 @@ export function Sidebar({
   collapsed: boolean;
   role: UserRole;
   username: string;
-  displayName: string;
   onViewChange: (view: ViewKey) => void;
   onToggle: () => void;
 }) {
   const items = role === "admin" ? [...navItems, { key: "admin" as ViewKey, icon: ShieldCheck, label: "管理后台" }] : navItems;
-  const profileName = displayName.trim() || username || "Teacher";
+  const profileName = username || "Teacher";
   const avatarText = profileName.slice(0, 1).toUpperCase();
 
   return (
@@ -123,9 +121,6 @@ export function Sidebar({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-base font-bold">{profileName}</div>
-                  <div className="truncate text-sm text-white/60">
-                    {username}
-                  </div>
                 </div>
                 <ChevronRight size={18} className="text-white/52" />
               </div>

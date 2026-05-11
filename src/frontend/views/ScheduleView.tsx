@@ -24,7 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { AttendanceStatus, Lesson, ScheduleRule, TeacherVault, WeekStart, Weekday } from "@/shared/types";
+import type { AttendanceStatus, Lesson, ScheduleRule, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
 import { calculateFee, getCourse, hoursBetween, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -47,9 +47,9 @@ import {
 } from "@/frontend/lib/helpers";
 
 const timePresets = [
-  { label: "上午", startTime: "09:00", endTime: "11:00" },
-  { label: "下午", startTime: "16:00", endTime: "18:00" },
-  { label: "晚上", startTime: "19:00", endTime: "21:00" }
+  { id: "builtin_morning", label: "上午", startTime: "09:00", endTime: "11:00" },
+  { id: "builtin_afternoon", label: "下午", startTime: "16:00", endTime: "18:00" },
+  { id: "builtin_evening", label: "晚上", startTime: "19:00", endTime: "21:00" }
 ];
 
 export function ScheduleView({
@@ -60,6 +60,8 @@ export function ScheduleView({
   onAddRule,
   onUpdateRule,
   onDeleteRule,
+  onAddCustomTimePreset,
+  onDeleteCustomTimePreset,
   onGenerateDrafts,
   onAddScheduledLesson,
   onWeekStartChange
@@ -71,6 +73,8 @@ export function ScheduleView({
   onAddRule: (rule: ScheduleRule) => void;
   onUpdateRule: (rule: ScheduleRule) => void;
   onDeleteRule: (ruleId: string) => void;
+  onAddCustomTimePreset: (preset: TimePreset) => void;
+  onDeleteCustomTimePreset: (presetId: string) => void;
   onGenerateDrafts: (
     startDate: string,
     endDate: string,
@@ -91,14 +95,21 @@ export function ScheduleView({
   const [rangeStart, setRangeStart] = useState(todayIso());
   const [rangeEnd, setRangeEnd] = useState(monthShift(todayIso().slice(0, 7), 1) + "-01");
   const [calendarMonth, setCalendarMonth] = useState(todayIso().slice(0, 7));
+  const [calendarMode, setCalendarMode] = useState<"schedule" | "view">("schedule");
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(todayIso());
   const [editingRule, setEditingRule] = useState<ScheduleRule | null>(null);
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
-  const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | "one_on_one" | "class">("all");
+  const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | "one_on_one" | "class" | "trial">("all");
+  const [customPresetLabel, setCustomPresetLabel] = useState("");
+  const [customPresetStart, setCustomPresetStart] = useState("08:00");
+  const [customPresetEnd, setCustomPresetEnd] = useState("10:00");
   const weekStartPreference = weekStartsOn(vault);
   const visibleWeekdays = orderedWeekdays(weekStartPreference);
   const visibleWeekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
+  const combinedTimePresets = [...timePresets, ...(vault.preferences?.customTimePresets ?? [])];
+  const selectedCalendarLessons = vault.lessons.filter((lesson) => lesson.date === selectedCalendarDate).sort(sortLessons);
   const dateShortcuts = [
     { label: "今天", value: offsetDate(0) },
     { label: "昨天", value: offsetDate(-1) },
@@ -156,6 +167,18 @@ export function ScheduleView({
     setSelectedWeekdays((current) =>
       current.includes(day) ? current.filter((item) => item !== day) : [...current, day].sort()
     );
+  }
+
+  function addCustomPreset() {
+    const label = customPresetLabel.trim() || `${customPresetStart}-${customPresetEnd}`;
+    if (!customPresetStart || !customPresetEnd) return;
+    onAddCustomTimePreset({
+      id: makeId("time"),
+      label: label.slice(0, 12),
+      startTime: customPresetStart,
+      endTime: customPresetEnd
+    });
+    setCustomPresetLabel("");
   }
 
   function saveRuleDraft() {
@@ -299,11 +322,11 @@ export function ScheduleView({
               <div className="space-y-2">
                 <div className="text-sm font-medium">常用时段</div>
                 <div className="grid grid-cols-3 gap-2">
-                  {timePresets.map((preset) => {
+                  {combinedTimePresets.map((preset) => {
                     const active = startTime === preset.startTime && endTime === preset.endTime;
                     return (
                       <Button
-                        key={preset.label}
+                        key={preset.id}
                         type="button"
                         size="sm"
                         variant={active ? "default" : "outline"}
@@ -319,6 +342,51 @@ export function ScheduleView({
                   })}
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+              <div className="mb-3 text-sm font-medium">自定义常用时段</div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_140px_140px_auto]">
+                <Input
+                  value={customPresetLabel}
+                  onChange={(event) => setCustomPresetLabel(event.target.value)}
+                  placeholder="例如：晚 8:10"
+                />
+                <Input
+                  type="time"
+                  value={customPresetStart}
+                  onChange={(event) => setCustomPresetStart(event.target.value)}
+                  className="date-time-input h-11 text-base"
+                />
+                <Input
+                  type="time"
+                  value={customPresetEnd}
+                  onChange={(event) => setCustomPresetEnd(event.target.value)}
+                  className="date-time-input h-11 text-base"
+                />
+                <Button type="button" variant="outline" onClick={addCustomPreset}>
+                  <Plus size={15} /> 保存时段
+                </Button>
+              </div>
+              {(vault.preferences?.customTimePresets ?? []).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(vault.preferences?.customTimePresets ?? []).map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`确认删除常用时段「${preset.label}」吗？`)) {
+                          onDeleteCustomTimePreset(preset.id);
+                        }
+                      }}
+                      className="rounded-full border border-[#dbe4ef] bg-white px-3 py-1.5 text-xs font-bold text-[#25324a] hover:border-[#ef4444] hover:text-[#dc2626]"
+                      title="点击删除自定义时段"
+                    >
+                      {preset.label} {preset.startTime}-{preset.endTime} ×
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -439,12 +507,28 @@ export function ScheduleView({
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
-                <CalendarDays size={14} /> 点击日历排课
+                <CalendarDays size={14} /> 日历排课 / 查看
               </div>
               <CardTitle>日历排课</CardTitle>
-              <CardDescription>选好课程和时间后，点击日期即可添加待上课。</CardDescription>
+              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课。" : "查看模式下，点击日期只显示当天课程。"}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setCalendarMode("schedule")}
+                  className={`rounded-[9px] px-3 py-2 text-xs font-bold ${calendarMode === "schedule" ? "orange-gradient text-white" : "text-[#25324a]"}`}
+                >
+                  排课
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCalendarMode("view")}
+                  className={`rounded-[9px] px-3 py-2 text-xs font-bold ${calendarMode === "view" ? "bg-[#1557c2] text-white" : "text-[#25324a]"}`}
+                >
+                  查看
+                </button>
+              </div>
               <Select
                 value={String(weekStartPreference)}
                 onChange={(event) => onWeekStartChange(Number(event.target.value) as WeekStart)}
@@ -476,10 +560,17 @@ export function ScheduleView({
                     key={calendarDate}
                     whileHover={{ scale: 1.04, y: -2 }}
                     whileTap={{ scale: 0.97 }}
-                    onClick={() => onAddScheduledLesson(calendarDate, courseGroupId, startTime, endTime)}
-                    disabled={!courseGroupId}
+                    onClick={() => {
+                      setSelectedCalendarDate(calendarDate);
+                      if (calendarMode === "schedule") {
+                        onAddScheduledLesson(calendarDate, courseGroupId, startTime, endTime);
+                      }
+                    }}
+                    disabled={calendarMode === "schedule" && !courseGroupId}
                     className={`relative flex min-h-[78px] flex-col items-start rounded-[14px] border p-2 text-left transition-all sm:min-h-[90px] sm:p-2.5 ${
-                      isCurrentMonth
+                      selectedCalendarDate === calendarDate
+                        ? "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.12)]"
+                        : isCurrentMonth
                         ? "border-[#dbe4ef] bg-white hover:border-[#ff8617] hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
                         : "border-transparent bg-white opacity-40"
                     }`}
@@ -490,11 +581,35 @@ export function ScheduleView({
                     {dayLessons.length > 0 ? (
                       <Badge variant="secondary" className="mt-1 text-[10px]">{dayLessons.length} 节</Badge>
                     ) : (
-                      <span className="mt-1 text-[10px] text-(--color-muted-foreground)">点击排课</span>
+                      <span className="mt-1 text-[10px] text-(--color-muted-foreground)">{calendarMode === "schedule" ? "点击排课" : "无课程"}</span>
                     )}
                   </motion.button>
                 );
               })}
+            </div>
+            <div className="mt-4 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="font-extrabold text-[#061226]">{selectedCalendarDate} 课程</div>
+                <Badge variant={selectedCalendarLessons.length ? "sky" : "secondary"}>{selectedCalendarLessons.length} 节</Badge>
+              </div>
+              <div className="space-y-2">
+                {selectedCalendarLessons.map((lesson) => (
+                  <button
+                    key={lesson.id}
+                    type="button"
+                    onClick={() => setSelectedId(lesson.id)}
+                    className="flex w-full items-center justify-between rounded-[12px] border border-[#dbe4ef] bg-white p-3 text-left text-sm"
+                  >
+                    <span className="min-w-0 truncate font-bold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
+                    <span className="shrink-0 text-xs font-semibold text-[#64748b]">{lesson.startTime}-{lesson.endTime}</span>
+                  </button>
+                ))}
+                {selectedCalendarLessons.length === 0 && (
+                  <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-4 text-center text-sm font-semibold text-[#64748b]">
+                    这一天没有课程
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -613,7 +728,16 @@ export function ScheduleView({
                         <Button type="button" size="sm" variant="outline" onClick={() => setEditingRule(rule)}>
                           <Pencil size={14} /> 编辑
                         </Button>
-                        <Button type="button" size="sm" variant="destructive" onClick={() => onDeleteRule(rule.id)}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            if (window.confirm(`确认删除排课规则「${courseName(vault, rule.courseGroupId)}」吗？`)) {
+                              onDeleteRule(rule.id);
+                            }
+                          }}
+                        >
                           <Trash2 size={14} /> 删除
                         </Button>
                       </div>
@@ -657,11 +781,12 @@ export function ScheduleView({
                 <label className="text-sm font-medium">班型筛选</label>
                 <Select
                   value={courseTypeFilter}
-                  onChange={(event) => setCourseTypeFilter(event.target.value as "all" | "one_on_one" | "class")}
+                  onChange={(event) => setCourseTypeFilter(event.target.value as "all" | "one_on_one" | "class" | "trial")}
                 >
                   <option value="all">全部班型</option>
                   <option value="one_on_one">一对一</option>
                   <option value="class">班课</option>
+                  <option value="trial">试听</option>
                 </Select>
               </div>
             </div>
@@ -714,7 +839,15 @@ export function ScheduleView({
                   <CardTitle>课程详情</CardTitle>
                   <CardDescription>{selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
-                <Button variant="destructive" size="sm" onClick={() => onDeleteLesson(selected.id)}>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    if (window.confirm(`确认删除这条课时记录吗？`)) {
+                      onDeleteLesson(selected.id);
+                    }
+                  }}
+                >
                   <Trash2 size={15} /> 删除
                 </Button>
               </CardHeader>

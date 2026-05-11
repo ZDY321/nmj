@@ -11,6 +11,7 @@ import type {
   AttendanceStatus,
   Campus,
   CourseGroup,
+  CourseType,
   Lesson,
   LessonStatus,
   ScheduleRule,
@@ -58,6 +59,12 @@ export const lessonStatusLabels: Record<LessonStatus, string> = {
   cancelled: "已取消",
   makeup_pending: "待补课",
   makeup_completed: "补课完成"
+};
+
+export const courseTypeLabels: Record<CourseType, string> = {
+  one_on_one: "一对一",
+  class: "班课",
+  trial: "试听"
 };
 
 export const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
@@ -148,17 +155,20 @@ export function studentNames(vault: TeacherVault, studentIds: string[]): string 
 }
 
 export function previousHomework(vault: TeacherVault, lesson: Lesson): string {
+  return previousLesson(vault, lesson)?.content.homework || lesson.content.nextLessonReminder;
+}
+
+export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | undefined {
   const previous = vault.lessons
     .filter(
       (item) =>
         item.courseGroupId === lesson.courseGroupId &&
-        `${item.date} ${item.startTime}` < `${lesson.date} ${lesson.startTime}` &&
-        Boolean(item.content.homework.trim())
+        `${item.date} ${item.startTime}` < `${lesson.date} ${lesson.startTime}`
     )
     .sort(sortLessons)
     .at(-1);
 
-  return previous?.content.homework || lesson.content.nextLessonReminder;
+  return previous;
 }
 
 export function createLessonFromCourse(

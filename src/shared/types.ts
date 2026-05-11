@@ -7,7 +7,7 @@ export type UserStatus =
   | "delete_scheduled"
   | "deleted";
 
-export type CourseType = "one_on_one" | "class";
+export type CourseType = "one_on_one" | "class" | "trial";
 
 export type LessonStatus =
   | "draft"
@@ -46,6 +46,7 @@ export type Campus = {
 export type Student = {
   id: string;
   name: string;
+  grade?: string;
   defaultCampusId?: string;
   note?: string;
   status: "active" | "paused";
@@ -142,8 +143,16 @@ export type TeacherProfile = {
   currency: "CNY";
 };
 
+export type TimePreset = {
+  id: string;
+  label: string;
+  startTime: string;
+  endTime: string;
+};
+
 export type AppPreferences = {
   weekStartsOn: WeekStart;
+  customTimePresets?: TimePreset[];
 };
 
 export type TeacherVault = {

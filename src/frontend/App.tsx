@@ -4,16 +4,12 @@ import {
   AlertTriangle,
   Bell,
   Calendar,
-  Check,
   GraduationCap,
   LogOut,
-  Menu,
-  Pencil,
-  X
+  Menu
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { AdminView } from "@/frontend/views/AdminView";
@@ -32,7 +28,19 @@ import {
   createLessonFromCourse
 } from "@/frontend/lib/helpers";
 import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
-import type { Campus, CourseGroup, Lesson, ScheduleRule, Student, TeacherVault, UserDeletionState, UserRole, WeekStart } from "@/shared/types";
+import type {
+  Campus,
+  CourseGroup,
+  Lesson,
+  SalaryAdjustment,
+  ScheduleRule,
+  Student,
+  TeacherVault,
+  TimePreset,
+  UserDeletionState,
+  UserRole,
+  WeekStart
+} from "@/shared/types";
 
 type UnlockedSession = {
   username: string;
@@ -60,8 +68,6 @@ export function App() {
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedDate, setSelectedDate] = useState(todayIso());
-  const [profileEditing, setProfileEditing] = useState(false);
-  const [profileNameDraft, setProfileNameDraft] = useState("");
   const [greetingTime, setGreetingTime] = useState(() => new Date());
 
   function rememberUnlockedSession(next?: Partial<UnlockedSession>) {
@@ -150,15 +156,6 @@ export function App() {
     });
   }
 
-  function saveProfileName() {
-    const nextName = profileNameDraft.trim();
-    if (!nextName) return;
-    updateVault((draft) => {
-      draft.profile.displayName = nextName.slice(0, 24);
-    });
-    setProfileEditing(false);
-  }
-
   function addLesson(lesson: Lesson) {
     updateVault((draft) => {
       draft.lessons.push(lesson);
@@ -222,6 +219,36 @@ export function App() {
   function deleteScheduleRule(ruleId: string) {
     updateVault((draft) => {
       draft.scheduleRules = draft.scheduleRules.filter((rule) => rule.id !== ruleId);
+    });
+  }
+
+  function addCustomTimePreset(preset: TimePreset) {
+    updateVault((draft) => {
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        customTimePresets: [...(draft.preferences?.customTimePresets ?? []), preset]
+      };
+    });
+  }
+
+  function deleteCustomTimePreset(presetId: string) {
+    updateVault((draft) => {
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        customTimePresets: (draft.preferences?.customTimePresets ?? []).filter((preset) => preset.id !== presetId)
+      };
+    });
+  }
+
+  function addSalaryAdjustment(adjustment: SalaryAdjustment) {
+    updateVault((draft) => {
+      draft.salaryAdjustments.push(adjustment);
+    });
+  }
+
+  function deleteSalaryAdjustment(adjustmentId: string) {
+    updateVault((draft) => {
+      draft.salaryAdjustments = draft.salaryAdjustments.filter((adjustment) => adjustment.id !== adjustmentId);
     });
   }
 
@@ -315,10 +342,6 @@ export function App() {
   }, [username, vault?.notice.enabled, vault?.notice.updatedAt]);
 
   useEffect(() => {
-    setProfileNameDraft(vault?.profile.displayName ?? "");
-  }, [vault?.profile.displayName]);
-
-  useEffect(() => {
     if (!vault) return;
     rememberUnlockedSession({ selectedDate });
   }, [selectedDate]);
@@ -370,7 +393,6 @@ export function App() {
         collapsed={collapsed}
         role={role}
         username={username}
-        displayName={vault.profile.displayName}
         onViewChange={setView}
         onToggle={() => setCollapsed((v) => !v)}
       />
@@ -434,41 +456,9 @@ export function App() {
                 <span>{activeTitle}</span>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                {profileEditing ? (
-                  <div className="flex w-full max-w-[420px] items-center gap-2">
-                    <Input
-                      value={profileNameDraft}
-                      onChange={(event) => setProfileNameDraft(event.target.value)}
-                      className="h-11 text-base font-bold"
-                      maxLength={24}
-                      autoFocus
-                    />
-                    <Button size="icon" className="h-11 w-11" onClick={saveProfileName} aria-label="保存名字">
-                      <Check size={18} />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-11 w-11"
-                      onClick={() => {
-                        setProfileNameDraft(vault.profile.displayName);
-                        setProfileEditing(false);
-                      }}
-                      aria-label="取消修改"
-                    >
-                      <X size={18} />
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <h1 className="break-words text-[28px] font-extrabold leading-tight text-[#050b18] sm:text-[38px]">
-                      {greeting}，{vault.profile.displayName || "Teacher"}
-                    </h1>
-                    <Button variant="outline" size="sm" className="shrink-0" onClick={() => setProfileEditing(true)}>
-                      <Pencil size={15} /> 改名字
-                    </Button>
-                  </>
-                )}
+                <h1 className="break-words text-[28px] font-extrabold leading-tight text-[#050b18] sm:text-[38px]">
+                  {greeting}
+                </h1>
               </div>
               <p className="mt-2 text-base text-[#475569] sm:text-lg">
                 今天的课时、收入、排课和待处理事项已汇总在这里。
@@ -615,6 +605,8 @@ export function App() {
                 }
                 onUpdateRule={updateScheduleRule}
                 onDeleteRule={deleteScheduleRule}
+                onAddCustomTimePreset={addCustomTimePreset}
+                onDeleteCustomTimePreset={deleteCustomTimePreset}
                 onGenerateDrafts={generateDrafts}
                 onAddScheduledLesson={addScheduledLesson}
                 onWeekStartChange={updateWeekStart}
@@ -654,6 +646,8 @@ export function App() {
                     draft.profile.baseSalary = Number.isFinite(value) ? value : 0;
                   })
                 }
+                onAddAdjustment={addSalaryAdjustment}
+                onDeleteAdjustment={deleteSalaryAdjustment}
               />
             )}
             {view === "admin" && role === "admin" && (
