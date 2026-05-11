@@ -14,6 +14,7 @@ import { campusName, courseName, courseTypeLabels, studentNames, weekdayLabels }
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置", ...fixedGradeOptions, "自定义"];
+type ArchivePanel = "campuses" | "students" | "courses";
 
 export function StudentsView({
   vault,
@@ -53,6 +54,7 @@ export function StudentsView({
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
+  const [archivePanel, setArchivePanel] = useState<ArchivePanel>("campuses");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
   const [archiveSearch, setArchiveSearch] = useState("");
@@ -217,10 +219,6 @@ export function StudentsView({
             </Card>
           );
         })}
-      </div>
-
-      <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] px-4 py-3 text-sm font-semibold leading-6 text-[#9a3412]">
-        删除限制说明：已有学生、课程、排课规则或历史课时引用的数据不能直接删除，建议改为暂停状态，以免影响工资和课时核对。
       </div>
 
       <Card className="overflow-hidden">
@@ -444,7 +442,29 @@ export function StudentsView({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 xl:items-start">
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1">
+          {[
+            { key: "campuses" as ArchivePanel, label: "校区列表" },
+            { key: "students" as ArchivePanel, label: "学生列表" },
+            { key: "courses" as ArchivePanel, label: "课程与班课" }
+          ].map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setArchivePanel(item.key)}
+              className={`rounded-[12px] px-3 py-2 text-sm font-extrabold transition-colors ${
+                archivePanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
+          删除限制：已有学生、课程、排课规则或历史课时引用的数据不能直接删除，建议改为暂停状态。
+        </div>
+        {archivePanel === "campuses" && (
         <Card className="h-fit overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">
@@ -545,7 +565,9 @@ export function StudentsView({
             )}
           </CardContent>
         </Card>
+        )}
 
+        {archivePanel === "students" && (
         <Card className="h-fit overflow-hidden">
           <CardHeader className="gap-3">
             <div className="flex flex-row items-center justify-between">
@@ -720,7 +742,9 @@ export function StudentsView({
             )}
           </CardContent>
         </Card>
+        )}
 
+        {archivePanel === "courses" && (
         <Card className="h-fit overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">
@@ -899,6 +923,7 @@ export function StudentsView({
             )}
           </CardContent>
         </Card>
+        )}
       </div>
 
       <Card className="overflow-hidden">

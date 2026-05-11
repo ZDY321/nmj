@@ -57,6 +57,7 @@ import {
 
 type LessonScope = "month" | "week";
 type CourseTypeFilter = "all" | CourseType;
+type SchedulePanel = "schedule" | "calendar" | "records";
 
 export function ScheduleView({
   vault,
@@ -119,6 +120,7 @@ export function ScheduleView({
   const [lessonMonth, setLessonMonth] = useState(todayIso().slice(0, 7));
   const [lessonWeek, setLessonWeek] = useState(isoWeekValue(todayIso()));
   const [showOnlyMakeup, setShowOnlyMakeup] = useState(false);
+  const [schedulePanel, setSchedulePanel] = useState<SchedulePanel>("schedule");
   const [customPresetStart, setCustomPresetStart] = useState("08:00");
   const [customPresetEnd, setCustomPresetEnd] = useState("10:00");
   const [temporaryStudentId, setTemporaryStudentId] = useState("");
@@ -408,6 +410,26 @@ export function ScheduleView({
   return (
     <div className="space-y-6">
       {dialog}
+      <div className="grid grid-cols-3 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1">
+        {[
+          { key: "schedule" as SchedulePanel, label: "排课" },
+          { key: "calendar" as SchedulePanel, label: "日历查看" },
+          { key: "records" as SchedulePanel, label: "课程记录" }
+        ].map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setSchedulePanel(item.key)}
+            className={`rounded-[12px] px-3 py-2 text-sm font-extrabold transition-colors ${
+              schedulePanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {schedulePanel === "schedule" && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader>
@@ -626,7 +648,9 @@ export function ScheduleView({
           </form>
         </Card>
       </div>
+      )}
 
+      {schedulePanel === "calendar" && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
         <Card className="h-fit overflow-hidden">
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -803,107 +827,11 @@ export function ScheduleView({
               )}
             </CardContent>
           </Card>
-
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                <Clock size={14} /> 已设置规则
-              </div>
-              <CardTitle>排课规则列表</CardTitle>
-              <CardDescription>每条规则都可编辑时间、课程、校区和启用状态。</CardDescription>
-            </CardHeader>
-            <CardContent className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-              {vault.scheduleRules.map((rule) => {
-                const isEditing = editingRule?.id === rule.id;
-                return (
-                  <motion.div key={rule.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4 transition-all hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]">
-                    {isEditing && editingRule ? (
-                      <div className="space-y-3">
-                        <Select
-                          value={editingRule.courseGroupId}
-                          onChange={(event) => {
-                            const course = getCourse(vault, event.target.value);
-                            setEditingRule({ ...editingRule, courseGroupId: event.target.value, campusId: course?.defaultCampusId });
-                          }}
-                        >
-                          {vault.courseGroups.map((course) => (
-                            <option key={course.id} value={course.id}>{course.name}</option>
-                          ))}
-                        </Select>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <Select value={editingRule.weekday} onChange={(event) => setEditingRule({ ...editingRule, weekday: Number(event.target.value) as Weekday })}>
-                            {visibleWeekdays.map((day) => (
-                              <option key={day} value={day}>{weekdayLabels[day]}</option>
-                            ))}
-                          </Select>
-                          <Select value={editingRule.campusId ?? ""} onChange={(event) => setEditingRule({ ...editingRule, campusId: event.target.value || undefined })}>
-                            <option value="">课程默认校区</option>
-                            {vault.campuses.map((campus) => (
-                              <option key={campus.id} value={campus.id}>{campus.name}</option>
-                            ))}
-                          </Select>
-                          <Input type="time" value={editingRule.startTime} onChange={(event) => setEditingRule({ ...editingRule, startTime: event.target.value })} />
-                          <Input type="time" value={editingRule.endTime} onChange={(event) => setEditingRule({ ...editingRule, endTime: event.target.value })} />
-                          <Input type="date" value={editingRule.effectiveFrom} onChange={(event) => setEditingRule({ ...editingRule, effectiveFrom: event.target.value })} />
-                          <Input type="date" value={editingRule.effectiveTo ?? ""} onChange={(event) => setEditingRule({ ...editingRule, effectiveTo: event.target.value || undefined })} />
-                        </div>
-                        <Select value={editingRule.enabled ? "enabled" : "disabled"} onChange={(event) => setEditingRule({ ...editingRule, enabled: event.target.value === "enabled" })}>
-                          <option value="enabled">启用</option>
-                          <option value="disabled">停用</option>
-                        </Select>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button type="button" size="sm" onClick={saveRuleDraft}><Save size={14} /> 保存</Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => setEditingRule(null)}><X size={14} /> 取消</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#fff1e2]">
-                              <Clock size={16} className="text-[#ff8617]" />
-                            </div>
-                            <div className="min-w-0">
-                              <strong className="block truncate text-sm font-semibold">{courseName(vault, rule.courseGroupId)}</strong>
-                              <p className="text-xs text-(--color-muted-foreground)">
-                                {weekdayLabels[rule.weekday]} {rule.startTime}-{rule.endTime} · {campusName(vault, rule.campusId)}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge variant={rule.enabled ? "sage" : "secondary"}>{rule.enabled ? "启用" : "停用"}</Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => setEditingRule(rule)}><Pencil size={14} /> 编辑</Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            onClick={() =>
-                              confirm({
-                                title: `删除排课规则「${courseName(vault, rule.courseGroupId)}」？`,
-                                description: "删除规则不会删除已经生成的课时记录。",
-                                confirmLabel: "删除",
-                                tone: "danger",
-                                onConfirm: () => onDeleteRule(rule.id)
-                              })
-                            }
-                          >
-                            <Trash2 size={14} /> 删除
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </motion.div>
-                );
-              })}
-              {vault.scheduleRules.length === 0 && (
-                <p className="py-8 text-center text-sm text-(--color-muted-foreground)">还没有排课规则</p>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </div>
+      )}
 
+      {schedulePanel === "records" && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
         <Card className="h-fit overflow-hidden">
           <CardHeader>
@@ -1205,6 +1133,7 @@ export function ScheduleView({
           </motion.div>
         )}
       </div>
+      )}
     </div>
   );
 }

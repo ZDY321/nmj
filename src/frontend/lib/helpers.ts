@@ -73,10 +73,11 @@ export const courseTypeLabels: Record<CourseType, string> = {
   trial: "试听"
 };
 
-export function lessonStatusVariant(status: LessonStatus): "sage" | "amber" | "destructive" | "secondary" | "sky" {
+export function lessonStatusVariant(status: LessonStatus): "sage" | "amber" | "destructive" | "secondary" | "sky" | "plum" {
   if (status === "completed" || status === "makeup_completed") return "sage";
   if (status === "cancelled") return "destructive";
-  if (status === "scheduled" || status === "makeup_pending") return "amber";
+  if (status === "makeup_pending") return "plum";
+  if (status === "scheduled") return "amber";
   return "secondary";
 }
 
@@ -87,7 +88,10 @@ export function lessonStatusSurfaceClass(status: LessonStatus): string {
   if (status === "completed" || status === "makeup_completed") {
     return "border-[#bbf7d0] bg-[#f0fdf4] text-[#14532d]";
   }
-  if (status === "scheduled" || status === "makeup_pending") {
+  if (status === "makeup_pending") {
+    return "border-[#fed7aa] bg-[#fff7ed] text-[#5161d6]";
+  }
+  if (status === "scheduled") {
     return "border-[#fed7aa] bg-[#fff7ed] text-[#7c2d12]";
   }
   return "border-[#dbe4ef] bg-white text-[#25324a]";
