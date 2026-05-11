@@ -151,7 +151,47 @@ export function StudentsView({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card className="overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Building2 size={18} className="text-[#ff8617]" />
+              <CardTitle className="text-lg">校区列表</CardTitle>
+            </div>
+            <Badge variant="secondary">{vault.campuses.length} 个</Badge>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {vault.campuses.map((campus) => (
+              <motion.div
+                key={campus.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
+                    <Building2 size={16} className="text-[#1557c2]" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{campus.name}</span>
+                    <span className="mt-1 flex items-center gap-1 text-xs text-(--color-muted-foreground)">
+                      <MapPin size={10} /> {campus.address || "未填写地址"}
+                    </span>
+                    {campus.note && (
+                      <span className="mt-1 block text-xs leading-5 text-(--color-muted-foreground)">
+                        {campus.note}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+            {vault.campuses.length === 0 && (
+              <p className="py-8 text-center text-sm text-(--color-muted-foreground)">还没有校区</p>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">

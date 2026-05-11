@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, BookText, CheckCircle2, ChevronDown, Clock, GraduationCap, MapPin, NotebookPen, Plus, Trash2, UserCheck } from "lucide-react";
+import { BookOpen, BookText, Clock, GraduationCap, NotebookPen, Plus, Trash2, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,10 +14,17 @@ import {
   courseName,
   createLessonFromCourse,
   findStudent,
+  formatDateIso,
   formatMoney,
   lessonStatusLabels,
   sortLessons
 } from "@/frontend/lib/helpers";
+
+const timePresets = [
+  { label: "上午", startTime: "09:00", endTime: "11:00" },
+  { label: "下午", startTime: "16:00", endTime: "18:00" },
+  { label: "晚上", startTime: "19:00", endTime: "21:00" }
+];
 
 function LessonForm({
   vault,
@@ -30,6 +37,11 @@ function LessonForm({
   const [courseGroupId, setCourseGroupId] = useState(vault.courseGroups[0]?.id ?? "");
   const [startTime, setStartTime] = useState("19:00");
   const [endTime, setEndTime] = useState("21:00");
+  const dateShortcuts = [
+    { label: "今天", value: offsetDate(0) },
+    { label: "昨天", value: offsetDate(-1) },
+    { label: "前天", value: offsetDate(-2) }
+  ];
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -61,10 +73,24 @@ function LessonForm({
             <Plus size={15} /> 添加
           </Button>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">日期</label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-12 text-base" />
+            <div className="grid grid-cols-3 gap-2">
+              {dateShortcuts.map((item) => (
+                <Button
+                  key={item.label}
+                  type="button"
+                  size="sm"
+                  variant={date === item.value ? "default" : "outline"}
+                  onClick={() => setDate(item.value)}
+                  className="h-10"
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">课程</label>
@@ -79,16 +105,45 @@ function LessonForm({
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">开始时间</label>
-            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-12 text-base" />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">结束时间</label>
-            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="h-12 text-base" />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <label className="text-sm font-medium">常用时段</label>
+            <div className="grid grid-cols-3 gap-2">
+              {timePresets.map((preset) => {
+                const active = startTime === preset.startTime && endTime === preset.endTime;
+                return (
+                  <Button
+                    key={preset.label}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    onClick={() => {
+                      setStartTime(preset.startTime);
+                      setEndTime(preset.endTime);
+                    }}
+                    className="h-10"
+                  >
+                    {preset.label}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
         </CardContent>
       </form>
     </Card>
   );
+}
+
+function offsetDate(offset: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return formatDateIso(date);
 }
 
 export function LessonsView({

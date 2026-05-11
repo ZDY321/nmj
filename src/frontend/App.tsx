@@ -35,6 +35,18 @@ import {
 import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import type { Lesson, TeacherVault, UserDeletionState, UserRole, WeekStart } from "@/shared/types";
 
+type UnlockedSession = {
+  username: string;
+  password: string;
+  token: string;
+  role: UserRole;
+  deletion: UserDeletionState | null;
+  vault: TeacherVault;
+  selectedDate: string;
+};
+
+const unlockedSessionKey = "teacher-salary-tracker:unlocked-session";
+
 export function App() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -51,6 +63,22 @@ export function App() {
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [profileEditing, setProfileEditing] = useState(false);
   const [profileNameDraft, setProfileNameDraft] = useState("");
+  const [greetingTime, setGreetingTime] = useState(() => new Date());
+
+  function rememberUnlockedSession(next?: Partial<UnlockedSession>) {
+    const session: UnlockedSession = {
+      username,
+      password,
+      token,
+      role,
+      deletion,
+      vault: vault!,
+      selectedDate,
+      ...next
+    };
+    if (!session.username || !session.password || !session.token || !session.vault) return;
+    writeUnlockedSession(session);
+  }
 
   async function login(nextUsername: string, nextPassword: string) {
     const result = await loginAccount(nextUsername, nextPassword);
@@ -60,6 +88,14 @@ export function App() {
     setRole(result.account.role);
     setDeletion(result.deletion);
     setVault(result.vault);
+    rememberUnlockedSession({
+      username: result.account.username,
+      password: nextPassword,
+      token: result.token,
+      role: result.account.role,
+      deletion: result.deletion,
+      vault: result.vault
+    });
     if (view === "admin" && result.account.role !== "admin") {
       setView("today");
     }
@@ -73,6 +109,14 @@ export function App() {
     setRole(result.account.role);
     setDeletion(result.deletion);
     setVault(result.vault);
+    rememberUnlockedSession({
+      username: result.account.username,
+      password: nextPassword,
+      token: result.token,
+      role: result.account.role,
+      deletion: result.deletion,
+      vault: result.vault
+    });
     return result.account.role;
   }
 
@@ -82,9 +126,11 @@ export function App() {
     setSaveState("saving");
     try {
       await saveVault(username, password, nextVault, token);
+      rememberUnlockedSession({ vault: nextVault });
       setSaveState("saved");
       window.setTimeout(() => setSaveState("idle"), 900);
     } catch {
+      rememberUnlockedSession({ vault: nextVault });
       setSaveState("error");
     }
   }
@@ -185,6 +231,36 @@ export function App() {
   }
 
   useEffect(() => {
+    const stored = readUnlockedSession();
+    if (!stored) return;
+    try {
+      const session = JSON.parse(stored) as UnlockedSession;
+      if (!session.username || !session.password || !session.token || !session.vault) {
+        clearUnlockedSession();
+        return;
+      }
+      setUsername(session.username);
+      setPassword(session.password);
+      setToken(session.token);
+      setRole(session.role);
+      setDeletion(session.deletion);
+      setVault(session.vault);
+      setSelectedDate(session.selectedDate || todayIso());
+      writeUnlockedSession({
+        ...session,
+        selectedDate: session.selectedDate || todayIso()
+      });
+    } catch {
+      clearUnlockedSession();
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setGreetingTime(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (!vault || !username || !vault.notice.enabled) return;
     const storedVersion = localStorage.getItem(noticeReadKey(username));
     setNoticeReadVersion(storedVersion ?? "");
@@ -194,6 +270,11 @@ export function App() {
   useEffect(() => {
     setProfileNameDraft(vault?.profile.displayName ?? "");
   }, [vault?.profile.displayName]);
+
+  useEffect(() => {
+    if (!vault) return;
+    rememberUnlockedSession({ selectedDate });
+  }, [selectedDate]);
 
   function acknowledgeNotice() {
     if (!vault || !username) return;
@@ -233,6 +314,7 @@ export function App() {
     saveState === "saving" ? "同步中" : saveState === "saved" ? "已同步" : saveState === "error" ? "同步失败" : "云端";
   const saveFullLabel =
     saveState === "saving" ? "同步中..." : saveState === "saved" ? "已加密同步" : saveState === "error" ? "云端同步失败" : "云端加密";
+  const greeting = greetingFor(greetingTime);
 
   return (
     <div className="dashboard-shell flex min-h-screen">
@@ -332,8 +414,8 @@ export function App() {
                   </div>
                 ) : (
                   <>
-                    <h1 className="text-[30px] font-extrabold leading-tight text-[#050b18] sm:text-[38px]">
-                      welcome back,{vault.profile.displayName || "Teacher"}
+                    <h1 className="break-words text-[28px] font-extrabold leading-tight text-[#050b18] sm:text-[38px]">
+                      {greeting}，{vault.profile.displayName || "Teacher"}
                     </h1>
                     <Button variant="outline" size="sm" className="shrink-0" onClick={() => setProfileEditing(true)}>
                       <Pencil size={15} /> 改名字
@@ -381,6 +463,7 @@ export function App() {
                   setPassword("");
                   setToken("");
                   setDeletion(null);
+                  clearUnlockedSession();
                 }}>
                   <LogOut size={18} /> 退出
                 </Button>
@@ -538,6 +621,7 @@ export function App() {
                   setPassword("");
                   setToken("");
                   setDeletion(null);
+                  clearUnlockedSession();
                 }}
               />
             )}
@@ -560,4 +644,27 @@ const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
 
 function noticeReadKey(username: string): string {
   return `teacher-salary-tracker:notice-read:${username}`;
+}
+
+function readUnlockedSession(): string | null {
+  return sessionStorage.getItem(unlockedSessionKey) ?? localStorage.getItem(unlockedSessionKey);
+}
+
+function writeUnlockedSession(session: UnlockedSession): void {
+  const serialized = JSON.stringify(session);
+  sessionStorage.setItem(unlockedSessionKey, serialized);
+  localStorage.setItem(unlockedSessionKey, serialized);
+}
+
+function clearUnlockedSession(): void {
+  sessionStorage.removeItem(unlockedSessionKey);
+  localStorage.removeItem(unlockedSessionKey);
+}
+
+function greetingFor(date: Date): string {
+  const hour = date.getHours();
+  if (hour >= 5 && hour < 11) return "早上好";
+  if (hour >= 11 && hour < 14) return "中午好";
+  if (hour >= 14 && hour < 18) return "下午好";
+  return "晚上好";
 }

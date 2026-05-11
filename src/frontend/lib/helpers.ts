@@ -41,7 +41,7 @@ export const viewTitles: Record<ViewKey, string> = {
   lessons: "课时记录",
   schedule: "排课",
   students: "学生与校区",
-  salary: "工资统计",
+  salary: "数据统计",
   admin: "管理后台"
 };
 
@@ -51,7 +51,7 @@ export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: s
   { key: "lessons", icon: ClipboardCheck, label: "课时记录" },
   { key: "schedule", icon: CalendarDays, label: "排课" },
   { key: "students", icon: Users, label: "学生与校区" },
-  { key: "salary", icon: WalletCards, label: "工资统计" }
+  { key: "salary", icon: WalletCards, label: "数据统计" }
 ];
 
 export const attendanceLabels: Record<AttendanceStatus, string> = {

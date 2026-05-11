@@ -1,11 +1,11 @@
 import { motion } from "framer-motion";
-import { BookOpen, Clock3, DollarSign, Tag, TrendingUp } from "lucide-react";
+import { Banknote, BookOpen, Clock3, Tag, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const variantStyles = {
   1: {
-    icon: DollarSign,
+    icon: Banknote,
     iconWrap: "bg-[#fff1e2]",
     iconBadge: "orange-gradient",
     trend: "text-[#16a34a]",
