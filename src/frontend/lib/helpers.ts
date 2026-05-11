@@ -22,7 +22,7 @@ import type {
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { calculateFee, getCourse, hoursBetween, monthOf, presentCount, salaryBreakdown, temporaryFeeTotal, todayIso } from "@/frontend/lib/calculations";
+import { calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, hoursBetween, monthOf, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 
 export type ViewKey = "today" | "calendar" | "schedule" | "students" | "grades" | "payroll" | "salary" | "admin";
@@ -253,14 +253,21 @@ export function createLessonFromCourse(
 
   const reminder = previousHomework(vault, lesson);
   lesson.content.nextLessonReminder = reminder;
+  const presentStudentCount = presentCount(lesson);
+  const classFeeTier = course.feeRule.mode === "class_headcount"
+    ? classFeeTierForCount(course.feeRule, presentStudentCount)
+    : undefined;
   lesson.feeSnapshot = {
-    baseFee: course.feeRule.baseFee,
+    baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
     hourlyRate: course.feeRule.hourlyRate,
     fixedFee: course.feeRule.fixedFee,
-    perPresentStudentFee: course.feeRule.perPresentStudentFee,
-    presentStudentCount: presentCount(lesson),
+    perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
+    classFeeTierId: classFeeTier?.id,
+    presentStudentCount,
+    trialStudentCount: lesson.trialStudentCount ?? 0,
+    trialFee: lesson.trialFee ?? 0,
     hours: hoursBetween(lesson.startTime, lesson.endTime),
-    manualAdjustment: temporaryFeeTotal(lesson),
+    manualAdjustment: extraFeeTotal(lesson),
     amount: calculateFee(course.feeRule, lesson)
   };
   return lesson;

@@ -28,7 +28,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type { AttendanceStatus, CourseType, Lesson, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
-import { calculateFee, getCourse, hoursBetween, presentCount, temporaryFeeTotal, todayIso } from "@/frontend/lib/calculations";
+import { calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, hoursBetween, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
@@ -115,7 +115,7 @@ export function ScheduleView({
   const [customPresetStart, setCustomPresetStart] = useState("08:00");
   const [customPresetEnd, setCustomPresetEnd] = useState("10:00");
   const [temporaryStudentId, setTemporaryStudentId] = useState("");
-  const [makeupDate, setMakeupDate] = useState(todayIso());
+  const [makeupOriginalDateFilter, setMakeupOriginalDateFilter] = useState("");
   const [scheduleError, setScheduleError] = useState("");
   const { confirm, dialog } = useConfirmDialog();
 
@@ -148,7 +148,7 @@ export function ScheduleView({
   const selectedOriginalLesson = selected?.linkedOriginalLessonId
     ? vault.lessons.find((lesson) => lesson.id === selected.linkedOriginalLessonId)
     : undefined;
-  const makeupEntries = vault.lessons
+  const allMakeupEntries = vault.lessons
     .filter((lesson) => lesson.status === "makeup_pending")
     .flatMap((lesson) =>
       lesson.attendance
@@ -156,6 +156,7 @@ export function ScheduleView({
         .map((entry) => ({ lesson, entry }))
     )
     .sort((a, b) => sortLessons(a.lesson, b.lesson));
+  const makeupEntries = allMakeupEntries.filter(({ lesson }) => !makeupOriginalDateFilter || lesson.date === makeupOriginalDateFilter);
   const dateShortcuts = [
     { label: "今天", value: offsetDate(0) },
     { label: "昨天", value: offsetDate(-1) },
@@ -227,18 +228,25 @@ export function ScheduleView({
   function recalculateLessonFee(lesson: Lesson): Lesson {
     const course = getCourse(vault, lesson.courseGroupId);
     if (!course) return lesson;
+    const presentStudentCount = presentCount(lesson);
+    const classFeeTier = course.feeRule.mode === "class_headcount"
+      ? classFeeTierForCount(course.feeRule, presentStudentCount)
+      : undefined;
     return {
       ...lesson,
       type: course.type,
       feeSnapshot: {
         ...lesson.feeSnapshot,
-        baseFee: course.feeRule.baseFee,
+        baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
         hourlyRate: course.feeRule.hourlyRate,
         fixedFee: course.feeRule.fixedFee,
-        perPresentStudentFee: course.feeRule.perPresentStudentFee,
-        presentStudentCount: presentCount(lesson),
+        perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
+        classFeeTierId: classFeeTier?.id,
+        presentStudentCount,
+        trialStudentCount: lesson.trialStudentCount ?? 0,
+        trialFee: lesson.trialFee ?? 0,
         hours: hoursBetween(lesson.startTime, lesson.endTime),
-        manualAdjustment: temporaryFeeTotal(lesson),
+        manualAdjustment: extraFeeTotal(lesson),
         amount: calculateFee(course.feeRule, lesson)
       }
     };
@@ -261,6 +269,8 @@ export function ScheduleView({
       type: course.type,
       expectedStudentIds: [...course.studentIds],
       attendance: course.studentIds.map((studentId) => ({ studentId, status: "attended" })),
+      trialStudentCount: course.type === "class" ? selected.trialStudentCount ?? 0 : 0,
+      trialFee: course.type === "class" ? selected.trialFee ?? 0 : 0,
       feeSnapshot: { ...selected.feeSnapshot, amount: 0 }
     };
     onUpdateLesson(recalculateLessonFee(next));
@@ -307,6 +317,11 @@ export function ScheduleView({
     onUpdateLesson(recalculateLessonFee(nextLesson));
   }
 
+  function updateTrialStats(patch: Pick<Partial<Lesson>, "trialStudentCount" | "trialFee">) {
+    if (!selected) return;
+    onUpdateLesson(recalculateLessonFee({ ...selected, ...patch }));
+  }
+
   function addTemporaryStudent() {
     if (!selected || !temporaryStudentId || selected.expectedStudentIds.includes(temporaryStudentId)) return;
     const next: Lesson = {
@@ -331,8 +346,9 @@ export function ScheduleView({
   function createMakeupLesson(original: Lesson, studentId: string) {
     const course = getCourse(vault, original.courseGroupId);
     if (!course) return;
+    const scheduledDate = selectedCalendarDate;
     const makeup = createLessonFromCourse(vault, course, {
-      date: makeupDate,
+      date: scheduledDate,
       startTime: original.startTime,
       endTime: original.endTime,
       campusId: original.campusId ?? course.defaultCampusId,
@@ -345,14 +361,14 @@ export function ScheduleView({
       linkedOriginalLessonId: original.id,
       makeupStudentId: studentId,
       makeupOriginalDate: original.date,
-      makeupScheduledDate: makeupDate,
+      makeupScheduledDate: scheduledDate,
       note: `${studentNames(vault, [studentId])} 补 ${original.date} 的课程`
     });
     onAddLesson(nextMakeup);
     onUpdateLesson({
       ...original,
       attendance: original.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, status: "makeup_pending", note: entry.note || `已安排 ${makeupDate} 补课` } : entry
+        entry.studentId === studentId ? { ...entry, status: "makeup_pending", note: entry.note || `已安排 ${scheduledDate} 补课` } : entry
       )
     });
   }
@@ -786,12 +802,20 @@ export function ScheduleView({
                 <RotateCcw size={14} /> 补课跟进
               </div>
               <CardTitle>需要补课的学生</CardTitle>
-              <CardDescription>从缺课记录直接生成新的补课课时。</CardDescription>
+              <CardDescription>按原课日期筛选缺课记录，补课会排到当前日历选中的日期。</CardDescription>
             </CardHeader>
             <CardContent className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">新补课日期</label>
-                <Input type="date" value={makeupDate} onChange={(event) => setMakeupDate(event.target.value)} />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">原课日期</label>
+                  <Input type="date" value={makeupOriginalDateFilter} onChange={(event) => setMakeupOriginalDateFilter(event.target.value)} />
+                </div>
+                <Button type="button" variant="outline" className="self-end" onClick={() => setMakeupOriginalDateFilter("")} disabled={!makeupOriginalDateFilter}>
+                  全部
+                </Button>
+              </div>
+              <div className="rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#25324a]">
+                补课安排日期：{selectedCalendarDate}
               </div>
               {makeupEntries.map(({ lesson, entry }) => (
                 <div key={`${lesson.id}-${entry.studentId}`} className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3">
@@ -811,7 +835,7 @@ export function ScheduleView({
               ))}
               {makeupEntries.length === 0 && (
                 <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                  暂无待补课学生
+                  {makeupOriginalDateFilter ? "这个原课日期暂无待补课学生" : "暂无待补课学生"}
                 </div>
               )}
             </CardContent>
@@ -1039,14 +1063,44 @@ export function ScheduleView({
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                     <UserCheck size={14} /> 到课情况
                   </div>
+                  {selected.type === "class" && (
+                    <div className="rounded-[14px] border border-[#c7d2fe] bg-[#eef0ff] p-3">
+                      <div className="mb-3 text-sm font-extrabold text-[#25324a]">班课试听统计</div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-[#64748b]">试听人数</label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={selected.trialStudentCount ?? 0}
+                            onChange={(event) => updateTrialStats({ trialStudentCount: Math.max(Number(event.target.value), 0) })}
+                            className="bg-white"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-[#64748b]">试听费用</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={selected.trialFee ?? 0}
+                              onChange={(event) => updateTrialStats({ trialFee: Math.max(Number(event.target.value), 0) })}
+                              className="bg-white pl-10"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
                     <Select value={temporaryStudentId} onChange={(event) => setTemporaryStudentId(event.target.value)}>
-                      <option value="">选择临时试听 / 临时加入学生</option>
+                      <option value="">选择临时加入学生</option>
                       {vault.students
                         .filter((student) => !selected.expectedStudentIds.includes(student.id))
                         .map((student) => (
                           <option key={student.id} value={student.id}>
-                            {student.name}{student.temporaryTrial ? "（临时试听）" : ""}
+                            {student.name}{student.temporaryTrial ? "（试听档案）" : ""}
                           </option>
                         ))}
                     </Select>
@@ -1070,7 +1124,7 @@ export function ScheduleView({
                               <span className="text-xs font-bold text-[#ff8617]">{(student?.name ?? "未知").slice(0, 1)}</span>
                             </div>
                             <span className="truncate text-sm font-medium">{student?.name ?? "未知学生"}</span>
-                            {isTemporary && <Badge variant="plum" className="shrink-0">临时试听</Badge>}
+                            {isTemporary && <Badge variant="plum" className="shrink-0">临时加入</Badge>}
                           </div>
                           <div className="flex items-center gap-2">
                             <Select value={entry.status} onChange={(event) => updateAttendance(entry.studentId, event.target.value as AttendanceStatus)} className="h-9 max-w-[136px]">
@@ -1088,7 +1142,7 @@ export function ScheduleView({
                         {isTemporary && (
                           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px]">
                             <div className="rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
-                              临时学生费用会在正常排课费用基础上额外相加。
+                              临时加入费用会在正常排课费用基础上额外相加。
                             </div>
                             <div className="relative">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>

@@ -1,6 +1,7 @@
 import type {
   AttendanceStatus,
   Campus,
+  ClassFeeTier,
   CourseGroup,
   FeeRule,
   Lesson,
@@ -80,21 +81,84 @@ export function presentCount(lesson: Lesson): number {
   return lesson.attendance.filter((entry) => entry.status === "attended").length;
 }
 
+function nonNegativeNumber(value: number | undefined, fallback = 0): number {
+  return Number.isFinite(value) ? Math.max(value ?? fallback, 0) : fallback;
+}
+
+function nonNegativeInteger(value: number | undefined, fallback = 0): number {
+  return Math.floor(nonNegativeNumber(value, fallback));
+}
+
 export function temporaryFeeTotal(lesson: Lesson): number {
-  return lesson.attendance.reduce((sum, entry) => sum + Math.max(entry.temporaryFee ?? 0, 0), 0);
+  return lesson.attendance.reduce((sum, entry) => sum + nonNegativeNumber(entry.temporaryFee), 0);
+}
+
+export function trialFeeTotal(lesson: Lesson): number {
+  return nonNegativeNumber(lesson.trialFee);
+}
+
+export function extraFeeTotal(lesson: Lesson): number {
+  return temporaryFeeTotal(lesson) + trialFeeTotal(lesson);
+}
+
+export function defaultClassFeeTiers(rule?: FeeRule): ClassFeeTier[] {
+  const baseFee = nonNegativeNumber(rule?.baseFee, 80);
+  const perStudentFee = nonNegativeNumber(rule?.perPresentStudentFee, 10);
+  return [
+    {
+      id: "tier_1_4",
+      minStudents: 1,
+      maxStudents: 4,
+      baseFee,
+      perStudentFee: 0
+    },
+    {
+      id: "tier_5_plus",
+      minStudents: 5,
+      baseFee,
+      perStudentFee
+    }
+  ];
+}
+
+export function normalizedClassFeeTiers(rule: FeeRule): ClassFeeTier[] {
+  const explicitTiers = (rule.classFeeTiers ?? []).filter((tier) => Number.isFinite(tier.minStudents));
+  const tiers = explicitTiers.length > 0 ? explicitTiers : defaultClassFeeTiers(rule);
+  return [...tiers].sort((a, b) => a.minStudents - b.minStudents);
+}
+
+export function classFeeTierForCount(rule: FeeRule, studentCount: number): ClassFeeTier | undefined {
+  const count = nonNegativeInteger(studentCount);
+  const tiers = (rule.classFeeTiers ?? [])
+    .filter((tier) => Number.isFinite(tier.minStudents))
+    .sort((a, b) => a.minStudents - b.minStudents);
+  return tiers.find((tier) => {
+    const min = nonNegativeInteger(tier.minStudents);
+    const max = tier.maxStudents === undefined ? undefined : Math.max(nonNegativeInteger(tier.maxStudents), min);
+    return count >= min && (max === undefined || count <= max);
+  });
+}
+
+export function calculateClassHeadcountFee(rule: FeeRule, studentCount: number): number {
+  const count = nonNegativeInteger(studentCount);
+  const tier = classFeeTierForCount(rule, count);
+  if (tier) {
+    return nonNegativeNumber(tier.baseFee) + count * nonNegativeNumber(tier.perStudentFee);
+  }
+  return nonNegativeNumber(rule.baseFee) + count * nonNegativeNumber(rule.perPresentStudentFee);
 }
 
 export function calculateFee(rule: FeeRule, lesson: Lesson): number {
-  const temporaryFee = temporaryFeeTotal(lesson);
+  const extraFee = extraFeeTotal(lesson);
   if (rule.mode === "hourly") {
-    return Math.round((rule.hourlyRate ?? 0) * hoursBetween(lesson.startTime, lesson.endTime) + temporaryFee);
+    return Math.round((rule.hourlyRate ?? 0) * hoursBetween(lesson.startTime, lesson.endTime) + extraFee);
   }
 
   if (rule.mode === "fixed") {
-    return Math.round((rule.fixedFee ?? 0) + temporaryFee);
+    return Math.round((rule.fixedFee ?? 0) + extraFee);
   }
 
-  return Math.round((rule.baseFee ?? 0) + presentCount(lesson) * (rule.perPresentStudentFee ?? 0) + temporaryFee);
+  return Math.round(calculateClassHeadcountFee(rule, presentCount(lesson)) + extraFee);
 }
 
 export function getCourse(vault: TeacherVault, courseId: string): CourseGroup | undefined {

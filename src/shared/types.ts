@@ -29,6 +29,14 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export type WeekStart = 0 | 1;
 
+export type ClassFeeTier = {
+  id: string;
+  minStudents: number;
+  maxStudents?: number;
+  baseFee: number;
+  perStudentFee?: number;
+};
+
 export type Notice = {
   enabled: boolean;
   title: string;
@@ -60,6 +68,7 @@ export type FeeRule = {
   fixedFee?: number;
   baseFee?: number;
   perPresentStudentFee?: number;
+  classFeeTiers?: ClassFeeTier[];
   makeupFeeMode?: "sameAsOriginal" | "perStudentFee" | "custom";
 };
 
@@ -101,7 +110,10 @@ export type FeeSnapshot = {
   hourlyRate?: number;
   fixedFee?: number;
   perPresentStudentFee?: number;
+  classFeeTierId?: string;
   presentStudentCount?: number;
+  trialStudentCount?: number;
+  trialFee?: number;
   hours?: number;
   manualAdjustment?: number;
   amount: number;
@@ -126,6 +138,8 @@ export type Lesson = {
   status: LessonStatus;
   expectedStudentIds: string[];
   attendance: AttendanceEntry[];
+  trialStudentCount?: number;
+  trialFee?: number;
   feeSnapshot: FeeSnapshot;
   linkedOriginalLessonId?: string | null;
   makeupStudentId?: string;

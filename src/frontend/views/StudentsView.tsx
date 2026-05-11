@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Campus, CourseGroup, CourseType, FeeRule, Student, TeacherProfile, TeacherVault } from "@/shared/types";
+import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, Student, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
-import { campusName, courseTypeLabels, studentNames } from "@/frontend/lib/helpers";
+import { calculateClassHeadcountFee, defaultClassFeeTiers, normalizedClassFeeTiers } from "@/frontend/lib/calculations";
+import { campusName, courseTypeLabels, formatMoney, studentNames } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置", ...fixedGradeOptions, "自定义"];
@@ -160,6 +161,61 @@ export function StudentsView({
     );
   }
 
+  function replaceEditingClassFeeTiers(nextTiers: ClassFeeTier[]) {
+    setEditingCourse((current) => {
+      if (!current) return current;
+      const sortedTiers = [...nextTiers].sort((a, b) => a.minStudents - b.minStudents);
+      const firstTier = sortedTiers[0];
+      return {
+        ...current,
+        feeRule: {
+          ...current.feeRule,
+          mode: "class_headcount",
+          baseFee: firstTier?.baseFee ?? current.feeRule.baseFee,
+          perPresentStudentFee: firstTier?.perStudentFee ?? current.feeRule.perPresentStudentFee,
+          classFeeTiers: sortedTiers
+        }
+      };
+    });
+  }
+
+  function updateClassFeeTier(tierId: string, patch: Partial<ClassFeeTier>) {
+    if (!editingCourse) return;
+    const nextTiers = normalizedClassFeeTiers(editingCourse.feeRule).map((tier) =>
+      tier.id === tierId ? { ...tier, ...patch } : tier
+    );
+    replaceEditingClassFeeTiers(nextTiers);
+  }
+
+  function addClassFeeTier() {
+    if (!editingCourse) return;
+    const tiers = normalizedClassFeeTiers(editingCourse.feeRule);
+    const lastTier = tiers.at(-1);
+    const nextMin = lastTier?.maxStudents !== undefined
+      ? lastTier.maxStudents + 1
+      : (lastTier?.minStudents ?? 0) + 1;
+    const cappedTiers = tiers.map((tier, index) =>
+      index === tiers.length - 1 && tier.maxStudents === undefined
+        ? { ...tier, maxStudents: Math.max(nextMin - 1, tier.minStudents) }
+        : tier
+    );
+    replaceEditingClassFeeTiers([
+      ...cappedTiers,
+      {
+        id: makeId("tier"),
+        minStudents: nextMin,
+        baseFee: lastTier?.baseFee ?? 0,
+        perStudentFee: lastTier?.perStudentFee ?? 0
+      }
+    ]);
+  }
+
+  function removeClassFeeTier(tierId: string) {
+    if (!editingCourse) return;
+    const nextTiers = normalizedClassFeeTiers(editingCourse.feeRule).filter((tier) => tier.id !== tierId);
+    replaceEditingClassFeeTiers(nextTiers.length > 0 ? nextTiers : defaultClassFeeTiers(editingCourse.feeRule));
+  }
+
   function updateProfile(patch: Partial<TeacherProfile>) {
     onUpdateProfile({
       ...vault.profile,
@@ -186,10 +242,18 @@ export function StudentsView({
   function saveCourseDraft() {
     if (!editingCourse?.name.trim()) return;
     const courseId = editingCourse.id;
+    const feeRule = editingCourse.type === "class"
+      ? {
+          ...editingCourse.feeRule,
+          mode: "class_headcount" as const,
+          classFeeTiers: normalizedClassFeeTiers(editingCourse.feeRule)
+        }
+      : editingCourse.feeRule;
     onUpdateCourse({
       ...editingCourse,
       name: editingCourse.name.trim(),
-      subject: editingCourse.subject.trim() || "未设置"
+      subject: editingCourse.subject.trim() || "未设置",
+      feeRule
     });
     setEditingCourse(null);
     flashArchiveRow("courses", courseId);
@@ -860,25 +924,77 @@ export function StudentsView({
                         <option value="paused">暂停</option>
                       </Select>
                       {editingCourse.type === "class" ? (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-[#64748b]">班课基础费用</label>
-                            <Input
-                              type="number"
-                              value={editingCourse.feeRule.baseFee ?? 0}
-                              onChange={(event) => updateEditingCourseFee({ baseFee: Number(event.target.value) })}
-                              placeholder="基础费用"
-                            />
+                        <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <div className="text-sm font-extrabold text-[#061226]">班课人数分档费用</div>
+                              <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                                当前关联 {editingCourse.studentIds.length} 人，预计 {formatMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length))}
+                              </div>
+                            </div>
+                            <Button type="button" size="sm" variant="outline" onClick={addClassFeeTier}>
+                              <Plus size={13} /> 添加档位
+                            </Button>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-[#64748b]">每名到课学生费用</label>
-                            <Input
-                              type="number"
-                              value={editingCourse.feeRule.perPresentStudentFee ?? 0}
-                              onChange={(event) => updateEditingCourseFee({ perPresentStudentFee: Number(event.target.value) })}
-                              placeholder="每人费用"
-                            />
-                          </div>
+                          {normalizedClassFeeTiers(editingCourse.feeRule).map((tier) => (
+                            <div key={tier.id} className="grid grid-cols-2 gap-2 rounded-[12px] border border-[#e8eef6] bg-white p-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={tier.minStudents}
+                                  onChange={(event) => updateClassFeeTier(tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
+                                  className="h-9"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-[#64748b]">最多人数</label>
+                                <Input
+                                  type="number"
+                                  min={tier.minStudents}
+                                  value={tier.maxStudents ?? ""}
+                                  onChange={(event) =>
+                                    updateClassFeeTier(tier.id, {
+                                      maxStudents: event.target.value === "" ? undefined : Math.max(Number(event.target.value), tier.minStudents)
+                                    })
+                                  }
+                                  placeholder="以上"
+                                  className="h-9"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-[#64748b]">基础费用</label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={tier.baseFee}
+                                  onChange={(event) => updateClassFeeTier(tier.id, { baseFee: Math.max(Number(event.target.value), 0) })}
+                                  className="h-9"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-[#64748b]">每人费用</label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={tier.perStudentFee ?? 0}
+                                  onChange={(event) => updateClassFeeTier(tier.id, { perStudentFee: Math.max(Number(event.target.value), 0) })}
+                                  className="h-9"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="destructive"
+                                className="self-end"
+                                onClick={() => removeClassFeeTier(tier.id)}
+                                disabled={normalizedClassFeeTiers(editingCourse.feeRule).length <= 1}
+                              >
+                                <Trash2 size={13} />
+                              </Button>
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <div className="space-y-1">
@@ -934,6 +1050,11 @@ export function StudentsView({
                           <span className="text-xs text-(--color-muted-foreground)">
                             {courseTypeLabels[course.type]} · {studentNames(vault, course.studentIds) || "未关联学生"}
                           </span>
+                          {course.type === "class" && (
+                            <span className="mt-1 block text-xs font-bold text-[#1557c2]">
+                              当前 {course.studentIds.length} 人预估：{formatMoney(calculateClassHeadcountFee(course.feeRule, course.studentIds.length))}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
@@ -991,7 +1112,15 @@ export function StudentsView({
 
 function defaultFeeRule(type: CourseType): FeeRule {
   if (type === "class") {
-    return { mode: "class_headcount", baseFee: 80, perPresentStudentFee: 10, makeupFeeMode: "perStudentFee" };
+    const baseFee = 80;
+    const perPresentStudentFee = 10;
+    return {
+      mode: "class_headcount",
+      baseFee,
+      perPresentStudentFee,
+      classFeeTiers: defaultClassFeeTiers({ mode: "class_headcount", baseFee, perPresentStudentFee }),
+      makeupFeeMode: "perStudentFee"
+    };
   }
   return { mode: "hourly", hourlyRate: type === "trial" ? 0 : 200 };
 }
