@@ -1,5 +1,6 @@
 import type {
   AttendanceStatus,
+  Campus,
   CourseGroup,
   FeeRule,
   Lesson,
@@ -55,6 +56,41 @@ export function completedAmount(lesson: Lesson): number {
   return lesson.feeSnapshot.amount;
 }
 
+function completedHours(lesson: Lesson): number {
+  if (lesson.status !== "completed" && lesson.status !== "makeup_completed") {
+    return 0;
+  }
+  return lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime);
+}
+
+export type ObligationSummary = {
+  campus?: Campus;
+  requiredHours: number;
+  completedHours: number;
+  deductedHours: number;
+  hourlyDeduction: number;
+  amount: number;
+};
+
+export function obligationSummary(vault: TeacherVault, month: string, campusId = vault.profile.obligationCampusId): ObligationSummary {
+  const requiredHours = Math.max(vault.profile.monthlyObligationHours ?? 0, 0);
+  const hourlyDeduction = Math.max(vault.profile.obligationHourlyDeduction ?? 0, 0);
+  const campus = vault.campuses.find((item) => item.id === campusId);
+  const completedAtCampus = vault.lessons
+    .filter((lesson) => monthOf(lesson.date) === month && (lesson.campusId ?? getCourse(vault, lesson.courseGroupId)?.defaultCampusId) === campusId)
+    .reduce((sum, lesson) => sum + completedHours(lesson), 0);
+  const deductedHours = campusId ? Math.min(requiredHours, completedAtCampus) : 0;
+
+  return {
+    campus,
+    requiredHours,
+    completedHours: completedAtCampus,
+    deductedHours,
+    hourlyDeduction,
+    amount: Math.round(deductedHours * hourlyDeduction)
+  };
+}
+
 export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreakdown {
   const monthLessons = vault.lessons.filter((lesson) => monthOf(lesson.date) === month);
   const monthAdjustments = vault.salaryAdjustments.filter((item) => item.month === month);
@@ -75,6 +111,7 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
   );
 
   const adjustments = monthAdjustments.reduce((sum, item) => sum + item.amount, 0);
+  const obligationDeduction = obligationSummary(vault, month).amount;
 
   return {
     baseSalary: vault.profile.baseSalary,
@@ -82,12 +119,14 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
     classLessons: lessonTotals.classLessons,
     makeup: lessonTotals.makeup,
     adjustments,
+    obligationDeduction,
     total:
       vault.profile.baseSalary +
       lessonTotals.oneOnOne +
       lessonTotals.classLessons +
       lessonTotals.makeup +
-      adjustments
+      adjustments -
+      obligationDeduction
   };
 }
 
@@ -116,8 +155,8 @@ export function yearlyTrend(vault: TeacherVault, year: string): Array<{ month: s
     const lessons = vault.lessons.filter((lesson) => monthOf(lesson.date) === month);
     return {
       month,
-      total: lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0),
-      count: lessons.filter((lesson) => lesson.status === "completed").length
+      total: salaryBreakdown(vault, month).total,
+      count: lessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed").length
     };
   });
 }

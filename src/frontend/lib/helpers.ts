@@ -3,6 +3,7 @@ import {
   BookOpen,
   CalendarCheck,
   CalendarDays,
+  FileCheck2,
   ShieldCheck,
   Users,
   WalletCards
@@ -24,13 +25,14 @@ import type {
 import { calculateFee, getCourse, hoursBetween, monthOf, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 
-export type ViewKey = "today" | "calendar" | "schedule" | "students" | "salary" | "admin";
+export type ViewKey = "today" | "calendar" | "schedule" | "students" | "payroll" | "salary" | "admin";
 
 export const viewTitles: Record<ViewKey, string> = {
   today: "今日提醒",
   calendar: "日历总览",
   schedule: "排课与课时",
-  students: "学生与校区",
+  students: "学生档案",
+  payroll: "工资核对",
   salary: "数据统计",
   admin: "管理后台"
 };
@@ -39,7 +41,8 @@ export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: s
   { key: "today", icon: Bell, label: "今日提醒" },
   { key: "calendar", icon: CalendarCheck, label: "日历总览" },
   { key: "schedule", icon: CalendarDays, label: "排课与课时" },
-  { key: "students", icon: Users, label: "学生与校区" },
+  { key: "students", icon: Users, label: "学生档案" },
+  { key: "payroll", icon: FileCheck2, label: "工资核对" },
   { key: "salary", icon: WalletCards, label: "数据统计" }
 ];
 
@@ -67,12 +70,33 @@ export const courseTypeLabels: Record<CourseType, string> = {
   trial: "试听"
 };
 
+export function lessonStatusVariant(status: LessonStatus): "sage" | "amber" | "destructive" | "secondary" | "sky" {
+  if (status === "completed" || status === "makeup_completed") return "sage";
+  if (status === "cancelled") return "destructive";
+  if (status === "scheduled" || status === "makeup_pending") return "amber";
+  return "secondary";
+}
+
+export function lessonStatusSurfaceClass(status: LessonStatus): string {
+  if (status === "cancelled") {
+    return "border-[#fecaca] bg-[#fff1f2] text-[#7f1d1d]";
+  }
+  if (status === "completed" || status === "makeup_completed") {
+    return "border-[#bbf7d0] bg-[#f0fdf4] text-[#14532d]";
+  }
+  if (status === "scheduled" || status === "makeup_pending") {
+    return "border-[#fed7aa] bg-[#fff7ed] text-[#7c2d12]";
+  }
+  return "border-[#dbe4ef] bg-white text-[#25324a]";
+}
+
 export const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 export const shortWeekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 export const privacyNoticeLines = [
   "课程、学生、费用、校区、排课和作业信息会先在你的浏览器中加密。",
   "管理员后台无法查看老师课程明细和工资明细等隐私信息。",
   "管理员后台只能看到账号的角色、状态、注册时间、最近登录时间和删除流程状态。",
+  "管理员后台除了查看上述信息和发布公告以外，无任何其他权限。",
   "如果直接查看数据库，敏感内容也只会是密文。",
   "登录密码/数据密码必须由你自己严肃保存，丢失后无法找回，也无法解析云端密文。"
 ];

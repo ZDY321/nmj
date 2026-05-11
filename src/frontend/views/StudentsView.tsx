@@ -1,14 +1,16 @@
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Building2, GraduationCap, MapPin, Pencil, Plus, Save, Trash2, User, Users, X } from "lucide-react";
+import { Building2, CalendarCheck, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, User, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { Campus, CourseGroup, CourseType, FeeRule, Student, TeacherVault } from "@/shared/types";
+import { Textarea } from "@/components/ui/textarea";
+import type { Campus, CourseGroup, CourseType, FeeRule, Student, TeacherProfile, TeacherVault } from "@/shared/types";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
-import { campusName, courseTypeLabels, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseName, courseTypeLabels, studentNames, weekdayLabels } from "@/frontend/lib/helpers";
 
 const gradeOptions = ["未设置", "幼儿园", "一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "初一", "初二", "初三", "高一", "高二", "高三"];
 
@@ -20,6 +22,7 @@ export function StudentsView({
   onAddStudent,
   onUpdateStudent,
   onDeleteStudent,
+  onUpdateProfile,
   onAddCourse,
   onUpdateCourse,
   onDeleteCourse
@@ -31,6 +34,7 @@ export function StudentsView({
   onAddStudent: (student: Student) => void;
   onUpdateStudent: (student: Student) => void;
   onDeleteStudent: (studentId: string) => void;
+  onUpdateProfile: (profile: TeacherProfile) => void;
   onAddCourse: (course: CourseGroup) => void;
   onUpdateCourse: (course: CourseGroup) => void;
   onDeleteCourse: (courseId: string) => void;
@@ -38,14 +42,31 @@ export function StudentsView({
   const [campusNameInput, setCampusNameInput] = useState("");
   const [studentNameInput, setStudentNameInput] = useState("");
   const [studentGradeInput, setStudentGradeInput] = useState("");
+  const [studentCampusInput, setStudentCampusInput] = useState(vault.campuses[0]?.id ?? "");
+  const [studentNoteInput, setStudentNoteInput] = useState("");
   const [courseNameInput, setCourseNameInput] = useState("");
   const [courseType, setCourseType] = useState<CourseType>("one_on_one");
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
   const [gradeFilter, setGradeFilter] = useState("all");
-  const visibleStudents = vault.students.filter((student) => gradeFilter === "all" || (student.grade || "") === gradeFilter);
+  const [studentCampusFilter, setStudentCampusFilter] = useState("all");
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const { confirm, dialog } = useConfirmDialog();
+  const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
+  const visibleStudents = vault.students.filter((student) => {
+    const matchesGrade = gradeFilter === "all" || (student.grade || "") === gradeFilter;
+    const matchesCampus = studentCampusFilter === "all" || student.defaultCampusId === studentCampusFilter;
+    const matchesSearch =
+      !normalizedArchiveSearch ||
+      student.name.toLowerCase().includes(normalizedArchiveSearch) ||
+      (student.note ?? "").toLowerCase().includes(normalizedArchiveSearch);
+    return matchesGrade && matchesCampus && matchesSearch;
+  });
   const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
+  const activeStudents = vault.students.filter((student) => student.status === "active").length;
+  const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
+  const scheduleRuleCount = vault.scheduleRules.length;
 
   function addCampus(e: FormEvent) {
     e.preventDefault();
@@ -61,11 +82,13 @@ export function StudentsView({
       id: makeId("student"),
       name: studentNameInput.trim(),
       grade: studentGradeInput || undefined,
-      defaultCampusId: vault.campuses[0]?.id,
+      defaultCampusId: studentCampusInput || vault.campuses[0]?.id,
+      note: studentNoteInput.trim() || undefined,
       status: "active"
     });
     setStudentNameInput("");
     setStudentGradeInput("");
+    setStudentNoteInput("");
   }
 
   function addCourse(e: FormEvent) {
@@ -122,6 +145,13 @@ export function StudentsView({
     );
   }
 
+  function updateProfile(patch: Partial<TeacherProfile>) {
+    onUpdateProfile({
+      ...vault.profile,
+      ...patch
+    });
+  }
+
   function toggleCourseStudent(studentId: string) {
     setEditingCourse((current) => {
       if (!current) return current;
@@ -144,6 +174,95 @@ export function StudentsView({
 
   return (
     <div className="space-y-6">
+      {dialog}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: "学生档案", value: `${vault.students.length} 人`, hint: `正常 ${activeStudents} 人`, icon: Users },
+          { label: "校区", value: `${vault.campuses.length} 个`, hint: "教学地点", icon: Building2 },
+          { label: "课程/班课", value: `${vault.courseGroups.length} 个`, hint: `启用 ${activeCourses} 个`, icon: GraduationCap },
+          { label: "固定规则", value: `${scheduleRuleCount} 条`, hint: "排课规则归档", icon: CalendarCheck }
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <Card key={item.label} className="overflow-hidden">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-[#eaf2ff] text-[#1557c2]">
+                  <Icon size={21} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-[#64748b]">{item.label}</div>
+                  <div className="mt-1 text-2xl font-extrabold text-[#061226]">{item.value}</div>
+                  <div className="mt-1 text-xs font-bold text-[#94a3b8]">{item.hint}</div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+            <Settings size={14} /> 个人与义务课时设置
+          </div>
+          <CardTitle>老师个人信息</CardTitle>
+          <CardDescription>校区归属和义务课时扣费会用于月底工资核对。</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">显示姓名</label>
+            <Input value={vault.profile.displayName} onChange={(event) => updateProfile({ displayName: event.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">所在校区</label>
+            <Select value={vault.profile.homeCampusId ?? ""} onChange={(event) => updateProfile({ homeCampusId: event.target.value || undefined })}>
+              <option value="">未设置</option>
+              {vault.campuses.map((campus) => (
+                <option key={campus.id} value={campus.id}>{campus.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">义务课时扣费校区</label>
+            <Select value={vault.profile.obligationCampusId ?? ""} onChange={(event) => updateProfile({ obligationCampusId: event.target.value || undefined })}>
+              <option value="">不扣义务课时</option>
+              {vault.campuses.map((campus) => (
+                <option key={campus.id} value={campus.id}>{campus.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">每月义务小时</label>
+            <Input
+              type="number"
+              value={vault.profile.monthlyObligationHours ?? 0}
+              onChange={(event) => updateProfile({ monthlyObligationHours: Number(event.target.value) })}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">每小时扣费</label>
+            <Input
+              type="number"
+              value={vault.profile.obligationHourlyDeduction ?? 0}
+              onChange={(event) => updateProfile({ obligationHourlyDeduction: Number(event.target.value) })}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">联系方式</label>
+            <Input value={vault.profile.phone ?? ""} onChange={(event) => updateProfile({ phone: event.target.value })} placeholder="手机号 / 微信" />
+          </div>
+          <div className="space-y-2 lg:col-span-3">
+            <label className="text-sm font-medium">个人备注</label>
+            <Textarea
+              value={vault.profile.note ?? ""}
+              onChange={(event) => updateProfile({ note: event.target.value })}
+              placeholder="例如：主要负责中心校区，高中数学方向"
+              className="min-h-[76px]"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-row items-center gap-3">
@@ -191,6 +310,17 @@ export function StudentsView({
                   <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
                 ))}
               </Select>
+              <Select value={studentCampusInput} onChange={(e) => setStudentCampusInput(e.target.value)}>
+                <option value="">未设置校区</option>
+                {vault.campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>{campus.name}</option>
+                ))}
+              </Select>
+              <Input
+                value={studentNoteInput}
+                onChange={(e) => setStudentNoteInput(e.target.value)}
+                placeholder="档案备注，可选"
+              />
               <Button type="submit" className="w-full">
                 <Plus size={15} /> 添加学生
               </Button>
@@ -309,11 +439,15 @@ export function StudentsView({
                           variant="destructive"
                           disabled={used}
                           title={used ? "已有学生、课程、规则或课时引用，不能直接删除" : "删除校区"}
-                          onClick={() => {
-                            if (window.confirm(`确认删除校区「${campus.name}」吗？`)) {
-                              onDeleteCampus(campus.id);
-                            }
-                          }}
+                          onClick={() =>
+                            confirm({
+                              title: `删除校区「${campus.name}」？`,
+                              description: "删除后无法从校区列表中恢复。",
+                              confirmLabel: "删除",
+                              tone: "danger",
+                              onConfirm: () => onDeleteCampus(campus.id)
+                            })
+                          }
                         >
                           <Trash2 size={14} /> 删除
                         </Button>
@@ -341,12 +475,24 @@ export function StudentsView({
               </div>
               <Badge variant="secondary">{visibleStudents.length} / {vault.students.length} 人</Badge>
             </div>
-            <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} className="h-10">
-              <option value="all">全部年级</option>
-              {gradeFilterOptions.map((grade) => (
-                <option key={grade} value={grade}>{grade}</option>
-              ))}
-            </Select>
+            <label className="relative block">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+              <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名或备注" />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} className="h-10">
+                <option value="all">全部年级</option>
+                {gradeFilterOptions.map((grade) => (
+                  <option key={grade} value={grade}>{grade}</option>
+                ))}
+              </Select>
+              <Select value={studentCampusFilter} onChange={(event) => setStudentCampusFilter(event.target.value)} className="h-10">
+                <option value="all">全部校区</option>
+                {vault.campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>{campus.name}</option>
+                ))}
+              </Select>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             {visibleStudents.map((student) => {
@@ -390,6 +536,12 @@ export function StudentsView({
                         <option value="active">正常</option>
                         <option value="paused">暂停</option>
                       </Select>
+                      <Textarea
+                        value={editingStudent.note ?? ""}
+                        onChange={(event) => setEditingStudent({ ...editingStudent, note: event.target.value })}
+                        placeholder="档案备注，例如学习情况、家长沟通、排课偏好"
+                        className="min-h-[76px]"
+                      />
                       <div className="grid grid-cols-2 gap-2">
                         <Button type="button" size="sm" onClick={() => {
                           if (!editingStudent.name.trim()) return;
@@ -422,6 +574,12 @@ export function StudentsView({
                           {student.status === "active" ? "正常" : "暂停"}
                         </Badge>
                       </div>
+                      {student.note && (
+                        <div className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                          <FileText size={12} className="mr-1 inline" />
+                          {student.note}
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-2">
                         <Button type="button" size="sm" variant="outline" onClick={() => setEditingStudent(student)}>
                           <Pencil size={14} /> 编辑
@@ -432,11 +590,15 @@ export function StudentsView({
                           variant="destructive"
                           disabled={used}
                           title={used ? "已有课程或课时引用，不能直接删除" : "删除学生"}
-                          onClick={() => {
-                            if (window.confirm(`确认删除学生「${student.name}」吗？`)) {
-                              onDeleteStudent(student.id);
-                            }
-                          }}
+                          onClick={() =>
+                            confirm({
+                              title: `删除学生「${student.name}」？`,
+                              description: "已有历史课时建议保留为暂停状态，确认删除后将从学生档案移除。",
+                              confirmLabel: "删除",
+                              tone: "danger",
+                              onConfirm: () => onDeleteStudent(student.id)
+                            })
+                          }
                         >
                           <Trash2 size={14} /> 删除
                         </Button>
@@ -597,11 +759,15 @@ export function StudentsView({
                           variant="destructive"
                           disabled={used}
                           title={used ? "已有规则或课时引用，不能直接删除" : "删除课程"}
-                          onClick={() => {
-                            if (window.confirm(`确认删除课程「${course.name}」吗？`)) {
-                              onDeleteCourse(course.id);
-                            }
-                          }}
+                          onClick={() =>
+                            confirm({
+                              title: `删除课程「${course.name}」？`,
+                              description: "删除课程不会自动清理历史课时。已有引用时建议先暂停课程。",
+                              confirmLabel: "删除",
+                              tone: "danger",
+                              onConfirm: () => onDeleteCourse(course.id)
+                            })
+                          }
                         >
                           <Trash2 size={14} /> 删除
                         </Button>
@@ -620,6 +786,36 @@ export function StudentsView({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+            <CalendarCheck size={14} /> 教务规则归档
+          </div>
+          <CardTitle>学生档案中的排课规则</CardTitle>
+          <CardDescription>固定排课仍在排课页编辑，这里按课程归档查看，方便核对学生档案和教务配置。</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {vault.scheduleRules.map((rule) => (
+            <div key={rule.id} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, rule.courseGroupId)}</div>
+                  <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                    {weekdayLabels[rule.weekday]} · {rule.startTime}-{rule.endTime} · {campusName(vault, rule.campusId)}
+                  </div>
+                </div>
+                <Badge variant={rule.enabled ? "sage" : "secondary"}>{rule.enabled ? "启用" : "停用"}</Badge>
+              </div>
+            </div>
+          ))}
+          {vault.scheduleRules.length === 0 && (
+            <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b] lg:col-span-2">
+              还没有固定排课规则
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

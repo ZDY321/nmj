@@ -5,13 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import type { TeacherVault, WeekStart } from "@/shared/types";
-import { salaryBreakdown } from "@/frontend/lib/calculations";
 import {
   calendarDates,
   courseName,
   campusName,
   formatMoney,
   lessonStatusLabels,
+  lessonStatusSurfaceClass,
+  lessonStatusVariant,
   monthShift,
   orderedWeekdayLabels,
   shortWeekdayLabels,
@@ -99,6 +100,7 @@ export function CalendarView({
                 const amount = dayLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
                 const hasPending = dayLessons.some((l) => l.status === "scheduled" || l.status === "makeup_pending");
                 const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
+                const hasCancelled = dayLessons.some((l) => l.status === "cancelled");
                 const isCurrentMonth = date.startsWith(month);
                 const isSelected = date === selectedDate;
 
@@ -111,8 +113,10 @@ export function CalendarView({
                     className={`relative flex flex-col items-start p-2.5 rounded-[14px] min-h-[100px] text-left transition-all duration-200 border ${
                       isSelected
                         ? "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
-                        : isCurrentMonth
-                          ? "border-[#dbe4ef] bg-white hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
+                      : isCurrentMonth
+                          ? hasCancelled
+                            ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
+                            : "border-[#dbe4ef] bg-white hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
                           : "border-transparent bg-white opacity-40"
                     }`}
                   >
@@ -121,6 +125,7 @@ export function CalendarView({
                     </span>
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
+                      {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                       {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
                       {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatMoney(amount)}</Badge>}
                     </div>
@@ -173,14 +178,19 @@ export function CalendarView({
                   key={lesson.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="p-3 rounded-[12px] bg-white border border-[#dbe4ef] flex items-center justify-between"
+                  className={`flex items-center justify-between rounded-[12px] border p-3 ${lessonStatusSurfaceClass(lesson.status)}`}
                 >
                   <div className="min-w-0">
-                    <strong className="text-sm block">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <strong className="block truncate text-sm">
                       {lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}
                     </strong>
+                      <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
+                        {lessonStatusLabels[lesson.status]}
+                      </Badge>
+                    </div>
                     <span className="text-xs text-(--color-muted-foreground)">
-                      {campusName(vault, lesson.campusId)} · {lessonStatusLabels[lesson.status]} · {studentNames(vault, lesson.expectedStudentIds)}
+                      {campusName(vault, lesson.campusId)} · {studentNames(vault, lesson.expectedStudentIds)}
                     </span>
                   </div>
                   <span className="font-bold text-sm text-[#1557c2] shrink-0 ml-3">{formatMoney(lesson.feeSnapshot.amount)}</span>

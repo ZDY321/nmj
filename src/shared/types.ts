@@ -90,6 +90,7 @@ export type AttendanceEntry = {
   studentId: string;
   status: AttendanceStatus;
   note?: string;
+  temporary?: boolean;
 };
 
 export type FeeSnapshot = {
@@ -124,6 +125,9 @@ export type Lesson = {
   attendance: AttendanceEntry[];
   feeSnapshot: FeeSnapshot;
   linkedOriginalLessonId?: string | null;
+  makeupStudentId?: string;
+  makeupOriginalDate?: string;
+  makeupScheduledDate?: string;
   content: LessonContent;
   note?: string;
   sourceScheduleRuleId?: string;
@@ -141,6 +145,13 @@ export type TeacherProfile = {
   displayName: string;
   baseSalary: number;
   currency: "CNY";
+  phone?: string;
+  email?: string;
+  homeCampusId?: string;
+  obligationCampusId?: string;
+  monthlyObligationHours?: number;
+  obligationHourlyDeduction?: number;
+  note?: string;
 };
 
 export type TimePreset = {
@@ -229,5 +240,6 @@ export type SalaryBreakdown = {
   classLessons: number;
   makeup: number;
   adjustments: number;
+  obligationDeduction: number;
   total: number;
 };

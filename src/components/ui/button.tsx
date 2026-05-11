@@ -10,7 +10,7 @@ const buttonVariants = cva(
         default:
           "orange-gradient text-white hover:brightness-105 shadow-[0_12px_22px_rgba(255,134,23,0.22)] border-0",
         destructive:
-          "bg-[#ef4444] text-white hover:bg-[#dc2626] shadow-[0_12px_22px_rgba(239,68,68,0.18)]",
+          "border border-[#fecaca] bg-[#fff1f2] text-[#b91c1c] shadow-none hover:border-[#fca5a5] hover:bg-[#fee2e2]",
         outline:
           "border border-[#dbe4ef] bg-white text-[#25324a] hover:bg-[#f6f9fd] hover:border-[#b9c7d9]",
         secondary:

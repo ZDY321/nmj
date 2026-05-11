@@ -13,7 +13,14 @@ export function createSampleVault(): TeacherVault {
     profile: {
       displayName: "牛马",
       baseSalary: 3200,
-      currency: "CNY"
+      currency: "CNY",
+      homeCampusId: "campus_main",
+      obligationCampusId: "campus_main",
+      monthlyObligationHours: 8,
+      obligationHourlyDeduction: 80,
+      phone: "",
+      email: "",
+      note: "中心校区承担义务课时核扣。"
     },
     preferences: {
       weekStartsOn: 0,

@@ -14,6 +14,7 @@ import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { AdminView } from "@/frontend/views/AdminView";
 import { CalendarView } from "@/frontend/views/CalendarView";
+import { PayrollReviewView } from "@/frontend/views/PayrollReviewView";
 import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
@@ -36,6 +37,7 @@ import type {
   ScheduleRule,
   Student,
   TeacherVault,
+  TeacherProfile,
   TimePreset,
   UserDeletionState,
   UserRole,
@@ -189,6 +191,12 @@ export function App() {
   function updateStudent(student: Student) {
     updateVault((draft) => {
       draft.students = draft.students.map((item) => (item.id === student.id ? student : item));
+    });
+  }
+
+  function updateProfile(profile: TeacherProfile) {
+    updateVault((draft) => {
+      draft.profile = profile;
     });
   }
 
@@ -629,6 +637,7 @@ export function App() {
                 }
                 onUpdateStudent={updateStudent}
                 onDeleteStudent={deleteStudent}
+                onUpdateProfile={updateProfile}
                 onAddCourse={(course) =>
                   updateVault((draft) => {
                     draft.courseGroups.push(course);
@@ -637,6 +646,9 @@ export function App() {
                 onUpdateCourse={updateCourse}
                 onDeleteCourse={deleteCourse}
               />
+            )}
+            {view === "payroll" && (
+              <PayrollReviewView vault={vault} />
             )}
             {view === "salary" && (
               <SalaryView
@@ -682,6 +694,7 @@ const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
   { key: "calendar", label: viewTitles.calendar },
   { key: "schedule", label: viewTitles.schedule },
   { key: "students", label: viewTitles.students },
+  { key: "payroll", label: viewTitles.payroll },
   { key: "salary", label: viewTitles.salary }
 ];
 

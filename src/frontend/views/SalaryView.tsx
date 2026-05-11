@@ -13,21 +13,27 @@ import {
   TrendingUp,
   Users
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import type { SalaryAdjustment, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
-import { attendanceSummary, salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
+import { attendanceSummary, obligationSummary, salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
   campusName,
   courseName,
+  courseTypeLabels,
   formatMoney,
+  lessonStatusLabels,
+  lessonStatusVariant,
   sortLessons,
   studentNames
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 
 const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 
@@ -46,6 +52,11 @@ export function SalaryView({
   const [adjustmentTitle, setAdjustmentTitle] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
+  const [detailDateFilter, setDetailDateFilter] = useState("");
+  const [detailCourseFilter, setDetailCourseFilter] = useState("all");
+  const [detailStudentFilter, setDetailStudentFilter] = useState("");
+  const [detailCampusFilter, setDetailCampusFilter] = useState("all");
+  const { confirm, dialog } = useConfirmDialog();
   const year = selectedMonth.slice(0, 4);
   const breakdown = salaryBreakdown(vault, selectedMonth);
   const summary = attendanceSummary(vault, selectedMonth);
@@ -56,8 +67,20 @@ export function SalaryView({
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
   const pendingMakeups = monthLessons.filter((lesson) => lesson.status === "makeup_pending");
   const totalHours = monthLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? 0), 0);
-  const recentLessons = [...monthLessons].sort(sortLessons).reverse();
+  const recentLessons = [...monthLessons]
+    .filter((lesson) => {
+      const matchesDate = !detailDateFilter || lesson.date === detailDateFilter;
+      const matchesCourse = detailCourseFilter === "all" || lesson.courseGroupId === detailCourseFilter;
+      const matchesStudent =
+        !detailStudentFilter.trim() ||
+        studentNames(vault, lesson.expectedStudentIds).toLowerCase().includes(detailStudentFilter.trim().toLowerCase());
+      const matchesCampus = detailCampusFilter === "all" || lesson.campusId === detailCampusFilter;
+      return matchesDate && matchesCourse && matchesStudent && matchesCampus;
+    })
+    .sort(sortLessons)
+    .reverse();
   const selectedMonthAdjustments = vault.salaryAdjustments.filter((item) => item.month === selectedMonth);
+  const obligation = obligationSummary(vault, selectedMonth);
 
   function addAdjustment() {
     const title = adjustmentTitle.trim();
@@ -77,6 +100,7 @@ export function SalaryView({
 
   return (
     <div className="space-y-6">
+      {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="基础工资" value={formatMoney(breakdown.baseSalary)} hint="月固定项" variant={1} index={0} showSparkline={false} />
         <MetricCard label="一对一" value={formatMoney(breakdown.oneOnOne)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
@@ -114,7 +138,8 @@ export function SalaryView({
                   { label: "一对一", value: breakdown.oneOnOne, icon: Users, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
                   { label: "补课", value: breakdown.makeup, icon: Clock, color: "text-[#1557c2] bg-[#eaf2ff]" },
-                  { label: "其他加减项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" }
+                  { label: "其他加减项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" },
+                  { label: "义务课时扣费", value: -breakdown.obligationDeduction, icon: FileCheck2, color: "text-[#b91c1c] bg-[#fff1f2]" }
                 ].map((item) => (
                   <motion.div
                     key={item.label}
@@ -135,6 +160,20 @@ export function SalaryView({
 
             <div className="space-y-3">
               <p className="text-sm font-medium">其他加减项（补贴 / 扣款）</p>
+              <div className="rounded-[14px] border border-[#fecaca] bg-[#fff1f2] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-extrabold text-[#7f1d1d]">义务课时扣费</div>
+                    <div className="mt-1 text-xs font-semibold leading-5 text-[#9f1239]">
+                      {obligation.campus?.name ?? "未设置义务校区"} · 已计 {obligation.completedHours.toFixed(1)} 小时，
+                      扣 {obligation.deductedHours.toFixed(1)} / {obligation.requiredHours || 0} 小时
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-sm font-extrabold text-[#b91c1c]">
+                    -{formatMoney(obligation.amount)}
+                  </div>
+                </div>
+              </div>
               <div className="space-y-2">
                 {selectedMonthAdjustments.map((item) => (
                   <div key={item.id} className="rounded-[14px] border border-[#dbe4ef] bg-white p-3">
@@ -152,11 +191,17 @@ export function SalaryView({
                         type="button"
                         size="sm"
                         variant="destructive"
-                        onClick={() => {
-                          if (window.confirm(`确认删除「${item.title}」吗？`)) {
-                            onDeleteAdjustment(item.id);
-                          }
-                        }}
+                        onClick={() =>
+                          confirm({
+                            title: `删除「${item.title}」？`,
+                            description: "删除后该补贴或扣款不会再进入本月工资统计。",
+                            confirmLabel: "删除",
+                            tone: "danger",
+                            onConfirm: () => {
+                              onDeleteAdjustment(item.id);
+                            }
+                          })
+                        }
                       >
                         <Trash2 size={14} /> 删除
                       </Button>
@@ -191,7 +236,7 @@ export function SalaryView({
                 <BarChart3 size={14} /> 年度变化
               </div>
               <CardTitle className="text-xl">按月收入趋势</CardTitle>
-              <CardDescription className="mt-2">按已完成课时确认收入统计</CardDescription>
+              <CardDescription className="mt-2">包含基础工资、已完成课时费、补贴扣款和义务课时扣费</CardDescription>
             </div>
             <div className="rounded-[10px] border border-[#dbe4ef] px-4 py-2 text-sm font-bold text-[#25324a]">
               {year}
@@ -348,20 +393,55 @@ export function SalaryView({
             ))}
           </div>
 
+          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">日期筛选</label>
+              <Input type="date" value={detailDateFilter} onChange={(event) => setDetailDateFilter(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">课程筛选</label>
+              <Select value={detailCourseFilter} onChange={(event) => setDetailCourseFilter(event.target.value)}>
+                <option value="all">全部课程</option>
+                {vault.courseGroups.map((course) => (
+                  <option key={course.id} value={course.id}>{course.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">学生筛选</label>
+              <Input value={detailStudentFilter} onChange={(event) => setDetailStudentFilter(event.target.value)} placeholder="输入学生名" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">校区筛选</label>
+              <Select value={detailCampusFilter} onChange={(event) => setDetailCampusFilter(event.target.value)}>
+                <option value="all">全部校区</option>
+                {vault.campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>{campus.name}</option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left">
+            <table className="w-full min-w-[860px] border-collapse text-left">
               <thead>
                 <tr className="bg-[#f8fbff] text-sm font-bold text-[#25324a]">
                   <th className="px-4 py-3">日期</th>
                   <th className="px-4 py-3">课程</th>
                   <th className="px-4 py-3">学生</th>
                   <th className="px-4 py-3">校区</th>
+                  <th className="px-4 py-3">状态</th>
                   <th className="px-4 py-3 text-right">金额</th>
                 </tr>
               </thead>
               <tbody>
                 {recentLessons.map((lesson) => (
-                  <tr key={lesson.id} className="border-t border-[#e8eef6] text-sm text-[#25324a]">
+                  <tr
+                    key={lesson.id}
+                    className={`border-t text-sm text-[#25324a] ${
+                      lesson.status === "cancelled" ? "border-[#fecaca] bg-[#fff1f2]" : "border-[#e8eef6]"
+                    }`}
+                  >
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="flex items-center gap-2">
                         <CalendarDays size={16} className="text-[#94a3b8]" />
@@ -372,7 +452,9 @@ export function SalaryView({
                       <div className="max-w-[220px] truncate font-semibold text-[#061226]">
                         {courseName(vault, lesson.courseGroupId)}
                       </div>
-                      <div className="mt-1 text-xs text-[#64748b]">{lesson.startTime}-{lesson.endTime}</div>
+                      <div className="mt-1 text-xs text-[#64748b]">
+                        {lesson.startTime}-{lesson.endTime} · {courseTypeLabels[lesson.type]}
+                      </div>
                     </td>
                     <td className="max-w-[200px] truncate px-4 py-3">{studentNames(vault, lesson.expectedStudentIds)}</td>
                     <td className="px-4 py-3">
@@ -380,6 +462,14 @@ export function SalaryView({
                         <MapPin size={13} className="text-[#94a3b8]" />
                         {campusName(vault, lesson.campusId)}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={lessonStatusVariant(lesson.status)}>
+                        {lessonStatusLabels[lesson.status]}
+                      </Badge>
+                      {lesson.note && (
+                        <div className="mt-1 max-w-[180px] truncate text-xs font-semibold text-[#b91c1c]">{lesson.note}</div>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-[#061226]">
                       {formatMoney(lesson.feeSnapshot.amount)}

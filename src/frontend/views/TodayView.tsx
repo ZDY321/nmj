@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import type { Lesson, TeacherVault } from "@/shared/types";
 import {
   attendanceLabels,
@@ -21,6 +22,7 @@ import {
   formatMoney,
   isToday,
   lessonStatusLabels,
+  lessonStatusVariant,
   previousHomework,
   previousLesson,
   sortLessons,
@@ -39,6 +41,12 @@ export function TodayView({
   const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
   const waitingLessons = selectedDateLessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "draft");
   const cancelledLessons = selectedDateLessons.filter((lesson) => lesson.status === "cancelled");
+  const campusCounts = vault.campuses
+    .map((campus) => ({
+      campus,
+      count: selectedDateLessons.filter((lesson) => lesson.campusId === campus.id).length
+    }))
+    .filter((item) => item.count > 0);
   const homeworkReminderCount = selectedDateLessons.filter((lesson) => previousHomework(vault, lesson).trim()).length;
   const selectedDateLabel = new Intl.DateTimeFormat("zh-CN", {
     month: "long",
@@ -53,7 +61,7 @@ export function TodayView({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
+        {[ 
           { label: isToday(selectedDate) ? "今日课程" : "选中日期课程", value: `${selectedDateLessons.length} 节`, icon: CalendarDays },
           { label: "待上课", value: `${waitingLessons.length} 节`, icon: Clock3 },
           { label: "作业提醒", value: `${homeworkReminderCount} 条`, icon: NotebookPen },
@@ -75,6 +83,28 @@ export function TodayView({
           );
         })}
       </div>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-sm font-extrabold text-[#061226]">各校区课程数量</div>
+              <div className="mt-1 text-sm font-semibold text-[#64748b]">
+                {selectedDateLabel} 的校区分布，便于提前确认通勤和教室。
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {campusCounts.length > 0 ? campusCounts.map((item) => (
+                <Badge key={item.campus.id} variant="sky" className="px-3 py-1">
+                  {item.campus.name} · {item.count} 节
+                </Badge>
+              )) : (
+                <Badge variant="secondary" className="px-3 py-1">暂无校区课程</Badge>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden">
         <CardHeader className="border-b border-[#e8eef6] pb-5">
@@ -131,7 +161,7 @@ export function TodayView({
                         </span>
                       </div>
                     </div>
-                    <Badge variant={lesson.status === "completed" ? "sage" : lesson.status === "cancelled" ? "destructive" : "amber"} className="w-fit">
+                    <Badge variant={lessonStatusVariant(lesson.status)} className="w-fit">
                       {lessonStatusLabels[lesson.status]}
                     </Badge>
                   </div>
@@ -170,6 +200,18 @@ export function TodayView({
                       </p>
                     </div>
                   </div>
+
+                  {lesson.status === "cancelled" && (
+                    <div className="mt-4 rounded-[14px] border border-[#fecaca] bg-[#fff1f2] p-3">
+                      <label className="text-sm font-extrabold text-[#7f1d1d]">取消备注</label>
+                      <Input
+                        value={lesson.note ?? ""}
+                        onChange={(event) => onUpdateLesson({ ...lesson, note: event.target.value })}
+                        placeholder="填写取消原因，例如学生请假 / 校区临时停课"
+                        className="mt-2 bg-white"
+                      />
+                    </div>
+                  )}
 
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm font-bold text-[#061226]">
