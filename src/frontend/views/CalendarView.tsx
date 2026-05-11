@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import type { TeacherVault } from "@/shared/types";
+import { Select } from "@/components/ui/select";
+import type { TeacherVault, WeekStart } from "@/shared/types";
 import { salaryBreakdown } from "@/frontend/lib/calculations";
 import {
   calendarDates,
@@ -12,31 +13,36 @@ import {
   formatMoney,
   lessonStatusLabels,
   monthShift,
+  orderedWeekdayLabels,
+  shortWeekdayLabels,
   sortLessons,
-  studentNames
+  studentNames,
+  weekDatesFor,
+  weekStartsOn
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
 
-export function CalendarView({ vault }: { vault: TeacherVault }) {
+export function CalendarView({
+  vault,
+  onWeekStartChange
+}: {
+  vault: TeacherVault;
+  onWeekStartChange: (weekStart: WeekStart) => void;
+}) {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const days = calendarDates(month);
+  const weekStartPreference = weekStartsOn(vault);
+  const days = calendarDates(month, weekStartPreference);
 
   const selectedLessons = vault.lessons.filter((l) => l.date === selectedDate).sort(sortLessons);
-  const weekStart = new Date(`${selectedDate}T00:00:00`);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  const weekDates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
+  const weekDates = weekDatesFor(selectedDate, weekStartPreference);
   const weekLessons = vault.lessons.filter((l) => weekDates.includes(l.date));
   const monthLessons = vault.lessons.filter((l) => l.date.startsWith(month));
   const selectedTotal = selectedLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const weekTotal = weekLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const monthTotal = monthLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
 
-  const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
+  const weekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
 
   return (
     <div className="space-y-6">
@@ -64,7 +70,16 @@ export function CalendarView({ vault }: { vault: TeacherVault }) {
               <CardTitle>{month}</CardTitle>
               <CardDescription>每天的课程、状态、校区和收入都排在日历上</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Select
+                value={String(weekStartPreference)}
+                onChange={(event) => onWeekStartChange(Number(event.target.value) as WeekStart)}
+                className="h-10 w-[132px]"
+                aria-label="选择一周开始日期"
+              >
+                <option value="0">周日开始</option>
+                <option value="1">周一开始</option>
+              </Select>
               <button onClick={() => setMonth((m) => monthShift(m, -1))} className="p-2 rounded-[10px] hover:bg-[#f3f7fb] transition-colors">
                 <ChevronLeft size={18} />
               </button>

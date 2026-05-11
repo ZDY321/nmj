@@ -176,6 +176,15 @@ function forbidden(): Response {
   return json({ error: "Forbidden" }, 403);
 }
 
+function isMigrationError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return /no such table: user_sessions|no such table: user_deletion_events|no such column: .*delete_|no such column: deleted_at/i.test(
+    error.message
+  );
+}
+
 function bearerToken(request: Request): string | null {
   const header = request.headers.get("authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(header);
@@ -992,6 +1001,15 @@ export default {
         }
         return await handleApi(request, env);
       } catch (error) {
+        if (isMigrationError(error)) {
+          return json(
+            {
+              error: "Database migration required",
+              detail: "请先对 D1 执行 migrations/0002_cloud_multi_user.sql，然后再注册或登录。"
+            },
+            503
+          );
+        }
         return json(
           {
             error: "Internal server error",

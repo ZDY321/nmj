@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { ScheduleRule, TeacherVault, Weekday } from "@/shared/types";
+import type { ScheduleRule, TeacherVault, WeekStart, Weekday } from "@/shared/types";
 import { getCourse, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -15,7 +15,11 @@ import {
   courseName,
   datesBetween,
   monthShift,
+  orderedWeekdayLabels,
+  orderedWeekdays,
   createLessonFromCourse,
+  shortWeekdayLabels,
+  weekStartsOn,
   weekdayLabels
 } from "@/frontend/lib/helpers";
 
@@ -23,7 +27,8 @@ export function ScheduleView({
   vault,
   onAddRule,
   onGenerateDrafts,
-  onAddScheduledLesson
+  onAddScheduledLesson,
+  onWeekStartChange
 }: {
   vault: TeacherVault;
   onAddRule: (rule: ScheduleRule) => void;
@@ -36,6 +41,7 @@ export function ScheduleView({
     endTime: string
   ) => void;
   onAddScheduledLesson: (date: string, courseGroupId: string, startTime: string, endTime: string) => void;
+  onWeekStartChange: (weekStart: WeekStart) => void;
 }) {
   const [courseGroupId, setCourseGroupId] = useState(vault.courseGroups[0]?.id ?? "");
   const [weekday, setWeekday] = useState<Weekday>(3);
@@ -45,6 +51,9 @@ export function ScheduleView({
   const [rangeStart, setRangeStart] = useState(todayIso());
   const [rangeEnd, setRangeEnd] = useState(monthShift(todayIso().slice(0, 7), 1) + "-01");
   const [calendarMonth, setCalendarMonth] = useState(todayIso().slice(0, 7));
+  const weekStartPreference = weekStartsOn(vault);
+  const visibleWeekdays = orderedWeekdays(weekStartPreference);
+  const visibleWeekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -104,8 +113,8 @@ export function ScheduleView({
                     value={weekday}
                     onChange={(e) => setWeekday(Number(e.target.value) as Weekday)}
                   >
-                    {weekdayLabels.map((label, i) => (
-                      <option key={label} value={i}>{label}</option>
+                    {visibleWeekdays.map((day) => (
+                      <option key={day} value={day}>{weekdayLabels[day]}</option>
                     ))}
                   </Select>
                 </div>
@@ -130,16 +139,16 @@ export function ScheduleView({
               <div className="space-y-2">
                 <p className="text-sm font-medium">选择生成星期</p>
                 <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-                  {weekdayLabels.map((label, i) => (
+                  {visibleWeekdays.map((day) => (
                     <Button
-                      key={label}
+                      key={day}
                       type="button"
-                      variant={selectedWeekdays.includes(i as Weekday) ? "default" : "outline"}
+                      variant={selectedWeekdays.includes(day) ? "default" : "outline"}
                       size="sm"
-                      onClick={() => toggleWeekday(i as Weekday)}
-                      className={selectedWeekdays.includes(i as Weekday) ? "orange-gradient shadow-[0_10px_20px_rgba(255,134,23,0.18)]" : ""}
+                      onClick={() => toggleWeekday(day)}
+                      className={selectedWeekdays.includes(day) ? "orange-gradient shadow-[0_10px_20px_rgba(255,134,23,0.18)]" : ""}
                     >
-                      {label}
+                      {weekdayLabels[day]}
                     </Button>
                   ))}
                 </div>
@@ -168,7 +177,16 @@ export function ScheduleView({
               <CardTitle>日历排课</CardTitle>
               <CardDescription>选好课程和时间后，点击日期即可排课</CardDescription>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Select
+                value={String(weekStartPreference)}
+                onChange={(event) => onWeekStartChange(Number(event.target.value) as WeekStart)}
+                className="h-10 w-[132px]"
+                aria-label="选择一周开始日期"
+              >
+                <option value="0">周日开始</option>
+                <option value="1">周一开始</option>
+              </Select>
               <Button variant="ghost" size="icon" onClick={() => setCalendarMonth((m: string) => monthShift(m, -1))}>
                 <ChevronLeft size={18} />
               </Button>
@@ -180,10 +198,10 @@ export function ScheduleView({
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-7 gap-2">
-              {weekdayLabels.map((d) => (
+              {visibleWeekdayLabels.map((d) => (
                 <div key={d} className="text-center text-xs font-bold text-(--color-muted-foreground) py-2">{d}</div>
               ))}
-              {calendarDates(calendarMonth).map((date) => {
+              {calendarDates(calendarMonth, weekStartPreference).map((date) => {
                 const dayLessons = vault.lessons.filter((l) => l.date === date);
                 const isCurrentMonth = date.startsWith(calendarMonth);
                 return (

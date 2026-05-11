@@ -27,6 +27,8 @@ export type AttendanceStatus =
 
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
+export type WeekStart = 0 | 1;
+
 export type Notice = {
   enabled: boolean;
   title: string;
@@ -140,9 +142,14 @@ export type TeacherProfile = {
   currency: "CNY";
 };
 
+export type AppPreferences = {
+  weekStartsOn: WeekStart;
+};
+
 export type TeacherVault = {
   version: 1;
   profile: TeacherProfile;
+  preferences?: AppPreferences;
   campuses: Campus[];
   students: Student[];
   courseGroups: CourseGroup[];

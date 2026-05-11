@@ -27,6 +27,7 @@ import type {
   Student,
   TeacherVault,
   UserRole,
+  WeekStart,
   Weekday
 } from "@/shared/types";
 import { calculateFee, getCourse, hoursBetween, monthOf, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
@@ -72,6 +73,7 @@ export const lessonStatusLabels: Record<LessonStatus, string> = {
 };
 
 export const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+export const shortWeekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 export const privacyNoticeLines = [
   "课程、学生、费用、校区、排课和作业信息会先在你的浏览器中加密。",
   "管理员后台无法查看老师课程明细和工资明细等隐私信息。",
@@ -98,6 +100,30 @@ export function sortLessons(a: Lesson, b: Lesson): number {
 
 export function cloneVault(vault: TeacherVault): TeacherVault {
   return structuredClone(vault);
+}
+
+export function weekStartsOn(vault: TeacherVault): WeekStart {
+  return vault.preferences?.weekStartsOn ?? 0;
+}
+
+export function orderedWeekdays(start: WeekStart): Weekday[] {
+  return Array.from({ length: 7 }, (_, index) => ((start + index) % 7) as Weekday);
+}
+
+export function orderedWeekdayLabels(start: WeekStart, labels = weekdayLabels): string[] {
+  return orderedWeekdays(start).map((day) => labels[day]);
+}
+
+export function weekDatesFor(date: string, start: WeekStart): string[] {
+  const selected = new Date(`${date}T00:00:00`);
+  const offset = (selected.getDay() - start + 7) % 7;
+  selected.setDate(selected.getDate() - offset);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(selected);
+    day.setDate(selected.getDate() + index);
+    return day.toISOString().slice(0, 10);
+  });
 }
 
 export function findCampus(vault: TeacherVault, campusId?: string): Campus | undefined {
@@ -208,13 +234,14 @@ export function datesBetween(startDate: string, endDate: string): string[] {
   return dates;
 }
 
-export function calendarDates(month: string): string[] {
+export function calendarDates(month: string, weekStart: WeekStart = 0): string[] {
   const firstDay = new Date(`${month}-01T00:00:00`);
-  const start = new Date(firstDay);
-  start.setDate(firstDay.getDate() - firstDay.getDay());
+  const cursor = new Date(firstDay);
+  const offset = (firstDay.getDay() - weekStart + 7) % 7;
+  cursor.setDate(firstDay.getDate() - offset);
   return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
+    const date = new Date(cursor);
+    date.setDate(cursor.getDate() + index);
     return date.toISOString().slice(0, 10);
   });
 }

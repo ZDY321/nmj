@@ -44,7 +44,8 @@ function translateApiError(error: string): string {
     "Not found": "没有找到对应数据。",
     "Registration is closed": "当前暂未开放注册，请联系管理员。",
     "Account already exists": "账号已存在。",
-    "Invalid username": "用户名请使用英文字母、数字、下划线、短横线或点，3-32 位，首尾必须是英文字母或数字。"
+    "Invalid username": "用户名请使用英文字母、数字、下划线、短横线或点，3-32 位，首尾必须是英文字母或数字。",
+    "Database migration required": "数据库还没执行 0002 云端多用户迁移。请先在 D1 执行 migrations/0002_cloud_multi_user.sql。"
   };
   return messages[error] ?? error;
 }

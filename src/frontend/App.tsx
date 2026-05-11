@@ -30,7 +30,7 @@ import {
   createLessonFromCourse
 } from "@/frontend/lib/helpers";
 import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
-import type { Lesson, TeacherVault, UserDeletionState, UserRole } from "@/shared/types";
+import type { Lesson, TeacherVault, UserDeletionState, UserRole, WeekStart } from "@/shared/types";
 
 export function App() {
   const [username, setUsername] = useState("");
@@ -88,6 +88,15 @@ export function App() {
     const next = cloneVault(vault);
     updater(next);
     void persist(next);
+  }
+
+  function updateWeekStart(weekStart: WeekStart) {
+    updateVault((draft) => {
+      draft.preferences = {
+        ...(draft.preferences ?? {}),
+        weekStartsOn: weekStart
+      };
+    });
   }
 
   function addLesson(lesson: Lesson) {
@@ -416,7 +425,7 @@ export function App() {
               <TodayView vault={vault} onUpdateLesson={updateLesson} />
             )}
             {view === "calendar" && (
-              <CalendarView vault={vault} />
+              <CalendarView vault={vault} onWeekStartChange={updateWeekStart} />
             )}
             {view === "lessons" && (
               <LessonsView
@@ -436,6 +445,7 @@ export function App() {
                 }
                 onGenerateDrafts={generateDrafts}
                 onAddScheduledLesson={addScheduledLesson}
+                onWeekStartChange={updateWeekStart}
               />
             )}
             {view === "students" && (

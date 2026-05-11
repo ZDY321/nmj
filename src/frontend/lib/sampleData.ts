@@ -15,6 +15,9 @@ export function createSampleVault(): TeacherVault {
       baseSalary: 3200,
       currency: "CNY"
     },
+    preferences: {
+      weekStartsOn: 0
+    },
     notice: defaultNotice,
     campuses: [
       { id: "campus_main", name: "中心校区", address: "A 座 3 楼" },
