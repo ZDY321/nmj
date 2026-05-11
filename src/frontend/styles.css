@@ -73,6 +73,24 @@
     font: inherit;
   }
 
+  input[type="date"],
+  input[type="time"] {
+    cursor: pointer;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    margin-left: auto;
+    padding-left: 0.75rem;
+    opacity: 0.72;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator:hover,
+  input[type="time"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
   button {
     cursor: pointer;
   }
@@ -137,6 +155,10 @@
     background: rgba(255, 255, 255, 0.78);
     backdrop-filter: blur(18px) saturate(1.25);
     border: 1px solid rgba(219, 228, 239, 0.72);
+  }
+
+  .date-time-input {
+    padding-right: 0.85rem;
   }
 }
 

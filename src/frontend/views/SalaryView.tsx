@@ -52,7 +52,7 @@ export function SalaryView({
         <MetricCard label="基础工资" value={formatMoney(breakdown.baseSalary)} hint="月固定项" variant={1} index={0} showSparkline={false} />
         <MetricCard label="一对一" value={formatMoney(breakdown.oneOnOne)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
         <MetricCard label="班课" value={formatMoney(breakdown.classLessons)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
-        <MetricCard label="合计" value={formatMoney(breakdown.total)} hint="含调整项" variant={4} index={3} showSparkline={false} />
+        <MetricCard label="合计" value={formatMoney(breakdown.total)} hint="含补贴/扣款" variant={4} index={3} showSparkline={false} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -85,7 +85,7 @@ export function SalaryView({
                   { label: "一对一", value: breakdown.oneOnOne, icon: Users, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
                   { label: "补课", value: breakdown.makeup, icon: Clock, color: "text-[#1557c2] bg-[#eaf2ff]" },
-                  { label: "调整项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" }
+                  { label: "其他加减项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" }
                 ].map((item) => (
                   <motion.div
                     key={item.label}
@@ -101,6 +101,30 @@ export function SalaryView({
                     </div>
                   </motion.div>
                 ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-medium">其他加减项（补贴 / 扣款）</p>
+              <div className="space-y-2">
+                {vault.salaryAdjustments.filter((item) => item.month === month).map((item) => (
+                  <div key={item.id} className="rounded-[14px] border border-[#dbe4ef] bg-white p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-bold text-[#061226]">{item.title}</div>
+                        <div className="mt-1 text-xs text-[#64748b]">{item.note || "无备注"}</div>
+                      </div>
+                      <div className={`shrink-0 text-sm font-extrabold ${item.amount >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
+                        {item.amount >= 0 ? "+" : ""}{formatMoney(item.amount)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {vault.salaryAdjustments.filter((item) => item.month === month).length === 0 && (
+                  <div className="rounded-[14px] border border-dashed border-[#cbd6e3] p-4 text-center text-sm font-semibold text-[#64748b]">
+                    本月没有补贴或扣款
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>

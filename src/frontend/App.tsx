@@ -18,7 +18,6 @@ import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { AdminView } from "@/frontend/views/AdminView";
 import { CalendarView } from "@/frontend/views/CalendarView";
-import { LessonsView } from "@/frontend/views/LessonsView";
 import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
@@ -33,7 +32,7 @@ import {
   createLessonFromCourse
 } from "@/frontend/lib/helpers";
 import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
-import type { Lesson, TeacherVault, UserDeletionState, UserRole, WeekStart } from "@/shared/types";
+import type { Campus, CourseGroup, Lesson, ScheduleRule, Student, TeacherVault, UserDeletionState, UserRole, WeekStart } from "@/shared/types";
 
 type UnlockedSession = {
   username: string;
@@ -175,6 +174,54 @@ export function App() {
   function deleteLesson(lessonId: string) {
     updateVault((draft) => {
       draft.lessons = draft.lessons.filter((lesson) => lesson.id !== lessonId);
+    });
+  }
+
+  function updateCampus(campus: Campus) {
+    updateVault((draft) => {
+      draft.campuses = draft.campuses.map((item) => (item.id === campus.id ? campus : item));
+    });
+  }
+
+  function deleteCampus(campusId: string) {
+    updateVault((draft) => {
+      draft.campuses = draft.campuses.filter((campus) => campus.id !== campusId);
+    });
+  }
+
+  function updateStudent(student: Student) {
+    updateVault((draft) => {
+      draft.students = draft.students.map((item) => (item.id === student.id ? student : item));
+    });
+  }
+
+  function deleteStudent(studentId: string) {
+    updateVault((draft) => {
+      draft.students = draft.students.filter((student) => student.id !== studentId);
+    });
+  }
+
+  function updateCourse(course: CourseGroup) {
+    updateVault((draft) => {
+      draft.courseGroups = draft.courseGroups.map((item) => (item.id === course.id ? course : item));
+    });
+  }
+
+  function deleteCourse(courseId: string) {
+    updateVault((draft) => {
+      draft.courseGroups = draft.courseGroups.filter((course) => course.id !== courseId);
+    });
+  }
+
+  function updateScheduleRule(rule: ScheduleRule) {
+    updateVault((draft) => {
+      draft.scheduleRules = draft.scheduleRules.map((item) => (item.id === rule.id ? rule : item));
+    });
+  }
+
+  function deleteScheduleRule(ruleId: string) {
+    updateVault((draft) => {
+      draft.scheduleRules = draft.scheduleRules.filter((rule) => rule.id !== ruleId);
     });
   }
 
@@ -555,22 +602,19 @@ export function App() {
             {view === "calendar" && (
               <CalendarView vault={vault} onWeekStartChange={updateWeekStart} />
             )}
-            {view === "lessons" && (
-              <LessonsView
+            {view === "schedule" && (
+              <ScheduleView
                 vault={vault}
                 onAddLesson={addLesson}
                 onUpdateLesson={updateLesson}
                 onDeleteLesson={deleteLesson}
-              />
-            )}
-            {view === "schedule" && (
-              <ScheduleView
-                vault={vault}
                 onAddRule={(rule) =>
                   updateVault((draft) => {
                     draft.scheduleRules.push(rule);
                   })
                 }
+                onUpdateRule={updateScheduleRule}
+                onDeleteRule={deleteScheduleRule}
                 onGenerateDrafts={generateDrafts}
                 onAddScheduledLesson={addScheduledLesson}
                 onWeekStartChange={updateWeekStart}
@@ -584,16 +628,22 @@ export function App() {
                     draft.campuses.push(campus);
                   })
                 }
+                onUpdateCampus={updateCampus}
+                onDeleteCampus={deleteCampus}
                 onAddStudent={(student) =>
                   updateVault((draft) => {
                     draft.students.push(student);
                   })
                 }
+                onUpdateStudent={updateStudent}
+                onDeleteStudent={deleteStudent}
                 onAddCourse={(course) =>
                   updateVault((draft) => {
                     draft.courseGroups.push(course);
                   })
                 }
+                onUpdateCourse={updateCourse}
+                onDeleteCourse={deleteCourse}
               />
             )}
             {view === "salary" && (
@@ -636,7 +686,6 @@ export function App() {
 const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
   { key: "today", label: viewTitles.today },
   { key: "calendar", label: viewTitles.calendar },
-  { key: "lessons", label: viewTitles.lessons },
   { key: "schedule", label: viewTitles.schedule },
   { key: "students", label: viewTitles.students },
   { key: "salary", label: viewTitles.salary }

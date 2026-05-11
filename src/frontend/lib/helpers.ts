@@ -3,17 +3,7 @@ import {
   BookOpen,
   CalendarCheck,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  ClipboardCheck,
-  Clock3,
-  Landmark,
-  LogOut,
-  MapPin,
-  Plus,
-  Save,
   ShieldCheck,
-  Trash2,
   Users,
   WalletCards
 } from "lucide-react";
@@ -33,13 +23,12 @@ import type {
 import { calculateFee, getCourse, hoursBetween, monthOf, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 
-export type ViewKey = "today" | "calendar" | "lessons" | "schedule" | "students" | "salary" | "admin";
+export type ViewKey = "today" | "calendar" | "schedule" | "students" | "salary" | "admin";
 
 export const viewTitles: Record<ViewKey, string> = {
   today: "今日提醒",
   calendar: "日历总览",
-  lessons: "课时记录",
-  schedule: "排课",
+  schedule: "排课与课时",
   students: "学生与校区",
   salary: "数据统计",
   admin: "管理后台"
@@ -48,8 +37,7 @@ export const viewTitles: Record<ViewKey, string> = {
 export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: string }> = [
   { key: "today", icon: Bell, label: "今日提醒" },
   { key: "calendar", icon: CalendarCheck, label: "日历总览" },
-  { key: "lessons", icon: ClipboardCheck, label: "课时记录" },
-  { key: "schedule", icon: CalendarDays, label: "排课" },
+  { key: "schedule", icon: CalendarDays, label: "排课与课时" },
   { key: "students", icon: Users, label: "学生与校区" },
   { key: "salary", icon: WalletCards, label: "数据统计" }
 ];
