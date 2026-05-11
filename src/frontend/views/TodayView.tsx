@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import type { Lesson, TeacherVault, TodoItem } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
+import { formatAppDateLabel } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
   campusName,
@@ -65,11 +66,11 @@ export function TodayView({
     return `${a.dueDate ?? "9999-99-99"} ${a.createdAt}`.localeCompare(`${b.dueDate ?? "9999-99-99"} ${b.createdAt}`);
   });
   const openTodoCount = todos.filter((todo) => todo.status === "open").length;
-  const selectedDateLabel = new Intl.DateTimeFormat("zh-CN", {
+  const selectedDateLabel = formatAppDateLabel(selectedDate, {
     month: "long",
     day: "numeric",
     weekday: "long"
-  }).format(new Date(`${selectedDate}T00:00:00`));
+  });
 
   function quickStatus(lesson: Lesson, status: "completed" | "cancelled") {
     onUpdateLesson({ ...lesson, status });

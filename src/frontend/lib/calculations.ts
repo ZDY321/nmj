@@ -13,12 +13,59 @@ export function monthOf(date: string): string {
   return date.slice(0, 7);
 }
 
-export function todayIso(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+export const appTimeZone = "Asia/Shanghai";
+
+function timeZonePartMap(date: Date, options: Intl.DateTimeFormatOptions): Record<string, string> {
+  return Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: appTimeZone,
+      ...options
+    })
+      .formatToParts(date)
+      .map((part) => [part.type, part.value])
+  );
+}
+
+export function todayIso(date = new Date()): string {
+  const parts = timeZonePartMap(date, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function currentAppHour(date = new Date()): number {
+  const parts = timeZonePartMap(date, {
+    hour: "2-digit",
+    hourCycle: "h23"
+  });
+  return Number(parts.hour);
+}
+
+export function appDateFromIso(dateIso: string): Date {
+  return new Date(`${dateIso}T00:00:00+08:00`);
+}
+
+export function formatAppDateLabel(dateIso: string, options: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: appTimeZone,
+    ...options
+  }).format(appDateFromIso(dateIso));
+}
+
+export function formatAppDateTime(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: appTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).format(date);
 }
 
 export function hoursBetween(startTime: string, endTime: string): number {

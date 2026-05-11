@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Building2, CalendarCheck, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, User, Users, X } from "lucide-react";
+import { Building2, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, User, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Campus, CourseGroup, CourseType, FeeRule, Student, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
-import { campusName, courseName, courseTypeLabels, studentNames, weekdayLabels } from "@/frontend/lib/helpers";
+import { campusName, courseTypeLabels, studentNames } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置", ...fixedGradeOptions, "自定义"];
@@ -73,7 +73,6 @@ export function StudentsView({
   const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
   const activeStudents = vault.students.filter((student) => student.status === "active").length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
-  const scheduleRuleCount = vault.scheduleRules.length;
   const obligationCampusId = vault.profile.obligationCampusId ?? "";
   const obligationCourses = vault.courseGroups.filter((course) => !obligationCampusId || course.defaultCampusId === obligationCampusId);
 
@@ -127,7 +126,6 @@ export function StudentsView({
     return (
       vault.students.some((student) => student.defaultCampusId === campusId) ||
       vault.courseGroups.some((course) => course.defaultCampusId === campusId) ||
-      vault.scheduleRules.some((rule) => rule.campusId === campusId) ||
       vault.lessons.some((lesson) => lesson.campusId === campusId)
     );
   }
@@ -145,7 +143,6 @@ export function StudentsView({
 
   function courseInUse(courseId: string): boolean {
     return (
-      vault.scheduleRules.some((rule) => rule.courseGroupId === courseId) ||
       vault.lessons.some((lesson) => lesson.courseGroupId === courseId)
     );
   }
@@ -196,12 +193,11 @@ export function StudentsView({
   return (
     <div className="space-y-6">
       {dialog}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
           { label: "档案信息", value: `${vault.students.length} 人`, hint: `正常学生 ${activeStudents} 人`, icon: Users },
           { label: "校区", value: `${vault.campuses.length} 个`, hint: "教学地点", icon: Building2 },
-          { label: "课程/班课", value: `${vault.courseGroups.length} 个`, hint: `启用 ${activeCourses} 个`, icon: GraduationCap },
-          { label: "固定规则", value: `${scheduleRuleCount} 条`, hint: "排课规则归档", icon: CalendarCheck }
+          { label: "课程/班课", value: `${vault.courseGroups.length} 个`, hint: `启用 ${activeCourses} 个`, icon: GraduationCap }
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -462,7 +458,7 @@ export function StudentsView({
           ))}
         </div>
         <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
-          删除限制：已有学生、课程、排课规则或历史课时引用的数据不能直接删除，建议改为暂停状态。
+          删除限制：已有学生、课程或历史课时引用的数据不能直接删除，建议将对应的引用数据全部删除或改为暂停状态。
         </div>
         {archivePanel === "campuses" && (
         <Card className="h-fit overflow-hidden">
@@ -952,35 +948,6 @@ export function StudentsView({
         )}
       </div>
 
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-            <CalendarCheck size={14} /> 教务规则归档
-          </div>
-          <CardTitle>档案信息中的排课规则</CardTitle>
-          <CardDescription>固定排课仍在排课页编辑，这里按课程归档查看，方便核对档案和教务配置。</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {vault.scheduleRules.map((rule) => (
-            <div key={rule.id} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, rule.courseGroupId)}</div>
-                  <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                    {weekdayLabels[rule.weekday]} · {rule.startTime}-{rule.endTime} · {campusName(vault, rule.campusId)}
-                  </div>
-                </div>
-                <Badge variant={rule.enabled ? "sage" : "secondary"}>{rule.enabled ? "启用" : "停用"}</Badge>
-              </div>
-            </div>
-          ))}
-          {vault.scheduleRules.length === 0 && (
-            <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b] lg:col-span-2">
-              还没有固定排课规则
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

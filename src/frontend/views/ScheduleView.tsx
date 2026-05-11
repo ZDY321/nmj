@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -13,15 +13,12 @@ import {
   GraduationCap,
   Link2,
   NotebookPen,
-  Pencil,
   Plus,
   RotateCcw,
-  Save,
   Search,
   Trash2,
   UserCheck,
-  UserPlus,
-  X
+  UserPlus
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,11 +27,12 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import type { AttendanceStatus, CourseType, Lesson, ScheduleRule, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
+import type { AttendanceStatus, CourseType, Lesson, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
 import { calculateFee, getCourse, hoursBetween, presentCount, temporaryFeeTotal, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
+  addDays,
   calendarDates,
   campusName,
   courseName,
@@ -52,6 +50,7 @@ import {
   sortLessons,
   studentNames,
   weekStartsOn,
+  weekdayOfDateIso,
   weekdayLabels
 } from "@/frontend/lib/helpers";
 
@@ -64,9 +63,6 @@ export function ScheduleView({
   onAddLesson,
   onUpdateLesson,
   onDeleteLesson,
-  onAddRule,
-  onUpdateRule,
-  onDeleteRule,
   onAddCustomTimePreset,
   onDeleteCustomTimePreset,
   onGenerateDrafts,
@@ -77,9 +73,6 @@ export function ScheduleView({
   onAddLesson: (lesson: Lesson) => void;
   onUpdateLesson: (lesson: Lesson) => void;
   onDeleteLesson: (lessonId: string) => void;
-  onAddRule: (rule: ScheduleRule) => void;
-  onUpdateRule: (rule: ScheduleRule) => void;
-  onDeleteRule: (ruleId: string) => void;
   onAddCustomTimePreset: (preset: TimePreset) => void;
   onDeleteCustomTimePreset: (presetId: string) => void;
   onGenerateDrafts: (
@@ -99,7 +92,6 @@ export function ScheduleView({
   const [singleStartTime, setSingleStartTime] = useState("19:00");
   const [singleEndTime, setSingleEndTime] = useState("21:00");
   const [ruleCourseGroupId, setRuleCourseGroupId] = useState(firstCourseId);
-  const [weekday, setWeekday] = useState<Weekday>(3);
   const [selectedWeekdays, setSelectedWeekdays] = useState<Weekday[]>([3]);
   const [ruleStartTime, setRuleStartTime] = useState("19:00");
   const [ruleEndTime, setRuleEndTime] = useState("21:00");
@@ -111,7 +103,6 @@ export function ScheduleView({
   const [calendarMonth, setCalendarMonth] = useState(todayIso().slice(0, 7));
   const [calendarMode, setCalendarMode] = useState<"schedule" | "view">("view");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(todayIso());
-  const [editingRule, setEditingRule] = useState<ScheduleRule | null>(null);
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
@@ -170,22 +161,6 @@ export function ScheduleView({
     { label: "前天", value: offsetDate(-2) }
   ];
 
-  function submitRule(event: FormEvent) {
-    event.preventDefault();
-    const course = getCourse(vault, ruleCourseGroupId);
-    if (!course) return;
-    onAddRule({
-      id: makeId("rule"),
-      courseGroupId: ruleCourseGroupId,
-      weekday,
-      startTime: ruleStartTime,
-      endTime: ruleEndTime,
-      campusId: course.defaultCampusId,
-      effectiveFrom: todayIso(),
-      enabled: true
-    });
-  }
-
   function addSingleLesson(status: "scheduled" | "completed") {
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
   }
@@ -237,15 +212,6 @@ export function ScheduleView({
       startTime: customPresetStart,
       endTime: customPresetEnd
     });
-  }
-
-  function saveRuleDraft() {
-    if (!editingRule) return;
-    onUpdateRule({
-      ...editingRule,
-      effectiveTo: editingRule.effectiveTo || undefined
-    });
-    setEditingRule(null);
   }
 
   function recalculateLessonFee(lesson: Lesson): Lesson {
@@ -402,7 +368,7 @@ export function ScheduleView({
 
   function hasBatchConflicts(): boolean {
     const dates = datesBetweenLocal(rangeStart, rangeEnd).filter((item) =>
-      selectedWeekdays.includes(new Date(`${item}T00:00:00`).getDay() as Weekday)
+      selectedWeekdays.includes(weekdayOfDateIso(item))
     );
     return dates.some((item) => findTimeConflict(item, ruleStartTime, ruleEndTime));
   }
@@ -437,7 +403,7 @@ export function ScheduleView({
               <Plus size={14} /> 单次排课 / 补录
             </div>
             <CardTitle>添加课程时间</CardTitle>
-            <CardDescription>单次排课与右侧固定规则互不联动，可分别选择课程和时间。</CardDescription>
+            <CardDescription>单次排课与右侧批量排课互不联动，可分别选择课程和时间。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -557,18 +523,12 @@ export function ScheduleView({
         </Card>
 
         <Card className="overflow-hidden">
-          <form onSubmit={submitRule}>
-            <CardHeader className="flex flex-row items-start justify-between gap-3">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                  <CalendarCheck size={14} /> 固定排课
-                </div>
-                <CardTitle>排课规则</CardTitle>
-                <CardDescription>固定规则使用独立课程和时间，不会改动单次排课表单。</CardDescription>
+            <CardHeader>
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                <CalendarCheck size={14} /> 批量排课
               </div>
-              <Button type="submit" size="sm" disabled={!ruleCourseGroupId}>
-                <Plus size={15} /> 添加规则
-              </Button>
+              <CardTitle>按日期范围生成课时</CardTitle>
+              <CardDescription>这里仅按当前条件生成待上课课时，不再保存排课规则记录。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -577,14 +537,6 @@ export function ScheduleView({
                   <Select value={ruleCourseGroupId} onChange={(event) => setRuleCourseGroupId(event.target.value)}>
                     {vault.courseGroups.map((course) => (
                       <option key={course.id} value={course.id}>{course.name}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">每周星期</label>
-                  <Select value={weekday} onChange={(event) => setWeekday(Number(event.target.value) as Weekday)}>
-                    {visibleWeekdays.map((day) => (
-                      <option key={day} value={day}>{weekdayLabels[day]}</option>
                     ))}
                   </Select>
                 </div>
@@ -645,7 +597,6 @@ export function ScheduleView({
                 <CalendarCheck size={16} /> 按日期范围生成待上课
               </Button>
             </CardContent>
-          </form>
         </Card>
       </div>
       )}
@@ -1139,20 +1090,18 @@ export function ScheduleView({
 }
 
 function offsetDate(offset: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return formatDateIso(date);
+  return addDays(todayIso(), offset);
 }
 
 function isoWeekValue(dateIso: string): string {
-  const date = new Date(`${dateIso}T00:00:00`);
-  const day = date.getDay() || 7;
+  const date = parseDateOnlyUtc(dateIso);
+  const day = date.getUTCDay() || 7;
   const thursday = new Date(date);
-  thursday.setDate(date.getDate() + 4 - day);
-  const year = thursday.getFullYear();
-  const firstThursday = new Date(`${year}-01-04T00:00:00`);
-  const firstDay = firstThursday.getDay() || 7;
-  firstThursday.setDate(firstThursday.getDate() + 4 - firstDay);
+  thursday.setUTCDate(date.getUTCDate() + 4 - day);
+  const year = thursday.getUTCFullYear();
+  const firstThursday = parseDateOnlyUtc(`${year}-01-04`);
+  const firstDay = firstThursday.getUTCDay() || 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() + 4 - firstDay);
   const week = Math.floor((thursday.getTime() - firstThursday.getTime()) / 604_800_000) + 1;
   return `${year}-W${String(week).padStart(2, "0")}`;
 }
@@ -1162,28 +1111,33 @@ function datesForIsoWeekValue(value: string): string[] {
   if (!match) return [];
   const year = Number(match[1]);
   const week = Number(match[2]);
-  const jan4 = new Date(`${year}-01-04T00:00:00`);
-  const jan4Day = jan4.getDay() || 7;
+  const jan4 = parseDateOnlyUtc(`${year}-01-04`);
+  const jan4Day = jan4.getUTCDay() || 7;
   const monday = new Date(jan4);
-  monday.setDate(jan4.getDate() - jan4Day + 1 + (week - 1) * 7);
+  monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1 + (week - 1) * 7);
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(monday);
-    date.setDate(monday.getDate() + index);
+    date.setUTCDate(monday.getUTCDate() + index);
     return formatDateIso(date);
   });
 }
 
 function datesBetweenLocal(startDate: string, endDate: string): string[] {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T00:00:00`);
+  const start = parseDateOnlyUtc(startDate);
+  const end = parseDateOnlyUtc(endDate);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
   const dates: string[] = [];
   const cursor = new Date(start);
   while (cursor <= end) {
     dates.push(formatDateIso(cursor));
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dates;
+}
+
+function parseDateOnlyUtc(dateIso: string): Date {
+  const [year, month, day] = dateIso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
 function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {

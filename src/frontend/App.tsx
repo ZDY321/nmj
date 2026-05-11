@@ -20,14 +20,15 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
-import { getCourse, todayIso } from "@/frontend/lib/calculations";
+import { currentAppHour, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
 import { cancelOwnDeletion } from "@/frontend/lib/cloud";
 import {
   cloneVault,
   type ViewKey,
   viewTitles,
   datesBetween,
-  createLessonFromCourse
+  createLessonFromCourse,
+  weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import type {
@@ -36,7 +37,6 @@ import type {
   GradeRecord,
   Lesson,
   SalaryAdjustment,
-  ScheduleRule,
   Student,
   TeacherVault,
   TeacherProfile,
@@ -222,18 +222,6 @@ export function App() {
     });
   }
 
-  function updateScheduleRule(rule: ScheduleRule) {
-    updateVault((draft) => {
-      draft.scheduleRules = draft.scheduleRules.map((item) => (item.id === rule.id ? rule : item));
-    });
-  }
-
-  function deleteScheduleRule(ruleId: string) {
-    updateVault((draft) => {
-      draft.scheduleRules = draft.scheduleRules.filter((rule) => rule.id !== ruleId);
-    });
-  }
-
   function addCustomTimePreset(preset: TimePreset) {
     updateVault((draft) => {
       draft.preferences = {
@@ -322,7 +310,7 @@ export function App() {
     const course = getCourse(vault, courseGroupId);
     if (!course) return;
     const dates = datesBetween(startDate, endDate).filter((date) =>
-      weekdays.includes(new Date(`${date}T00:00:00`).getDay())
+      weekdays.includes(weekdayOfDateIso(date))
     );
     updateVault((draft) => {
       dates.forEach((date) => {
@@ -380,6 +368,11 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!vault || vault.scheduleRules.length === 0 || !username || !password) return;
+    void persist({ ...vault, scheduleRules: [] });
+  }, [vault?.scheduleRules.length, username, password]);
+
+  useEffect(() => {
     if (!vault || !username || !vault.notice.enabled) return;
     const storedVersion = localStorage.getItem(noticeReadKey(username));
     setNoticeReadVersion(storedVersion ?? "");
@@ -426,12 +419,12 @@ export function App() {
   }
 
   const activeTitle = viewTitles[view];
-  const selectedDateLabel = new Intl.DateTimeFormat("zh-CN", {
+  const selectedDateLabel = formatAppDateLabel(selectedDate, {
     year: "numeric",
     month: "short",
     day: "numeric",
     weekday: "short"
-  }).format(new Date(`${selectedDate}T00:00:00`));
+  });
 
   const mobileItems = role === "admin"
     ? [...viewTitlesList, { key: "admin" as ViewKey, label: viewTitles.admin }]
@@ -581,7 +574,7 @@ export function App() {
               <div className="min-w-0">
                 <div className="font-extrabold">账号删除申请待处理</div>
                 <div className="mt-1 text-sm font-semibold leading-6">
-                  删除计划时间：{new Date(deletion.scheduledAt).toLocaleString("zh-CN")}。在此之前可撤销申请。
+                  删除计划时间：{formatAppDateTime(deletion.scheduledAt)}。在此之前可撤销申请。
                 </div>
               </div>
             </div>
@@ -621,7 +614,7 @@ export function App() {
                     {vault.notice.content}
                   </p>
                   <p className="mt-4 text-xs font-semibold text-[#64748b]">
-                    更新时间：{new Date(vault.notice.updatedAt).toLocaleString("zh-CN")}
+                    更新时间：{formatAppDateTime(vault.notice.updatedAt)}
                   </p>
                   <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <Button variant="outline" onClick={() => setNoticeModalOpen(false)}>
@@ -664,13 +657,6 @@ export function App() {
                 onAddLesson={addLesson}
                 onUpdateLesson={updateLesson}
                 onDeleteLesson={deleteLesson}
-                onAddRule={(rule) =>
-                  updateVault((draft) => {
-                    draft.scheduleRules.push(rule);
-                  })
-                }
-                onUpdateRule={updateScheduleRule}
-                onDeleteRule={deleteScheduleRule}
                 onAddCustomTimePreset={addCustomTimePreset}
                 onDeleteCustomTimePreset={deleteCustomTimePreset}
                 onGenerateDrafts={generateDrafts}
@@ -785,7 +771,7 @@ function clearUnlockedSession(): void {
 }
 
 function greetingFor(date: Date): string {
-  const hour = date.getHours();
+  const hour = currentAppHour(date);
   if (hour >= 5 && hour < 11) return "早上好";
   if (hour >= 11 && hour < 14) return "中午好";
   if (hour >= 14 && hour < 18) return "下午好";

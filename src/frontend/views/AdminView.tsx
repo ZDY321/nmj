@@ -20,6 +20,7 @@ import {
   updateRegistrationEnabled
 } from "@/frontend/lib/cloud";
 import { derivePasswordVerifier } from "@/frontend/lib/crypto";
+import { formatAppDateTime } from "@/frontend/lib/calculations";
 
 const statusLabels: Record<UserStatus, string> = {
   active: "正常",
@@ -370,12 +371,12 @@ export function AdminView({
                       <Badge variant={statusVariant(user.status)}>{statusLabels[user.status]}</Badge>
                     </td>
                     <td className="px-3 py-3 text-[#475569]">
-                      {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("zh-CN") : "未登录"}
+                      {user.lastLoginAt ? formatAppDateTime(user.lastLoginAt) : "未登录"}
                     </td>
                     <td className="px-3 py-3 text-[#475569]">
                       {user.deletion ? (
                         <div className="space-y-1">
-                          <div>{new Date(user.deletion.scheduledAt).toLocaleString("zh-CN")}</div>
+                          <div>{formatAppDateTime(user.deletion.scheduledAt)}</div>
                           {user.deletion.noticeCount > 0 && !user.deletion.cancelledAt && (
                             <div className="text-xs font-semibold text-[#9a3412]">
                               已提醒 {user.deletion.noticeCount} 次

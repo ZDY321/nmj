@@ -16,7 +16,6 @@ import type {
   CourseType,
   Lesson,
   LessonStatus,
-  ScheduleRule,
   Student,
   TeacherVault,
   UserRole,
@@ -129,16 +128,31 @@ export function cloneVault(vault: TeacherVault): TeacherVault {
 }
 
 export function formatDateIso(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
 export function formatMonthIso(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
+}
+
+function dateOnlyUtc(dateIso: string): Date {
+  const [year, month, day] = dateIso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+export function addDays(dateIso: string, days: number): string {
+  const date = dateOnlyUtc(dateIso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatDateIso(date);
+}
+
+export function weekdayOfDateIso(dateIso: string): Weekday {
+  return dateOnlyUtc(dateIso).getUTCDay() as Weekday;
 }
 
 export function weekStartsOn(vault: TeacherVault): WeekStart {
@@ -154,13 +168,13 @@ export function orderedWeekdayLabels(start: WeekStart, labels = weekdayLabels): 
 }
 
 export function weekDatesFor(date: string, start: WeekStart): string[] {
-  const selected = new Date(`${date}T00:00:00`);
-  const offset = (selected.getDay() - start + 7) % 7;
-  selected.setDate(selected.getDate() - offset);
+  const selected = dateOnlyUtc(date);
+  const offset = (selected.getUTCDay() - start + 7) % 7;
+  selected.setUTCDate(selected.getUTCDate() - offset);
 
   return Array.from({ length: 7 }, (_, index) => {
     const day = new Date(selected);
-    day.setDate(selected.getDate() + index);
+    day.setUTCDate(selected.getUTCDate() + index);
     return formatDateIso(day);
   });
 }
@@ -253,17 +267,17 @@ export function createLessonFromCourse(
 }
 
 export function nextSevenDates(fromDate: string): string[] {
-  const start = new Date(`${fromDate}T00:00:00`);
+  const start = dateOnlyUtc(fromDate);
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
-    date.setDate(start.getDate() + index);
+    date.setUTCDate(start.getUTCDate() + index);
     return formatDateIso(date);
   });
 }
 
 export function datesBetween(startDate: string, endDate: string): string[] {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T00:00:00`);
+  const start = dateOnlyUtc(startDate);
+  const end = dateOnlyUtc(endDate);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
     return [];
   }
@@ -272,25 +286,25 @@ export function datesBetween(startDate: string, endDate: string): string[] {
   const cursor = new Date(start);
   while (cursor <= end) {
     dates.push(formatDateIso(cursor));
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dates;
 }
 
 export function calendarDates(month: string, weekStart: WeekStart = 0): string[] {
-  const firstDay = new Date(`${month}-01T00:00:00`);
+  const firstDay = dateOnlyUtc(`${month}-01`);
   const cursor = new Date(firstDay);
-  const offset = (firstDay.getDay() - weekStart + 7) % 7;
-  cursor.setDate(firstDay.getDate() - offset);
+  const offset = (firstDay.getUTCDay() - weekStart + 7) % 7;
+  cursor.setUTCDate(firstDay.getUTCDate() - offset);
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(cursor);
-    date.setDate(cursor.getDate() + index);
+    date.setUTCDate(cursor.getUTCDate() + index);
     return formatDateIso(date);
   });
 }
 
 export function monthShift(month: string, offset: number): string {
-  const date = new Date(`${month}-01T00:00:00`);
-  date.setMonth(date.getMonth() + offset);
+  const date = dateOnlyUtc(`${month}-01`);
+  date.setUTCMonth(date.getUTCMonth() + offset);
   return formatMonthIso(date);
 }

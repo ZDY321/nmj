@@ -11,10 +11,10 @@ import type { AttendanceStatus, Lesson, TeacherVault } from "@/shared/types";
 import { calculateFee, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
+  addDays,
   courseName,
   createLessonFromCourse,
   findStudent,
-  formatDateIso,
   formatMoney,
   lessonStatusLabels,
   sortLessons
@@ -141,9 +141,7 @@ function LessonForm({
 }
 
 function offsetDate(offset: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return formatDateIso(date);
+  return addDays(todayIso(), offset);
 }
 
 export function LessonsView({

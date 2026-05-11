@@ -67,28 +67,7 @@ export function createSampleVault(): TeacherVault {
         status: "active"
       }
     ],
-    scheduleRules: [
-      {
-        id: "rule_a_wed",
-        courseGroupId: "course_one_math",
-        weekday: 3,
-        startTime: "19:00",
-        endTime: "21:00",
-        campusId: "campus_main",
-        effectiveFrom: "2026-05-01",
-        enabled: true
-      },
-      {
-        id: "rule_class_sat",
-        courseGroupId: "course_class_math",
-        weekday: 6,
-        startTime: "09:00",
-        endTime: "11:00",
-        campusId: "campus_west",
-        effectiveFrom: "2026-05-01",
-        enabled: true
-      }
-    ],
+    scheduleRules: [],
     lessons: [
       {
         id: "lesson_20260506_a",

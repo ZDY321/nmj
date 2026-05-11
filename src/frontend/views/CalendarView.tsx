@@ -22,6 +22,7 @@ import {
   weekStartsOn
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
+import { todayIso } from "@/frontend/lib/calculations";
 
 export function CalendarView({
   vault,
@@ -30,8 +31,8 @@ export function CalendarView({
   vault: TeacherVault;
   onWeekStartChange: (weekStart: WeekStart) => void;
 }) {
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [month, setMonth] = useState(() => todayIso().slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState(() => todayIso());
   const weekStartPreference = weekStartsOn(vault);
   const days = calendarDates(month, weekStartPreference);
 
