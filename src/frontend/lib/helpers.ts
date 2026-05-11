@@ -102,6 +102,19 @@ export function cloneVault(vault: TeacherVault): TeacherVault {
   return structuredClone(vault);
 }
 
+export function formatDateIso(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function formatMonthIso(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
 export function weekStartsOn(vault: TeacherVault): WeekStart {
   return vault.preferences?.weekStartsOn ?? 0;
 }
@@ -122,7 +135,7 @@ export function weekDatesFor(date: string, start: WeekStart): string[] {
   return Array.from({ length: 7 }, (_, index) => {
     const day = new Date(selected);
     day.setDate(selected.getDate() + index);
-    return day.toISOString().slice(0, 10);
+    return formatDateIso(day);
   });
 }
 
@@ -214,7 +227,7 @@ export function nextSevenDates(fromDate: string): string[] {
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-    return date.toISOString().slice(0, 10);
+    return formatDateIso(date);
   });
 }
 
@@ -228,7 +241,7 @@ export function datesBetween(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
   const cursor = new Date(start);
   while (cursor <= end) {
-    dates.push(cursor.toISOString().slice(0, 10));
+    dates.push(formatDateIso(cursor));
     cursor.setDate(cursor.getDate() + 1);
   }
   return dates;
@@ -242,12 +255,12 @@ export function calendarDates(month: string, weekStart: WeekStart = 0): string[]
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(cursor);
     date.setDate(cursor.getDate() + index);
-    return date.toISOString().slice(0, 10);
+    return formatDateIso(date);
   });
 }
 
 export function monthShift(month: string, offset: number): string {
   const date = new Date(`${month}-01T00:00:00`);
   date.setMonth(date.getMonth() + offset);
-  return date.toISOString().slice(0, 7);
+  return formatMonthIso(date);
 }

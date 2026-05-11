@@ -4,13 +4,16 @@ import {
   AlertTriangle,
   Bell,
   Calendar,
-  ChevronDown,
+  Check,
   GraduationCap,
   LogOut,
-  Menu
+  Menu,
+  Pencil,
+  X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { AdminView } from "@/frontend/views/AdminView";
@@ -20,7 +23,7 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
-import { getCourse } from "@/frontend/lib/calculations";
+import { getCourse, todayIso } from "@/frontend/lib/calculations";
 import { cancelOwnDeletion } from "@/frontend/lib/cloud";
 import {
   cloneVault,
@@ -45,6 +48,9 @@ export function App() {
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [selectedDate, setSelectedDate] = useState(todayIso());
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [profileNameDraft, setProfileNameDraft] = useState("");
 
   async function login(nextUsername: string, nextPassword: string) {
     const result = await loginAccount(nextUsername, nextPassword);
@@ -97,6 +103,15 @@ export function App() {
         weekStartsOn: weekStart
       };
     });
+  }
+
+  function saveProfileName() {
+    const nextName = profileNameDraft.trim();
+    if (!nextName) return;
+    updateVault((draft) => {
+      draft.profile.displayName = nextName.slice(0, 24);
+    });
+    setProfileEditing(false);
   }
 
   function addLesson(lesson: Lesson) {
@@ -176,6 +191,10 @@ export function App() {
     setNoticeModalOpen(storedVersion !== vault.notice.updatedAt);
   }, [username, vault?.notice.enabled, vault?.notice.updatedAt]);
 
+  useEffect(() => {
+    setProfileNameDraft(vault?.profile.displayName ?? "");
+  }, [vault?.profile.displayName]);
+
   function acknowledgeNotice() {
     if (!vault || !username) return;
     localStorage.setItem(noticeReadKey(username), vault.notice.updatedAt);
@@ -197,12 +216,12 @@ export function App() {
   }
 
   const activeTitle = viewTitles[view];
-  const today = new Intl.DateTimeFormat("zh-CN", {
+  const selectedDateLabel = new Intl.DateTimeFormat("zh-CN", {
     year: "numeric",
     month: "short",
     day: "numeric",
     weekday: "short"
-  }).format(new Date());
+  }).format(new Date(`${selectedDate}T00:00:00`));
 
   const mobileItems = role === "admin"
     ? [...viewTitlesList, { key: "admin" as ViewKey, label: viewTitles.admin }]
@@ -285,9 +304,43 @@ export function App() {
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#64748b] md:hidden">
                 <span>{activeTitle}</span>
               </div>
-              <h1 className="text-[30px] font-extrabold leading-tight text-[#050b18] sm:text-[38px]">
-                welcome back,{vault.profile.displayName || "Teacher"}
-              </h1>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                {profileEditing ? (
+                  <div className="flex w-full max-w-[420px] items-center gap-2">
+                    <Input
+                      value={profileNameDraft}
+                      onChange={(event) => setProfileNameDraft(event.target.value)}
+                      className="h-11 text-base font-bold"
+                      maxLength={24}
+                      autoFocus
+                    />
+                    <Button size="icon" className="h-11 w-11" onClick={saveProfileName} aria-label="保存名字">
+                      <Check size={18} />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11"
+                      onClick={() => {
+                        setProfileNameDraft(vault.profile.displayName);
+                        setProfileEditing(false);
+                      }}
+                      aria-label="取消修改"
+                    >
+                      <X size={18} />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <h1 className="text-[30px] font-extrabold leading-tight text-[#050b18] sm:text-[38px]">
+                      welcome back,{vault.profile.displayName || "Teacher"}
+                    </h1>
+                    <Button variant="outline" size="sm" className="shrink-0" onClick={() => setProfileEditing(true)}>
+                      <Pencil size={15} /> 改名字
+                    </Button>
+                  </>
+                )}
+              </div>
               <p className="mt-2 text-base text-[#475569] sm:text-lg">
                 今天的课时、收入、排课和待处理事项已汇总在这里。
               </p>
@@ -307,25 +360,17 @@ export function App() {
                 )}
               </button>
 
-              <div className="flex h-[58px] overflow-hidden rounded-[16px] border border-[#dbe4ef] bg-white p-1 shadow-[0_12px_28px_rgba(15,35,66,0.08)]">
-                {["Daily", "Weekly", "Monthly", "Yearly"].map((label) => (
-                  <button
-                    type="button"
-                    key={label}
-                    className={`min-w-[78px] rounded-[12px] px-4 text-sm font-bold transition-colors ${
-                      label === "Yearly" ? "orange-gradient text-white shadow-[0_10px_20px_rgba(255,134,23,0.22)]" : "text-[#25324a] hover:bg-[#f3f7fb]"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex h-[58px] min-w-0 items-center gap-3 rounded-[16px] border border-[#dbe4ef] bg-white px-4 shadow-[0_12px_28px_rgba(15,35,66,0.08)]">
+              <label className="flex h-[58px] min-w-0 items-center gap-3 rounded-[16px] border border-[#dbe4ef] bg-white px-4 shadow-[0_12px_28px_rgba(15,35,66,0.08)]">
                 <Calendar size={20} className="shrink-0 text-[#25324a]" />
-                <span className="truncate text-sm font-bold text-[#25324a]">{today}</span>
-                <ChevronDown size={16} className="shrink-0 text-[#64748b]" />
-              </div>
+                <span className="hidden truncate text-sm font-bold text-[#25324a] sm:block">{selectedDateLabel}</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(event) => setSelectedDate(event.target.value)}
+                  className="h-10 rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a] outline-none focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20"
+                  aria-label="选择提醒日期"
+                />
+              </label>
 
               <div className="hidden items-center gap-2 md:flex">
                 <Button variant="outline" className="h-[58px] rounded-[16px]" onClick={() => {
@@ -422,7 +467,7 @@ export function App() {
             transition={{ duration: 0.25 }}
           >
             {view === "today" && (
-              <TodayView vault={vault} onUpdateLesson={updateLesson} />
+              <TodayView vault={vault} selectedDate={selectedDate} onUpdateLesson={updateLesson} />
             )}
             {view === "calendar" && (
               <CalendarView vault={vault} onWeekStartChange={updateWeekStart} />

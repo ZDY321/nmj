@@ -263,7 +263,7 @@ export function AdminView({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] border-separate border-spacing-y-2 text-left text-sm">
+            <table className="w-full min-w-[1080px] border-separate border-spacing-y-2 text-left text-sm">
               <thead>
                 <tr className="text-xs font-extrabold uppercase text-[#64748b]">
                   <th className="px-3 py-2">账号</th>
@@ -301,18 +301,20 @@ export function AdminView({
                     </td>
                     <td className="rounded-r-[12px] px-3 py-3">
                       {user.status === "active" && (
-                        <div className="flex min-w-[260px] flex-col gap-2">
+                        <div className="flex min-w-[330px] items-center gap-2">
                           <Input
                             value={deleteReasons[user.id] ?? ""}
                             onChange={(event) =>
                               setDeleteReasons((current) => ({ ...current, [user.id]: event.target.value }))
                             }
                             placeholder="删除原因"
+                            className="min-w-0 flex-1"
                           />
                           <Button
                             size="sm"
                             variant="destructive"
                             disabled={busy}
+                            className="shrink-0"
                             onClick={() =>
                               updateUser(requestUserDeletion(token, user.id, deleteReasons[user.id] ?? ""))
                             }

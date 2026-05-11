@@ -25,10 +25,10 @@ export function SalaryView({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="基础工资" value={formatMoney(breakdown.baseSalary)} hint="月固定项" variant={1} index={0} />
-        <MetricCard label="一对一" value={formatMoney(breakdown.oneOnOne)} hint="已完成课程" variant={2} index={1} />
-        <MetricCard label="班课" value={formatMoney(breakdown.classLessons)} hint="按到课人数" variant={3} index={2} />
-        <MetricCard label="合计" value={formatMoney(breakdown.total)} hint="含调整项" variant={4} index={3} />
+        <MetricCard label="基础工资" value={formatMoney(breakdown.baseSalary)} hint="月固定项" variant={1} index={0} showSparkline={false} />
+        <MetricCard label="一对一" value={formatMoney(breakdown.oneOnOne)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
+        <MetricCard label="班课" value={formatMoney(breakdown.classLessons)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
+        <MetricCard label="合计" value={formatMoney(breakdown.total)} hint="含调整项" variant={4} index={3} showSparkline={false} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

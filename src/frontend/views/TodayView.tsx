@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Lesson, TeacherVault } from "@/shared/types";
-import { salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
+import { salaryBreakdown, yearlyTrend } from "@/frontend/lib/calculations";
 import {
   campusName,
   courseName,
@@ -32,14 +32,16 @@ const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8�
 
 export function TodayView({
   vault,
+  selectedDate,
   onUpdateLesson
 }: {
   vault: TeacherVault;
+  selectedDate: string;
   onUpdateLesson: (lesson: Lesson) => void;
 }) {
-  const todayLessons = vault.lessons.filter((lesson) => isToday(lesson.date)).sort(sortLessons);
+  const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
   const pendingMakeups = vault.lessons.filter((lesson) => lesson.status === "makeup_pending");
-  const currentMonth = todayIso().slice(0, 7);
+  const currentMonth = selectedDate.slice(0, 7);
   const currentYear = currentMonth.slice(0, 4);
   const breakdown = salaryBreakdown(vault, currentMonth);
   const trend = yearlyTrend(vault, currentYear);
@@ -270,15 +272,15 @@ export function TodayView({
 
           <Card className="overflow-hidden">
             <CardHeader className="border-b border-[#e8eef6] pb-5">
-              <CardTitle className="text-xl">今日课程</CardTitle>
+            <CardTitle className="text-xl">{isToday(selectedDate) ? "今日课程" : "选中日期课程"}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 p-5">
-              {todayLessons.length === 0 ? (
+              {selectedDateLessons.length === 0 ? (
                 <div className="rounded-[14px] border border-dashed border-[#cbd6e3] p-8 text-center text-sm font-semibold text-[#64748b]">
-                  今天没有已生成的课程
+                  {isToday(selectedDate) ? "今天没有已生成的课程" : "这一天没有已生成的课程"}
                 </div>
               ) : (
-                todayLessons.map((lesson) => (
+                selectedDateLessons.map((lesson) => (
                   <article key={lesson.id} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

@@ -103,8 +103,26 @@ export function LessonsView({
   onDeleteLesson: (lessonId: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
-  const lessons = [...vault.lessons].sort(sortLessons).reverse();
-  const selected = vault.lessons.find((l) => l.id === selectedId) ?? lessons[0];
+  const [campusFilter, setCampusFilter] = useState("all");
+  const [studentFilter, setStudentFilter] = useState("");
+  const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | "one_on_one" | "class">("all");
+  const normalizedStudentFilter = studentFilter.trim().toLowerCase();
+  const lessons = vault.lessons
+    .filter((lesson) => {
+      const course = getCourse(vault, lesson.courseGroupId);
+      const campusId = lesson.campusId ?? course?.defaultCampusId;
+      const matchesCampus = campusFilter === "all" || campusId === campusFilter;
+      const matchesType = courseTypeFilter === "all" || lesson.type === courseTypeFilter;
+      const matchesStudent =
+        !normalizedStudentFilter ||
+        lesson.expectedStudentIds.some((studentId) =>
+          (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(normalizedStudentFilter)
+        );
+      return matchesCampus && matchesType && matchesStudent;
+    })
+    .sort(sortLessons)
+    .reverse();
+  const selected = lessons.find((l) => l.id === selectedId) ?? lessons[0];
 
   function updateSelected(patch: Partial<Lesson>) {
     if (!selected) return;
@@ -151,8 +169,39 @@ export function LessonsView({
             <CardTitle>课时列表</CardTitle>
             <CardDescription>课程、到课、金额和状态都会影响工资统计</CardDescription>
           </CardHeader>
-          <CardContent className="max-h-[600px] overflow-y-auto pr-2">
-            <div className="space-y-1">
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">校区筛选</label>
+                <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
+                  <option value="all">全部校区</option>
+                  {vault.campuses.map((campus) => (
+                    <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">学生名筛选</label>
+                <Input
+                  value={studentFilter}
+                  onChange={(event) => setStudentFilter(event.target.value)}
+                  placeholder="输入学生名"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">班型筛选</label>
+                <Select
+                  value={courseTypeFilter}
+                  onChange={(event) => setCourseTypeFilter(event.target.value as "all" | "one_on_one" | "class")}
+                >
+                  <option value="all">全部班型</option>
+                  <option value="one_on_one">一对一</option>
+                  <option value="class">班课</option>
+                </Select>
+              </div>
+            </div>
+
+            <div className="max-h-[520px] space-y-1 overflow-y-auto pr-2">
               {lessons.map((lesson, index) => (
                 <motion.button
                   key={lesson.id}
@@ -186,7 +235,7 @@ export function LessonsView({
                 </motion.button>
               ))}
               {lessons.length === 0 && (
-                <p className="text-sm text-(--color-muted-foreground) text-center py-8">还没有课程记录</p>
+                <p className="text-sm text-(--color-muted-foreground) text-center py-8">没有符合筛选条件的课程记录</p>
               )}
             </div>
           </CardContent>

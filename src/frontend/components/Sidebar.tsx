@@ -31,8 +31,8 @@ export function Sidebar({
       className="navy-gradient sticky top-0 z-30 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-white/10 text-white shadow-[18px_0_50px_rgba(3,31,61,0.2)] transition-[width] duration-300 md:flex"
       style={{ width: collapsed ? 92 : 286 }}
     >
-      <div className="flex h-full flex-col p-5">
-        <div className="mb-12 flex items-center justify-between gap-3">
+      <div className="flex h-full flex-col p-4">
+        <div className="mb-8 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onToggle}
@@ -47,7 +47,7 @@ export function Sidebar({
             </div>
             {!collapsed && (
               <div className="min-w-0">
-                <div className="truncate text-[25px] font-extrabold leading-tight">
+                <div className="truncate text-[22px] font-extrabold leading-tight">
                   <span>Teach</span>
                   <span className="text-[#ff911f]">Pro</span>
                 </div>
@@ -69,7 +69,7 @@ export function Sidebar({
           )}
         </div>
 
-        <nav className="flex-1 space-y-3 overflow-y-auto pr-1">
+        <nav className="flex-1 space-y-2 overflow-hidden">
           {items.map((item) => {
             const Icon = item.icon;
             const isActive = view === item.key;
@@ -80,8 +80,8 @@ export function Sidebar({
                 type="button"
                 onClick={() => onViewChange(item.key)}
                 className={cn(
-                  "group relative flex h-[64px] w-full items-center rounded-[14px] text-left text-[16px] font-semibold transition-all duration-200",
-                  collapsed ? "justify-center px-0" : "gap-5 px-5",
+                  "group relative flex h-[54px] w-full items-center rounded-[12px] text-left text-[14px] font-semibold transition-all duration-200",
+                  collapsed ? "justify-center px-0" : "gap-3 px-4",
                   isActive
                     ? "bg-[#0d4b86]/65 text-white shadow-[0_12px_26px_rgba(0,0,0,0.16)]"
                     : "text-white/68 hover:bg-white/8 hover:text-white"
@@ -90,13 +90,13 @@ export function Sidebar({
               >
                 <span
                   className={cn(
-                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] transition-colors",
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] transition-colors",
                     isActive
                       ? "orange-gradient text-white shadow-[0_10px_20px_rgba(255,134,23,0.3)]"
                       : "text-white/72 group-hover:text-white"
                   )}
                 >
-                  <Icon size={24} strokeWidth={2.2} />
+                  <Icon size={21} strokeWidth={2.2} />
                 </span>
                 {!collapsed && <span className="truncate">{item.label}</span>}
               </motion.button>
@@ -104,7 +104,7 @@ export function Sidebar({
           })}
         </nav>
 
-        <div className="mt-6">
+        <div className="mt-4">
           {collapsed ? (
             <Button
               variant="ghost"
@@ -116,9 +116,9 @@ export function Sidebar({
               <ChevronRight size={18} />
             </Button>
           ) : (
-            <div className="rounded-[16px] border border-white/12 bg-white/[0.045] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.12)]">
+            <div className="rounded-[14px] border border-white/12 bg-white/[0.045] p-3 shadow-[0_16px_40px_rgba(0,0,0,0.12)]">
               <div className="flex items-center gap-3">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-lg font-extrabold text-[#0a3a68]">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-base font-extrabold text-[#0a3a68]">
                   {avatarText}
                 </div>
                 <div className="min-w-0 flex-1">
