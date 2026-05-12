@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { Building2, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, Student, TeacherProfile, TeacherVault } from "@/shared/types";
+import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
 import { calculateClassHeadcountFee, defaultClassFeeTiers, normalizedClassFeeTiers } from "@/frontend/lib/calculations";
@@ -28,7 +28,8 @@ export function StudentsView({
   onUpdateProfile,
   onAddCourse,
   onUpdateCourse,
-  onDeleteCourse
+  onDeleteCourse,
+  onTransferStudentCourse
 }: {
   vault: TeacherVault;
   onAddCampus: (campus: Campus) => void;
@@ -41,8 +42,11 @@ export function StudentsView({
   onAddCourse: (course: CourseGroup) => void;
   onUpdateCourse: (course: CourseGroup) => void;
   onDeleteCourse: (courseId: string) => void;
+  onTransferStudentCourse: (transition: StudentCourseTransition) => void;
 }) {
   const [campusNameInput, setCampusNameInput] = useState("");
+  const [campusAddressInput, setCampusAddressInput] = useState("");
+  const [campusNoteInput, setCampusNoteInput] = useState("");
   const [studentNameInput, setStudentNameInput] = useState("");
   const [studentGradeInput, setStudentGradeInput] = useState("");
   const [customGradeInput, setCustomGradeInput] = useState("");
@@ -63,6 +67,15 @@ export function StudentsView({
   const [archiveSearch, setArchiveSearch] = useState("");
   const [courseStudentSearch, setCourseStudentSearch] = useState("");
   const [courseStudentScope, setCourseStudentScope] = useState<"all" | "selected" | "available">("all");
+  const [transferStudentId, setTransferStudentId] = useState(vault.students[0]?.id ?? "");
+  const [transferCourseType, setTransferCourseType] = useState<CourseType>("trial");
+  const [transferTargetMode, setTransferTargetMode] = useState<"new" | "existing">("new");
+  const [transferTargetCourseId, setTransferTargetCourseId] = useState("");
+  const [transferSubjectInput, setTransferSubjectInput] = useState("");
+  const [transferCourseNameInput, setTransferCourseNameInput] = useState("");
+  const [transferCampusInput, setTransferCampusInput] = useState(vault.campuses[0]?.id ?? "");
+  const [transferEndExisting, setTransferEndExisting] = useState(true);
+  const [transferMessage, setTransferMessage] = useState("");
   const { confirm, dialog } = useConfirmDialog();
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
   const normalizedCourseStudentSearch = courseStudentSearch.trim().toLowerCase();
@@ -84,12 +97,52 @@ export function StudentsView({
   const obligationMode = vault.profile.obligationDeductionMode ?? "auto_gap";
   const isManualObligationMode = obligationMode === "manual";
   const obligationCourses = vault.courseGroups.filter((course) => !obligationCampusId || course.defaultCampusId === obligationCampusId);
+  const transferStudent = vault.students.find((student) => student.id === transferStudentId);
+  const transferCurrentCourses = transferStudent
+    ? vault.courseGroups.filter((course) => course.status === "active" && course.studentIds.includes(transferStudent.id))
+    : [];
+  const transferSubject = transferSubjectInput.trim() || transferCurrentCourses[0]?.subject || "未设置";
+  const transferTargetCourses = transferStudent
+    ? vault.courseGroups.filter(
+        (course) =>
+          course.status === "active" &&
+          course.type === transferCourseType &&
+          !course.studentIds.includes(transferStudent.id) &&
+          canJoinCourse(vault, course, transferStudent)
+      )
+    : [];
+  const transferTargetCourseIds = transferTargetCourses.map((course) => course.id).join("|");
+
+  useEffect(() => {
+    setTransferStudentId((current) =>
+      vault.students.some((student) => student.id === current) ? current : vault.students[0]?.id ?? ""
+    );
+  }, [vault.students]);
+
+  useEffect(() => {
+    setTransferCampusInput((current) =>
+      current && vault.campuses.some((campus) => campus.id === current) ? current : vault.campuses[0]?.id ?? ""
+    );
+  }, [vault.campuses]);
+
+  useEffect(() => {
+    setTransferTargetCourseId((current) =>
+      transferTargetCourses.some((course) => course.id === current) ? current : transferTargetCourses[0]?.id ?? ""
+    );
+  }, [transferTargetCourseIds]);
 
   function addCampus(e: FormEvent) {
     e.preventDefault();
     if (!campusNameInput.trim()) return;
-    onAddCampus({ id: makeId("campus"), name: campusNameInput.trim() });
+    onAddCampus({
+      id: makeId("campus"),
+      name: campusNameInput.trim(),
+      address: campusAddressInput.trim() || undefined,
+      note: campusNoteInput.trim() || undefined
+    });
     setCampusNameInput("");
+    setCampusAddressInput("");
+    setCampusNoteInput("");
   }
 
   function addStudent(e: FormEvent) {
@@ -128,6 +181,47 @@ export function StudentsView({
       status: "active"
     });
     setCourseNameInput("");
+  }
+
+  function applyStudentCourseTransfer(event: FormEvent) {
+    event.preventDefault();
+    if (!transferStudent) return;
+
+    if (transferTargetMode === "existing") {
+      const targetCourse = transferTargetCourses.find((course) => course.id === transferTargetCourseId);
+      if (!targetCourse) {
+        setTransferMessage("请选择一个可加入的目标课程。");
+        return;
+      }
+      onTransferStudentCourse({
+        studentId: transferStudent.id,
+        targetCourseId: targetCourse.id,
+        subject: targetCourse.subject,
+        endExisting: transferEndExisting
+      });
+      setTransferMessage(`已将「${transferStudent.name}」调整到「${targetCourse.name}」。已有课时不受影响。`);
+      return;
+    }
+
+    const nextCourseName = transferCourseNameInput.trim() || `${transferStudent.name}${courseTypeLabels[transferCourseType]}`;
+    const nextCourse: CourseGroup = {
+      id: makeId("course"),
+      name: nextCourseName,
+      type: transferCourseType,
+      subject: transferSubject,
+      defaultCampusId: transferCampusInput || transferStudent.defaultCampusId || vault.campuses[0]?.id,
+      studentIds: [transferStudent.id],
+      feeRule: defaultFeeRule(transferCourseType),
+      status: "active"
+    };
+    onTransferStudentCourse({
+      studentId: transferStudent.id,
+      newCourse: nextCourse,
+      subject: nextCourse.subject,
+      endExisting: transferEndExisting
+    });
+    setTransferCourseNameInput("");
+    setTransferMessage(`已为「${transferStudent.name}」新建「${nextCourse.name}」。已有课时不受影响。`);
   }
 
   function campusInUse(campusId: string): boolean {
@@ -428,6 +522,142 @@ export function StudentsView({
         <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
           删除限制：已有学生、课程或历史课时引用的数据不能直接删除，建议将对应的引用数据全部删除或改为暂停状态。
         </div>
+        {archivePanel === "students" && (
+          <Card className="overflow-hidden">
+            <CardHeader className="gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                    <GraduationCap size={14} /> 班型调整
+                  </div>
+                  <CardTitle className="text-lg">学生课程关系</CardTitle>
+                  <CardDescription>调整后只影响后续新建课时；已经生成的课时保留原学生、班型和费用快照。</CardDescription>
+                </div>
+                <Badge variant="sky" className="w-fit">{transferCurrentCourses.length} 个当前课程</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <form onSubmit={applyStudentCourseTransfer} className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">学生</label>
+                    <Select value={transferStudentId} onChange={(event) => setTransferStudentId(event.target.value)}>
+                      {vault.students.map((student) => (
+                        <option key={student.id} value={student.id}>{student.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">新班型</label>
+                    <Select value={transferCourseType} onChange={(event) => setTransferCourseType(event.target.value as CourseType)}>
+                      <option value="trial">试听</option>
+                      <option value="class">班课</option>
+                      <option value="one_on_one">一对一</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">科目</label>
+                    <Input
+                      value={transferSubjectInput}
+                      onChange={(event) => setTransferSubjectInput(event.target.value)}
+                      placeholder={transferCurrentCourses[0]?.subject || "未设置"}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">处理方式</label>
+                    <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
+                      {[
+                        { key: "new" as const, label: "新建课程" },
+                        { key: "existing" as const, label: "加入已有" }
+                      ].map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setTransferTargetMode(item.key)}
+                          className={`rounded-[9px] px-3 py-2 text-xs font-bold ${
+                            transferTargetMode === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a]"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {transferTargetMode === "new" ? (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">课程名称</label>
+                      <Input
+                        value={transferCourseNameInput}
+                        onChange={(event) => setTransferCourseNameInput(event.target.value)}
+                        placeholder={transferStudent ? `${transferStudent.name}${courseTypeLabels[transferCourseType]}` : "新课程名称"}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">默认校区</label>
+                      <Select value={transferCampusInput} onChange={(event) => setTransferCampusInput(event.target.value)}>
+                        <option value="">未设置校区</option>
+                        {vault.campuses.map((campus) => (
+                          <option key={campus.id} value={campus.id}>{campus.name}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">目标课程</label>
+                    <Select value={transferTargetCourseId} onChange={(event) => setTransferTargetCourseId(event.target.value)}>
+                      {transferTargetCourses.map((course) => (
+                        <option key={course.id} value={course.id}>
+                          {course.name} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
+                        </option>
+                      ))}
+                    </Select>
+                    {transferTargetCourses.length === 0 && (
+                      <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
+                        当前没有可加入的同班型课程，可以切换为新建课程。
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-extrabold text-[#061226]">当前课程</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {transferCurrentCourses.length > 0 ? transferCurrentCourses.map((course) => (
+                        <Badge key={course.id} variant={course.type === "class" ? "sky" : course.type === "trial" ? "plum" : "sage"}>
+                          {course.name} · {courseTypeLabels[course.type]}
+                        </Badge>
+                      )) : (
+                        <Badge variant="secondary">暂无当前课程</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <label className="flex shrink-0 items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-bold text-[#25324a]">
+                    <input
+                      type="checkbox"
+                      checked={transferEndExisting}
+                      onChange={(event) => setTransferEndExisting(event.target.checked)}
+                      className="h-4 w-4 accent-[#ff8617]"
+                    />
+                    结束同科目旧课程关系
+                  </label>
+                  <Button type="submit" disabled={!transferStudentId || (transferTargetMode === "existing" && !transferTargetCourseId)}>
+                    <Save size={15} /> 保存调整
+                  </Button>
+                </div>
+              </form>
+              {transferMessage && (
+                <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-bold text-[#166534]">
+                  {transferMessage}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
         {archivePanel === "campuses" && (
         <Card className="h-fit overflow-hidden">
           <CardHeader className="gap-3">
@@ -1085,6 +1315,9 @@ export function StudentsView({
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
+                        <Badge variant={course.status === "active" ? "sage" : "secondary"}>
+                          {course.status === "active" ? "启用" : "暂停"}
+                        </Badge>
                         <span className="mr-1 max-w-[96px] truncate text-xs text-(--color-muted-foreground)" title={campusName(vault, course.defaultCampusId)}>
                           {campusName(vault, course.defaultCampusId)}
                         </span>
@@ -1135,6 +1368,12 @@ export function StudentsView({
 
     </div>
   );
+}
+
+function canJoinCourse(vault: TeacherVault, course: CourseGroup, student: Student): boolean {
+  if (course.type !== "class" || course.studentIds.length === 0) return true;
+  const existingGrade = vault.students.find((item) => item.id === course.studentIds[0])?.grade ?? "";
+  return existingGrade === (student.grade ?? "");
 }
 
 function defaultFeeRule(type: CourseType): FeeRule {

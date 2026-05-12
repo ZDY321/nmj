@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -86,7 +86,9 @@ export function ScheduleView({
   onAddScheduledLesson: (date: string, courseGroupId: string, startTime: string, endTime: string) => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
 }) {
-  const firstCourseId = vault.courseGroups[0]?.id ?? "";
+  const courseSelectionOptions = vault.courseGroups.filter((course) => course.status === "active");
+  const courseSelectionOptionIds = courseSelectionOptions.map((course) => course.id).join("|");
+  const firstCourseId = courseSelectionOptions[0]?.id ?? "";
   const [singleCourseGroupId, setSingleCourseGroupId] = useState(firstCourseId);
   const [singleDate, setSingleDate] = useState(todayIso());
   const [singleStartTime, setSingleStartTime] = useState("19:00");
@@ -124,6 +126,14 @@ export function ScheduleView({
   const [makeupOriginalDateFilter, setMakeupOriginalDateFilter] = useState("");
   const [scheduleError, setScheduleError] = useState("");
   const { confirm, dialog } = useConfirmDialog();
+
+  useEffect(() => {
+    const fallbackCourseId = courseSelectionOptions[0]?.id ?? "";
+    const hasCourse = (courseId: string) => courseSelectionOptions.some((course) => course.id === courseId);
+    setSingleCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
+    setRuleCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
+    setCalendarCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
+  }, [courseSelectionOptionIds]);
 
   const weekStartPreference = weekStartsOn(vault);
   const visibleWeekdays = orderedWeekdays(weekStartPreference);
@@ -244,6 +254,10 @@ export function ScheduleView({
     if (!validateTimeRange(lessonStartTime, lessonEndTime)) return;
     const course = getCourse(vault, courseGroupId);
     if (!course) return;
+    if (course.status !== "active") {
+      showScheduleError("这个课程已暂停，请先在档案信息中启用或选择当前课程。");
+      return;
+    }
     setScheduleError("");
     const conflict = findTimeConflict(lessonDate, lessonStartTime, lessonEndTime);
     if (conflict && !force) {
@@ -533,7 +547,7 @@ export function ScheduleView({
               <div className="space-y-2">
                 <label className="text-sm font-medium">课程</label>
                 <Select value={singleCourseGroupId} onChange={(event) => setSingleCourseGroupId(event.target.value)}>
-                  {vault.courseGroups.map((course) => (
+                  {courseSelectionOptions.map((course) => (
                     <option key={course.id} value={course.id}>{course.name}</option>
                   ))}
                 </Select>
@@ -666,7 +680,7 @@ export function ScheduleView({
                 <div className="space-y-2">
                   <label className="text-sm font-medium">课程</label>
                   <Select value={ruleCourseGroupId} onChange={(event) => setRuleCourseGroupId(event.target.value)}>
-                    {vault.courseGroups.map((course) => (
+                    {courseSelectionOptions.map((course) => (
                       <option key={course.id} value={course.id}>{course.name}</option>
                     ))}
                   </Select>
@@ -783,7 +797,7 @@ export function ScheduleView({
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-3">
               <Select value={calendarCourseGroupId} onChange={(event) => setCalendarCourseGroupId(event.target.value)}>
-                {vault.courseGroups.map((course) => (
+                {courseSelectionOptions.map((course) => (
                   <option key={course.id} value={course.id}>{course.name}</option>
                 ))}
               </Select>

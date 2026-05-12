@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, BookText, Clock, GraduationCap, NotebookPen, Plus, Trash2, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -34,8 +34,10 @@ function LessonForm({
   vault: TeacherVault;
   onAddLesson: (lesson: Lesson) => void;
 }) {
+  const courseOptions = vault.courseGroups.filter((course) => course.status === "active");
+  const courseOptionIds = courseOptions.map((course) => course.id).join("|");
   const [date, setDate] = useState(todayIso());
-  const [courseGroupId, setCourseGroupId] = useState(vault.courseGroups[0]?.id ?? "");
+  const [courseGroupId, setCourseGroupId] = useState(courseOptions[0]?.id ?? "");
   const [startTime, setStartTime] = useState("19:00");
   const [endTime, setEndTime] = useState("21:00");
   const dateShortcuts = [
@@ -44,10 +46,16 @@ function LessonForm({
     { label: "前天", value: offsetDate(-2) }
   ];
 
+  useEffect(() => {
+    setCourseGroupId((current) =>
+      courseOptions.some((course) => course.id === current) ? current : courseOptions[0]?.id ?? ""
+    );
+  }, [courseOptionIds]);
+
   function submit(event: FormEvent) {
     event.preventDefault();
     const course = getCourse(vault, courseGroupId);
-    if (!course) return;
+    if (!course || course.status !== "active") return;
     onAddLesson(
       createLessonFromCourse(vault, course, {
         date,
@@ -70,7 +78,7 @@ function LessonForm({
             <CardTitle>添加课时</CardTitle>
             <CardDescription>可以补录几天前上的课，确认后会计入工资</CardDescription>
           </div>
-          <Button type="submit" size="sm" className="mt-1">
+          <Button type="submit" size="sm" className="mt-1" disabled={!courseGroupId}>
             <Plus size={15} /> 添加
           </Button>
         </CardHeader>
@@ -99,7 +107,7 @@ function LessonForm({
               value={courseGroupId}
               onChange={(e) => setCourseGroupId(e.target.value)}
             >
-              {vault.courseGroups.map((c) => (
+              {courseOptions.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </Select>

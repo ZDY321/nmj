@@ -84,6 +84,14 @@ export type CourseGroup = {
   status: "active" | "paused";
 };
 
+export type StudentCourseTransition = {
+  studentId: string;
+  targetCourseId?: string;
+  newCourse?: CourseGroup;
+  subject?: string;
+  endExisting: boolean;
+};
+
 export type ScheduleRule = {
   id: string;
   courseGroupId: string;

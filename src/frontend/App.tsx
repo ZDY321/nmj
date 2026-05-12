@@ -38,6 +38,7 @@ import type {
   Lesson,
   SalaryAdjustment,
   Student,
+  StudentCourseTransition,
   TeacherVault,
   TeacherProfile,
   TimePreset,
@@ -222,6 +223,50 @@ export function App() {
     });
   }
 
+  function transferStudentCourse(transition: StudentCourseTransition) {
+    updateVault((draft) => {
+      const targetSubject =
+        transition.subject ??
+        transition.newCourse?.subject ??
+        draft.courseGroups.find((course) => course.id === transition.targetCourseId)?.subject;
+
+      if (transition.endExisting) {
+        draft.courseGroups = draft.courseGroups.map((course) => {
+          if (!course.studentIds.includes(transition.studentId)) return course;
+          if (transition.targetCourseId && course.id === transition.targetCourseId) {
+            return { ...course, status: "active" };
+          }
+          if (targetSubject && course.subject !== targetSubject) return course;
+
+          const nextStudentIds = course.studentIds.filter((id) => id !== transition.studentId);
+          return {
+            ...course,
+            studentIds: nextStudentIds,
+            status: nextStudentIds.length === 0 ? "paused" : course.status
+          };
+        });
+      }
+
+      if (transition.targetCourseId) {
+        draft.courseGroups = draft.courseGroups.map((course) =>
+          course.id === transition.targetCourseId
+            ? {
+                ...course,
+                status: "active",
+                studentIds: course.studentIds.includes(transition.studentId)
+                  ? course.studentIds
+                  : [...course.studentIds, transition.studentId]
+              }
+            : course
+        );
+      }
+
+      if (transition.newCourse) {
+        draft.courseGroups.push(transition.newCourse);
+      }
+    });
+  }
+
   function addCustomTimePreset(preset: TimePreset) {
     updateVault((draft) => {
       draft.preferences = {
@@ -285,7 +330,7 @@ export function App() {
   function addScheduledLesson(date: string, courseGroupId: string, startTime: string, endTime: string) {
     if (!vault) return;
     const course = getCourse(vault, courseGroupId);
-    if (!course) return;
+    if (!course || course.status !== "active") return;
     if (hasLessonConflict(vault.lessons, date, startTime, endTime)) return;
     addLesson(
       createLessonFromCourse(vault, course, {
@@ -308,7 +353,7 @@ export function App() {
   ) {
     if (!vault) return;
     const course = getCourse(vault, courseGroupId);
-    if (!course) return;
+    if (!course || course.status !== "active") return;
     const dates = datesBetween(startDate, endDate).filter((date) =>
       weekdays.includes(weekdayOfDateIso(date))
     );
@@ -687,6 +732,7 @@ export function App() {
                 }
                 onUpdateCourse={updateCourse}
                 onDeleteCourse={deleteCourse}
+                onTransferStudentCourse={transferStudentCourse}
               />
             )}
             {view === "grades" && (

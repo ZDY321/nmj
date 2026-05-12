@@ -178,10 +178,16 @@ export function GradesView({
                         {record.note && <div className="mt-1 max-w-[220px] text-xs leading-5 text-[#64748b]">{record.note}</div>}
                       </td>
                       <td className="px-3 py-3">
-                        <Badge variant="sky">
-                          {record.score}{record.fullScore ? ` / ${record.fullScore}` : ""}
-                        </Badge>
-                        {record.fullScore && <div className="mt-1 text-xs font-semibold text-[#64748b]">{normalizedScore(record).toFixed(1)}%</div>}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="sky">
+                            {record.score}{record.fullScore ? ` / ${record.fullScore}` : ""}
+                          </Badge>
+                          {record.fullScore && (
+                            <span className="text-xs font-semibold text-[#64748b]">
+                              {normalizedScore(record).toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-[#475569]">{record.rank || "未填"}</td>
                       <td className="rounded-r-[12px] px-3 py-3 text-right">
@@ -218,7 +224,7 @@ export function GradesView({
                 <div>
                   <div className="text-sm font-extrabold text-[#061226]">学生成绩走势</div>
                   <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                    {trendMetric === "score" ? "按百分制折算显示，越高越好。" : "按排名数值显示，数值越小越靠前。"}
+                    {trendMetric === "score" ? "柱高按百分制折算，标签默认显示原始分数。" : "按排名数值显示，数值越小越靠前。"}
                   </div>
                 </div>
                 <div className="grid w-full grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1 sm:w-[180px]">
@@ -242,7 +248,7 @@ export function GradesView({
                 {trendRecords.map((record, index) => {
                   const rankValue = parseRankNumber(record.rank);
                   const value = trendMetric === "score" ? normalizedScore(record) : rankValue;
-                  const scoreMode = scoreLabelModes[record.id] ?? "ratio";
+                  const scoreMode = scoreLabelModes[record.id] ?? "raw";
                   const ratioLabel = `${normalizedScore(record).toFixed(1)}%`;
                   const rawScoreLabel = record.fullScore ? `${record.score}/${record.fullScore}` : `${record.score}分`;
                   const height =
