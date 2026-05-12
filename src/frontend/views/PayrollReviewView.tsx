@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { CourseType, TeacherVault } from "@/shared/types";
+import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
 import { completedAmount, hoursBetween, obligationSummary, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import {
   campusName,
@@ -28,7 +28,13 @@ type CampusAmountDetail = {
   count: number;
 };
 
-export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
+export function PayrollReviewView({
+  vault,
+  onOpenLessonInCalendar
+}: {
+  vault: TeacherVault;
+  onOpenLessonInCalendar?: (lesson: Lesson) => void;
+}) {
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
   const [campusFilter, setCampusFilter] = useState(vault.campuses[0]?.id ?? "all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -332,12 +338,14 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
         </CardHeader>
         <CardContent className="space-y-3">
           {filteredLessons.map((lesson, index) => (
-            <motion.div
+            <motion.button
               key={lesson.id}
+              type="button"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.02 }}
-              className={`rounded-[14px] border p-4 ${
+              onClick={() => onOpenLessonInCalendar?.(lesson)}
+              className={`w-full rounded-[14px] border p-4 text-left transition-all hover:border-[#ff8617] hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)] ${
                 lesson.attendance.some((entry) => entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending")
                   ? "border-[#fed7aa] bg-[#fff7ed]"
                   : lessonStatusSurfaceClass(lesson.status)
@@ -376,7 +384,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
                   <div className="mt-1 text-lg font-extrabold text-[#061226]">{formatMoney(completedAmount(lesson))}</div>
                 </div>
               </div>
-            </motion.div>
+            </motion.button>
           ))}
           {filteredLessons.length === 0 && (
             <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">

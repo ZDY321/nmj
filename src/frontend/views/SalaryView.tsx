@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { SalaryAdjustment, TeacherVault } from "@/shared/types";
+import type { Lesson, SalaryAdjustment, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
 import { attendanceSummary, obligationSummary, salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
 import {
@@ -41,12 +41,14 @@ export function SalaryView({
   vault,
   onBaseSalaryChange,
   onAddAdjustment,
-  onDeleteAdjustment
+  onDeleteAdjustment,
+  onOpenLessonInCalendar
 }: {
   vault: TeacherVault;
   onBaseSalaryChange: (value: number) => void;
   onAddAdjustment: (adjustment: SalaryAdjustment) => void;
   onDeleteAdjustment: (adjustmentId: string) => void;
+  onOpenLessonInCalendar?: (lesson: Lesson) => void;
 }) {
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
   const [adjustmentTitle, setAdjustmentTitle] = useState("");
@@ -507,9 +509,11 @@ export function SalaryView({
           {recentLessons.length > 0 && (
             <div className="space-y-3 md:hidden">
               {recentLessons.map((lesson) => (
-                <div
+                <button
                   key={lesson.id}
-                  className={`rounded-[14px] border p-4 ${
+                  type="button"
+                  onClick={() => onOpenLessonInCalendar?.(lesson)}
+                  className={`w-full rounded-[14px] border p-4 text-left transition-all hover:border-[#ff8617] hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)] ${
                     lesson.status === "cancelled" ? "border-[#fecaca] bg-[#fff1f2]" : "border-[#dbe4ef] bg-[#f8fbff]"
                   }`}
                 >
@@ -546,7 +550,7 @@ export function SalaryView({
                       {lesson.note}
                     </div>
                   )}
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -567,7 +571,16 @@ export function SalaryView({
                 {recentLessons.map((lesson) => (
                   <tr
                     key={lesson.id}
-                    className={`border-t text-sm text-[#25324a] ${
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onOpenLessonInCalendar?.(lesson)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onOpenLessonInCalendar?.(lesson);
+                      }
+                    }}
+                    className={`cursor-pointer border-t text-sm text-[#25324a] transition-colors hover:bg-[#fff7ed] ${
                       lesson.status === "cancelled" ? "border-[#fecaca] bg-[#fff1f2]" : "border-[#e8eef6]"
                     }`}
                   >

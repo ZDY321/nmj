@@ -57,6 +57,7 @@ import {
 type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
 type SchedulePanel = "schedule" | "calendar" | "records";
+type CalendarFocus = { date: string; lessonId?: string; nonce: number } | null;
 
 export function ScheduleView({
   vault,
@@ -67,7 +68,8 @@ export function ScheduleView({
   onDeleteCustomTimePreset,
   onGenerateDrafts,
   onAddScheduledLesson,
-  onWeekStartChange
+  onWeekStartChange,
+  calendarFocus
 }: {
   vault: TeacherVault;
   onAddLesson: (lesson: Lesson) => void;
@@ -85,6 +87,7 @@ export function ScheduleView({
   ) => void;
   onAddScheduledLesson: (date: string, courseGroupId: string, startTime: string, endTime: string) => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
+  calendarFocus?: CalendarFocus;
 }) {
   const courseSelectionOptions = vault.courseGroups.filter((course) => course.status === "active");
   const courseSelectionOptionIds = courseSelectionOptions.map((course) => course.id).join("|");
@@ -134,6 +137,20 @@ export function ScheduleView({
     setRuleCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
     setCalendarCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
   }, [courseSelectionOptionIds]);
+
+  useEffect(() => {
+    if (!calendarFocus?.date) return;
+    setSchedulePanel("calendar");
+    setCalendarMode("view");
+    setSelectedCalendarDate(calendarFocus.date);
+    setCalendarMonth(calendarFocus.date.slice(0, 7));
+    setLessonDay(calendarFocus.date);
+    setLessonMonth(calendarFocus.date.slice(0, 7));
+    setSyncRecordsWithCalendarDate(true);
+    if (calendarFocus.lessonId) {
+      setSelectedId(calendarFocus.lessonId);
+    }
+  }, [calendarFocus?.nonce]);
 
   const weekStartPreference = weekStartsOn(vault);
   const visibleWeekdays = orderedWeekdays(weekStartPreference);
@@ -773,7 +790,7 @@ export function ScheduleView({
                 <CalendarDays size={14} /> 日历排课 / 查看
               </div>
               <CardTitle>日历排课</CardTitle>
-              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课；课程和时间是新课预设，不作为筛选条件。" : "查看模式下，点击日期只切换右侧明细。"}</CardDescription>
+              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课；课程和时间是新课预设，不作为筛选条件。" : "查看模式：点击日期切换右侧明细。"}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
@@ -831,8 +848,9 @@ export function ScheduleView({
                 </div>
               </div>
             ) : (
-              <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] px-4 py-3 text-sm font-semibold leading-6 text-[#64748b]">
-                查看模式只按日期切换右侧“每日课程详情”，不会用课程和时间做筛选。需要新增课时请切到“排课”模式；需要按课程、校区或学生筛选记录请切到“课时记录”。
+              <div className="space-y-1 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] px-4 py-3 text-sm font-semibold leading-6 text-[#64748b]">
+                <div>查看模式只按日期切换右侧“每日课程详情”，不会用课程和时间做筛选。</div>
+                <div>需要新增课时请切到“排课”模式；需要筛选记录请切到“课时记录”。</div>
               </div>
             )}
             <div className="grid grid-cols-7 gap-1 sm:gap-2">

@@ -1367,15 +1367,18 @@ export function StudentsView({
         )}
 
         {archivePanel === "courses" && (
+        <div className="space-y-4">
         <Card className="h-fit overflow-hidden">
-          <CardHeader className="gap-3">
+          <CardHeader>
             <div className="flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
                 <GraduationCap size={18} className="text-[#ff8617]" />
-                <CardTitle className="text-lg">课程与班课</CardTitle>
+                <CardTitle className="text-lg">添加课程</CardTitle>
               </div>
-              <Badge variant="secondary">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
             </div>
+            <CardDescription>新增时直接设置类型、科目、校区、费用和关联学生。</CardDescription>
+          </CardHeader>
+          <CardContent>
             <form onSubmit={addCourse} className="space-y-3 rounded-[16px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
                 <Input
@@ -1572,6 +1575,23 @@ export function StudentsView({
                 </Button>
               </div>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card className="h-fit overflow-hidden">
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                  <GraduationCap size={14} /> 已添加课程
+                </div>
+                <CardTitle className="text-lg">课程与班课列表</CardTitle>
+                <CardDescription>筛选和数量只作用于下方已添加课程。</CardDescription>
+              </div>
+              <Badge variant="secondary" className="w-fit">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
                 <option value="all">全部课程类型</option>
@@ -1599,8 +1619,7 @@ export function StudentsView({
                 ))}
               </Select>
             </div>
-          </CardHeader>
-          <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
+          <div className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
             {visibleCourses.map((course) => {
               const isEditing = editingCourse?.id === course.id;
               const used = courseInUse(course.id);
@@ -1921,8 +1940,10 @@ export function StudentsView({
             {visibleCourses.length === 0 && (
               <p className="py-8 text-center text-sm text-(--color-muted-foreground)">当前筛选下没有课程</p>
             )}
+          </div>
           </CardContent>
         </Card>
+        </div>
         )}
       </div>
 

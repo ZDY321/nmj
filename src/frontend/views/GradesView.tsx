@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { BarChart3, CalendarDays, GraduationCap, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -23,17 +23,18 @@ export function GradesView({
   onDeleteGradeRecord: (recordId: string) => void;
 }) {
   const [studentId, setStudentId] = useState(vault.students[0]?.id ?? "");
-  const [subject, setSubject] = useState("数学");
+  const [subject, setSubject] = useState("");
   const [examName, setExamName] = useState("");
   const [date, setDate] = useState(todayIso());
   const [score, setScore] = useState("");
-  const [fullScore, setFullScore] = useState("100");
+  const [fullScore, setFullScore] = useState("");
   const [rank, setRank] = useState("");
   const [note, setNote] = useState("");
   const [studentFilter, setStudentFilter] = useState("all");
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [trendMetric, setTrendMetric] = useState<"score" | "rank">("score");
   const [activeTrendRecordId, setActiveTrendRecordId] = useState("");
+  const trendCardRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog } = useConfirmDialog();
 
   const records = [...(vault.gradeRecords ?? [])].sort((a, b) => `${b.date} ${b.examName}`.localeCompare(`${a.date} ${a.examName}`));
@@ -49,7 +50,17 @@ export function GradesView({
       .filter((record) => record.studentId === targetId && (subjectFilter === "all" || record.subject === subjectFilter))
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [records, studentFilter, studentId, subjectFilter]);
-  const trendRecords = selectedStudentRecords.slice(-10);
+  const trendRecords = useMemo(() => {
+    const groups = new Map<string, GradeRecord[]>();
+    selectedStudentRecords.forEach((record) => {
+      const group = groups.get(record.subject) ?? [];
+      group.push(record);
+      groups.set(record.subject, group);
+    });
+    return Array.from(groups.values())
+      .flatMap((group) => group.slice(-10))
+      .sort((a, b) => `${a.date} ${a.examName}`.localeCompare(`${b.date} ${b.examName}`));
+  }, [selectedStudentRecords]);
   const rankValues = trendRecords.map((record) => parseRankNumber(record.rank)).filter((value): value is number => value !== null);
   const maxRank = Math.max(...rankValues, 1);
   const minRank = Math.min(...rankValues, maxRank);
@@ -78,6 +89,16 @@ export function GradesView({
     setScore("");
     setRank("");
     setNote("");
+  }
+
+  function focusGradeRecord(record: GradeRecord) {
+    setStudentId(record.studentId);
+    setStudentFilter(record.studentId);
+    if (subjectFilter !== "all" && subjectFilter !== record.subject) {
+      setSubjectFilter(record.subject);
+    }
+    setActiveTrendRecordId(record.id);
+    window.setTimeout(() => trendCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
   }
 
   return (
@@ -151,7 +172,21 @@ export function GradesView({
             {filteredRecords.length > 0 && (
               <div className="space-y-3 md:hidden">
                 {filteredRecords.map((record) => (
-                  <div key={record.id} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                  <div
+                    key={record.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => focusGradeRecord(record)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        focusGradeRecord(record);
+                      }
+                    }}
+                    className={`cursor-pointer rounded-[14px] border p-4 transition-all hover:border-[#ff8617] hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)] ${
+                      activeTrendRecordId === record.id ? "border-[#ff8617] bg-[#fff7ed]" : "border-[#dbe4ef] bg-[#f8fbff]"
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-[#64748b]">{record.date} · {record.subject}</div>
@@ -182,15 +217,16 @@ export function GradesView({
                         type="button"
                         size="sm"
                         variant="destructive"
-                        onClick={() =>
+                        onClick={(event) => {
+                          event.stopPropagation();
                           confirm({
                             title: "删除这条成绩记录？",
                             description: `${record.date} · ${record.examName}`,
                             confirmLabel: "删除",
                             tone: "danger",
                             onConfirm: () => onDeleteGradeRecord(record.id)
-                          })
-                        }
+                          });
+                        }}
                       >
                         <Trash2 size={14} /> 删除
                       </Button>
@@ -215,7 +251,21 @@ export function GradesView({
                 </thead>
                 <tbody>
                   {filteredRecords.map((record) => (
-                    <tr key={record.id} className="bg-[#f8fbff] align-top">
+                    <tr
+                      key={record.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => focusGradeRecord(record)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          focusGradeRecord(record);
+                        }
+                      }}
+                      className={`cursor-pointer align-top transition-colors hover:bg-[#fff7ed] ${
+                        activeTrendRecordId === record.id ? "bg-[#fff7ed]" : "bg-[#f8fbff]"
+                      }`}
+                    >
                       <td className="rounded-l-[12px] px-3 py-3 font-bold text-[#25324a]">{record.date}</td>
                       <td className="px-3 py-3">{findStudent(vault, record.studentId)?.name ?? "未知学生"}</td>
                       <td className="px-3 py-3">{record.subject}</td>
@@ -241,15 +291,16 @@ export function GradesView({
                           type="button"
                           size="sm"
                           variant="destructive"
-                          onClick={() =>
+                          onClick={(event) => {
+                            event.stopPropagation();
                             confirm({
                               title: "删除这条成绩记录？",
                               description: `${record.date} · ${record.examName}`,
                               confirmLabel: "删除",
                               tone: "danger",
                               onConfirm: () => onDeleteGradeRecord(record.id)
-                            })
-                          }
+                            });
+                          }}
                         >
                           <Trash2 size={14} /> 删除
                         </Button>
@@ -265,12 +316,12 @@ export function GradesView({
               </div>
             )}
 
-            <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+            <div ref={trendCardRef} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-sm font-extrabold text-[#061226]">学生成绩走势</div>
                   <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                    {trendMetric === "score" ? "按百分制折算绘制折线，便于看同一学生的阶段变化。" : "按排名数值绘制折线，位置越高代表排名越靠前。"}
+                    {trendMetric === "score" ? "按科目分别绘制百分制折线，便于看同一学生的阶段变化。" : "按科目分别绘制排名折线，位置越高代表排名越靠前。"}
                   </div>
                 </div>
                 <div className="grid w-full grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1 sm:w-[180px]">
@@ -364,8 +415,18 @@ function TrendLineChart({
     const y = value === null ? null : valueToY(value, metric, scoreMax, minRank, maxRank, plotTop, plotBottom);
     return { record, value, rankValue, x, y };
   });
+  const subjectNames = Array.from(new Set(records.map((record) => record.subject)));
+  const subjectColors = ["#1557c2", "#ff8617", "#16a34a", "#7c3aed", "#dc2626", "#0891b2"];
+  const subjectColor = (subject: string) => subjectColors[Math.max(subjectNames.indexOf(subject), 0) % subjectColors.length];
+  const subjectLines = subjectNames.map((subject) => {
+    const subjectPoints = points.filter((point) => point.record.subject === subject && point.y !== null && point.value !== null);
+    return {
+      subject,
+      points: subjectPoints,
+      line: subjectPoints.map((point) => `${point.x},${point.y ?? 0}`).join(" ")
+    };
+  });
   const validPoints = points.filter((point) => point.y !== null && point.value !== null);
-  const line = validPoints.map((point) => `${point.x},${point.y ?? 0}`).join(" ");
   const activeRecord = records.find((record) => record.id === activeRecordId) ?? records.at(-1);
   const hasDrawablePoints = validPoints.length > 0;
   const axisRows = metric === "score"
@@ -395,19 +456,22 @@ function TrendLineChart({
         ))}
         <line x1={plotLeft} x2={plotLeft} y1={plotTop} y2={plotBottom} stroke="#dbe4ef" />
         <line x1={plotLeft} x2={plotRight} y1={plotBottom} y2={plotBottom} stroke="#dbe4ef" />
-        {line && (
-          <motion.polyline
-            points={line}
-            fill="none"
-            stroke={metric === "score" ? "#1557c2" : "#ff8617"}
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 0.45 }}
-          />
-        )}
+        {subjectLines.map((series, index) => (
+          series.line ? (
+            <motion.polyline
+              key={series.subject}
+              points={series.line}
+              fill="none"
+              stroke={subjectColor(series.subject)}
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 0.45, delay: index * 0.04 }}
+            />
+          ) : null
+        ))}
         {points.map((point) => {
           const isActive = activeRecord?.id === point.record.id;
           const label = trendValueLabel(point.record, metric);
@@ -425,7 +489,7 @@ function TrendLineChart({
                     cy={point.y}
                     r={isActive ? "7" : "5"}
                     fill={isActive ? "#ff8617" : "#fff"}
-                    stroke={metric === "score" ? "#1557c2" : "#ff8617"}
+                    stroke={subjectColor(point.record.subject)}
                     strokeWidth="4"
                   >
                     <title>{`${point.record.date} ${point.record.examName}: ${label}`}</title>
@@ -452,6 +516,14 @@ function TrendLineChart({
 
       {activeRecord && (
         <div className="mt-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+          <div className="mb-3 flex flex-wrap gap-2">
+            {subjectNames.map((subject) => (
+              <span key={subject} className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#25324a] ring-1 ring-[#dbe4ef]">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: subjectColor(subject) }} />
+                {subject}
+              </span>
+            ))}
+          </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="truncate text-sm font-extrabold text-[#061226]">{activeRecord.examName}</div>

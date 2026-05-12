@@ -65,6 +65,12 @@ type UnlockedSession = {
   selectedDate: string;
 };
 
+type ScheduleCalendarFocus = {
+  date: string;
+  lessonId?: string;
+  nonce: number;
+};
+
 const unlockedSessionKey = "teacher-salary-tracker:unlocked-session";
 
 export function App() {
@@ -89,6 +95,7 @@ export function App() {
   const [onboardingVisitedSteps, setOnboardingVisitedSteps] = useState<OnboardingStepKey[]>([]);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedDate, setSelectedDate] = useState(todayIso());
+  const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
 
   function rememberUnlockedSession(next?: Partial<UnlockedSession>) {
@@ -575,6 +582,15 @@ export function App() {
     setView(nextView);
   }
 
+  function openLessonInCalendar(lesson: Lesson) {
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setMobileNavOpen(false);
+    setOnboardingVisible(false);
+    setScheduleCalendarFocus({ date: lesson.date, lessonId: lesson.id, nonce: Date.now() });
+    setView("schedule");
+  }
+
   return (
     <div className="dashboard-shell flex min-h-screen">
       <Sidebar
@@ -937,6 +953,7 @@ export function App() {
                 onGenerateDrafts={generateDrafts}
                 onAddScheduledLesson={addScheduledLesson}
                 onWeekStartChange={updateWeekStart}
+                calendarFocus={scheduleCalendarFocus}
               />
             )}
             {!onboardingVisible && view === "students" && (
@@ -975,7 +992,7 @@ export function App() {
               />
             )}
             {!onboardingVisible && view === "payroll" && (
-              <PayrollReviewView vault={vault} />
+              <PayrollReviewView vault={vault} onOpenLessonInCalendar={openLessonInCalendar} />
             )}
             {!onboardingVisible && view === "salary" && (
               <SalaryView
@@ -987,6 +1004,7 @@ export function App() {
                 }
                 onAddAdjustment={addSalaryAdjustment}
                 onDeleteAdjustment={deleteSalaryAdjustment}
+                onOpenLessonInCalendar={openLessonInCalendar}
               />
             )}
             {!onboardingVisible && view === "admin" && role === "admin" && (
