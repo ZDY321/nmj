@@ -102,6 +102,7 @@ export function CalendarView({
                 const hasPending = dayLessons.some((l) => l.status === "scheduled" || l.status === "makeup_pending");
                 const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
                 const hasCancelled = dayLessons.some((l) => l.status === "cancelled");
+                const isAllCompleted = dayLessons.length > 0 && dayLessons.every((l) => l.status === "completed" || l.status === "makeup_completed");
                 const isCurrentMonth = date.startsWith(month);
                 const isSelected = date === selectedDate;
 
@@ -113,15 +114,19 @@ export function CalendarView({
                     onClick={() => setSelectedDate(date)}
                     className={`relative flex flex-col items-start p-2.5 rounded-[14px] min-h-[100px] text-left transition-all duration-200 border ${
                       isSelected
-                        ? "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
+                        ? isAllCompleted
+                          ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
+                          : "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
                       : isCurrentMonth
                           ? hasCancelled
                             ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
-                            : "border-[#dbe4ef] bg-white hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
+                            : isAllCompleted
+                              ? "border-[#bbf7d0] bg-[#f0fdf4] hover:border-[#86efac] hover:shadow-[0_10px_24px_rgba(22,163,74,0.1)]"
+                              : "border-[#dbe4ef] bg-white hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
                           : "border-transparent bg-white opacity-40"
                     }`}
                   >
-                    <span className={`text-sm font-bold ${isSelected ? "text-[#ff8617]" : "text-[#061226]"}`}>
+                    <span className={`text-sm font-bold ${isSelected ? (isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
                       {Number(date.slice(8))}
                     </span>
                     <div className="flex flex-wrap gap-1 mt-1.5">

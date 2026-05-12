@@ -54,7 +54,7 @@ import {
   weekdayLabels
 } from "@/frontend/lib/helpers";
 
-type LessonScope = "month" | "week";
+type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
 type SchedulePanel = "schedule" | "calendar" | "records";
 
@@ -109,7 +109,11 @@ export function ScheduleView({
   const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
   const [lessonScope, setLessonScope] = useState<LessonScope>("month");
   const [lessonMonth, setLessonMonth] = useState(todayIso().slice(0, 7));
+  const [lessonDay, setLessonDay] = useState(todayIso());
+  const [lessonRangeStart, setLessonRangeStart] = useState(todayIso());
+  const [lessonRangeEnd, setLessonRangeEnd] = useState(todayIso());
   const [lessonWeek, setLessonWeek] = useState(isoWeekValue(todayIso()));
+  const [syncRecordsWithCalendarDate, setSyncRecordsWithCalendarDate] = useState(false);
   const [showOnlyMakeup, setShowOnlyMakeup] = useState(false);
   const [schedulePanel, setSchedulePanel] = useState<SchedulePanel>("schedule");
   const [customPresetStart, setCustomPresetStart] = useState("08:00");
@@ -125,12 +129,21 @@ export function ScheduleView({
   const customTimePresets = vault.preferences?.customTimePresets ?? [];
   const selectedCalendarLessons = vault.lessons.filter((lesson) => lesson.date === selectedCalendarDate).sort(sortLessons);
   const normalizedStudentFilter = studentFilter.trim().toLowerCase();
-  const scopeDates = lessonScope === "week" ? datesForIsoWeekValue(lessonWeek) : [];
+  const effectiveLessonScope = syncRecordsWithCalendarDate ? "day" : lessonScope;
+  const effectiveLessonDay = syncRecordsWithCalendarDate ? selectedCalendarDate : lessonDay;
+  const scopeDates = effectiveLessonScope === "week" ? datesForIsoWeekValue(lessonWeek) : [];
   const lessons = vault.lessons
     .filter((lesson) => {
       const course = getCourse(vault, lesson.courseGroupId);
       const campusId = lesson.campusId ?? course?.defaultCampusId;
-      const matchesScope = lessonScope === "month" ? lesson.date.startsWith(lessonMonth) : scopeDates.includes(lesson.date);
+      const matchesScope =
+        effectiveLessonScope === "month"
+          ? lesson.date.startsWith(lessonMonth)
+          : effectiveLessonScope === "day"
+            ? lesson.date === effectiveLessonDay
+            : effectiveLessonScope === "range"
+              ? isOrderedDateRange(lessonRangeStart, lessonRangeEnd) && lesson.date >= lessonRangeStart && lesson.date <= lessonRangeEnd
+              : scopeDates.includes(lesson.date);
       const matchesCampus = campusFilter === "all" || campusId === campusFilter;
       const matchesType = courseTypeFilter === "all" || lesson.type === courseTypeFilter;
       const matchesStudent =
@@ -656,8 +669,8 @@ export function ScheduleView({
       )}
 
       {schedulePanel === "calendar" && (
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr] xl:items-start">
-        <Card className="h-fit overflow-hidden">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr] xl:items-stretch">
+        <Card className="h-full overflow-hidden">
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
@@ -716,6 +729,7 @@ export function ScheduleView({
                 const hasCancelled = dayLessons.some((lesson) => lesson.status === "cancelled");
                 const hasCompleted = dayLessons.some((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
                 const hasPending = dayLessons.some((lesson) => lesson.status === "scheduled" || lesson.status === "makeup_pending");
+                const isAllCompleted = dayLessons.length > 0 && dayLessons.every((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
                 return (
                   <motion.button
                     key={calendarDate}
@@ -730,11 +744,15 @@ export function ScheduleView({
                     disabled={calendarMode === "schedule" && !calendarCourseGroupId}
                     className={`relative flex min-h-[86px] flex-col items-start rounded-[14px] border p-2 text-left transition-all sm:min-h-[96px] sm:p-2.5 ${
                       selectedCalendarDate === calendarDate
-                        ? "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.12)]"
+                        ? isAllCompleted
+                          ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
+                          : "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.12)]"
                         : isCurrentMonth
                           ? hasCancelled
                             ? "border-[#fecaca] bg-[#fff1f2] hover:border-[#fca5a5]"
-                            : "border-[#dbe4ef] bg-white hover:border-[#ff8617] hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
+                            : isAllCompleted
+                              ? "border-[#bbf7d0] bg-[#f0fdf4] hover:border-[#86efac] hover:shadow-[0_10px_24px_rgba(22,163,74,0.1)]"
+                              : "border-[#dbe4ef] bg-white hover:border-[#ff8617] hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
                           : "border-transparent bg-white opacity-40"
                     }`}
                   >
@@ -757,7 +775,7 @@ export function ScheduleView({
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
+        <div className="flex h-full min-h-0 flex-col gap-6">
           <Card className="overflow-hidden">
             <CardHeader>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
@@ -796,7 +814,7 @@ export function ScheduleView({
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden">
+          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <CardHeader>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                 <RotateCcw size={14} /> 补课跟进
@@ -804,7 +822,7 @@ export function ScheduleView({
               <CardTitle>需要补课的学生</CardTitle>
               <CardDescription>按原课日期筛选缺课记录，补课会排到当前日历选中的日期。</CardDescription>
             </CardHeader>
-            <CardContent className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+            <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">原课日期</label>
@@ -852,22 +870,55 @@ export function ScheduleView({
               <Clock size={14} /> 课程记录
             </div>
             <CardTitle>课时列表</CardTitle>
-            <CardDescription>默认只看所选月份或周，不再把所有课时一次性铺开。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 pb-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <label className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
+              <input
+                type="checkbox"
+                checked={syncRecordsWithCalendarDate}
+                onChange={(event) => setSyncRecordsWithCalendarDate(event.target.checked)}
+                className="h-4 w-4 accent-[#ff8617]"
+              />
+              同步日历查看日期（{selectedCalendarDate}）
+            </label>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4 xl:grid-cols-5">
               <div className="space-y-2">
                 <label className="text-sm font-medium">查看范围</label>
-                <Select value={lessonScope} onChange={(event) => setLessonScope(event.target.value as LessonScope)}>
+                <Select value={syncRecordsWithCalendarDate ? "day" : lessonScope} onChange={(event) => setLessonScope(event.target.value as LessonScope)} disabled={syncRecordsWithCalendarDate}>
                   <option value="month">按月查看</option>
+                  <option value="day">按日查看</option>
+                  <option value="range">按日期范围</option>
                   <option value="week">按周查看</option>
                 </Select>
               </div>
-              {lessonScope === "month" ? (
+              {effectiveLessonScope === "month" ? (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">月份</label>
                   <Input type="month" value={lessonMonth} onChange={(event) => setLessonMonth(event.target.value)} className="compact-date-input min-w-0 text-[11px]" />
                 </div>
+              ) : effectiveLessonScope === "day" ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">日期</label>
+                  <Input
+                    type="date"
+                    value={effectiveLessonDay}
+                    onChange={(event) => setLessonDay(event.target.value)}
+                    disabled={syncRecordsWithCalendarDate}
+                    className="compact-date-input min-w-0 text-[11px]"
+                  />
+                </div>
+              ) : effectiveLessonScope === "range" ? (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">开始日期</label>
+                    <Input type="date" value={lessonRangeStart} onChange={(event) => setLessonRangeStart(event.target.value)} className="compact-date-input min-w-0 text-[11px]" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">结束日期</label>
+                    <Input type="date" value={lessonRangeEnd} min={lessonRangeStart} onChange={(event) => setLessonRangeEnd(event.target.value)} className={!isOrderedDateRange(lessonRangeStart, lessonRangeEnd) ? "compact-date-input min-w-0 border-[#fca5a5] bg-[#fff1f2] text-[11px]" : "compact-date-input min-w-0 text-[11px]"} />
+                  </div>
+                </>
               ) : (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">周</label>
