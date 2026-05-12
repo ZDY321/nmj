@@ -30,6 +30,7 @@ import {
   lessonStatusLabels,
   lessonStatusVariant,
   sortLessons,
+  sortCampusesForProfile,
   studentNames
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
@@ -61,6 +62,7 @@ export function SalaryView({
   const [detailCampusFilter, setDetailCampusFilter] = useState("all");
   const [hoveredTrendMonth, setHoveredTrendMonth] = useState<string | null>(null);
   const { confirm, dialog } = useConfirmDialog();
+  const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const year = selectedMonth.slice(0, 4);
   const breakdown = salaryBreakdown(vault, selectedMonth);
   const summary = attendanceSummary(vault, selectedMonth);
@@ -119,7 +121,7 @@ export function SalaryView({
     <div className="space-y-6">
       {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="基础工资" value={formatMoney(breakdown.baseSalary)} hint="月固定项" variant={1} index={0} showSparkline={false} />
+        <MetricCard label="基本工资" value={formatMoney(breakdown.baseSalary)} hint="月固定项" variant={1} index={0} showSparkline={false} />
         <MetricCard label="一对一" value={formatMoney(breakdown.oneOnOne)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
         <MetricCard label="班课" value={formatMoney(breakdown.classLessons)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
         <MetricCard label="全日制" value={formatMoney(breakdown.fullTime)} hint="已完成课程" variant={4} index={3} showSparkline={false} />
@@ -133,26 +135,14 @@ export function SalaryView({
               <Banknote size={14} /> 工资设置
             </div>
             <CardTitle>工资配置</CardTitle>
-            <CardDescription>基础工资会参与月工资合计</CardDescription>
+            <CardDescription>基本工资、课时费、补贴扣款和义务课时扣费会共同进入月工资合计。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">基础工资</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
-                <Input
-                  type="number"
-                  value={vault.profile.baseSalary}
-                  onChange={(e) => onBaseSalaryChange(Number(e.target.value))}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
             <div className="space-y-3">
               <p className="text-sm font-medium">收入明细</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {[
+                  { label: "基本工资", value: breakdown.baseSalary, icon: Banknote, color: "text-[#061226] bg-[#eef0ff]", editable: true },
                   { label: "一对一", value: breakdown.oneOnOne, icon: Users, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
                   { label: "全日制", value: breakdown.fullTime, icon: CalendarDays, color: "text-[#5161d6] bg-[#eef0ff]" },
@@ -171,9 +161,25 @@ export function SalaryView({
                     </div>
                     <div className="min-w-0 flex-1">
                       <span className="block text-xs text-[#64748b]">{item.label}</span>
-                      <span className={`text-sm font-bold ${"danger" in item && item.danger ? "text-[#b91c1c]" : "text-[#061226]"}`}>
-                        {formatMoney(item.value)}
-                      </span>
+                      {"editable" in item && item.editable ? (
+                        <div className="relative mt-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-extrabold text-[#64748b]">¥</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={vault.profile.baseSalary}
+                            onChange={(event) => {
+                              const value = Number(event.target.value);
+                              onBaseSalaryChange(Number.isFinite(value) ? Math.max(value, 0) : 0);
+                            }}
+                            className="h-9 bg-white pl-8 text-sm font-bold"
+                          />
+                        </div>
+                      ) : (
+                        <span className={`text-sm font-bold ${"danger" in item && item.danger ? "text-[#b91c1c]" : "text-[#061226]"}`}>
+                          {formatMoney(item.value)}
+                        </span>
+                      )}
                     </div>
                   </motion.div>
                 ))}
@@ -260,21 +266,15 @@ export function SalaryView({
                 <BarChart3 size={14} /> 年度变化
               </div>
               <CardTitle className="text-xl">按月收入趋势</CardTitle>
-              <CardDescription className="mt-2">包含基础工资、已完成课时费、补贴扣款和义务课时扣费</CardDescription>
+              <CardDescription className="mt-2">包含基本工资、已完成课时费、补贴扣款和义务课时扣费</CardDescription>
             </div>
             <div className="rounded-[10px] border border-[#dbe4ef] px-4 py-2 text-sm font-bold text-[#25324a]">
               {year}
             </div>
           </CardHeader>
           <CardContent>
-            <div className="soft-grid rounded-[12px] px-3 pb-3 pt-3">
+            <div className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 pb-3 pt-3">
               <svg viewBox="0 0 760 230" className="h-[260px] w-full overflow-visible">
-                <defs>
-                  <linearGradient id="salaryFill" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#1557c2" stopOpacity="0.22" />
-                    <stop offset="100%" stopColor="#1557c2" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
                 {(() => {
                   const plotLeft = 84;
                   const plotRight = 744;
@@ -287,7 +287,6 @@ export function SalaryView({
                     return { x, y, month: item.month, total: item.total };
                   });
                   const line = points.map((point) => `${point.x},${point.y}`).join(" ");
-                  const area = points.length ? `${points[0].x},${plotBottom} ${line} ${points.at(-1)?.x ?? plotRight},${plotBottom}` : "";
                   const hoveredPoint = points.find((point) => point.month === hoveredTrendMonth);
                   const tooltipWidth = 136;
                   const tooltipHeight = 42;
@@ -306,7 +305,6 @@ export function SalaryView({
                           </g>
                         );
                       })}
-                      {area && <polygon points={area} fill="url(#salaryFill)" />}
                       {line && <polyline points={line} fill="none" stroke="#1557c2" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}
                       {points.map((point) => (
                         <g
@@ -326,9 +324,9 @@ export function SalaryView({
                             cx={point.x}
                             cy={point.y}
                             r="7"
-                            fill={selectedMonth === point.month ? "#ff8617" : "#fff"}
-                            stroke={selectedMonth === point.month ? "#ff8617" : "#1557c2"}
-                            strokeWidth="5"
+                            fill="#fff"
+                            stroke={selectedMonth === point.month ? "#061226" : "#1557c2"}
+                            strokeWidth={selectedMonth === point.month ? "4" : "3"}
                           >
                             <title>{`${point.month}：${formatMoney(point.total)}`}</title>
                           </circle>
@@ -371,7 +369,9 @@ export function SalaryView({
                       key={item.month}
                       type="button"
                       onClick={() => setSelectedMonth(item.month)}
-                      className={`rounded-[6px] py-0.5 ${selectedMonth === item.month ? "bg-[#ff8617] text-white" : ""}`}
+                      className={`rounded-[6px] py-0.5 transition-colors ${
+                        selectedMonth === item.month ? "bg-white text-[#1557c2] ring-1 ring-[#bfdbfe]" : "hover:bg-white"
+                      }`}
                     >
                       {monthNames[monthIndex]}
                     </button>
@@ -386,20 +386,22 @@ export function SalaryView({
                   <div className="mt-1 text-xs font-semibold text-[#64748b]">仅显示已发生或当前月份，避免未来月份干扰判断。</div>
                 </div>
               </div>
-              <div className="soft-grid flex h-[220px] items-end gap-2 rounded-[12px] px-3 pb-8 pt-6 sm:gap-3 sm:px-4">
+              <div className="flex h-[220px] items-end gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 pb-8 pt-6 sm:gap-3 sm:px-4">
                 {trend.map((item, index) => (
                   <button
                     key={item.month}
                     type="button"
                     onClick={() => setSelectedMonth(item.month)}
-                    className={`flex h-full flex-1 flex-col justify-end gap-2 rounded-[8px] ${selectedMonth === item.month ? "bg-[#fff7ed]" : ""}`}
+                    className={`flex h-full flex-1 flex-col justify-end gap-2 rounded-[8px] transition-colors ${
+                      selectedMonth === item.month ? "ring-1 ring-[#bfdbfe]" : "hover:bg-white/70"
+                    }`}
                   >
                     <span className="text-center text-xs font-extrabold text-[#25324a]">{item.count}</span>
                     <motion.div
                       initial={{ height: 0 }}
                       animate={{ height: `${Math.max((item.count / maxCount) * 150, item.count ? 24 : 8)}px` }}
                       transition={{ delay: index * 0.035, type: "spring", stiffness: 110, damping: 18 }}
-                      className="blue-gradient mx-auto w-full max-w-[28px] rounded-t-[5px] shadow-[0_10px_18px_rgba(21,87,194,0.18)]"
+                      className="blue-gradient mx-auto w-full max-w-[28px] rounded-t-[5px]"
                       title={`${item.month}: ${item.count} 节`}
                     />
                     <span className="text-center text-[11px] font-medium text-[#64748b]">{Number(item.month.slice(5))}月</span>
@@ -469,7 +471,7 @@ export function SalaryView({
               <label className="text-sm font-medium">校区筛选</label>
               <Select value={detailCampusFilter} onChange={(event) => setDetailCampusFilter(event.target.value)}>
                 <option value="all">全部校区</option>
-                {vault.campuses.map((campus) => (
+                {campusOptions.map((campus) => (
                   <option key={campus.id} value={campus.id}>{campus.name}</option>
                 ))}
               </Select>

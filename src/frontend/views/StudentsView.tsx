@@ -11,7 +11,7 @@ import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, Student, S
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
 import { calculateClassHeadcountFee, defaultClassFeeTiers, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
-import { campusName, courseTypeLabels, formatMoney, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseTypeLabels, formatMoney, sortCampusesForProfile, studentNames } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
@@ -50,6 +50,8 @@ export function StudentsView({
   onDeleteCourse: (courseId: string) => void;
   onTransferStudentCourse: (transition: StudentCourseTransition) => void;
 }) {
+  const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
+  const preferredCampusId = campusOptions[0]?.id ?? "";
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
   const [campusNoteInput, setCampusNoteInput] = useState("");
@@ -58,12 +60,12 @@ export function StudentsView({
   const [customGradeInput, setCustomGradeInput] = useState("");
   const [studentSchoolInput, setStudentSchoolInput] = useState("");
   const [studentTemporaryTrialInput, setStudentTemporaryTrialInput] = useState(false);
-  const [studentCampusInput, setStudentCampusInput] = useState(vault.campuses[0]?.id ?? "");
+  const [studentCampusInput, setStudentCampusInput] = useState(preferredCampusId);
   const [studentNoteInput, setStudentNoteInput] = useState("");
   const [courseNameInput, setCourseNameInput] = useState("");
   const [courseType, setCourseType] = useState<CourseType>("one_on_one");
   const [courseSubjectInput, setCourseSubjectInput] = useState("");
-  const [courseCampusInput, setCourseCampusInput] = useState(vault.campuses[0]?.id ?? "");
+  const [courseCampusInput, setCourseCampusInput] = useState(preferredCampusId);
   const [courseStatusInput, setCourseStatusInput] = useState<CourseGroup["status"]>("active");
   const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
   const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => defaultFeeRule("one_on_one"));
@@ -93,7 +95,7 @@ export function StudentsView({
   const [transferTargetCourseId, setTransferTargetCourseId] = useState("");
   const [transferSubjectInput, setTransferSubjectInput] = useState("");
   const [transferCourseNameInput, setTransferCourseNameInput] = useState("");
-  const [transferCampusInput, setTransferCampusInput] = useState(vault.campuses[0]?.id ?? "");
+  const [transferCampusInput, setTransferCampusInput] = useState(preferredCampusId);
   const [transferEndExisting, setTransferEndExisting] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
   const { confirm, dialog } = useConfirmDialog();
@@ -181,10 +183,10 @@ export function StudentsView({
       )
     : [];
   const transferTargetCourseIds = transferTargetCourses.map((course) => course.id).join("|");
-  const campusOptionIds = vault.campuses.map((campus) => campus.id).join("|");
+  const campusOptionIds = [vault.profile.homeCampusId ?? "", ...vault.campuses.map((campus) => campus.id)].join("|");
 
   useEffect(() => {
-    const fallbackCampusId = vault.campuses[0]?.id ?? "";
+    const fallbackCampusId = preferredCampusId;
     setStudentCampusInput((current) =>
       current && vault.campuses.some((campus) => campus.id === current) ? current : fallbackCampusId
     );
@@ -200,8 +202,7 @@ export function StudentsView({
   }, [vault.students]);
 
   useEffect(() => {
-    const preferredCampusId = transferStudent?.defaultCampusId || vault.campuses[0]?.id || "";
-    setTransferCampusInput(preferredCampusId);
+    setTransferCampusInput(transferStudent?.defaultCampusId || preferredCampusId);
   }, [transferStudentId, campusOptionIds]);
 
   useEffect(() => {
@@ -234,7 +235,7 @@ export function StudentsView({
       grade: resolvedGrade || undefined,
       school: studentSchoolInput.trim() || undefined,
       temporaryTrial: studentTemporaryTrialInput,
-      defaultCampusId: studentCampusInput || vault.campuses[0]?.id,
+      defaultCampusId: studentCampusInput || preferredCampusId,
       note: studentNoteInput.trim() || undefined,
       status: "active"
     });
@@ -263,7 +264,7 @@ export function StudentsView({
       name: resolvedName,
       type: courseType,
       subject: courseSubjectInput.trim() || "未设置",
-      defaultCampusId: courseCampusInput || firstCourseStudentCampus(normalizedStudentIds) || vault.campuses[0]?.id,
+      defaultCampusId: courseCampusInput || firstCourseStudentCampus(normalizedStudentIds) || preferredCampusId,
       studentIds: normalizedStudentIds,
       feeRule,
       status: courseStatusInput
@@ -271,7 +272,7 @@ export function StudentsView({
     setCourseNameInput("");
     setCourseSubjectInput("");
     setCourseStudentIds([]);
-    setCourseCampusInput(vault.campuses[0]?.id ?? "");
+    setCourseCampusInput(preferredCampusId);
     setCourseStatusInput("active");
     setCourseFeeRule(defaultFeeRule(courseType));
     setNewCourseStudentSearch("");
@@ -303,7 +304,7 @@ export function StudentsView({
       name: nextCourseName,
       type: transferCourseType,
       subject: transferSubject,
-      defaultCampusId: transferCampusInput || transferStudent.defaultCampusId || vault.campuses[0]?.id,
+      defaultCampusId: transferCampusInput || transferStudent.defaultCampusId || preferredCampusId,
       studentIds: [transferStudent.id],
       feeRule: defaultFeeRule(transferCourseType),
       status: "active"
@@ -678,7 +679,7 @@ export function StudentsView({
                   <label className="text-sm font-medium">所在校区</label>
                   <Select value={vault.profile.homeCampusId ?? ""} onChange={(event) => updateHomeCampus(event.target.value)}>
                     <option value="">未设置</option>
-                    {vault.campuses.map((campus) => (
+                    {campusOptions.map((campus) => (
                       <option key={campus.id} value={campus.id}>{campus.name}</option>
                     ))}
                   </Select>
@@ -687,7 +688,7 @@ export function StudentsView({
                   <label className="text-sm font-medium">义务课时扣费校区</label>
                   <Select value={vault.profile.obligationCampusId ?? ""} onChange={(event) => updateObligationCampus(event.target.value)}>
                     <option value="">跟随所在校区</option>
-                    {vault.campuses.map((campus) => (
+                    {campusOptions.map((campus) => (
                       <option key={campus.id} value={campus.id}>{campus.name}</option>
                     ))}
                   </Select>
@@ -751,8 +752,20 @@ export function StudentsView({
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">联系方式</label>
-                  <Input value={vault.profile.phone ?? ""} onChange={(event) => updateProfile({ phone: event.target.value })} placeholder="手机号 / 微信" />
+                  <label className="text-sm font-medium">基本工资</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={vault.profile.baseSalary}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        updateProfile({ baseSalary: Number.isFinite(value) ? Math.max(value, 0) : 0 });
+                      }}
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2 lg:col-span-3">
                   <label className="text-sm font-medium">个人备注</label>
@@ -914,7 +927,7 @@ export function StudentsView({
                       <label className="text-sm font-medium">默认校区</label>
                       <Select value={transferCampusInput} onChange={(event) => setTransferCampusInput(event.target.value)}>
                         <option value="">未设置校区</option>
-                        {vault.campuses.map((campus) => (
+                        {campusOptions.map((campus) => (
                           <option key={campus.id} value={campus.id}>{campus.name}</option>
                         ))}
                       </Select>
@@ -1008,7 +1021,7 @@ export function StudentsView({
             </form>
           </CardHeader>
           <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
-            {vault.campuses.map((campus) => {
+            {campusOptions.map((campus) => {
               const isEditing = editingCampus?.id === campus.id;
               const used = campusInUse(campus.id);
               return (
@@ -1149,7 +1162,7 @@ export function StudentsView({
               />
               <Select value={studentCampusInput} onChange={(e) => setStudentCampusInput(e.target.value)}>
                 <option value="">未设置校区</option>
-                {vault.campuses.map((campus) => (
+                {campusOptions.map((campus) => (
                   <option key={campus.id} value={campus.id}>{campus.name}</option>
                 ))}
               </Select>
@@ -1185,7 +1198,7 @@ export function StudentsView({
               </Select>
               <Select value={studentCampusFilter} onChange={(event) => setStudentCampusFilter(event.target.value)} className="h-10">
                 <option value="all">全部校区</option>
-                {vault.campuses.map((campus) => (
+                {campusOptions.map((campus) => (
                   <option key={campus.id} value={campus.id}>{campus.name}</option>
                 ))}
               </Select>
@@ -1246,7 +1259,7 @@ export function StudentsView({
                         onChange={(event) => setEditingStudent({ ...editingStudent, defaultCampusId: event.target.value || undefined })}
                       >
                         <option value="">未设置校区</option>
-                        {vault.campuses.map((campus) => (
+                        {campusOptions.map((campus) => (
                           <option key={campus.id} value={campus.id}>{campus.name}</option>
                         ))}
                       </Select>
@@ -1401,7 +1414,7 @@ export function StudentsView({
                 </Select>
                 <Select value={courseCampusInput} onChange={(event) => setCourseCampusInput(event.target.value)}>
                   <option value="">未设置校区</option>
-                  {vault.campuses.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <option key={campus.id} value={campus.id}>{campus.name}</option>
                   ))}
                 </Select>
@@ -1614,7 +1627,7 @@ export function StudentsView({
               </Select>
               <Select value={courseCampusFilter} onChange={(event) => setCourseCampusFilter(event.target.value)} className="h-10">
                 <option value="all">全部校区</option>
-                {vault.campuses.map((campus) => (
+                {campusOptions.map((campus) => (
                   <option key={campus.id} value={campus.id}>{campus.name}</option>
                 ))}
               </Select>
@@ -1684,7 +1697,7 @@ export function StudentsView({
                           onChange={(event) => updateEditingCourse({ defaultCampusId: event.target.value || undefined })}
                         >
                           <option value="">未设置校区</option>
-                          {vault.campuses.map((campus) => (
+                          {campusOptions.map((campus) => (
                             <option key={campus.id} value={campus.id}>{campus.name}</option>
                           ))}
                         </Select>
@@ -1804,7 +1817,7 @@ export function StudentsView({
                             </Select>
                             <Select value={courseStudentCampusFilter} onChange={(event) => setCourseStudentCampusFilter(event.target.value)} className="h-10">
                               <option value="all">全部校区</option>
-                              {vault.campuses.map((campus) => (
+                              {campusOptions.map((campus) => (
                                 <option key={campus.id} value={campus.id}>{campus.name}</option>
                               ))}
                             </Select>

@@ -1,6 +1,5 @@
 import {
   CalendarDays,
-  ChevronRight,
   GraduationCap,
   ShieldCheck,
   WalletCards
@@ -43,8 +42,8 @@ export function OnboardingGuide({
     {
       key: "profile",
       title: "建立校区和个人档案",
-      description: "先录入常用校区、基础工资、义务课时规则和联系方式。",
-      detail: "这些信息会被后续课程、课时费、工资核对自动引用，建议先把校区和基础工资填好。",
+      description: "先录入常用校区、基本工资和义务课时规则。",
+      detail: "这些信息会被后续课程、课时费、工资核对自动引用，建议先把校区和基本工资填好。",
       view: "students",
       button: "去档案信息"
     },
@@ -92,11 +91,6 @@ export function OnboardingGuide({
   });
 
   const completed = steps.filter((step) => step.done).length;
-  const lastDoneIndex = steps.reduce((lastIndex, step, index) => (step.done ? index : lastIndex), -1);
-  const startStep =
-    steps.slice(lastDoneIndex + 1).find((step) => !step.done) ??
-    steps.find((step) => !step.done) ??
-    steps[0];
 
   return (
     <div className="space-y-6">
@@ -131,9 +125,6 @@ export function OnboardingGuide({
                 </div>
               </div>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <Button type="button" onClick={() => onOpenStep(startStep.key, startStep.view)} className="h-12 rounded-[14px]">
-                  开始配置 <ChevronRight size={16} />
-                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -152,9 +143,15 @@ export function OnboardingGuide({
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="mb-2 flex items-center gap-2">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-extrabold text-[#1557c2] ring-1 ring-[#dbe4ef]">
+                          <button
+                            type="button"
+                            onClick={() => onOpenStep(step.key, step.view)}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-extrabold text-[#1557c2] ring-1 ring-[#dbe4ef] transition-colors hover:bg-[#eaf2ff]"
+                            aria-label={`进入第 ${index + 1} 步：${step.title}`}
+                            title={step.button}
+                          >
                             {index + 1}
-                          </span>
+                          </button>
                           <Badge variant={step.done ? "sage" : "secondary"}>
                             {step.dataDone ? "已准备" : step.visited ? "已查看" : "建议完成"}
                           </Badge>

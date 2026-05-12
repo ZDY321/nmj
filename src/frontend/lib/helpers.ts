@@ -184,6 +184,22 @@ export function findCampus(vault: TeacherVault, campusId?: string): Campus | und
   return vault.campuses.find((campus) => campus.id === campusId);
 }
 
+const campusNameCollator = new Intl.Collator("zh-Hans-CN-u-co-pinyin", {
+  numeric: true,
+  sensitivity: "base"
+});
+
+export function sortCampusesForProfile(campuses: Campus[], homeCampusId?: string): Campus[] {
+  return [...campuses].sort((a, b) => {
+    if (homeCampusId) {
+      if (a.id === homeCampusId && b.id !== homeCampusId) return -1;
+      if (b.id === homeCampusId && a.id !== homeCampusId) return 1;
+    }
+    const nameOrder = campusNameCollator.compare(a.name, b.name);
+    return nameOrder || a.id.localeCompare(b.id);
+  });
+}
+
 export function findStudent(vault: TeacherVault, studentId: string): Student | undefined {
   return vault.students.find((student) => student.id === studentId);
 }

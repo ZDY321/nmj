@@ -16,6 +16,7 @@ import {
   lessonStatusSurfaceClass,
   lessonStatusVariant,
   sortLessons,
+  sortCampusesForProfile,
   studentNames
 } from "@/frontend/lib/helpers";
 
@@ -35,11 +36,16 @@ export function PayrollReviewView({
   vault: TeacherVault;
   onOpenLessonInCalendar?: (lesson: Lesson) => void;
 }) {
+  const campusOptions = useMemo(
+    () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
+    [vault.campuses, vault.profile.homeCampusId]
+  );
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
-  const [campusFilter, setCampusFilter] = useState(vault.campuses[0]?.id ?? "all");
+  const [campusFilter, setCampusFilter] = useState(campusOptions[0]?.id ?? "all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [gradeFilter, setGradeFilter] = useState("all");
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
+  const effectiveObligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId;
 
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
   const filteredLessons = monthLessons
@@ -61,7 +67,7 @@ export function PayrollReviewView({
     if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;
     return sum + (lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime));
   }, 0);
-  const campusDeduction = campusFilter === "all" || campusFilter === vault.profile.obligationCampusId ? currentCampusObligation.amount : 0;
+  const campusDeduction = campusFilter === "all" || campusFilter === effectiveObligationCampusId ? currentCampusObligation.amount : 0;
   const campusNet = campusLessonFee - campusDeduction;
 
   const lessonCampusAmounts = useMemo<Record<OverviewCampusKey, CampusAmountDetail[]>>(() => {
@@ -109,14 +115,14 @@ export function PayrollReviewView({
   }, [monthLessons, vault]);
 
   const campusSummaries = useMemo(() => {
-    return vault.campuses.map((campus) => {
+    return campusOptions.map((campus) => {
       const lessons = monthLessons.filter((lesson) => (lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId) === campus.id);
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
       const hours = lessons.reduce((sum, lesson) => {
         if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;
         return sum + (lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime));
       }, 0);
-      const obligation = campus.id === vault.profile.obligationCampusId ? obligationSummary(vault, selectedMonth, campus.id).amount : 0;
+      const obligation = campus.id === effectiveObligationCampusId ? obligationSummary(vault, selectedMonth, campus.id).amount : 0;
       return {
         campus,
         lessons,
@@ -126,7 +132,7 @@ export function PayrollReviewView({
         net: amount - obligation
       };
     });
-  }, [monthLessons, selectedMonth, vault]);
+  }, [campusOptions, effectiveObligationCampusId, monthLessons, selectedMonth, vault]);
 
   const typeCounts = filteredLessons.reduce<Record<CourseType, number>>(
     (summary, lesson) => {
@@ -158,7 +164,7 @@ export function PayrollReviewView({
               <label className="text-sm font-medium">校区</label>
               <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
                 <option value="all">全部校区</option>
-                {vault.campuses.map((campus) => (
+                {campusOptions.map((campus) => (
                   <option key={campus.id} value={campus.id}>{campus.name}</option>
                 ))}
               </Select>
@@ -265,12 +271,12 @@ export function PayrollReviewView({
               <BookOpen size={14} /> 本月总和
             </div>
             <CardTitle>工资总览</CardTitle>
-            <CardDescription>按基础工资、课时费、补贴扣款和义务课时扣费合并，课程明细金额单独核对。</CardDescription>
+            <CardDescription>按基本工资、课时费、补贴扣款和义务课时扣费合并，课程明细金额单独核对。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "基础工资", value: breakdown.baseSalary },
+                { label: "基本工资", value: breakdown.baseSalary },
                 { label: "一对一", value: breakdown.oneOnOne, details: lessonCampusAmounts.oneOnOne },
                 { label: "班课", value: breakdown.classLessons, details: lessonCampusAmounts.classLessons },
                 { label: "全日制", value: breakdown.fullTime, details: lessonCampusAmounts.fullTime },

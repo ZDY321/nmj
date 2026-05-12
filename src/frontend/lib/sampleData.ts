@@ -47,7 +47,6 @@ export function createSampleVault(): TeacherVault {
       currency: "CNY",
       homeCampusId: "campus_main",
       obligationCampusId: "campus_main",
-      obligationCourseGroupId: "course_class_math",
       obligationDeductionMode: "auto_gap",
       monthlyObligationHours: 8,
       obligationHourlyDeduction: 80,
