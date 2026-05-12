@@ -6,10 +6,14 @@ import {
   Calendar,
   GraduationCap,
   LogOut,
-  Menu
+  Menu,
+  MessageSquare,
+  Send
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { AdminView } from "@/frontend/views/AdminView";
@@ -21,7 +25,7 @@ import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
 import { currentAppHour, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
-import { cancelOwnDeletion } from "@/frontend/lib/cloud";
+import { cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   cloneVault,
   type ViewKey,
@@ -72,6 +76,11 @@ export function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackTitle, setFeedbackTitle] = useState("");
+  const [feedbackContent, setFeedbackContent] = useState("");
+  const [feedbackState, setFeedbackState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [feedbackError, setFeedbackError] = useState("");
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedDate, setSelectedDate] = useState(todayIso());
@@ -437,6 +446,26 @@ export function App() {
     setNoticeModalOpen(false);
   }
 
+  async function sendFeedback() {
+    const content = feedbackContent.trim();
+    if (!content || !token) return;
+    setFeedbackState("sending");
+    setFeedbackError("");
+    try {
+      await submitFeedback(token, feedbackTitle.trim(), content);
+      setFeedbackState("sent");
+      setFeedbackTitle("");
+      setFeedbackContent("");
+      window.setTimeout(() => {
+        setFeedbackModalOpen(false);
+        setFeedbackState("idle");
+      }, 900);
+    } catch (error) {
+      setFeedbackState("error");
+      setFeedbackError(error instanceof Error ? error.message : "反馈发送失败。");
+    }
+  }
+
   async function cancelDeletionRequest() {
     if (!token) return;
     await cancelOwnDeletion(token);
@@ -574,6 +603,20 @@ export function App() {
                 )}
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setFeedbackModalOpen(true);
+                  setFeedbackState("idle");
+                  setFeedbackError("");
+                }}
+                className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors hover:bg-[#f8fbff]"
+                aria-label="发送功能反馈"
+                title="功能反馈"
+              >
+                <MessageSquare size={21} />
+              </button>
+
               <label className="flex h-[58px] min-w-0 items-center gap-3 rounded-[16px] border border-[#dbe4ef] bg-white px-4 shadow-[0_12px_28px_rgba(15,35,66,0.08)]">
                 <Calendar size={20} className="shrink-0 text-[#25324a]" />
                 <span className="hidden truncate text-sm font-bold text-[#25324a] sm:block">{selectedDateLabel}</span>
@@ -665,6 +708,86 @@ export function App() {
                     </Button>
                     <Button onClick={acknowledgeNotice}>
                       已阅读并确认
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {feedbackModalOpen && (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/40 p-4 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                className="w-full max-w-[560px] overflow-hidden rounded-[22px] border border-[#dbe4ef] bg-white shadow-[0_30px_80px_rgba(6,18,38,0.24)]"
+              >
+                <div className="flex items-start gap-4 border-b border-[#e8eef6] p-6">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff] text-[#1557c2]">
+                    <MessageSquare size={22} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold uppercase text-[#1557c2]">功能反馈</p>
+                    <h2 className="mt-1 text-2xl font-extrabold leading-tight text-[#061226]">发送给管理员</h2>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-[#64748b]">
+                      这里只做单向提交，管理员可在后台查看和标注处理进度。
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-4 p-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-[#25324a]">主题</label>
+                    <Input
+                      value={feedbackTitle}
+                      onChange={(event) => setFeedbackTitle(event.target.value)}
+                      placeholder="例如：排课页面希望增加筛选"
+                      maxLength={120}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-[#25324a]">反馈内容</label>
+                    <Textarea
+                      value={feedbackContent}
+                      onChange={(event) => setFeedbackContent(event.target.value)}
+                      placeholder="写下功能改进、使用问题或需要优化的地方..."
+                      className="min-h-[150px]"
+                      maxLength={4000}
+                    />
+                    <div className="text-right text-xs font-semibold text-[#94a3b8]">
+                      {feedbackContent.length} / 4000
+                    </div>
+                  </div>
+                  {feedbackState === "sent" && (
+                    <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-bold text-[#166534]">
+                      已发送给管理员。
+                    </div>
+                  )}
+                  {feedbackError && (
+                    <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
+                      {feedbackError}
+                    </div>
+                  )}
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <Button
+                      variant="outline"
+                      disabled={feedbackState === "sending"}
+                      onClick={() => setFeedbackModalOpen(false)}
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      disabled={!feedbackContent.trim() || feedbackState === "sending"}
+                      onClick={sendFeedback}
+                    >
+                      <Send size={15} /> {feedbackState === "sending" ? "发送中" : "发送反馈"}
                     </Button>
                   </div>
                 </div>

@@ -1,22 +1,25 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bell, Database, KeyRound, Lock, RefreshCw, Save, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Bell, Database, KeyRound, Lock, MessageSquare, RefreshCw, Save, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { AdminSummary, AdminUser, Notice, TeacherVault, UserStatus } from "@/shared/types";
+import type { AdminSummary, AdminUser, FeedbackStatus, Notice, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import {
   cancelUserDeletion,
   confirmUserDeletion,
+  getAdminFeedback,
   getAdminSummary,
   getAdminUsers,
   lookupPasswordSalt,
   requestUserDeletion,
   runDueDeletions,
+  updateAdminFeedback,
   updateAdminNotice,
   updateRegistrationEnabled
 } from "@/frontend/lib/cloud";
@@ -30,6 +33,20 @@ const statusLabels: Record<UserStatus, string> = {
   delete_scheduled: "等待自动删除",
   deleted: "已删除"
 };
+
+const feedbackStatusLabels: Record<FeedbackStatus, string> = {
+  unread: "未读",
+  read: "已读",
+  in_progress: "处理中",
+  completed: "已完成"
+};
+
+function feedbackStatusVariant(status: FeedbackStatus): "sage" | "amber" | "secondary" | "sky" {
+  if (status === "completed") return "sage";
+  if (status === "in_progress") return "amber";
+  if (status === "read") return "sky";
+  return "secondary";
+}
 
 function statusVariant(status: UserStatus): "sage" | "amber" | "destructive" | "secondary" {
   if (status === "active") return "sage";
@@ -55,6 +72,9 @@ export function AdminView({
   const [content, setContent] = useState(vault.notice.content);
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [feedbackItems, setFeedbackItems] = useState<UserFeedback[]>([]);
+  const [feedbackFilter, setFeedbackFilter] = useState<"all" | FeedbackStatus>("all");
+  const [feedbackNotes, setFeedbackNotes] = useState<Record<string, string>>({});
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [deleteReasons, setDeleteReasons] = useState<Record<string, string>>({});
   const [deletePasswords, setDeletePasswords] = useState<Record<string, string>>({});
@@ -80,12 +100,17 @@ export function AdminView({
     setBusy(true);
     setMessage("");
     try {
-      const [nextSummary, nextUsers] = await Promise.all([
+      const [nextSummary, nextUsers, nextFeedback] = await Promise.all([
         getAdminSummary(token),
-        getAdminUsers(token)
+        getAdminUsers(token),
+        getAdminFeedback(token)
       ]);
       setSummary(nextSummary);
       setUsers(nextUsers);
+      setFeedbackItems(nextFeedback);
+      setFeedbackNotes(
+        Object.fromEntries(nextFeedback.map((item) => [item.id, item.adminNote ?? ""]))
+      );
       setRegistrationEnabled(nextSummary.registrationEnabled);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "管理员数据加载失败。");
@@ -137,6 +162,20 @@ export function AdminView({
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "用户操作失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setFeedbackStatus(feedback: UserFeedback, status: FeedbackStatus) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const updated = await updateAdminFeedback(token, feedback.id, status, feedbackNotes[feedback.id] ?? "");
+      setFeedbackItems((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setFeedbackNotes((current) => ({ ...current, [updated.id]: updated.adminNote ?? "" }));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "反馈状态更新失败。");
     } finally {
       setBusy(false);
     }
@@ -269,6 +308,8 @@ export function AdminView({
   const activeUsers = summary?.users.active ?? 0;
   const pendingDeletion = summary?.users.pendingDeletion ?? 0;
   const encryptedDocuments = summary?.encryptedDocuments ?? 0;
+  const filteredFeedback = feedbackItems.filter((item) => feedbackFilter === "all" || item.status === feedbackFilter);
+  const unreadFeedback = feedbackItems.filter((item) => item.status === "unread").length;
 
   return (
     <div className="space-y-6">
@@ -365,6 +406,85 @@ export function AdminView({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
+              <MessageSquare size={14} /> 用户反馈
+            </div>
+            <CardTitle>功能改进与优化建议</CardTitle>
+            <CardDescription>用户只能单向发送；这里的处理进度和标注不会返回给用户。</CardDescription>
+          </div>
+          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-[150px_auto] lg:w-auto">
+            <Select value={feedbackFilter} onChange={(event) => setFeedbackFilter(event.target.value as "all" | FeedbackStatus)}>
+              <option value="all">全部反馈</option>
+              <option value="unread">未读</option>
+              <option value="read">已读</option>
+              <option value="in_progress">处理中</option>
+              <option value="completed">已完成</option>
+            </Select>
+            <Badge variant={unreadFeedback ? "amber" : "secondary"} className="justify-center">
+              {unreadFeedback ? `${unreadFeedback} 条未读` : "无未读"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {filteredFeedback.map((item) => (
+            <div key={item.id} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="break-words text-base text-[#061226]">{item.title}</strong>
+                    <Badge variant={feedbackStatusVariant(item.status)}>{feedbackStatusLabels[item.status]}</Badge>
+                  </div>
+                  <div className="mt-2 text-xs font-bold text-[#64748b]">
+                    {item.username} · {formatAppDateTime(item.createdAt)}
+                  </div>
+                  <div className="mt-3 whitespace-pre-wrap rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-sm font-semibold leading-6 text-[#25324a]">
+                    {item.content}
+                  </div>
+                </div>
+                <div className="w-full shrink-0 space-y-2 lg:w-[320px]">
+                  <Select
+                    value={item.status}
+                    onChange={(event) => void setFeedbackStatus(item, event.target.value as FeedbackStatus)}
+                    disabled={busy}
+                  >
+                    <option value="unread">未读</option>
+                    <option value="read">已读</option>
+                    <option value="in_progress">处理中</option>
+                    <option value="completed">已完成</option>
+                  </Select>
+                  <Textarea
+                    value={feedbackNotes[item.id] ?? ""}
+                    onChange={(event) =>
+                      setFeedbackNotes((current) => ({ ...current, [item.id]: event.target.value }))
+                    }
+                    placeholder="管理员内部标注，不会返回给用户"
+                    className="min-h-[88px] bg-white"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void setFeedbackStatus(item, item.status)}
+                    className="w-full"
+                  >
+                    <Save size={14} /> 保存标注
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredFeedback.length === 0 && (
+            <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
+              当前没有用户反馈
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden">
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

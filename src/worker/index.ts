@@ -1,8 +1,10 @@
 import type {
   AdminSummary,
   AdminUser,
+  FeedbackStatus,
   Notice,
   SessionUser,
+  UserFeedback,
   UserDeletionState,
   UserRole,
   UserStatus
@@ -36,6 +38,16 @@ type PublicSettings = {
   registrationEnabled: boolean;
 };
 
+type FeedbackRequest = {
+  title?: unknown;
+  content?: unknown;
+};
+
+type FeedbackUpdateRequest = {
+  status?: unknown;
+  adminNote?: unknown;
+};
+
 type UserRow = {
   id: string;
   username: string;
@@ -61,6 +73,20 @@ type UserRow = {
 type AuthContext = {
   tokenHash: string;
   user: UserRow;
+};
+
+type FeedbackRow = {
+  id: string;
+  user_id: string | null;
+  username: string;
+  title: string;
+  content: string;
+  status: string;
+  admin_note: string | null;
+  created_at: string;
+  updated_at: string;
+  handled_at: string | null;
+  handled_by: string | null;
 };
 
 const jsonHeaders = {
@@ -110,6 +136,10 @@ function isUserStatus(value: string): value is UserStatus {
     value === "delete_scheduled" ||
     value === "deleted"
   );
+}
+
+function isFeedbackStatus(value: string): value is FeedbackStatus {
+  return value === "unread" || value === "read" || value === "in_progress" || value === "completed";
 }
 
 function daysFromNow(days: number): string {
@@ -164,6 +194,22 @@ function adminUser(row: UserRow): AdminUser {
   };
 }
 
+function feedbackFromRow(row: FeedbackRow): UserFeedback {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    username: row.username,
+    title: row.title,
+    content: row.content,
+    status: isFeedbackStatus(row.status) ? row.status : "unread",
+    adminNote: row.admin_note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    handledAt: row.handled_at,
+    handledBy: row.handled_by
+  };
+}
+
 async function readJson<T>(request: Request): Promise<T> {
   return (await request.json()) as T;
 }
@@ -180,7 +226,7 @@ function isMigrationError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return /no such table: user_sessions|no such table: user_deletion_events|no such column: .*delete_|no such column: deleted_at/i.test(
+  return /no such table: user_sessions|no such table: user_deletion_events|no such table: user_feedback|no such column: .*delete_|no such column: deleted_at/i.test(
     error.message
   );
 }
@@ -663,6 +709,107 @@ async function putEncryptedDocument(pathname: string, request: Request, env: Env
   return json({ ok: true, updatedAt });
 }
 
+async function submitFeedback(request: Request, env: Env): Promise<Response> {
+  const context = await requireAuth(request, env);
+  if (context instanceof Response) {
+    return context;
+  }
+
+  const body = await readJson<FeedbackRequest>(request).catch((): FeedbackRequest => ({}));
+  const content = String(body.content ?? "").trim().slice(0, 4000);
+  const title = String(body.title ?? "").trim().slice(0, 120) || "用户反馈";
+
+  if (!content) {
+    return json({ error: "Feedback content required" }, 400);
+  }
+
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO user_feedback (
+      id,
+      user_id,
+      username,
+      title,
+      content,
+      status,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, 'unread', ?, ?)`
+  )
+    .bind(id, context.user.id, context.user.username, title, content, now, now)
+    .run();
+
+  return json({ ok: true, id, createdAt: now }, 201);
+}
+
+async function listFeedback(env: Env): Promise<Response> {
+  const result = await env.DB.prepare(
+    `SELECT
+      id,
+      user_id,
+      username,
+      title,
+      content,
+      status,
+      admin_note,
+      created_at,
+      updated_at,
+      handled_at,
+      handled_by
+     FROM user_feedback
+     ORDER BY created_at DESC
+     LIMIT 200`
+  ).all<FeedbackRow>();
+
+  return json((result.results ?? []).map(feedbackFromRow));
+}
+
+async function updateFeedback(request: Request, env: Env, actor: AuthContext, feedbackId: string): Promise<Response> {
+  const body = await readJson<FeedbackUpdateRequest>(request).catch((): FeedbackUpdateRequest => ({}));
+  const status = typeof body.status === "string" && isFeedbackStatus(body.status) ? body.status : null;
+  if (!status) {
+    return json({ error: "Invalid feedback status" }, 400);
+  }
+
+  const adminNote = typeof body.adminNote === "string" ? body.adminNote.trim().slice(0, 1000) : null;
+  const now = new Date().toISOString();
+  const handledAt = status === "completed" ? now : null;
+
+  await env.DB.prepare(
+    `UPDATE user_feedback SET
+      status = ?,
+      admin_note = ?,
+      updated_at = ?,
+      handled_at = ?,
+      handled_by = ?
+     WHERE id = ?`
+  )
+    .bind(status, adminNote || null, now, handledAt, actor.user.id, feedbackId)
+    .run();
+
+  const updated = await env.DB.prepare(
+    `SELECT
+      id,
+      user_id,
+      username,
+      title,
+      content,
+      status,
+      admin_note,
+      created_at,
+      updated_at,
+      handled_at,
+      handled_by
+     FROM user_feedback
+     WHERE id = ?`
+  )
+    .bind(feedbackId)
+    .first<FeedbackRow>();
+
+  return updated ? json(feedbackFromRow(updated)) : notFound();
+}
+
 async function upsertEncryptedPayload(
   env: Env,
   userId: string,
@@ -933,6 +1080,18 @@ async function handleAdminRequest(request: Request, env: Env): Promise<Response 
     return runDueDeletions(env);
   }
 
+  if (request.method === "GET" && pathname === "/api/admin/feedback") {
+    return listFeedback(env);
+  }
+
+  const feedbackMatch = /^\/api\/admin\/feedback\/([^/]+)$/.exec(pathname);
+  if (feedbackMatch) {
+    if (request.method !== "PATCH") {
+      return notFound();
+    }
+    return updateFeedback(request, env, context, feedbackMatch[1]);
+  }
+
   const deleteMatch = /^\/api\/admin\/users\/([^/]+)\/delete-(request|confirm|cancel)$/.exec(pathname);
   if (deleteMatch) {
     const [, userId, action] = deleteMatch;
@@ -993,6 +1152,10 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
     return selfCancelDeletion(request, env);
   }
 
+  if (request.method === "POST" && pathname === "/api/feedback") {
+    return submitFeedback(request, env);
+  }
+
   if (request.method === "GET" && pathname === "/api/me/vault") {
     return getMyVault(request, env);
   }
@@ -1034,7 +1197,7 @@ export default {
           return json(
             {
               error: "Database migration required",
-              detail: "请先对 D1 执行 migrations/0002_cloud_multi_user.sql，然后再注册或登录。"
+              detail: "请先对 D1 执行最新 migrations SQL，然后再注册或登录。"
             },
             503
           );

@@ -1,5 +1,7 @@
 export type UserRole = "teacher" | "admin";
 
+export type FeedbackStatus = "unread" | "read" | "in_progress" | "completed";
+
 export type UserStatus =
   | "active"
   | "disabled"
@@ -275,6 +277,20 @@ export type AdminSummary = {
   };
   encryptedDocuments: number;
   registrationEnabled: boolean;
+};
+
+export type UserFeedback = {
+  id: string;
+  userId: string | null;
+  username: string;
+  title: string;
+  content: string;
+  status: FeedbackStatus;
+  adminNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  handledAt: string | null;
+  handledBy: string | null;
 };
 
 export type EncryptedBox = {

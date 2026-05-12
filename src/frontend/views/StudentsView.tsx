@@ -74,7 +74,7 @@ export function StudentsView({
   const [transferSubjectInput, setTransferSubjectInput] = useState("");
   const [transferCourseNameInput, setTransferCourseNameInput] = useState("");
   const [transferCampusInput, setTransferCampusInput] = useState(vault.campuses[0]?.id ?? "");
-  const [transferEndExisting, setTransferEndExisting] = useState(true);
+  const [transferEndExisting, setTransferEndExisting] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
   const { confirm, dialog } = useConfirmDialog();
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
@@ -643,7 +643,7 @@ export function StudentsView({
                       onChange={(event) => setTransferEndExisting(event.target.checked)}
                       className="h-4 w-4 accent-[#ff8617]"
                     />
-                    结束同科目旧课程关系
+                    转班后从旧同科目课程中移除该学生
                   </label>
                   <Button type="submit" disabled={!transferStudentId || (transferTargetMode === "existing" && !transferTargetCourseId)}>
                     <Save size={15} /> 保存调整

@@ -196,6 +196,7 @@ database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 ```text
 migrations/0001_initial.sql
 migrations/0002_cloud_multi_user.sql
+migrations/0003_user_feedback.sql
 ```
 
 新数据库按顺序执行：
@@ -203,6 +204,7 @@ migrations/0002_cloud_multi_user.sql
 ```bash
 npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0001_initial.sql
 npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0002_cloud_multi_user.sql
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0003_user_feedback.sql
 ```
 
 这会创建：
@@ -213,6 +215,7 @@ encrypted_documents
 app_settings
 user_sessions
 user_deletion_events
+user_feedback
 ```
 
 同时会写入默认设置：
@@ -228,10 +231,11 @@ registration_enabled = true
 
 如果你把数据库名称改成了别的，命令里的 `teacher_salary_tracker` 也要改成你的数据库名。
 
-如果线上库已经执行过 `0001_initial.sql`，只需要补执行：
+如果线上库已经执行过旧迁移，只需要按缺失的文件继续补执行，例如：
 
 ```bash
 npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0002_cloud_multi_user.sql
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0003_user_feedback.sql
 ```
 
 ## 7. 设置后台 API Secret

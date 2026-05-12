@@ -10,7 +10,7 @@
 - 云端注册、登录和会话
 - 浏览器端加密数据模型
 - D1 密文同步和换设备拉取
-- 管理员真实用户列表、注册开关、系统公告
+- 管理员真实用户列表、注册开关、系统公告、用户反馈处理
 - 删除用户申请、二次确认、撤销、10 天自动删除流程
 - 老师端工作台、今日提醒、排课、学生/校区、工资概览、管理后台 UI
 
@@ -33,7 +33,7 @@ npm run build
 
 1. 在 Cloudflare 创建 D1 数据库。
 2. 把 `wrangler.toml` 里的 `database_id` 替换成真实 ID。
-3. 按顺序执行 `migrations/0001_initial.sql` 和 `migrations/0002_cloud_multi_user.sql`。
+3. 按顺序执行 `migrations/` 目录下的 SQL 迁移文件。
 4. 通过 GitHub 连接 Cloudflare，或本地使用：
 
 ```bash

@@ -1,4 +1,4 @@
-import type { AdminSummary, AdminUser, Notice } from "@/shared/types";
+import type { AdminSummary, AdminUser, FeedbackStatus, Notice, UserFeedback } from "@/shared/types";
 
 export type PublicSettings = {
   registrationEnabled: boolean;
@@ -53,7 +53,9 @@ function translateApiError(error: string): string {
     "Password confirmation required": "请先输入当前管理员密码。",
     "Password confirmation failed": "管理员密码确认失败。",
     "Target password confirmation failed": "被删除账号密码验证失败。",
-    "Database migration required": "数据库还没执行 0002 云端多用户迁移。请先在 D1 执行 migrations/0002_cloud_multi_user.sql。"
+    "Database migration required": "数据库还没执行最新云端迁移。请先在 D1 按顺序执行 migrations 目录下的新 SQL。",
+    "Feedback content required": "请先填写反馈内容。",
+    "Invalid feedback status": "反馈处理状态不正确。"
   };
   return messages[error] ?? error;
 }
@@ -121,6 +123,31 @@ export async function runDueDeletions(token: string): Promise<{ deleted: number 
   return apiRequest<{ deleted: number }>("/api/admin/deletions/run-due", {
     method: "POST",
     token
+  });
+}
+
+export async function submitFeedback(token: string, title: string, content: string): Promise<{ ok: true; id: string; createdAt: string }> {
+  return apiRequest<{ ok: true; id: string; createdAt: string }>("/api/feedback", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ title, content })
+  });
+}
+
+export async function getAdminFeedback(token: string): Promise<UserFeedback[]> {
+  return apiRequest<UserFeedback[]>("/api/admin/feedback", { token });
+}
+
+export async function updateAdminFeedback(
+  token: string,
+  feedbackId: string,
+  status: FeedbackStatus,
+  adminNote: string | null
+): Promise<UserFeedback> {
+  return apiRequest<UserFeedback>(`/api/admin/feedback/${encodeURIComponent(feedbackId)}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ status, adminNote })
   });
 }
 
