@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Building2, ChevronDown, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Building2, ChevronDown, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
-import { calculateClassHeadcountFee, defaultClassFeeTiers, normalizedClassFeeTiers } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, defaultClassFeeTiers, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
 import { campusName, courseTypeLabels, formatMoney, studentNames } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
@@ -21,7 +21,7 @@ const courseTypeOptions: Array<{ value: CourseType; label: string }> = [
   { value: "trial", label: "试听" },
   { value: "full_time", label: "全日制" }
 ];
-type ArchivePanel = "campuses" | "students" | "courses";
+type ArchivePanel = "profile" | "campuses" | "students" | "courses";
 
 export function StudentsView({
   vault,
@@ -71,7 +71,7 @@ export function StudentsView({
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
   const [flashingArchiveItem, setFlashingArchiveItem] = useState<{ panel: ArchivePanel; id: string } | null>(null);
-  const [archivePanel, setArchivePanel] = useState<ArchivePanel>("campuses");
+  const [archivePanel, setArchivePanel] = useState<ArchivePanel>("profile");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
   const [studentCourseTypeFilter, setStudentCourseTypeFilter] = useState<"all" | CourseType>("all");
@@ -148,10 +148,24 @@ export function StudentsView({
   });
   const activeStudents = vault.students.filter((student) => student.status === "active").length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
-  const obligationCampusId = vault.profile.obligationCampusId ?? "";
+  const obligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId ?? "";
   const obligationMode = vault.profile.obligationDeductionMode ?? "auto_gap";
   const isManualObligationMode = obligationMode === "manual";
   const obligationCourses = vault.courseGroups.filter((course) => !obligationCampusId || course.defaultCampusId === obligationCampusId);
+  const obligationMonth = todayIso().slice(0, 7);
+  const obligation = obligationSummary(vault, obligationMonth, obligationCampusId || undefined);
+  const obligationCourseIds = obligationCourses.map((course) => course.id);
+  const orderedObligationCourseIds = Array.from(new Set([
+    ...(vault.profile.obligationCourseGroupId ? [vault.profile.obligationCourseGroupId] : []),
+    ...(vault.profile.obligationCourseOrder ?? []),
+    ...obligationCourseIds
+  ])).filter((id) => obligationCourseIds.includes(id));
+  const orderedObligationCourses = orderedObligationCourseIds
+    .map((courseId) => vault.courseGroups.find((course) => course.id === courseId))
+    .filter(Boolean) as CourseGroup[];
+  const selectedObligationCourseStats = vault.profile.obligationCourseGroupId
+    ? obligation.courseBreakdown.find((item) => item.courseId === vault.profile.obligationCourseGroupId)
+    : undefined;
   const transferStudent = vault.students.find((student) => student.id === transferStudentId);
   const transferCurrentCourses = transferStudent
     ? vault.courseGroups.filter((course) => course.status === "active" && course.studentIds.includes(transferStudent.id))
@@ -450,6 +464,62 @@ export function StudentsView({
     });
   }
 
+  function updateHomeCampus(campusId: string) {
+    const nextCampusId = campusId || undefined;
+    const nextObligationCampusId = vault.profile.obligationCampusId ?? nextCampusId;
+    onUpdateProfile({
+      ...vault.profile,
+      homeCampusId: nextCampusId,
+      obligationCampusId: vault.profile.obligationCampusId,
+      obligationCourseGroupId:
+        vault.profile.obligationCourseGroupId &&
+        vault.courseGroups.some((course) => course.id === vault.profile.obligationCourseGroupId && (!nextObligationCampusId || course.defaultCampusId === nextObligationCampusId))
+          ? vault.profile.obligationCourseGroupId
+          : undefined,
+      obligationCourseOrder: normalizeObligationCourseOrder(vault.profile.obligationCourseOrder ?? [], nextObligationCampusId)
+    });
+  }
+
+  function updateObligationCampus(campusId: string) {
+    const nextCampusId = campusId || undefined;
+    const effectiveNextCampusId = nextCampusId ?? vault.profile.homeCampusId;
+    onUpdateProfile({
+      ...vault.profile,
+      obligationCampusId: nextCampusId,
+      obligationCourseGroupId: undefined,
+      obligationCourseOrder: normalizeObligationCourseOrder([], effectiveNextCampusId)
+    });
+  }
+
+  function updateObligationCourseGroup(courseId: string) {
+    const nextCourseId = courseId || undefined;
+    const nextOrder = nextCourseId
+      ? [nextCourseId, ...orderedObligationCourseIds.filter((id) => id !== nextCourseId)]
+      : orderedObligationCourseIds;
+    updateProfile({
+      obligationCourseGroupId: nextCourseId,
+      obligationCourseOrder: nextOrder
+    });
+  }
+
+  function normalizeObligationCourseOrder(courseIds: string[], campusId = obligationCampusId): string[] {
+    const availableIds = new Set(
+      vault.courseGroups
+        .filter((course) => !campusId || course.defaultCampusId === campusId)
+        .map((course) => course.id)
+    );
+    return Array.from(new Set(courseIds)).filter((courseId) => availableIds.has(courseId));
+  }
+
+  function moveObligationCourse(courseId: string, direction: -1 | 1) {
+    const index = orderedObligationCourseIds.indexOf(courseId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= orderedObligationCourseIds.length) return;
+    const nextOrder = [...orderedObligationCourseIds];
+    [nextOrder[index], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[index]];
+    updateProfile({ obligationCourseOrder: nextOrder });
+  }
+
   function gradeSelectValue(grade?: string): string {
     if (!grade) return "";
     if (grade === "__custom__") return "自定义";
@@ -566,113 +636,10 @@ export function StudentsView({
         })}
       </div>
 
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-            <Settings size={14} /> 个人与义务课时设置
-          </div>
-          <CardTitle>老师个人信息</CardTitle>
-          <CardDescription>校区归属和义务课时扣费会用于月底工资核对。</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">显示姓名</label>
-            <Input value={vault.profile.displayName} onChange={(event) => updateProfile({ displayName: event.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">所在校区</label>
-            <Select value={vault.profile.homeCampusId ?? ""} onChange={(event) => updateProfile({ homeCampusId: event.target.value || undefined })}>
-              <option value="">未设置</option>
-              {vault.campuses.map((campus) => (
-                <option key={campus.id} value={campus.id}>{campus.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">义务课时扣费校区</label>
-            <Select
-              value={vault.profile.obligationCampusId ?? ""}
-              onChange={(event) =>
-                updateProfile({
-                  obligationCampusId: event.target.value || undefined,
-                  obligationCourseGroupId: undefined
-                })
-              }
-            >
-              <option value="">不扣义务课时</option>
-              {vault.campuses.map((campus) => (
-                <option key={campus.id} value={campus.id}>{campus.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">扣费方式</label>
-            <Select
-              value={obligationMode}
-              onChange={(event) => updateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
-            >
-              <option value="auto_gap">按缺少义务小时自动扣</option>
-              <option value="manual">手动填写扣除金额</option>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">对应班级 / 课程</label>
-            <Select
-              value={vault.profile.obligationCourseGroupId ?? ""}
-              onChange={(event) => updateProfile({ obligationCourseGroupId: event.target.value || undefined })}
-            >
-              <option value="">扣费校区全部课程</option>
-              {obligationCourses.map((course) => (
-                <option key={course.id} value={course.id}>{course.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">每月义务小时</label>
-            <Input
-              type="number"
-              value={vault.profile.monthlyObligationHours ?? 0}
-              onChange={(event) => updateProfile({ monthlyObligationHours: Number(event.target.value) })}
-              disabled={isManualObligationMode}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">每小时扣费</label>
-            <Input
-              type="number"
-              value={vault.profile.obligationHourlyDeduction ?? 0}
-              onChange={(event) => updateProfile({ obligationHourlyDeduction: Number(event.target.value) })}
-              disabled={isManualObligationMode}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">手动扣除金额</label>
-            <Input
-              type="number"
-              value={vault.profile.manualObligationDeduction ?? 0}
-              onChange={(event) => updateProfile({ manualObligationDeduction: Number(event.target.value) })}
-              disabled={(vault.profile.obligationDeductionMode ?? "auto_gap") !== "manual"}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">联系方式</label>
-            <Input value={vault.profile.phone ?? ""} onChange={(event) => updateProfile({ phone: event.target.value })} placeholder="手机号 / 微信" />
-          </div>
-          <div className="space-y-2 lg:col-span-3">
-            <label className="text-sm font-medium">个人备注</label>
-            <Textarea
-              value={vault.profile.note ?? ""}
-              onChange={(event) => updateProfile({ note: event.target.value })}
-              placeholder="例如：主要负责中心校区，高中数学方向"
-              className="min-h-[76px]"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1">
+        <div className="grid grid-cols-2 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1 md:grid-cols-4">
           {[
+            { key: "profile" as ArchivePanel, label: "老师个人信息" },
             { key: "campuses" as ArchivePanel, label: "校区列表" },
             { key: "students" as ArchivePanel, label: "学生列表" },
             { key: "courses" as ArchivePanel, label: "课程与班课" }
@@ -692,6 +659,177 @@ export function StudentsView({
         <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
           删除限制：已有学生、课程或历史课时引用的数据不能直接删除，建议将对应的引用数据全部删除或改为暂停状态。
         </div>
+        {archivePanel === "profile" && (
+          <Card className="overflow-hidden">
+            <CardHeader>
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                <Settings size={14} /> 个人与义务课时设置
+              </div>
+              <CardTitle>老师个人信息</CardTitle>
+              <CardDescription>所在校区会作为义务课时扣费的默认校区；扣费顺序按下方课程从上到下执行。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">显示姓名</label>
+                  <Input value={vault.profile.displayName} onChange={(event) => updateProfile({ displayName: event.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">所在校区</label>
+                  <Select value={vault.profile.homeCampusId ?? ""} onChange={(event) => updateHomeCampus(event.target.value)}>
+                    <option value="">未设置</option>
+                    {vault.campuses.map((campus) => (
+                      <option key={campus.id} value={campus.id}>{campus.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">义务课时扣费校区</label>
+                  <Select value={vault.profile.obligationCampusId ?? ""} onChange={(event) => updateObligationCampus(event.target.value)}>
+                    <option value="">跟随所在校区</option>
+                    {vault.campuses.map((campus) => (
+                      <option key={campus.id} value={campus.id}>{campus.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">扣义务课时方式</label>
+                  <Select
+                    value={obligationMode}
+                    onChange={(event) => updateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
+                  >
+                    <option value="auto_gap">按课程顺序扣课时费，不足按小时补扣</option>
+                    <option value="manual">手动填写扣除金额</option>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">优先扣费班级 / 课程</label>
+                  <Select
+                    value={vault.profile.obligationCourseGroupId ?? ""}
+                    onChange={(event) => updateObligationCourseGroup(event.target.value)}
+                    disabled={isManualObligationMode}
+                  >
+                    <option value="">按下方顺序扣本校区全部课程</option>
+                    {obligationCourses.map((course) => (
+                      <option key={course.id} value={course.id}>{course.name}</option>
+                    ))}
+                  </Select>
+                  {selectedObligationCourseStats && (
+                    <div className="text-xs font-semibold text-[#64748b]">
+                      {obligationMonth} 已完成 {selectedObligationCourseStats.lessonCount} 节，{selectedObligationCourseStats.availableHours.toFixed(1)} 小时
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">每月义务小时</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={vault.profile.monthlyObligationHours ?? 0}
+                    onChange={(event) => updateProfile({ monthlyObligationHours: Math.max(Number(event.target.value), 0) })}
+                    disabled={isManualObligationMode}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">每小时补扣费用</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={vault.profile.obligationHourlyDeduction ?? 0}
+                    onChange={(event) => updateProfile({ obligationHourlyDeduction: Math.max(Number(event.target.value), 0) })}
+                    disabled={isManualObligationMode}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">手动扣除金额</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={vault.profile.manualObligationDeduction ?? 0}
+                    onChange={(event) => updateProfile({ manualObligationDeduction: Math.max(Number(event.target.value), 0) })}
+                    disabled={!isManualObligationMode}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">联系方式</label>
+                  <Input value={vault.profile.phone ?? ""} onChange={(event) => updateProfile({ phone: event.target.value })} placeholder="手机号 / 微信" />
+                </div>
+                <div className="space-y-2 lg:col-span-3">
+                  <label className="text-sm font-medium">个人备注</label>
+                  <Textarea
+                    value={vault.profile.note ?? ""}
+                    onChange={(event) => updateProfile({ note: event.target.value })}
+                    placeholder="例如：主要负责中心校区，高中数学方向"
+                    className="min-h-[76px]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 rounded-[16px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-4">
+                {[
+                  { label: "义务目标", value: `${obligation.requiredHours.toFixed(1)} 小时` },
+                  { label: "本月应扣", value: `${obligation.deductedHours.toFixed(1)} 小时` },
+                  { label: "补扣小时", value: `${obligation.fallbackHours.toFixed(1)} 小时` },
+                  { label: "本月扣费", value: formatMoney(obligation.amount) }
+                ].map((item) => (
+                  <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
+                    <div className="text-xs font-bold text-[#64748b]">{item.label}</div>
+                    <div className="mt-1 text-lg font-extrabold text-[#061226]">{item.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {!isManualObligationMode && (
+                <div className="space-y-3 rounded-[16px] border border-[#dbe4ef] bg-white p-3">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-extrabold text-[#061226]">本校区课程扣费顺序</div>
+                      <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                        {campusName(vault, obligationCampusId)} · {obligationMonth}，先扣排在上面的课程；本校区课程不够时，剩余小时按每小时补扣费用计算。
+                      </div>
+                    </div>
+                    <Badge variant="secondary">{orderedObligationCourses.length} 个课程</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {orderedObligationCourses.map((course, index) => {
+                      const item = obligation.courseBreakdown.find((entry) => entry.courseId === course.id);
+                      return (
+                        <div key={course.id} className="grid grid-cols-1 gap-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[1fr_auto] md:items-center">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={course.id === vault.profile.obligationCourseGroupId ? "amber" : "secondary"}>{index + 1}</Badge>
+                              <span className="truncate text-sm font-extrabold text-[#061226]">{course.name}</span>
+                              <span className="text-xs font-semibold text-[#64748b]">{courseTypeLabels[course.type]} · {course.subject}</span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
+                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">本月 {item?.lessonCount ?? 0} 节</span>
+                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">可扣 {(item?.availableHours ?? 0).toFixed(1)} 小时</span>
+                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">已扣 {(item?.deductedHours ?? 0).toFixed(1)} 小时</span>
+                              <span className="rounded-full bg-[#fee2e2] px-2.5 py-1 text-[#b91c1c]">扣 {formatMoney(item?.amount ?? 0)}</span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => moveObligationCourse(course.id, -1)} disabled={index === 0}>
+                              <ArrowUp size={14} /> 上移
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => moveObligationCourse(course.id, 1)} disabled={index === orderedObligationCourses.length - 1}>
+                              <ArrowDown size={14} /> 下移
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {orderedObligationCourses.length === 0 && (
+                      <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+                        当前校区还没有课程，义务小时会全部按每小时补扣费用计算。
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
         {archivePanel === "students" && (
           <Card className="overflow-hidden">
             <CardHeader className="gap-3">

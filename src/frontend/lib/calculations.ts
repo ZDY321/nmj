@@ -184,38 +184,116 @@ export type ObligationSummary = {
   missingHours: number;
   hourlyDeduction: number;
   manualAmount: number;
+  targetAmount: number;
+  courseDeductionAmount: number;
+  fallbackHours: number;
+  fallbackAmount: number;
+  courseBreakdown: ObligationCourseDeduction[];
   amount: number;
 };
 
-export function obligationSummary(vault: TeacherVault, month: string, campusId = vault.profile.obligationCampusId): ObligationSummary {
+export type ObligationCourseDeduction = {
+  courseId: string;
+  courseName: string;
+  lessonCount: number;
+  availableHours: number;
+  deductedHours: number;
+  amount: number;
+};
+
+export function obligationSummary(vault: TeacherVault, month: string, campusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId): ObligationSummary {
   const courseId = vault.profile.obligationCourseGroupId;
   const mode = vault.profile.obligationDeductionMode ?? "auto_gap";
   const requiredHours = Math.max(vault.profile.monthlyObligationHours ?? 0, 0);
   const hourlyDeduction = Math.max(vault.profile.obligationHourlyDeduction ?? 0, 0);
   const manualAmount = Math.max(vault.profile.manualObligationDeduction ?? 0, 0);
+  const targetAmount = Math.round(requiredHours * hourlyDeduction);
   const campus = vault.campuses.find((item) => item.id === campusId);
   const course = vault.courseGroups.find((item) => item.id === courseId);
-  const completedAtCampus = vault.lessons
-    .filter((lesson) => {
-      const lessonCampusId = lesson.campusId ?? getCourse(vault, lesson.courseGroupId)?.defaultCampusId;
-      const matchesCampus = !campusId || lessonCampusId === campusId;
-      const matchesCourse = !courseId || lesson.courseGroupId === courseId;
-      return monthOf(lesson.date) === month && matchesCampus && matchesCourse;
-    })
-    .reduce((sum, lesson) => sum + completedHours(lesson), 0);
-  const missingHours = Math.max(requiredHours - completedAtCampus, 0);
-  const autoAmount = Math.round(missingHours * hourlyDeduction);
+  const campusCourses = vault.courseGroups.filter((item) => !campusId || item.defaultCampusId === campusId);
+  const campusCourseIds = new Set(campusCourses.map((item) => item.id));
+  const orderedCourseIds = Array.from(new Set([
+    ...(courseId ? [courseId] : []),
+    ...(vault.profile.obligationCourseOrder ?? []),
+    ...campusCourses.map((item) => item.id)
+  ])).filter((id) => campusCourseIds.has(id));
+  let remainingHours = requiredHours;
+  let remainingAmount = targetAmount;
+  let availableHours = 0;
+  let courseDeductedHours = 0;
+  let courseDeductionAmount = 0;
+  const courseBreakdown: ObligationCourseDeduction[] = orderedCourseIds.map((id) => {
+    const item = vault.courseGroups.find((candidate) => candidate.id === id);
+    const lessons = vault.lessons
+      .filter((lesson) => {
+        const lessonCampusId = lesson.campusId ?? getCourse(vault, lesson.courseGroupId)?.defaultCampusId;
+        return (
+          lesson.courseGroupId === id &&
+          monthOf(lesson.date) === month &&
+          (!campusId || lessonCampusId === campusId) &&
+          completedHours(lesson) > 0
+        );
+      })
+      .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`));
+    const courseAvailableHours = lessons.reduce((sum, lesson) => sum + completedHours(lesson), 0);
+    let deductedHours = 0;
+    let amount = 0;
+    availableHours += courseAvailableHours;
+
+    for (const lesson of lessons) {
+      if (remainingHours <= 0.0001 && remainingAmount <= 0.0001) break;
+      const lessonHours = completedHours(lesson);
+      const lessonAmount = completedAmount(lesson);
+      if (lessonHours <= 0) continue;
+      const lessonHourlyValue = lessonAmount / lessonHours;
+      const hoursNeededByAmount = remainingAmount > 0 && lessonHourlyValue > 0
+        ? remainingAmount / lessonHourlyValue
+        : 0;
+      const hoursToDeduct = Math.min(lessonHours, Math.max(remainingHours, hoursNeededByAmount, 0));
+      const amountToDeduct = lessonHourlyValue * hoursToDeduct;
+
+      deductedHours += hoursToDeduct;
+      amount += amountToDeduct;
+      courseDeductedHours += hoursToDeduct;
+      courseDeductionAmount += amountToDeduct;
+      remainingHours -= hoursToDeduct;
+      remainingAmount -= amountToDeduct;
+    }
+
+    return {
+      courseId: id,
+      courseName: item?.name ?? "未知课程",
+      lessonCount: lessons.length,
+      availableHours: courseAvailableHours,
+      deductedHours,
+      amount: Math.round(amount)
+    };
+  });
+  const fallbackHours = mode === "manual"
+    ? 0
+    : Math.max(
+        remainingHours,
+        hourlyDeduction > 0 ? remainingAmount / hourlyDeduction : 0,
+        0
+      );
+  const fallbackAmount = Math.round(fallbackHours * hourlyDeduction);
+  const autoAmount = Math.round(courseDeductionAmount) + fallbackAmount;
 
   return {
     campus,
     course,
     mode,
     requiredHours,
-    completedHours: completedAtCampus,
-    deductedHours: mode === "manual" ? 0 : missingHours,
-    missingHours,
+    completedHours: availableHours,
+    deductedHours: mode === "manual" ? 0 : courseDeductedHours + fallbackHours,
+    missingHours: fallbackHours,
     hourlyDeduction,
     manualAmount,
+    targetAmount,
+    courseDeductionAmount: Math.round(courseDeductionAmount),
+    fallbackHours,
+    fallbackAmount,
+    courseBreakdown,
     amount: mode === "manual" ? manualAmount : autoAmount
   };
 }

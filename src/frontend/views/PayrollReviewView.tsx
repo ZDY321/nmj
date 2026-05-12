@@ -220,7 +220,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
               <MapPin size={14} /> 校区合并统计
             </div>
             <CardTitle>{selectedMonth} 校区汇总</CardTitle>
-            <CardDescription>义务课时按缺口扣费；选择了对应班级时，只核算该班级的完成小时。</CardDescription>
+            <CardDescription>义务课时按老师个人信息里的课程顺序扣课时费；校区课程不足时，剩余小时按每小时费用补扣。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {campusSummaries.map((item) => (

@@ -186,10 +186,9 @@ export function SalaryView({
                     <div className="text-sm font-extrabold text-[#7f1d1d]">义务课时扣费</div>
                     <div className="mt-1 text-xs font-semibold leading-5 text-[#9f1239]">
                       {obligation.campus?.name ?? "未设置义务校区"}
-                      {obligation.course ? ` · ${obligation.course.name}` : ""} · 已计 {obligation.completedHours.toFixed(1)} 小时，
                       {obligation.mode === "manual"
-                        ? `手动扣 ${formatMoney(obligation.manualAmount)}`
-                        : `缺口 ${obligation.missingHours.toFixed(1)} / ${obligation.requiredHours || 0} 小时`}
+                        ? ` · 手动扣 ${formatMoney(obligation.manualAmount)}`
+                        : `${obligation.course ? ` · ${obligation.course.name}` : ""} · 课程扣 ${formatMoney(obligation.courseDeductionAmount)}，补扣 ${obligation.fallbackHours.toFixed(1)} / ${obligation.requiredHours || 0} 小时`}
                     </div>
                   </div>
                   <div className="shrink-0 text-sm font-extrabold text-[#b91c1c]">

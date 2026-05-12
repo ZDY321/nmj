@@ -92,6 +92,11 @@ export function OnboardingGuide({
   });
 
   const completed = steps.filter((step) => step.done).length;
+  const lastDoneIndex = steps.reduce((lastIndex, step, index) => (step.done ? index : lastIndex), -1);
+  const startStep =
+    steps.slice(lastDoneIndex + 1).find((step) => !step.done) ??
+    steps.find((step) => !step.done) ??
+    steps[0];
 
   return (
     <div className="space-y-6">
@@ -126,7 +131,7 @@ export function OnboardingGuide({
                 </div>
               </div>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <Button type="button" onClick={() => onOpenStep("profile", "students")} className="h-12 rounded-[14px]">
+                <Button type="button" onClick={() => onOpenStep(startStep.key, startStep.view)} className="h-12 rounded-[14px]">
                   开始配置 <ChevronRight size={16} />
                 </Button>
                 <Button

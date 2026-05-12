@@ -177,6 +177,7 @@ export type TeacherProfile = {
   homeCampusId?: string;
   obligationCampusId?: string;
   obligationCourseGroupId?: string;
+  obligationCourseOrder?: string[];
   obligationDeductionMode?: "auto_gap" | "manual";
   monthlyObligationHours?: number;
   obligationHourlyDeduction?: number;
