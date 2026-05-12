@@ -254,7 +254,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
               <BookOpen size={14} /> 本月总和
             </div>
             <CardTitle>工资总览</CardTitle>
-            <CardDescription>按基础工资、课时费、补贴扣款和义务课时扣费合并。</CardDescription>
+            <CardDescription>按基础工资、课时费、补贴扣款和义务课时扣费合并，课程明细金额单独核对。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -322,7 +322,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
             <Users size={14} /> 课程明细
           </div>
           <CardTitle>校区课程明细</CardTitle>
-          <CardDescription>取消课程会以红色底色标出，避免月底漏看。</CardDescription>
+          <CardDescription>这里展示课程记录与课时费明细，用于核对课程信息，不直接代表总工资。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {filteredLessons.map((lesson, index) => (

@@ -70,7 +70,7 @@ export function CalendarView({
                 <CalendarDays size={14} /> 日历总览
               </div>
               <CardTitle>{month}</CardTitle>
-              <CardDescription>每天的课程、状态、校区和收入都排在日历上</CardDescription>
+              <CardDescription>每天的课程、状态、校区和课时金额都排在日历上</CardDescription>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Select
@@ -153,20 +153,20 @@ export function CalendarView({
         <Card className="h-fit overflow-hidden">
           <CardHeader>
             <CardTitle>{selectedDate} 明细</CardTitle>
-            <CardDescription>日、周、月的核对信息</CardDescription>
+            <CardDescription>仅统计课程课时金额，不等同于工资总额。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">
-                <span className="text-xs text-(--color-muted-foreground)">当天收入</span>
+                <span className="text-xs text-(--color-muted-foreground)">当天课时费</span>
                 <strong className="block text-xl font-extrabold mt-1">{formatMoney(selectedTotal)}</strong>
               </div>
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">
-                <span className="text-xs text-(--color-muted-foreground)">本周收入</span>
+                <span className="text-xs text-(--color-muted-foreground)">本周课时费</span>
                 <strong className="block text-xl font-extrabold mt-1">{formatMoney(weekTotal)}</strong>
               </div>
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">
-                <span className="text-xs text-(--color-muted-foreground)">本月收入</span>
+                <span className="text-xs text-(--color-muted-foreground)">本月课时费</span>
                 <strong className="block text-xl font-extrabold mt-1">{formatMoney(monthTotal)}</strong>
               </div>
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">

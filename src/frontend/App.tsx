@@ -336,6 +336,7 @@ export function App() {
   }
 
   useEffect(() => {
+    localStorage.removeItem(unlockedSessionKey);
     const stored = readUnlockedSession();
     if (stored) {
       try {
@@ -753,13 +754,11 @@ function noticeReadKey(username: string): string {
 }
 
 function readUnlockedSession(): string | null {
-  return sessionStorage.getItem(unlockedSessionKey) ?? localStorage.getItem(unlockedSessionKey);
+  return sessionStorage.getItem(unlockedSessionKey);
 }
 
 function writeUnlockedSession(session: UnlockedSession): void {
-  const serialized = JSON.stringify(session);
-  sessionStorage.setItem(unlockedSessionKey, serialized);
-  localStorage.setItem(unlockedSessionKey, serialized);
+  sessionStorage.setItem(unlockedSessionKey, JSON.stringify(session));
 }
 
 function clearUnlockedSession(): void {
