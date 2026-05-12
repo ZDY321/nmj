@@ -658,7 +658,14 @@ export function ScheduleView({
             </div>
             <div className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-semibold text-[#64748b] sm:grid-cols-[1fr_auto] sm:items-center">
               <span>也可以切换到日历查看，直接点击日期完成排课。</span>
-              <Button type="button" size="sm" variant="outline" onClick={goToCalendarSchedulingFromSingle} disabled={!singleCourseGroupId || !isSingleTimeValid}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={goToCalendarSchedulingFromSingle}
+                disabled={!singleCourseGroupId || !isSingleTimeValid}
+                className="border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2] hover:bg-[#dbeafe] hover:text-[#0f3f8f]"
+              >
                 <CalendarDays size={14} /> 前往日历排课
               </Button>
             </div>

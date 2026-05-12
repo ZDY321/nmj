@@ -625,7 +625,18 @@ export function StudentsView({
 
                 <div className="flex flex-col gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0">
-                    <div className="text-sm font-extrabold text-[#061226]">当前课程</div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <div className="text-sm font-extrabold text-[#061226]">当前课程</div>
+                      <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748b]">
+                        <input
+                          type="checkbox"
+                          checked={transferEndExisting}
+                          onChange={(event) => setTransferEndExisting(event.target.checked)}
+                          className="h-3.5 w-3.5 accent-[#ff8617]"
+                        />
+                        转班后从旧同科目课程中移除该学生
+                      </label>
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {transferCurrentCourses.length > 0 ? transferCurrentCourses.map((course) => (
                         <Badge key={course.id} variant={course.type === "class" ? "sky" : course.type === "trial" ? "plum" : "sage"}>
@@ -636,15 +647,6 @@ export function StudentsView({
                       )}
                     </div>
                   </div>
-                  <label className="flex shrink-0 items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-bold text-[#25324a]">
-                    <input
-                      type="checkbox"
-                      checked={transferEndExisting}
-                      onChange={(event) => setTransferEndExisting(event.target.checked)}
-                      className="h-4 w-4 accent-[#ff8617]"
-                    />
-                    转班后从旧同科目课程中移除该学生
-                  </label>
                   <Button type="submit" disabled={!transferStudentId || (transferTargetMode === "existing" && !transferTargetCourseId)}>
                     <Save size={15} /> 保存调整
                   </Button>
