@@ -1,6 +1,7 @@
+"$schema" = "./node_modules/wrangler/config-schema.json"
 name = "teacher-salary-tracker"
 main = "src/worker/index.ts"
-compatibility_date = "2026-05-10"
+compatibility_date = "2026-05-12"
 
 [triggers]
 crons = ["0 3 * * *"]
@@ -9,8 +10,9 @@ crons = ["0 3 * * *"]
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "teacher_salary_tracker"
-database_id = "ded4cba9-a992-46d6-8c32-1961b8905299"
+database_id = "6aad5b02-84e8-47ae-9218-880188215797"
