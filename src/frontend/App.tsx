@@ -524,6 +524,7 @@ export function App() {
   const saveFullLabel =
     saveState === "saving" ? "同步中..." : saveState === "saved" ? "已加密同步" : saveState === "error" ? "云端同步失败" : "云端加密";
   const greeting = greetingFor(greetingTime);
+  const guideNeedsAttention = !isOnboardingSetupComplete(vault);
 
   function dismissOnboarding() {
     if (username) {
@@ -611,9 +612,11 @@ export function App() {
                 <button
                   type="button"
                   onClick={openOnboardingManually}
-                  className="rounded-[12px] bg-[#eaf2ff] px-3 py-2 text-left text-sm font-bold text-[#1557c2]"
+                  className={`rounded-[12px] px-3 py-2 text-left text-sm font-bold ${
+                    guideNeedsAttention ? "orange-gradient text-white shadow-[0_10px_22px_rgba(255,134,23,0.22)]" : "bg-[#eaf2ff] text-[#1557c2]"
+                  }`}
                 >
-                  新手指引
+                  新手指引{guideNeedsAttention ? " · 待配置" : ""}
                 </button>
               </motion.div>
             )}
@@ -658,11 +661,23 @@ export function App() {
               <button
                 type="button"
                 onClick={openOnboardingManually}
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors hover:bg-[#f8fbff] sm:h-[58px] sm:w-[58px]"
+                className={`relative flex h-14 min-w-[56px] shrink-0 items-center justify-center rounded-[16px] border transition-colors sm:h-[58px] ${
+                  guideNeedsAttention
+                    ? "orange-gradient gap-2 border-[#ffb15c] px-3 text-white shadow-[0_14px_30px_rgba(255,134,23,0.24)] ring-2 ring-[#ffb15c]/35 sm:w-auto sm:px-4"
+                    : "w-14 border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] hover:bg-[#f8fbff] sm:w-[58px]"
+                }`}
                 aria-label="查看新手指引"
-                title="新手指引"
+                title={guideNeedsAttention ? "新手指引：基础配置待完成" : "新手指引"}
               >
                 <BookOpen size={21} />
+                {guideNeedsAttention && (
+                  <>
+                    <span className="hidden text-sm font-extrabold sm:inline">新手指引</span>
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1 text-[10px] font-extrabold text-white ring-2 ring-white">
+                      待
+                    </span>
+                  </>
+                )}
               </button>
 
               {role !== "admin" && (
@@ -1006,6 +1021,13 @@ function shouldShowOnboarding(vault: TeacherVault): boolean {
     (vault.gradeRecords ?? []).length === 0 &&
     vault.salaryAdjustments.length === 0
   );
+}
+
+function isOnboardingSetupComplete(vault: TeacherVault): boolean {
+  const hasProfileBasis = vault.campuses.length > 0 || vault.profile.baseSalary > 0;
+  const hasStudentCourseBasis = vault.students.length > 0 && vault.courseGroups.length > 0;
+  const hasScheduleBasis = vault.lessons.length > 0;
+  return hasProfileBasis && hasStudentCourseBasis && hasScheduleBasis;
 }
 
 function readUnlockedSession(): string | null {

@@ -430,16 +430,6 @@ function TrendLineChart({
                   >
                     <title>{`${point.record.date} ${point.record.examName}: ${label}`}</title>
                   </circle>
-                  {isActive && (
-                    <text
-                      x={point.x}
-                      y={Math.max(point.y - 16, 14)}
-                      textAnchor="middle"
-                      className="fill-[#061226] text-[13px] font-extrabold"
-                    >
-                      {label}
-                    </text>
-                  )}
                 </>
               ) : (
                 <text x={point.x} y={plotBottom - 8} textAnchor="middle" className="fill-[#94a3b8] text-[12px] font-bold">
