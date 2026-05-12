@@ -974,7 +974,7 @@ export function StudentsView({
                                 />
                               </div>
                               <div className="space-y-1">
-                                <label className="text-[11px] font-bold text-[#64748b]">每人费用</label>
+                                <label className="text-[11px] font-bold text-[#64748b]">每增加一人</label>
                                 <Input
                                   type="number"
                                   min={0}

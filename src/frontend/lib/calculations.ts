@@ -143,7 +143,9 @@ export function calculateClassHeadcountFee(rule: FeeRule, studentCount: number):
   const count = nonNegativeInteger(studentCount);
   const tier = classFeeTierForCount(rule, count);
   if (tier) {
-    return nonNegativeNumber(tier.baseFee) + count * nonNegativeNumber(tier.perStudentFee);
+    const includedStudents = nonNegativeInteger(tier.minStudents);
+    const extraStudents = Math.max(count - includedStudents, 0);
+    return nonNegativeNumber(tier.baseFee) + extraStudents * nonNegativeNumber(tier.perStudentFee);
   }
   return nonNegativeNumber(rule.baseFee) + count * nonNegativeNumber(rule.perPresentStudentFee);
 }

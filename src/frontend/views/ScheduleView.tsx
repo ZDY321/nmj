@@ -882,7 +882,7 @@ export function ScheduleView({
               同步日历查看日期（{selectedCalendarDate}）
             </label>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium">查看范围</label>
                 <Select value={syncRecordsWithCalendarDate ? "day" : lessonScope} onChange={(event) => setLessonScope(event.target.value as LessonScope)} disabled={syncRecordsWithCalendarDate}>
@@ -895,7 +895,7 @@ export function ScheduleView({
               {effectiveLessonScope === "month" ? (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">月份</label>
-                  <Input type="month" value={lessonMonth} onChange={(event) => setLessonMonth(event.target.value)} className="compact-date-input min-w-0 text-[11px]" />
+                  <Input type="month" value={lessonMonth} onChange={(event) => setLessonMonth(event.target.value)} className="min-w-0 text-sm" />
                 </div>
               ) : effectiveLessonScope === "day" ? (
                 <div className="space-y-2">
@@ -905,24 +905,24 @@ export function ScheduleView({
                     value={effectiveLessonDay}
                     onChange={(event) => setLessonDay(event.target.value)}
                     disabled={syncRecordsWithCalendarDate}
-                    className="compact-date-input min-w-0 text-[11px]"
+                    className="min-w-0 text-sm"
                   />
                 </div>
               ) : effectiveLessonScope === "range" ? (
                 <>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">开始日期</label>
-                    <Input type="date" value={lessonRangeStart} onChange={(event) => setLessonRangeStart(event.target.value)} className="compact-date-input min-w-0 text-[11px]" />
+                    <Input type="date" value={lessonRangeStart} onChange={(event) => setLessonRangeStart(event.target.value)} className="min-w-0 text-sm" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">结束日期</label>
-                    <Input type="date" value={lessonRangeEnd} min={lessonRangeStart} onChange={(event) => setLessonRangeEnd(event.target.value)} className={!isOrderedDateRange(lessonRangeStart, lessonRangeEnd) ? "compact-date-input min-w-0 border-[#fca5a5] bg-[#fff1f2] text-[11px]" : "compact-date-input min-w-0 text-[11px]"} />
+                    <Input type="date" value={lessonRangeEnd} min={lessonRangeStart} onChange={(event) => setLessonRangeEnd(event.target.value)} className={!isOrderedDateRange(lessonRangeStart, lessonRangeEnd) ? "min-w-0 border-[#fca5a5] bg-[#fff1f2] text-sm" : "min-w-0 text-sm"} />
                   </div>
                 </>
               ) : (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">周</label>
-                  <Input type="week" value={lessonWeek} onChange={(event) => setLessonWeek(event.target.value)} className="compact-date-input min-w-0 text-[11px]" />
+                  <Input type="week" value={lessonWeek} onChange={(event) => setLessonWeek(event.target.value)} className="min-w-0 text-sm" />
                 </div>
               )}
               <div className="space-y-2">
