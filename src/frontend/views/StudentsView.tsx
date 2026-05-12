@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Building2, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, User, Users, X } from "lucide-react";
+import { Building2, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -59,6 +59,7 @@ export function StudentsView({
   const [archivePanel, setArchivePanel] = useState<ArchivePanel>("campuses");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
+  const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [archiveSearch, setArchiveSearch] = useState("");
   const { confirm, dialog } = useConfirmDialog();
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
@@ -73,6 +74,7 @@ export function StudentsView({
     return matchesGrade && matchesCampus && matchesSearch;
   });
   const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
+  const visibleCourses = vault.courseGroups.filter((course) => courseTypeFilter === "all" || course.type === courseTypeFilter);
   const activeStudents = vault.students.filter((student) => student.status === "active").length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
   const obligationCampusId = vault.profile.obligationCampusId ?? "";
@@ -410,125 +412,6 @@ export function StudentsView({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[#eaf2ff]">
-              <Building2 size={18} className="text-[#1557c2]" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">校区</CardTitle>
-              <CardDescription>管理教学地点</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={addCampus} className="space-y-3">
-              <Input
-                value={campusNameInput}
-                onChange={(e) => setCampusNameInput(e.target.value)}
-                placeholder="例如：中心校区"
-              />
-              <Button type="submit" className="w-full">
-                <Plus size={15} /> 添加校区
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[#e8f8ef]">
-              <User size={18} className="text-[#16a34a]" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">学生</CardTitle>
-              <CardDescription>管理学生名单</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={addStudent} className="space-y-3">
-              <Input
-                value={studentNameInput}
-                onChange={(e) => setStudentNameInput(e.target.value)}
-                placeholder="例如：学生 E"
-              />
-              <Select value={studentGradeInput} onChange={(e) => setStudentGradeInput(e.target.value)}>
-                {gradeOptions.map((grade) => (
-                  <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
-                ))}
-              </Select>
-              {studentGradeInput === "自定义" && (
-                <Input
-                  value={customGradeInput}
-                  onChange={(e) => setCustomGradeInput(e.target.value)}
-                  placeholder="输入自定义年级"
-                />
-              )}
-              <Input
-                value={studentSchoolInput}
-                onChange={(e) => setStudentSchoolInput(e.target.value)}
-                placeholder="所在学校，例如：实验中学"
-              />
-              <Select value={studentCampusInput} onChange={(e) => setStudentCampusInput(e.target.value)}>
-                <option value="">未设置校区</option>
-                {vault.campuses.map((campus) => (
-                  <option key={campus.id} value={campus.id}>{campus.name}</option>
-                ))}
-              </Select>
-              <Input
-                value={studentNoteInput}
-                onChange={(e) => setStudentNoteInput(e.target.value)}
-                placeholder="档案备注，可选"
-              />
-              <label className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
-                <input
-                  type="checkbox"
-                  checked={studentTemporaryTrialInput}
-                  onChange={(event) => setStudentTemporaryTrialInput(event.target.checked)}
-                  className="h-4 w-4 accent-[#ff8617]"
-                />
-                临时试听学生
-              </label>
-              <Button type="submit" className="w-full">
-                <Plus size={15} /> 添加学生
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[#fff1e2]">
-              <GraduationCap size={18} className="text-[#ff8617]" />
-            </div>
-            <div>
-              <CardTitle className="text-lg">课程 / 班课</CardTitle>
-              <CardDescription>设置课程类型和计费规则</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={addCourse} className="space-y-3">
-              <Input
-                value={courseNameInput}
-                onChange={(e) => setCourseNameInput(e.target.value)}
-                placeholder="例如：初三数学班"
-              />
-              <Select
-                value={courseType}
-                onChange={(e) => setCourseType(e.target.value as CourseType)}
-              >
-                <option value="one_on_one">一对一</option>
-                <option value="class">班课</option>
-                <option value="trial">试听</option>
-              </Select>
-              <Button type="submit" className="w-full">
-                <Plus size={15} /> 添加课程
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="space-y-3">
         <div className="grid grid-cols-3 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1">
           {[
@@ -553,12 +436,24 @@ export function StudentsView({
         </div>
         {archivePanel === "campuses" && (
         <Card className="h-fit overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Building2 size={18} className="text-[#ff8617]" />
-              <CardTitle className="text-lg">校区列表</CardTitle>
+          <CardHeader className="gap-3">
+            <div className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 size={18} className="text-[#ff8617]" />
+                <CardTitle className="text-lg">校区列表</CardTitle>
+              </div>
+              <Badge variant="secondary">{vault.campuses.length} 个</Badge>
             </div>
-            <Badge variant="secondary">{vault.campuses.length} 个</Badge>
+            <form onSubmit={addCampus} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+              <Input
+                value={campusNameInput}
+                onChange={(e) => setCampusNameInput(e.target.value)}
+                placeholder="例如：中心校区"
+              />
+              <Button type="submit">
+                <Plus size={15} /> 添加校区
+              </Button>
+            </form>
           </CardHeader>
           <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
             {vault.campuses.map((campus) => {
@@ -677,6 +572,53 @@ export function StudentsView({
               </div>
               <Badge variant="secondary">{visibleStudents.length} / {vault.students.length} 人</Badge>
             </div>
+            <form onSubmit={addStudent} className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+              <Input
+                value={studentNameInput}
+                onChange={(e) => setStudentNameInput(e.target.value)}
+                placeholder="例如：学生 E"
+              />
+              <Select value={studentGradeInput} onChange={(e) => setStudentGradeInput(e.target.value)}>
+                {gradeOptions.map((grade) => (
+                  <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
+                ))}
+              </Select>
+              {studentGradeInput === "自定义" && (
+                <Input
+                  value={customGradeInput}
+                  onChange={(e) => setCustomGradeInput(e.target.value)}
+                  placeholder="输入自定义年级"
+                />
+              )}
+              <Input
+                value={studentSchoolInput}
+                onChange={(e) => setStudentSchoolInput(e.target.value)}
+                placeholder="所在学校，例如：实验中学"
+              />
+              <Select value={studentCampusInput} onChange={(e) => setStudentCampusInput(e.target.value)}>
+                <option value="">未设置校区</option>
+                {vault.campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>{campus.name}</option>
+                ))}
+              </Select>
+              <Input
+                value={studentNoteInput}
+                onChange={(e) => setStudentNoteInput(e.target.value)}
+                placeholder="档案备注，可选"
+              />
+              <label className="flex min-h-11 items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
+                <input
+                  type="checkbox"
+                  checked={studentTemporaryTrialInput}
+                  onChange={(event) => setStudentTemporaryTrialInput(event.target.checked)}
+                  className="h-4 w-4 accent-[#ff8617]"
+                />
+                临时试听学生
+              </label>
+              <Button type="submit">
+                <Plus size={15} /> 添加学生
+              </Button>
+            </form>
             <label className="relative block">
               <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
               <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名、学校或备注" />
@@ -861,15 +803,41 @@ export function StudentsView({
 
         {archivePanel === "courses" && (
         <Card className="h-fit overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <GraduationCap size={18} className="text-[#ff8617]" />
-              <CardTitle className="text-lg">课程与班课</CardTitle>
+          <CardHeader className="gap-3">
+            <div className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <GraduationCap size={18} className="text-[#ff8617]" />
+                <CardTitle className="text-lg">课程与班课</CardTitle>
+              </div>
+              <Badge variant="secondary">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
             </div>
-            <Badge variant="secondary">{vault.courseGroups.length} 个</Badge>
+            <form onSubmit={addCourse} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px_auto]">
+              <Input
+                value={courseNameInput}
+                onChange={(e) => setCourseNameInput(e.target.value)}
+                placeholder="例如：初三数学班"
+              />
+              <Select
+                value={courseType}
+                onChange={(e) => setCourseType(e.target.value as CourseType)}
+              >
+                <option value="one_on_one">一对一</option>
+                <option value="class">班课</option>
+                <option value="trial">试听</option>
+              </Select>
+              <Button type="submit">
+                <Plus size={15} /> 添加课程
+              </Button>
+            </form>
+            <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
+              <option value="all">全部课程类型</option>
+              <option value="one_on_one">一对一</option>
+              <option value="class">班课</option>
+              <option value="trial">试听</option>
+            </Select>
           </CardHeader>
           <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
-            {vault.courseGroups.map((course) => {
+            {visibleCourses.map((course) => {
               const isEditing = editingCourse?.id === course.id;
               const used = courseInUse(course.id);
               return (
@@ -1098,8 +1066,8 @@ export function StudentsView({
                 </motion.div>
               );
             })}
-            {vault.courseGroups.length === 0 && (
-              <p className="py-8 text-center text-sm text-(--color-muted-foreground)">还没有课程</p>
+            {visibleCourses.length === 0 && (
+              <p className="py-8 text-center text-sm text-(--color-muted-foreground)">当前筛选下没有课程</p>
             )}
           </CardContent>
         </Card>

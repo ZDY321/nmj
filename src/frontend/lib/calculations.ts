@@ -106,15 +106,8 @@ export function defaultClassFeeTiers(rule?: FeeRule): ClassFeeTier[] {
   const perStudentFee = nonNegativeNumber(rule?.perPresentStudentFee, 10);
   return [
     {
-      id: "tier_1_4",
+      id: "tier_1_plus",
       minStudents: 1,
-      maxStudents: 4,
-      baseFee,
-      perStudentFee: 0
-    },
-    {
-      id: "tier_5_plus",
-      minStudents: 5,
       baseFee,
       perStudentFee
     }
@@ -129,9 +122,7 @@ export function normalizedClassFeeTiers(rule: FeeRule): ClassFeeTier[] {
 
 export function classFeeTierForCount(rule: FeeRule, studentCount: number): ClassFeeTier | undefined {
   const count = nonNegativeInteger(studentCount);
-  const tiers = (rule.classFeeTiers ?? [])
-    .filter((tier) => Number.isFinite(tier.minStudents))
-    .sort((a, b) => a.minStudents - b.minStudents);
+  const tiers = normalizedClassFeeTiers(rule);
   return tiers.find((tier) => {
     const min = nonNegativeInteger(tier.minStudents);
     const max = tier.maxStudents === undefined ? undefined : Math.max(nonNegativeInteger(tier.maxStudents), min);

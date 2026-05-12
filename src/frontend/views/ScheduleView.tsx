@@ -185,6 +185,16 @@ export function ScheduleView({
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
   }
 
+  function goToCalendarSchedulingFromSingle() {
+    setCalendarCourseGroupId(singleCourseGroupId);
+    setCalendarStartTime(singleStartTime);
+    setCalendarEndTime(singleEndTime);
+    setSelectedCalendarDate(singleDate);
+    setCalendarMonth(singleDate.slice(0, 7));
+    setCalendarMode("schedule");
+    setSchedulePanel("calendar");
+  }
+
   function addLessonFromCourse(
     courseGroupId: string,
     lessonDate: string,
@@ -467,7 +477,6 @@ export function ScheduleView({
               <Plus size={14} /> 单次排课 / 补录
             </div>
             <CardTitle>添加课程时间</CardTitle>
-            <CardDescription>单次排课与右侧批量排课互不联动，可分别选择课程和时间。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -583,6 +592,12 @@ export function ScheduleView({
                 <CheckCircle2 size={16} /> 补录已完成
               </Button>
             </div>
+            <div className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-semibold text-[#64748b] sm:grid-cols-[1fr_auto] sm:items-center">
+              <span>也可以切换到日历查看，直接点击日期完成排课。</span>
+              <Button type="button" size="sm" variant="outline" onClick={goToCalendarSchedulingFromSingle} disabled={!singleCourseGroupId || !isSingleTimeValid}>
+                <CalendarDays size={14} /> 前往日历排课
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -592,9 +607,11 @@ export function ScheduleView({
                 <CalendarCheck size={14} /> 批量排课
               </div>
               <CardTitle>按日期范围生成课时</CardTitle>
-              <CardDescription>这里仅按当前条件生成待上课课时，不再保存排课规则记录。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
+                需要逐日选择时，可以切换到日历查看后点击日期排课。
+              </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">课程</label>

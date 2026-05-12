@@ -30,7 +30,7 @@ type CampusAmountDetail = {
 
 export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
-  const [campusFilter, setCampusFilter] = useState("all");
+  const [campusFilter, setCampusFilter] = useState(vault.campuses[0]?.id ?? "all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [gradeFilter, setGradeFilter] = useState("all");
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
@@ -177,14 +177,14 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `有效课时：仅已完成/补课完成，${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
+          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `已完成 ${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatMoney(campusLessonFee), hint: "仅统计已完成/补课完成", icon: Banknote },
           {
             label: "义务课时扣费",
             value: `-${formatMoney(campusDeduction)}`,
             hint: currentCampusObligation.mode === "manual"
-              ? "义务课时扣费：手动填写扣除金额"
-              : `义务课时扣费：缺口 ${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0} 小时`,
+              ? "手动填写扣除"
+              : `缺口 ${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0} 小时`,
             icon: SlidersHorizontal,
             danger: true
           },
@@ -200,7 +200,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-[#64748b]">{item.label}</div>
                   <div className={`mt-1 text-2xl font-extrabold ${"danger" in item && item.danger ? "text-[#b91c1c]" : "text-[#061226]"}`}>{item.value}</div>
-                  <div className="mt-1 truncate text-xs font-bold text-[#94a3b8]">{item.hint}</div>
+                  <div className="mt-1 text-[11px] font-bold leading-4 text-[#94a3b8]">{item.hint}</div>
                 </div>
               </CardContent>
             </Card>

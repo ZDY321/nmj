@@ -63,8 +63,7 @@ export function createSampleVault(): TeacherVault {
           baseFee: 80,
           perPresentStudentFee: 10,
           classFeeTiers: [
-            { id: "tier_class_math_1_4", minStudents: 1, maxStudents: 4, baseFee: 80, perStudentFee: 0 },
-            { id: "tier_class_math_5_plus", minStudents: 5, baseFee: 80, perStudentFee: 10 }
+            { id: "tier_class_math_1_plus", minStudents: 1, baseFee: 80, perStudentFee: 10 }
           ],
           makeupFeeMode: "perStudentFee"
         },
@@ -113,12 +112,12 @@ export function createSampleVault(): TeacherVault {
         trialFee: 0,
         feeSnapshot: {
           baseFee: 80,
-          perPresentStudentFee: 0,
-          classFeeTierId: "tier_class_math_1_4",
+          perPresentStudentFee: 10,
+          classFeeTierId: "tier_class_math_1_plus",
           presentStudentCount: 2,
           trialStudentCount: 0,
           trialFee: 0,
-          amount: 80
+          amount: 90
         },
         linkedOriginalLessonId: null,
         content: {
