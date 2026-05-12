@@ -113,7 +113,7 @@ export function ScheduleView({
   const [lessonRangeStart, setLessonRangeStart] = useState(todayIso());
   const [lessonRangeEnd, setLessonRangeEnd] = useState(todayIso());
   const [lessonWeek, setLessonWeek] = useState(isoWeekValue(todayIso()));
-  const [syncRecordsWithCalendarDate, setSyncRecordsWithCalendarDate] = useState(false);
+  const [syncRecordsWithCalendarDate, setSyncRecordsWithCalendarDate] = useState(true);
   const [showOnlyMakeup, setShowOnlyMakeup] = useState(false);
   const [schedulePanel, setSchedulePanel] = useState<SchedulePanel>("schedule");
   const [customPresetStart, setCustomPresetStart] = useState("08:00");

@@ -183,39 +183,8 @@ export function StudentsView({
 
   function updateClassFeeTier(tierId: string, patch: Partial<ClassFeeTier>) {
     if (!editingCourse) return;
-    const nextTiers = normalizedClassFeeTiers(editingCourse.feeRule).map((tier) =>
-      tier.id === tierId ? { ...tier, ...patch } : tier
-    );
-    replaceEditingClassFeeTiers(nextTiers);
-  }
-
-  function addClassFeeTier() {
-    if (!editingCourse) return;
-    const tiers = normalizedClassFeeTiers(editingCourse.feeRule);
-    const lastTier = tiers.at(-1);
-    const nextMin = lastTier?.maxStudents !== undefined
-      ? lastTier.maxStudents + 1
-      : (lastTier?.minStudents ?? 0) + 1;
-    const cappedTiers = tiers.map((tier, index) =>
-      index === tiers.length - 1 && tier.maxStudents === undefined
-        ? { ...tier, maxStudents: Math.max(nextMin - 1, tier.minStudents) }
-        : tier
-    );
-    replaceEditingClassFeeTiers([
-      ...cappedTiers,
-      {
-        id: makeId("tier"),
-        minStudents: nextMin,
-        baseFee: lastTier?.baseFee ?? 0,
-        perStudentFee: lastTier?.perStudentFee ?? 0
-      }
-    ]);
-  }
-
-  function removeClassFeeTier(tierId: string) {
-    if (!editingCourse) return;
-    const nextTiers = normalizedClassFeeTiers(editingCourse.feeRule).filter((tier) => tier.id !== tierId);
-    replaceEditingClassFeeTiers(nextTiers.length > 0 ? nextTiers : defaultClassFeeTiers(editingCourse.feeRule));
+    const tier = normalizedClassFeeTiers(editingCourse.feeRule).find((item) => item.id === tierId) ?? normalizedClassFeeTiers(editingCourse.feeRule)[0];
+    replaceEditingClassFeeTiers([{ ...tier, ...patch, maxStudents: undefined }]);
   }
 
   function updateProfile(patch: Partial<TeacherProfile>) {
@@ -234,11 +203,24 @@ export function StudentsView({
   function toggleCourseStudent(studentId: string) {
     setEditingCourse((current) => {
       if (!current) return current;
+      const isSelected = current.studentIds.includes(studentId);
+      const student = vault.students.find((item) => item.id === studentId);
+      if (current.type === "class" && !isSelected) {
+        const selectedGrade = firstCourseStudentGrade(current.studentIds);
+        if (selectedGrade !== undefined && (student?.grade ?? "") !== selectedGrade) {
+          return current;
+        }
+      }
       const studentIds = current.studentIds.includes(studentId)
         ? current.studentIds.filter((id) => id !== studentId)
         : [...current.studentIds, studentId];
       return { ...current, studentIds };
     });
+  }
+
+  function firstCourseStudentGrade(studentIds: string[]): string | undefined {
+    if (studentIds.length === 0) return undefined;
+    return vault.students.find((student) => student.id === studentIds[0])?.grade ?? "";
   }
 
   function saveCourseDraft() {
@@ -248,7 +230,7 @@ export function StudentsView({
       ? {
           ...editingCourse.feeRule,
           mode: "class_headcount" as const,
-          classFeeTiers: normalizedClassFeeTiers(editingCourse.feeRule)
+          classFeeTiers: [{ ...(normalizedClassFeeTiers(editingCourse.feeRule)[0] ?? defaultClassFeeTiers(editingCourse.feeRule)[0]), maxStudents: undefined }]
         }
       : editingCourse.feeRule;
     onUpdateCourse({
@@ -893,19 +875,14 @@ export function StudentsView({
                       </Select>
                       {editingCourse.type === "class" ? (
                         <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <div className="text-sm font-extrabold text-[#061226]">班课人数分档费用</div>
-                              <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                                当前关联 {editingCourse.studentIds.length} 人，预计 {formatMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length))}
-                              </div>
+                          <div>
+                            <div className="text-sm font-extrabold text-[#061226]">班课人数计费</div>
+                            <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                              当前关联 {editingCourse.studentIds.length} 人，预计 {formatMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length))}
                             </div>
-                            <Button type="button" size="sm" variant="outline" onClick={addClassFeeTier}>
-                              <Plus size={13} /> 添加档位
-                            </Button>
                           </div>
-                          {normalizedClassFeeTiers(editingCourse.feeRule).map((tier) => (
-                            <div key={tier.id} className="grid grid-cols-2 gap-2 rounded-[12px] border border-[#e8eef6] bg-white p-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+                          {normalizedClassFeeTiers(editingCourse.feeRule).slice(0, 1).map((tier) => (
+                            <div key={tier.id} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white p-2 sm:grid-cols-3">
                               <div className="space-y-1">
                                 <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
                                 <Input
@@ -913,21 +890,6 @@ export function StudentsView({
                                   min={0}
                                   value={tier.minStudents}
                                   onChange={(event) => updateClassFeeTier(tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
-                                  className="h-9"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[11px] font-bold text-[#64748b]">最多人数</label>
-                                <Input
-                                  type="number"
-                                  min={tier.minStudents}
-                                  value={tier.maxStudents ?? ""}
-                                  onChange={(event) =>
-                                    updateClassFeeTier(tier.id, {
-                                      maxStudents: event.target.value === "" ? undefined : Math.max(Number(event.target.value), tier.minStudents)
-                                    })
-                                  }
-                                  placeholder="以上"
                                   className="h-9"
                                 />
                               </div>
@@ -951,16 +913,6 @@ export function StudentsView({
                                   className="h-9"
                                 />
                               </div>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="destructive"
-                                className="self-end"
-                                onClick={() => removeClassFeeTier(tier.id)}
-                                disabled={normalizedClassFeeTiers(editingCourse.feeRule).length <= 1}
-                              >
-                                <Trash2 size={13} />
-                              </Button>
                             </div>
                           ))}
                         </div>
@@ -978,24 +930,40 @@ export function StudentsView({
                         </div>
                       )}
                       <div className="space-y-2">
-                        <div className="text-sm font-medium">关联学生（{editingCourse.studentIds.length} / {vault.students.length}）</div>
+                        <div className="text-sm font-medium">
+                          关联学生（{editingCourse.studentIds.length} / {vault.students.length}）
+                          {editingCourse.type === "class" && (
+                            <span className="ml-2 text-xs font-bold text-[#64748b]">
+                              班课需同年级{firstCourseStudentGrade(editingCourse.studentIds) !== undefined ? `：${firstCourseStudentGrade(editingCourse.studentIds) || "未设置年级"}` : ""}
+                            </span>
+                          )}
+                        </div>
                         <div className="grid grid-cols-2 gap-2">
-                          {vault.students.map((student) => (
-                            <button
-                              type="button"
-                              key={student.id}
-                              onClick={() => toggleCourseStudent(student.id)}
-                              className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
-                                editingCourse.studentIds.includes(student.id)
-                                  ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
-                                  : student.temporaryTrial
-                                  ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
-                                  : "border-[#dbe4ef] bg-white text-[#25324a]"
-                              }`}
-                            >
-                              {student.name}{student.temporaryTrial ? " · 试听" : ""}
-                            </button>
-                          ))}
+                          {vault.students.map((student) => {
+                            const isSelected = editingCourse.studentIds.includes(student.id);
+                            const selectedGrade = editingCourse.type === "class" ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
+                            const isDifferentGrade = editingCourse.type === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
+                            return (
+                              <button
+                                type="button"
+                                key={student.id}
+                                onClick={() => toggleCourseStudent(student.id)}
+                                disabled={isDifferentGrade}
+                                title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : undefined}
+                                className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
+                                  isSelected
+                                    ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
+                                    : isDifferentGrade
+                                      ? "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
+                                      : student.temporaryTrial
+                                        ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
+                                        : "border-[#dbe4ef] bg-white text-[#25324a]"
+                                }`}
+                              >
+                                {student.name}{student.grade ? ` · ${student.grade}` : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">

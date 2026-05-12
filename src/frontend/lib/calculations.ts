@@ -116,8 +116,10 @@ export function defaultClassFeeTiers(rule?: FeeRule): ClassFeeTier[] {
 
 export function normalizedClassFeeTiers(rule: FeeRule): ClassFeeTier[] {
   const explicitTiers = (rule.classFeeTiers ?? []).filter((tier) => Number.isFinite(tier.minStudents));
-  const tiers = explicitTiers.length > 0 ? explicitTiers : defaultClassFeeTiers(rule);
-  return [...tiers].sort((a, b) => a.minStudents - b.minStudents);
+  const tier = explicitTiers.length > 0
+    ? [...explicitTiers].sort((a, b) => a.minStudents - b.minStudents)[0]
+    : defaultClassFeeTiers(rule)[0];
+  return [{ ...tier, maxStudents: undefined }];
 }
 
 export function classFeeTierForCount(rule: FeeRule, studentCount: number): ClassFeeTier | undefined {

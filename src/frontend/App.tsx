@@ -512,9 +512,6 @@ export function App() {
                   {greeting}
                 </h1>
               </div>
-              <p className="mt-2 text-base text-[#475569] sm:text-lg">
-                今天的课时、收入、排课和待处理事项已汇总在这里。
-              </p>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap xl:justify-end">
