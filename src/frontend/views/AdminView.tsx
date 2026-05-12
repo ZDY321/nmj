@@ -55,6 +55,10 @@ function statusVariant(status: UserStatus): "sage" | "amber" | "destructive" | "
   return "secondary";
 }
 
+function isMigrationMessage(message: string): boolean {
+  return message.includes("云端迁移") || message.includes("D1") || message.includes("migration");
+}
+
 export function AdminView({
   vault,
   token,
@@ -100,18 +104,29 @@ export function AdminView({
     setBusy(true);
     setMessage("");
     try {
-      const [nextSummary, nextUsers, nextFeedback] = await Promise.all([
+      const [nextSummary, nextUsers] = await Promise.all([
         getAdminSummary(token),
-        getAdminUsers(token),
-        getAdminFeedback(token)
+        getAdminUsers(token)
       ]);
       setSummary(nextSummary);
       setUsers(nextUsers);
-      setFeedbackItems(nextFeedback);
-      setFeedbackNotes(
-        Object.fromEntries(nextFeedback.map((item) => [item.id, item.adminNote ?? ""]))
-      );
       setRegistrationEnabled(nextSummary.registrationEnabled);
+      try {
+        const nextFeedback = await getAdminFeedback(token);
+        setFeedbackItems(nextFeedback);
+        setFeedbackNotes(
+          Object.fromEntries(nextFeedback.map((item) => [item.id, item.adminNote ?? ""]))
+        );
+      } catch (feedbackError) {
+        setFeedbackItems([]);
+        setFeedbackNotes({});
+        const feedbackMessage = feedbackError instanceof Error ? feedbackError.message : "用户反馈列表加载失败。";
+        setMessage(
+          isMigrationMessage(feedbackMessage)
+            ? "用户反馈列表暂时不可用：云端 D1 还没执行最新迁移。请在 Cloudflare D1 按顺序执行 migrations/0003_user_feedback.sql 后刷新。其他管理员数据已正常加载。"
+            : feedbackMessage
+        );
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "管理员数据加载失败。");
     } finally {

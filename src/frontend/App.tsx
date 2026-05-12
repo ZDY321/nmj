@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   Bell,
+  BookOpen,
   Calendar,
   GraduationCap,
   LogOut,
@@ -532,6 +533,13 @@ export function App() {
     setOnboardingVisible(false);
   }
 
+  function openOnboardingManually() {
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setMobileNavOpen(false);
+    setOnboardingVisible(true);
+  }
+
   function openOnboardingView(nextView: ViewKey) {
     dismissOnboarding();
     setView(nextView);
@@ -600,6 +608,13 @@ export function App() {
                     {item.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={openOnboardingManually}
+                  className="rounded-[12px] bg-[#eaf2ff] px-3 py-2 text-left text-sm font-bold text-[#1557c2]"
+                >
+                  新手指引
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -620,7 +635,13 @@ export function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-[56px_56px_minmax(0,1fr)] gap-2 sm:flex sm:flex-wrap sm:gap-3 xl:justify-end">
+            <div
+              className={`grid ${
+                role === "admin"
+                  ? "grid-cols-[56px_56px_minmax(0,1fr)]"
+                  : "grid-cols-[56px_56px_56px_minmax(0,1fr)]"
+              } gap-2 sm:flex sm:flex-wrap sm:gap-3 xl:justify-end`}
+            >
               <button
                 type="button"
                 onClick={() => setNoticeModalOpen(true)}
@@ -636,17 +657,29 @@ export function App() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setFeedbackModalOpen(true);
-                  setFeedbackState("idle");
-                  setFeedbackError("");
-                }}
+                onClick={openOnboardingManually}
                 className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors hover:bg-[#f8fbff] sm:h-[58px] sm:w-[58px]"
-                aria-label="发送功能反馈"
-                title="功能反馈"
+                aria-label="查看新手指引"
+                title="新手指引"
               >
-                <MessageSquare size={21} />
+                <BookOpen size={21} />
               </button>
+
+              {role !== "admin" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeedbackModalOpen(true);
+                    setFeedbackState("idle");
+                    setFeedbackError("");
+                  }}
+                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors hover:bg-[#f8fbff] sm:h-[58px] sm:w-[58px]"
+                  aria-label="发送功能反馈"
+                  title="功能反馈"
+                >
+                  <MessageSquare size={21} />
+                </button>
+              )}
 
               <label className="flex h-14 min-w-0 items-center gap-2 rounded-[16px] border border-[#dbe4ef] bg-white px-3 shadow-[0_12px_28px_rgba(15,35,66,0.08)] sm:h-[58px] sm:gap-3 sm:px-4">
                 <Calendar size={20} className="shrink-0 text-[#25324a]" />
@@ -748,7 +781,7 @@ export function App() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {feedbackModalOpen && (
+          {role !== "admin" && feedbackModalOpen && (
             <motion.div
               className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/40 p-4 backdrop-blur-sm"
               initial={{ opacity: 0 }}

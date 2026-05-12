@@ -53,7 +53,7 @@ function translateApiError(error: string): string {
     "Password confirmation required": "请先输入当前管理员密码。",
     "Password confirmation failed": "管理员密码确认失败。",
     "Target password confirmation failed": "被删除账号密码验证失败。",
-    "Database migration required": "数据库还没执行最新云端迁移。请先在 D1 按顺序执行 migrations 目录下的新 SQL。",
+    "Database migration required": "云端 D1 表结构不是最新。请在 Cloudflare D1 按顺序执行 migrations 目录下尚未执行的 SQL，然后刷新页面。",
     "Feedback content required": "请先填写反馈内容。",
     "Invalid feedback status": "反馈处理状态不正确。"
   };

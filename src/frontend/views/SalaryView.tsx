@@ -85,6 +85,15 @@ export function SalaryView({
     })
     .sort(sortLessons)
     .reverse();
+  const filteredCompletedLessons = recentLessons.filter((lesson) => isCompletedLessonStatus(lesson.status));
+  const filteredPendingLessons = recentLessons.filter((lesson) => isPendingLessonStatus(lesson.status));
+  const filteredCancelledLessons = recentLessons.filter((lesson) => lesson.status === "cancelled");
+  const filteredTotalAmount = recentLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
+  const filteredTotalHours = recentLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? 0), 0);
+  const filteredMissedAttendanceCount = recentLessons.reduce(
+    (sum, lesson) => sum + lesson.attendance.filter((entry) => isMissedAttendanceStatus(entry.status)).length,
+    0
+  );
   const selectedMonthAdjustments = vault.salaryAdjustments.filter((item) => item.month === selectedMonth);
   const obligation = obligationSummary(vault, selectedMonth);
 
@@ -464,6 +473,36 @@ export function SalaryView({
             </div>
           </div>
 
+          <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4 shadow-[0_10px_24px_rgba(15,35,66,0.04)]">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-extrabold text-[#061226]">当前筛选结果</div>
+                <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                  按上方日期、课程、学生和校区筛选后的课时汇总。
+                </div>
+              </div>
+              <Badge variant="secondary" className="w-fit">
+                {recentLessons.length} 条记录
+              </Badge>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
+              {[
+                { label: "总课次", value: `${recentLessons.length} 节` },
+                { label: "课时金额", value: formatMoney(filteredTotalAmount) },
+                { label: "课时合计", value: `${filteredTotalHours.toFixed(1)} 小时` },
+                { label: "已完成", value: `${filteredCompletedLessons.length} 节` },
+                { label: "未上/待补", value: `${filteredPendingLessons.length} 节` },
+                { label: "缺勤请假", value: `${filteredMissedAttendanceCount} 人次` },
+                { label: "已取消", value: `${filteredCancelledLessons.length} 节` }
+              ].map((item) => (
+                <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
+                  <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
+                  <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {recentLessons.length > 0 && (
             <div className="space-y-3 md:hidden">
               {recentLessons.map((lesson) => (
@@ -585,4 +624,16 @@ function niceChartMax(value: number): number {
   const normalized = value / magnitude;
   const step = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10].find((candidate) => normalized <= candidate) ?? 10;
   return step * magnitude;
+}
+
+function isCompletedLessonStatus(status: string): boolean {
+  return status === "completed" || status === "makeup_completed";
+}
+
+function isPendingLessonStatus(status: string): boolean {
+  return status === "draft" || status === "scheduled" || status === "makeup_pending";
+}
+
+function isMissedAttendanceStatus(status: string): boolean {
+  return status === "leave_requested" || status === "absent" || status === "cancelled" || status === "makeup_pending";
 }

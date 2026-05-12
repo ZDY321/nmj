@@ -1197,7 +1197,7 @@ export default {
           return json(
             {
               error: "Database migration required",
-              detail: "请先对 D1 执行最新 migrations SQL，然后再注册或登录。"
+              detail: "请先在 Cloudflare D1 按顺序执行 migrations 目录下尚未执行的 SQL，然后刷新页面。"
             },
             503
           );
