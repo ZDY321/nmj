@@ -773,7 +773,7 @@ export function ScheduleView({
                 <CalendarDays size={14} /> 日历排课 / 查看
               </div>
               <CardTitle>日历排课</CardTitle>
-              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课。" : "查看模式下，点击日期只切换右侧明细。"}</CardDescription>
+              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课；课程和时间是新课预设，不作为筛选条件。" : "查看模式下，点击日期只切换右侧明细。"}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
@@ -807,22 +807,27 @@ export function ScheduleView({
           </CardHeader>
           <CardContent className="space-y-4">
             {calendarMode === "schedule" ? (
-              <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">排课课程</label>
-                  <Select value={calendarCourseGroupId} onChange={(event) => setCalendarCourseGroupId(event.target.value)}>
-                    {courseSelectionOptions.map((course) => (
-                      <option key={course.id} value={course.id}>{course.name}</option>
-                    ))}
-                  </Select>
+              <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">排课课程</label>
+                    <Select value={calendarCourseGroupId} onChange={(event) => setCalendarCourseGroupId(event.target.value)}>
+                      {courseSelectionOptions.map((course) => (
+                        <option key={course.id} value={course.id}>{course.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">开始时间</label>
+                    <Input type="time" value={calendarStartTime} max={calendarEndTime} onChange={(event) => setCalendarStartTime(event.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">结束时间</label>
+                    <Input type="time" value={calendarEndTime} min={calendarStartTime} onChange={(event) => setCalendarEndTime(event.target.value)} className={!isCalendarTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">开始时间</label>
-                  <Input type="time" value={calendarStartTime} max={calendarEndTime} onChange={(event) => setCalendarStartTime(event.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">结束时间</label>
-                  <Input type="time" value={calendarEndTime} min={calendarStartTime} onChange={(event) => setCalendarEndTime(event.target.value)} className={!isCalendarTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">
+                  说明：这里的排课课程、开始时间和结束时间只用于点击日期时生成新课，不会筛选日历或右侧每日课程详情。
                 </div>
               </div>
             ) : (

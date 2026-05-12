@@ -10,67 +10,86 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { TeacherVault } from "@/shared/types";
 import type { ViewKey } from "@/frontend/lib/helpers";
+import { getOnboardingStepStates, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 
 type GuideStep = {
+  key: OnboardingStepKey;
   title: string;
   description: string;
   detail: string;
   view: ViewKey;
   button: string;
+  dataDone: boolean;
+  visited: boolean;
   done: boolean;
 };
 
+type GuideStepContent = Omit<GuideStep, "dataDone" | "visited" | "done">;
+
 export function OnboardingGuide({
   vault,
-  onOpenView,
+  visitedSteps,
+  onOpenStep,
   onDismiss
 }: {
   vault: TeacherVault;
-  onOpenView: (view: ViewKey) => void;
+  visitedSteps: OnboardingStepKey[];
+  onOpenStep: (stepKey: OnboardingStepKey, view: ViewKey) => void;
   onDismiss: () => void;
 }) {
-  const steps: GuideStep[] = [
+  const stepStates = getOnboardingStepStates(vault, visitedSteps);
+  const stepStateByKey = new Map(stepStates.map((step) => [step.key, step]));
+  const stepContent: GuideStepContent[] = [
     {
+      key: "profile",
       title: "建立校区和个人档案",
       description: "先录入常用校区、基础工资、义务课时规则和联系方式。",
       detail: "这些信息会被后续课程、课时费、工资核对自动引用，建议先把校区和基础工资填好。",
       view: "students",
-      button: "去档案信息",
-      done: vault.campuses.length > 0 || vault.profile.baseSalary > 0
+      button: "去档案信息"
     },
     {
+      key: "student_course",
       title: "录入学生和课程",
       description: "给学生建档，再创建一对一、班课或试听课程，并设置计费方式。",
       detail: "课程会绑定学生、校区和收费规则；后面排课时只需要选择课程，金额会自动带出。",
       view: "students",
-      button: "添加学生课程",
-      done: vault.students.length > 0 && vault.courseGroups.length > 0
+      button: "添加学生课程"
     },
     {
+      key: "schedule",
       title: "生成课时记录",
       description: "用单节添加、日历点选或批量生成，把未来课程排到系统里。",
       detail: "上课后在课时记录里确认到课状态、补课、临时学生、作业和下次提醒。",
       view: "schedule",
-      button: "去排课",
-      done: vault.lessons.length > 0
+      button: "去排课"
     },
     {
+      key: "payroll",
       title: "每天看提醒，月底核工资",
       description: "今日提醒负责当天跟进，工资核对和数据统计负责月底复盘。",
       detail: "月底先核对课程状态，再看校区小计、义务课时扣费、补贴扣款和最终收入。",
       view: "payroll",
-      button: "看核对页",
-      done: vault.lessons.some((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed")
+      button: "看核对页"
     },
     {
+      key: "grades",
       title: "补充成绩记录",
       description: "有考试或测验时，按学生和科目录入成绩，后续可看走势。",
       detail: "成绩记录不会影响工资，只用于教学跟进和家长沟通。",
       view: "grades",
-      button: "去成绩记录",
-      done: Boolean(vault.gradeRecords?.length)
+      button: "去成绩记录"
     }
   ];
+  const steps: GuideStep[] = stepContent.map((step) => {
+    const state = stepStateByKey.get(step.key);
+    return {
+      ...step,
+      dataDone: Boolean(state?.dataDone),
+      visited: Boolean(state?.visited),
+      done: Boolean(state?.done)
+    };
+  });
 
   const completed = steps.filter((step) => step.done).length;
 
@@ -107,7 +126,7 @@ export function OnboardingGuide({
                 </div>
               </div>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <Button type="button" onClick={() => onOpenView("students")} className="h-12 rounded-[14px]">
+                <Button type="button" onClick={() => onOpenStep("profile", "students")} className="h-12 rounded-[14px]">
                   开始配置 <ChevronRight size={16} />
                 </Button>
                 <Button
@@ -132,7 +151,7 @@ export function OnboardingGuide({
                             {index + 1}
                           </span>
                           <Badge variant={step.done ? "sage" : "secondary"}>
-                            {step.done ? "已准备" : "建议完成"}
+                            {step.dataDone ? "已准备" : step.visited ? "已查看" : "建议完成"}
                           </Badge>
                         </div>
                         <div className="text-base font-extrabold text-[#061226]">{step.title}</div>
@@ -144,7 +163,7 @@ export function OnboardingGuide({
                         variant={step.done ? "outline" : "secondary"}
                         size="sm"
                         className="shrink-0"
-                        onClick={() => onOpenView(step.view)}
+                        onClick={() => onOpenStep(step.key, step.view)}
                       >
                         {step.button}
                       </Button>

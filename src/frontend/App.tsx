@@ -36,6 +36,7 @@ import {
   createLessonFromCourse,
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
+import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import type {
   Campus,
@@ -85,6 +86,7 @@ export function App() {
   const [feedbackError, setFeedbackError] = useState("");
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
   const [onboardingVisible, setOnboardingVisible] = useState(false);
+  const [onboardingVisitedSteps, setOnboardingVisitedSteps] = useState<OnboardingStepKey[]>([]);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [greetingTime, setGreetingTime] = useState(() => new Date());
@@ -438,6 +440,14 @@ export function App() {
   }, [username, vault?.notice.enabled, vault?.notice.updatedAt]);
 
   useEffect(() => {
+    if (!username) {
+      setOnboardingVisitedSteps([]);
+      return;
+    }
+    setOnboardingVisitedSteps(readOnboardingVisitedSteps(username));
+  }, [username]);
+
+  useEffect(() => {
     if (!vault || !username) {
       setOnboardingVisible(false);
       return;
@@ -524,7 +534,7 @@ export function App() {
   const saveFullLabel =
     saveState === "saving" ? "同步中..." : saveState === "saved" ? "已加密同步" : saveState === "error" ? "云端同步失败" : "云端加密";
   const greeting = greetingFor(greetingTime);
-  const guideNeedsAttention = !isOnboardingSetupComplete(vault);
+  const guideNeedsAttention = !isOnboardingSetupComplete(vault, onboardingVisitedSteps);
 
   function dismissOnboarding() {
     if (username) {
@@ -541,7 +551,19 @@ export function App() {
     setOnboardingVisible(true);
   }
 
-  function openOnboardingView(nextView: ViewKey) {
+  function recordOnboardingStep(stepKey: OnboardingStepKey) {
+    if (!username) return;
+    setOnboardingVisitedSteps((current) => {
+      const stored = readOnboardingVisitedSteps(username);
+      const next = Array.from(new Set([...stored, ...current, stepKey]));
+      if (next.length === current.length && current.includes(stepKey)) return current;
+      localStorage.setItem(onboardingProgressKey(username), JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function openOnboardingStep(stepKey: OnboardingStepKey, nextView: ViewKey) {
+    recordOnboardingStep(stepKey);
     dismissOnboarding();
     setView(nextView);
   }
@@ -886,7 +908,8 @@ export function App() {
             {onboardingVisible && (
               <OnboardingGuide
                 vault={vault}
-                onOpenView={openOnboardingView}
+                visitedSteps={onboardingVisitedSteps}
+                onOpenStep={openOnboardingStep}
                 onDismiss={dismissOnboarding}
               />
             )}
@@ -1012,6 +1035,18 @@ function onboardingDismissedKey(username: string): string {
   return `teacher-salary-tracker:onboarding-dismissed:${username}`;
 }
 
+function onboardingProgressKey(username: string): string {
+  return `teacher-salary-tracker:onboarding-progress:${username}`;
+}
+
+function readOnboardingVisitedSteps(username: string): OnboardingStepKey[] {
+  try {
+    return normalizeOnboardingStepKeys(JSON.parse(localStorage.getItem(onboardingProgressKey(username)) ?? "[]"));
+  } catch {
+    return [];
+  }
+}
+
 function shouldShowOnboarding(vault: TeacherVault): boolean {
   return (
     vault.campuses.length === 0 &&
@@ -1021,13 +1056,6 @@ function shouldShowOnboarding(vault: TeacherVault): boolean {
     (vault.gradeRecords ?? []).length === 0 &&
     vault.salaryAdjustments.length === 0
   );
-}
-
-function isOnboardingSetupComplete(vault: TeacherVault): boolean {
-  const hasProfileBasis = vault.campuses.length > 0 || vault.profile.baseSalary > 0;
-  const hasStudentCourseBasis = vault.students.length > 0 && vault.courseGroups.length > 0;
-  const hasScheduleBasis = vault.lessons.length > 0;
-  return hasProfileBasis && hasStudentCourseBasis && hasScheduleBasis;
 }
 
 function readUnlockedSession(): string | null {

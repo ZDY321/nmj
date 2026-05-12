@@ -62,6 +62,11 @@ export function StudentsView({
   const [studentNoteInput, setStudentNoteInput] = useState("");
   const [courseNameInput, setCourseNameInput] = useState("");
   const [courseType, setCourseType] = useState<CourseType>("one_on_one");
+  const [courseSubjectInput, setCourseSubjectInput] = useState("");
+  const [courseCampusInput, setCourseCampusInput] = useState(vault.campuses[0]?.id ?? "");
+  const [courseStatusInput, setCourseStatusInput] = useState<CourseGroup["status"]>("active");
+  const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
+  const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => defaultFeeRule("one_on_one"));
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
@@ -77,6 +82,7 @@ export function StudentsView({
   const [courseCampusFilter, setCourseCampusFilter] = useState("all");
   const [archiveSearch, setArchiveSearch] = useState("");
   const [courseStudentSearch, setCourseStudentSearch] = useState("");
+  const [newCourseStudentSearch, setNewCourseStudentSearch] = useState("");
   const [courseStudentScope, setCourseStudentScope] = useState<"all" | "selected" | "available">("all");
   const [courseStudentGradeFilter, setCourseStudentGradeFilter] = useState("all");
   const [courseStudentCampusFilter, setCourseStudentCampusFilter] = useState("all");
@@ -93,10 +99,26 @@ export function StudentsView({
   const { confirm, dialog } = useConfirmDialog();
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
   const normalizedCourseStudentSearch = courseStudentSearch.trim().toLowerCase();
+  const normalizedNewCourseStudentSearch = newCourseStudentSearch.trim().toLowerCase();
   const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
   const hasStudentsWithoutGrade = vault.students.some((student) => !student.grade);
   const hasUnsetGradeFilterOption = hasStudentsWithoutGrade || vault.courseGroups.some((course) => course.studentIds.length === 0);
   const subjectFilterOptions = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter((subject): subject is string => Boolean(subject)))).sort();
+  const primaryCourseStudent = courseStudentIds[0]
+    ? vault.students.find((student) => student.id === courseStudentIds[0])
+    : undefined;
+  const suggestedCourseName = primaryCourseStudent && courseType === "one_on_one" ? `${primaryCourseStudent.name}${courseTypeLabels[courseType]}` : "";
+  const addCourseStudentOptions = vault.students.filter((student) => {
+    const searchable = [
+      student.name,
+      student.grade ?? "",
+      student.school ?? "",
+      student.note ?? "",
+      campusName(vault, student.defaultCampusId),
+      student.temporaryTrial ? "试听 临时试听" : ""
+    ].join(" ").toLowerCase();
+    return !normalizedNewCourseStudentSearch || searchable.includes(normalizedNewCourseStudentSearch);
+  });
   const visibleStudents = vault.students.filter((student) => {
     const matchesGrade = matchesGradeFilter(student.grade, gradeFilter);
     const matchesCampus = studentCampusFilter === "all" || student.defaultCampusId === studentCampusFilter;
@@ -146,6 +168,16 @@ export function StudentsView({
     : [];
   const transferTargetCourseIds = transferTargetCourses.map((course) => course.id).join("|");
   const campusOptionIds = vault.campuses.map((campus) => campus.id).join("|");
+
+  useEffect(() => {
+    const fallbackCampusId = vault.campuses[0]?.id ?? "";
+    setStudentCampusInput((current) =>
+      current && vault.campuses.some((campus) => campus.id === current) ? current : fallbackCampusId
+    );
+    setCourseCampusInput((current) =>
+      current && vault.campuses.some((campus) => campus.id === current) ? current : fallbackCampusId
+    );
+  }, [campusOptionIds]);
 
   useEffect(() => {
     setTransferStudentId((current) =>
@@ -202,18 +234,33 @@ export function StudentsView({
 
   function addCourse(e: FormEvent) {
     e.preventDefault();
-    if (!courseNameInput.trim()) return;
+    const resolvedName = courseNameInput.trim() || suggestedCourseName;
+    if (!resolvedName) return;
+    const normalizedStudentIds = courseType === "one_on_one" ? courseStudentIds.slice(0, 1) : courseStudentIds;
+    const feeRule = courseType === "class"
+      ? {
+          ...courseFeeRule,
+          mode: "class_headcount" as const,
+          classFeeTiers: [{ ...(normalizedClassFeeTiers(courseFeeRule)[0] ?? defaultClassFeeTiers(courseFeeRule)[0]), maxStudents: undefined }]
+        }
+      : courseFeeRule;
     onAddCourse({
       id: makeId("course"),
-      name: courseNameInput.trim(),
+      name: resolvedName,
       type: courseType,
-      subject: "未设置",
-      defaultCampusId: vault.campuses[0]?.id,
-      studentIds: [],
-      feeRule: defaultFeeRule(courseType),
-      status: "active"
+      subject: courseSubjectInput.trim() || "未设置",
+      defaultCampusId: courseCampusInput || firstCourseStudentCampus(normalizedStudentIds) || vault.campuses[0]?.id,
+      studentIds: normalizedStudentIds,
+      feeRule,
+      status: courseStatusInput
     });
     setCourseNameInput("");
+    setCourseSubjectInput("");
+    setCourseStudentIds([]);
+    setCourseCampusInput(vault.campuses[0]?.id ?? "");
+    setCourseStatusInput("active");
+    setCourseFeeRule(defaultFeeRule(courseType));
+    setNewCourseStudentSearch("");
   }
 
   function applyStudentCourseTransfer(event: FormEvent) {
@@ -282,6 +329,78 @@ export function StudentsView({
     );
   }
 
+  function firstCourseStudentCampus(studentIds: string[]): string | undefined {
+    return studentIds
+      .map((studentId) => vault.students.find((student) => student.id === studentId)?.defaultCampusId)
+      .find(Boolean);
+  }
+
+  function syncNewCourseCampusFromStudents(studentIds: string[]) {
+    const campusId = firstCourseStudentCampus(studentIds);
+    if (campusId) {
+      setCourseCampusInput(campusId);
+    }
+  }
+
+  function changeNewCourseType(nextType: CourseType) {
+    const nextStudentIds = nextType === "one_on_one" ? courseStudentIds.slice(0, 1) : courseStudentIds;
+    setCourseType(nextType);
+    setCourseStudentIds(nextStudentIds);
+    setCourseFeeRule(defaultFeeRule(nextType));
+    syncNewCourseCampusFromStudents(nextStudentIds);
+  }
+
+  function updateNewCourseFee(patch: Partial<FeeRule>) {
+    setCourseFeeRule((current) => ({ ...current, ...patch }));
+  }
+
+  function replaceNewClassFeeTiers(nextTiers: ClassFeeTier[]) {
+    setCourseFeeRule((current) => {
+      const sortedTiers = [...nextTiers].sort((a, b) => a.minStudents - b.minStudents);
+      const firstTier = sortedTiers[0];
+      return {
+        ...current,
+        mode: "class_headcount",
+        baseFee: firstTier?.baseFee ?? current.baseFee,
+        perPresentStudentFee: firstTier?.perStudentFee ?? current.perPresentStudentFee,
+        classFeeTiers: sortedTiers
+      };
+    });
+  }
+
+  function updateNewClassFeeTier(tierId: string, patch: Partial<ClassFeeTier>) {
+    const tier = normalizedClassFeeTiers(courseFeeRule).find((item) => item.id === tierId) ?? normalizedClassFeeTiers(courseFeeRule)[0];
+    replaceNewClassFeeTiers([{ ...tier, ...patch, maxStudents: undefined }]);
+  }
+
+  function setNewCourseStudents(nextStudentIds: string[]) {
+    const normalizedStudentIds = courseType === "one_on_one" ? nextStudentIds.slice(0, 1) : nextStudentIds;
+    setCourseStudentIds(normalizedStudentIds);
+    syncNewCourseCampusFromStudents(normalizedStudentIds);
+  }
+
+  function chooseNewOneOnOneStudent(studentId: string) {
+    setNewCourseStudents(studentId ? [studentId] : []);
+  }
+
+  function toggleNewCourseStudent(studentId: string) {
+    const isSelected = courseStudentIds.includes(studentId);
+    const student = vault.students.find((item) => item.id === studentId);
+    if (courseType === "one_on_one") {
+      setNewCourseStudents(isSelected ? [] : [studentId]);
+      return;
+    }
+    if (courseType === "class" && !isSelected) {
+      const selectedGrade = firstCourseStudentGrade(courseStudentIds);
+      if (selectedGrade !== undefined && (student?.grade ?? "") !== selectedGrade) {
+        return;
+      }
+    }
+    setNewCourseStudents(
+      isSelected ? courseStudentIds.filter((id) => id !== studentId) : [...courseStudentIds, studentId]
+    );
+  }
+
   function updateEditingCourse(patch: Partial<CourseGroup>) {
     setEditingCourse((current) => (current ? { ...current, ...patch } : current));
   }
@@ -342,6 +461,14 @@ export function StudentsView({
       if (!current) return current;
       const isSelected = current.studentIds.includes(studentId);
       const student = vault.students.find((item) => item.id === studentId);
+      if (current.type === "one_on_one") {
+        const studentIds = isSelected ? [] : [studentId];
+        return {
+          ...current,
+          studentIds,
+          defaultCampusId: !isSelected ? student?.defaultCampusId ?? current.defaultCampusId : current.defaultCampusId
+        };
+      }
       if (current.type === "class" && !isSelected) {
         const selectedGrade = firstCourseStudentGrade(current.studentIds);
         if (selectedGrade !== undefined && (student?.grade ?? "") !== selectedGrade) {
@@ -351,7 +478,11 @@ export function StudentsView({
       const studentIds = current.studentIds.includes(studentId)
         ? current.studentIds.filter((id) => id !== studentId)
         : [...current.studentIds, studentId];
-      return { ...current, studentIds };
+      return {
+        ...current,
+        studentIds,
+        defaultCampusId: !isSelected ? student?.defaultCampusId ?? current.defaultCampusId : current.defaultCampusId
+      };
     });
   }
 
@@ -1107,23 +1238,201 @@ export function StudentsView({
               </div>
               <Badge variant="secondary">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
             </div>
-            <form onSubmit={addCourse} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px_auto]">
-              <Input
-                value={courseNameInput}
-                onChange={(e) => setCourseNameInput(e.target.value)}
-                placeholder="例如：初三数学班"
-              />
-              <Select
-                value={courseType}
-                onChange={(e) => setCourseType(e.target.value as CourseType)}
-              >
-                {courseTypeOptions.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </Select>
-              <Button type="submit">
-                <Plus size={15} /> 添加课程
-              </Button>
+            <form onSubmit={addCourse} className="space-y-3 rounded-[16px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+                <Input
+                  value={courseNameInput}
+                  onChange={(event) => setCourseNameInput(event.target.value)}
+                  placeholder={suggestedCourseName || "课程名称，例如：初三数学班"}
+                />
+                <Input
+                  value={courseSubjectInput}
+                  onChange={(event) => setCourseSubjectInput(event.target.value)}
+                  placeholder="科目，例如：数学"
+                />
+                <Select
+                  value={courseType}
+                  onChange={(event) => changeNewCourseType(event.target.value as CourseType)}
+                >
+                  {courseTypeOptions.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </Select>
+                <Select value={courseCampusInput} onChange={(event) => setCourseCampusInput(event.target.value)}>
+                  <option value="">未设置校区</option>
+                  {vault.campuses.map((campus) => (
+                    <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  ))}
+                </Select>
+                <Select value={courseStatusInput} onChange={(event) => setCourseStatusInput(event.target.value as CourseGroup["status"])}>
+                  <option value="active">启用</option>
+                  <option value="paused">暂停</option>
+                </Select>
+              </div>
+
+              {courseType === "class" ? (
+                <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-white p-3">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm font-extrabold text-[#061226]">班课人数计费</div>
+                    <div className="text-xs font-semibold text-[#64748b]">
+                      当前关联 {courseStudentIds.length} 人，预计 {formatMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length))}
+                    </div>
+                  </div>
+                  {normalizedClassFeeTiers(courseFeeRule).slice(0, 1).map((tier) => (
+                    <div key={tier.id} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={tier.minStudents}
+                          onChange={(event) => updateNewClassFeeTier(tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#64748b]">基础费用</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={tier.baseFee}
+                          onChange={(event) => updateNewClassFeeTier(tier.id, { baseFee: Math.max(Number(event.target.value), 0) })}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#64748b]">每增加一人</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={tier.perStudentFee ?? 0}
+                          onChange={(event) => updateNewClassFeeTier(tier.id, { perStudentFee: Math.max(Number(event.target.value), 0) })}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-end">
+                  <div>
+                    <div className="text-sm font-extrabold text-[#061226]">
+                      {courseType === "trial" ? "试听费用" : "课程费用"}
+                    </div>
+                    <div className="mt-1 text-xs font-semibold text-[#64748b]">按开始和结束时间自动折算课时费。</div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#64748b]">
+                      {courseType === "trial" ? "试听每小时费用" : "每小时费用"}
+                    </label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={courseFeeRule.hourlyRate ?? 0}
+                      onChange={(event) => updateNewCourseFee({ hourlyRate: Math.max(Number(event.target.value), 0) })}
+                      className="h-9 bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-medium">
+                    关联学生（{courseStudentIds.length} / {vault.students.length}）
+                    {courseType === "class" && (
+                      <span className="ml-2 text-xs font-bold text-[#64748b]">
+                        班课需同年级{firstCourseStudentGrade(courseStudentIds) !== undefined ? `：${firstCourseStudentGrade(courseStudentIds) || "未设置年级"}` : ""}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-[#64748b]">默认校区跟随所选学生档案</span>
+                </div>
+
+                {courseType === "one_on_one" ? (
+                  <Select value={courseStudentIds[0] ?? ""} onChange={(event) => chooseNewOneOnOneStudent(event.target.value)}>
+                    <option value="">选择一对一学生</option>
+                    {vault.students.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <>
+                    <label className="relative block">
+                      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                      <Input
+                        className="h-10 bg-white pl-9"
+                        value={newCourseStudentSearch}
+                        onChange={(event) => setNewCourseStudentSearch(event.target.value)}
+                        placeholder="搜索学生姓名、年级、学校、校区或备注"
+                      />
+                    </label>
+                    {courseStudentIds.length > 0 && (
+                      <div className="max-h-20 overflow-y-auto pr-1">
+                        <div className="flex flex-wrap gap-2">
+                          {courseStudentIds.map((studentId) => {
+                            const student = vault.students.find((item) => item.id === studentId);
+                            return (
+                              <button
+                                type="button"
+                                key={studentId}
+                                onClick={() => toggleNewCourseStudent(studentId)}
+                                className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1 text-xs font-bold text-[#9a3412]"
+                                title="点击取消关联"
+                              >
+                                <span className="truncate">{student?.name ?? "未知学生"}</span>
+                                <X size={12} />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <div className="max-h-[220px] overflow-y-auto pr-1">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {addCourseStudentOptions.map((student) => {
+                          const isSelected = courseStudentIds.includes(student.id);
+                          const selectedGrade = courseType === "class" ? firstCourseStudentGrade(courseStudentIds) : undefined;
+                          const isDifferentGrade = courseType === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
+                          return (
+                            <button
+                              type="button"
+                              key={student.id}
+                              onClick={() => toggleNewCourseStudent(student.id)}
+                              disabled={isDifferentGrade}
+                              title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : undefined}
+                              className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
+                                isSelected
+                                  ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
+                                  : isDifferentGrade
+                                    ? "cursor-not-allowed border-[#e2e8f0] bg-white text-[#94a3b8]"
+                                    : student.temporaryTrial
+                                      ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
+                                      : "border-[#dbe4ef] bg-white text-[#25324a]"
+                              }`}
+                            >
+                              {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {addCourseStudentOptions.length === 0 && (
+                        <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
+                          没有符合条件的学生
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex justify-end">
+                <Button type="submit" disabled={!courseNameInput.trim() && !suggestedCourseName}>
+                  <Plus size={15} /> 添加课程
+                </Button>
+              </div>
             </form>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
@@ -1200,9 +1509,12 @@ export function StudentsView({
                           value={editingCourse.type}
                           onChange={(event) => {
                             const nextType = event.target.value as CourseType;
+                            const nextStudentIds = nextType === "one_on_one" ? editingCourse.studentIds.slice(0, 1) : editingCourse.studentIds;
                             updateEditingCourse({
                               type: nextType,
-                              feeRule: defaultFeeRule(nextType)
+                              feeRule: defaultFeeRule(nextType),
+                              studentIds: nextStudentIds,
+                              defaultCampusId: firstCourseStudentCampus(nextStudentIds) ?? editingCourse.defaultCampusId
                             });
                           }}
                         >
