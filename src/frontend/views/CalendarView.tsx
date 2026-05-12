@@ -48,7 +48,7 @@ export function CalendarView({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="选中日期" value={`${selectedLessons.length} 节`} hint={formatMoney(selectedTotal)} variant={1} index={0} showSparkline={false} />
         <MetricCard label="本周课程" value={`${weekLessons.length} 节`} hint={formatMoney(weekTotal)} variant={2} index={1} showSparkline={false} />
         <MetricCard label="本月课程" value={`${monthLessons.length} 节`} hint={formatMoney(monthTotal)} variant={3} index={2} showSparkline={false} />
@@ -62,9 +62,9 @@ export function CalendarView({
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.45fr_0.75fr] gap-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr]">
         <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <div className="flex items-center gap-2 text-[#ff8617] text-xs font-bold uppercase tracking-widest mb-1">
                 <CalendarDays size={14} /> 日历总览
@@ -91,8 +91,8 @@ export function CalendarView({
               </button>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-7 gap-2">
+          <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {weekdayLabels.map((d) => (
                 <div key={d} className="text-center text-xs font-bold text-(--color-muted-foreground) py-2">{d}</div>
               ))}
@@ -112,7 +112,7 @@ export function CalendarView({
                     whileHover={{ scale: 1.03, y: -2 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setSelectedDate(date)}
-                    className={`relative flex flex-col items-start p-2.5 rounded-[14px] min-h-[100px] text-left transition-all duration-200 border ${
+                    className={`relative flex min-h-[66px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[100px] sm:rounded-[14px] sm:p-2.5 ${
                       isSelected
                         ? isAllCompleted
                           ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
@@ -129,19 +129,24 @@ export function CalendarView({
                     <span className={`text-sm font-bold ${isSelected ? (isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
                       {Number(date.slice(8))}
                     </span>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
+                    <div className="mt-2 flex gap-1 sm:hidden">
+                      {hasDone && <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a]" />}
+                      {hasCancelled && <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626]" />}
+                      {hasPending && <span className="h-1.5 w-1.5 rounded-full bg-[#ff8617]" />}
+                    </div>
+                    <div className="mt-1.5 hidden flex-wrap gap-1 sm:flex">
                       {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
                       {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                       {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
                       {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatMoney(amount)}</Badge>}
                     </div>
                     {dayLessons.slice(0, 2).map((l) => (
-                      <span key={l.id} className="text-[10px] text-(--color-muted-foreground) mt-0.5 truncate w-full">
+                      <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
                         {l.startTime} {courseName(vault, l.courseGroupId)}
                       </span>
                     ))}
                     {dayLessons.length > 2 && (
-                      <span className="text-[10px] text-(--color-muted-foreground)">+{dayLessons.length - 2} 节</span>
+                      <span className="hidden text-[10px] text-(--color-muted-foreground) sm:block">+{dayLessons.length - 2} 节</span>
                     )}
                   </motion.button>
                 );
@@ -156,7 +161,7 @@ export function CalendarView({
             <CardDescription>仅统计课程课时金额，不等同于工资总额。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">
                 <span className="text-xs text-(--color-muted-foreground)">当天课时费</span>
                 <strong className="block text-xl font-extrabold mt-1">{formatMoney(selectedTotal)}</strong>
@@ -184,7 +189,7 @@ export function CalendarView({
                   key={lesson.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`flex items-center justify-between rounded-[12px] border p-3 ${lessonStatusSurfaceClass(lesson.status)}`}
+                  className={`flex flex-col gap-3 rounded-[12px] border p-3 sm:flex-row sm:items-center sm:justify-between ${lessonStatusSurfaceClass(lesson.status)}`}
                 >
                   <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -199,7 +204,7 @@ export function CalendarView({
                       {campusName(vault, lesson.campusId)} · {studentNames(vault, lesson.expectedStudentIds)}
                     </span>
                   </div>
-                  <span className="font-bold text-sm text-[#1557c2] shrink-0 ml-3">{formatMoney(lesson.feeSnapshot.amount)}</span>
+                  <span className="shrink-0 text-sm font-bold text-[#1557c2] sm:ml-3">{formatMoney(lesson.feeSnapshot.amount)}</span>
                 </motion.div>
               ))}
             </div>

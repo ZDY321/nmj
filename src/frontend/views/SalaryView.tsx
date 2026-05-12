@@ -464,7 +464,54 @@ export function SalaryView({
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {recentLessons.length > 0 && (
+            <div className="space-y-3 md:hidden">
+              {recentLessons.map((lesson) => (
+                <div
+                  key={lesson.id}
+                  className={`rounded-[14px] border p-4 ${
+                    lesson.status === "cancelled" ? "border-[#fecaca] bg-[#fff1f2]" : "border-[#dbe4ef] bg-[#f8fbff]"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-xs font-bold text-[#64748b]">
+                        <CalendarDays size={14} className="shrink-0 text-[#94a3b8]" />
+                        {lesson.date} · {lesson.startTime}-{lesson.endTime}
+                      </div>
+                      <div className="mt-1 break-words text-base font-extrabold text-[#061226]">
+                        {courseName(vault, lesson.courseGroupId)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                        {studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-sm font-extrabold text-[#061226]">{formatMoney(lesson.feeSnapshot.amount)}</div>
+                      <Badge variant={lessonStatusVariant(lesson.status)} className="mt-2">
+                        {lessonStatusLabels[lesson.status]}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
+                      <MapPin size={12} /> {campusName(vault, lesson.campusId)}
+                    </span>
+                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
+                      {courseTypeLabels[lesson.type]}
+                    </span>
+                  </div>
+                  {lesson.note && (
+                    <div className="mt-3 rounded-[12px] border border-[#fecaca] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#b91c1c]">
+                      {lesson.note}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[860px] border-collapse text-left">
               <thead>
                 <tr className="bg-[#f8fbff] text-sm font-bold text-[#25324a]">
@@ -520,12 +567,12 @@ export function SalaryView({
                 ))}
               </tbody>
             </table>
-            {recentLessons.length === 0 && (
-              <div className="border-t border-[#e8eef6] p-8 text-center text-sm font-semibold text-[#64748b]">
-                这个月没有课时记录
-              </div>
-            )}
           </div>
+          {recentLessons.length === 0 && (
+            <div className="border-t border-[#e8eef6] p-8 text-center text-sm font-semibold text-[#64748b]">
+              这个月没有课时记录
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

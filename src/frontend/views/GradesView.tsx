@@ -33,7 +33,7 @@ export function GradesView({
   const [studentFilter, setStudentFilter] = useState("all");
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [trendMetric, setTrendMetric] = useState<"score" | "rank">("score");
-  const [scoreLabelModes, setScoreLabelModes] = useState<Record<string, "ratio" | "raw">>({});
+  const [activeTrendRecordId, setActiveTrendRecordId] = useState("");
   const { confirm, dialog } = useConfirmDialog();
 
   const records = [...(vault.gradeRecords ?? [])].sort((a, b) => `${b.date} ${b.examName}`.localeCompare(`${a.date} ${a.examName}`));
@@ -52,6 +52,7 @@ export function GradesView({
   const trendRecords = selectedStudentRecords.slice(-10);
   const rankValues = trendRecords.map((record) => parseRankNumber(record.rank)).filter((value): value is number => value !== null);
   const maxRank = Math.max(...rankValues, 1);
+  const minRank = Math.min(...rankValues, maxRank);
   const average =
     filteredRecords.length > 0
       ? filteredRecords.reduce((sum, record) => sum + normalizedScore(record), 0) / filteredRecords.length
@@ -77,13 +78,6 @@ export function GradesView({
     setScore("");
     setRank("");
     setNote("");
-  }
-
-  function toggleScoreLabelMode(recordId: string) {
-    setScoreLabelModes((current) => ({
-      ...current,
-      [recordId]: current[recordId] === "raw" ? "ratio" : "raw"
-    }));
   }
 
   return (
@@ -154,7 +148,59 @@ export function GradesView({
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="max-h-[520px] overflow-y-auto pr-2">
+            {filteredRecords.length > 0 && (
+              <div className="space-y-3 md:hidden">
+                {filteredRecords.map((record) => (
+                  <div key={record.id} className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-[#64748b]">{record.date} · {record.subject}</div>
+                        <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{record.examName}</div>
+                        <div className="mt-1 text-sm font-semibold text-[#25324a]">
+                          {findStudent(vault, record.studentId)?.name ?? "未知学生"}
+                        </div>
+                      </div>
+                      <Badge variant="sky" className="shrink-0">
+                        {record.score}{record.fullScore ? ` / ${record.fullScore}` : ""}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
+                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
+                        百分制 {normalizedScore(record).toFixed(1)}%
+                      </span>
+                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
+                        排名 {record.rank || "未填"}
+                      </span>
+                    </div>
+                    {record.note && (
+                      <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                        {record.note}
+                      </div>
+                    )}
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() =>
+                          confirm({
+                            title: "删除这条成绩记录？",
+                            description: `${record.date} · ${record.examName}`,
+                            confirmLabel: "删除",
+                            tone: "danger",
+                            onConfirm: () => onDeleteGradeRecord(record.id)
+                          })
+                        }
+                      >
+                        <Trash2 size={14} /> 删除
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="hidden max-h-[520px] overflow-y-auto pr-2 md:block">
               <table className="w-full min-w-[760px] border-separate border-spacing-y-2 text-left text-sm">
                 <thead>
                   <tr className="text-xs font-extrabold text-[#64748b]">
@@ -212,19 +258,19 @@ export function GradesView({
                   ))}
                 </tbody>
               </table>
-              {filteredRecords.length === 0 && (
-                <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
-                  当前筛选下没有成绩记录
-                </div>
-              )}
             </div>
+            {filteredRecords.length === 0 && (
+              <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
+                当前筛选下没有成绩记录
+              </div>
+            )}
 
             <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-sm font-extrabold text-[#061226]">学生成绩走势</div>
                   <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                    {trendMetric === "score" ? "柱高按百分制折算，标签默认显示原始分数。" : "按排名数值显示，数值越小越靠前。"}
+                    {trendMetric === "score" ? "按百分制折算绘制折线，便于看同一学生的阶段变化。" : "按排名数值绘制折线，位置越高代表排名越靠前。"}
                   </div>
                 </div>
                 <div className="grid w-full grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1 sm:w-[180px]">
@@ -244,60 +290,14 @@ export function GradesView({
                   </button>
                 </div>
               </div>
-              <div className="flex h-[190px] items-end gap-2">
-                {trendRecords.map((record, index) => {
-                  const rankValue = parseRankNumber(record.rank);
-                  const value = trendMetric === "score" ? normalizedScore(record) : rankValue;
-                  const scoreMode = scoreLabelModes[record.id] ?? "raw";
-                  const ratioLabel = `${normalizedScore(record).toFixed(1)}%`;
-                  const rawScoreLabel = record.fullScore ? `${record.score}/${record.fullScore}` : `${record.score}分`;
-                  const height =
-                    trendMetric === "score"
-                      ? Math.max(Math.min(normalizedScore(record), 100), 4)
-                        : rankValue
-                          ? Math.max(((maxRank - rankValue + 1) / maxRank) * 100, 8)
-                          : 4;
-                  const label = trendMetric === "score"
-                    ? scoreMode === "raw" ? rawScoreLabel : ratioLabel
-                    : rankValue
-                      ? formatRankLabel(record.rank, rankValue)
-                      : "未填";
-                  const chartTitle = trendMetric === "score"
-                    ? `${record.examName}: ${ratioLabel} · ${rawScoreLabel}`
-                    : `${record.examName}: ${label}`;
-                  return (
-                    <div key={record.id} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-2">
-                      <div className="truncate text-center text-[11px] font-extrabold text-[#25324a]" title={chartTitle}>
-                        {label}
-                      </div>
-                      <motion.button
-                        type="button"
-                        initial={{ height: 0 }}
-                        animate={{ height: `${height}%` }}
-                        transition={{ delay: index * 0.04 }}
-                        onClick={() => {
-                          if (trendMetric === "score") {
-                            toggleScoreLabelMode(record.id);
-                          }
-                        }}
-                        className={`mx-auto w-full max-w-[34px] rounded-t-[6px] border-0 p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff8617] focus-visible:ring-offset-2 ${
-                          trendMetric === "score" ? "cursor-pointer" : "cursor-default"
-                        } ${
-                          value === null ? "bg-[#cbd5e1]" : trendMetric === "score" ? "bg-[#1557c2]" : "bg-[#ff8617]"
-                        }`}
-                        title={chartTitle}
-                        aria-label={chartTitle}
-                      />
-                      <span className="truncate text-center text-[10px] font-semibold text-[#64748b]">{record.date.slice(5)}</span>
-                    </div>
-                  );
-                })}
-                {trendRecords.length === 0 && (
-                  <div className="flex h-full flex-1 items-center justify-center text-sm font-semibold text-[#64748b]">
-                    选择学生后查看走势
-                  </div>
-                )}
-              </div>
+              <TrendLineChart
+                records={trendRecords}
+                metric={trendMetric}
+                maxRank={maxRank}
+                minRank={minRank}
+                activeRecordId={activeTrendRecordId}
+                onActiveRecordChange={setActiveTrendRecordId}
+              />
             </div>
           </CardContent>
         </Card>
@@ -324,6 +324,194 @@ function formatRankLabel(rank: string | undefined, value: number): string {
   if (!trimmed) return `第${value}名`;
   if (trimmed.includes("%") || /[名前]/.test(trimmed)) return trimmed;
   return `第${value}名`;
+}
+
+function TrendLineChart({
+  records,
+  metric,
+  maxRank,
+  minRank,
+  activeRecordId,
+  onActiveRecordChange
+}: {
+  records: GradeRecord[];
+  metric: "score" | "rank";
+  maxRank: number;
+  minRank: number;
+  activeRecordId: string;
+  onActiveRecordChange: (recordId: string) => void;
+}) {
+  if (records.length === 0) {
+    return (
+      <div className="flex h-[230px] items-center justify-center rounded-[12px] border border-dashed border-[#cbd6e3] bg-white text-sm font-semibold text-[#64748b]">
+        选择学生后查看走势
+      </div>
+    );
+  }
+
+  const width = 720;
+  const height = 250;
+  const plotLeft = 58;
+  const plotRight = 696;
+  const plotTop = 28;
+  const plotBottom = 190;
+  const plotHeight = plotBottom - plotTop;
+  const scoreMax = niceScoreMax(Math.max(...records.map((record) => normalizedScore(record)), 100));
+  const points = records.map((record, index) => {
+    const rankValue = parseRankNumber(record.rank);
+    const value = metric === "score" ? normalizedScore(record) : rankValue;
+    const x = records.length === 1 ? (plotLeft + plotRight) / 2 : plotLeft + (index / (records.length - 1)) * (plotRight - plotLeft);
+    const y = value === null ? null : valueToY(value, metric, scoreMax, minRank, maxRank, plotTop, plotBottom);
+    return { record, value, rankValue, x, y };
+  });
+  const validPoints = points.filter((point) => point.y !== null && point.value !== null);
+  const line = validPoints.map((point) => `${point.x},${point.y ?? 0}`).join(" ");
+  const activeRecord = records.find((record) => record.id === activeRecordId) ?? records.at(-1);
+  const hasDrawablePoints = validPoints.length > 0;
+  const axisRows = metric === "score"
+    ? [
+        { y: plotTop, label: `${scoreMax}` },
+        { y: plotTop + plotHeight / 2, label: `${scoreMax / 2}` },
+        { y: plotBottom, label: "0" }
+      ]
+    : maxRank === minRank
+      ? [{ y: plotTop + plotHeight / 2, label: formatRankLabel(undefined, maxRank) }]
+      : [
+          { y: plotTop, label: formatRankLabel(undefined, minRank) },
+          { y: plotTop + plotHeight / 2, label: formatRankLabel(undefined, Math.round((minRank + maxRank) / 2)) },
+          { y: plotBottom, label: formatRankLabel(undefined, maxRank) }
+        ];
+
+  return (
+    <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-[230px] w-full overflow-visible" role="img" aria-label="学生成绩走势折线图">
+        {axisRows.map((row) => (
+          <g key={`${row.y}-${row.label}`}>
+            <line x1={plotLeft} x2={plotRight} y1={row.y} y2={row.y} stroke="#dbe4ef" strokeDasharray="4 6" />
+            <text x="4" y={row.y + 4} className="fill-[#64748b] text-[12px] font-semibold">
+              {row.label}
+            </text>
+          </g>
+        ))}
+        <line x1={plotLeft} x2={plotLeft} y1={plotTop} y2={plotBottom} stroke="#dbe4ef" />
+        <line x1={plotLeft} x2={plotRight} y1={plotBottom} y2={plotBottom} stroke="#dbe4ef" />
+        {line && (
+          <motion.polyline
+            points={line}
+            fill="none"
+            stroke={metric === "score" ? "#1557c2" : "#ff8617"}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.45 }}
+          />
+        )}
+        {points.map((point) => {
+          const isActive = activeRecord?.id === point.record.id;
+          const label = trendValueLabel(point.record, metric);
+          return (
+            <g
+              key={point.record.id}
+              className="cursor-pointer"
+              onClick={() => onActiveRecordChange(point.record.id)}
+            >
+              {point.y !== null ? (
+                <>
+                  <circle cx={point.x} cy={point.y} r="15" fill="transparent" />
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={isActive ? "7" : "5"}
+                    fill={isActive ? "#ff8617" : "#fff"}
+                    stroke={metric === "score" ? "#1557c2" : "#ff8617"}
+                    strokeWidth="4"
+                  >
+                    <title>{`${point.record.date} ${point.record.examName}: ${label}`}</title>
+                  </circle>
+                  {isActive && (
+                    <text
+                      x={point.x}
+                      y={Math.max(point.y - 16, 14)}
+                      textAnchor="middle"
+                      className="fill-[#061226] text-[13px] font-extrabold"
+                    >
+                      {label}
+                    </text>
+                  )}
+                </>
+              ) : (
+                <text x={point.x} y={plotBottom - 8} textAnchor="middle" className="fill-[#94a3b8] text-[12px] font-bold">
+                  未填
+                </text>
+              )}
+              <text x={point.x} y="224" textAnchor="middle" className="fill-[#64748b] text-[11px] font-semibold">
+                {point.record.date.slice(5)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {!hasDrawablePoints && (
+        <div className="mt-2 rounded-[10px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] px-3 py-2 text-center text-xs font-semibold text-[#64748b]">
+          当前记录没有可绘制的排名数值
+        </div>
+      )}
+
+      {activeRecord && (
+        <div className="mt-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-extrabold text-[#061226]">{activeRecord.examName}</div>
+              <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                {activeRecord.date} · {activeRecord.subject}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="sky">{trendValueLabel(activeRecord, "score")}</Badge>
+              <Badge variant="secondary">{trendValueLabel(activeRecord, "rank")}</Badge>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function valueToY(
+  value: number,
+  metric: "score" | "rank",
+  scoreMax: number,
+  minRank: number,
+  maxRank: number,
+  plotTop: number,
+  plotBottom: number
+): number {
+  if (metric === "score") {
+    const ratio = Math.max(0, Math.min(value / scoreMax, 1));
+    return plotBottom - ratio * (plotBottom - plotTop);
+  }
+  if (maxRank === minRank) {
+    return plotTop + (plotBottom - plotTop) / 2;
+  }
+  return plotTop + ((value - minRank) / (maxRank - minRank)) * (plotBottom - plotTop);
+}
+
+function trendValueLabel(record: GradeRecord, metric: "score" | "rank"): string {
+  if (metric === "score") {
+    return record.fullScore
+      ? `${normalizedScore(record).toFixed(1)}% · ${record.score}/${record.fullScore}`
+      : `${record.score}分`;
+  }
+  const rankValue = parseRankNumber(record.rank);
+  return rankValue !== null ? formatRankLabel(record.rank, rankValue) : "排名未填";
+}
+
+function niceScoreMax(value: number): number {
+  if (value <= 100) return 100;
+  return Math.ceil(value / 10) * 10;
 }
 
 function Metric({

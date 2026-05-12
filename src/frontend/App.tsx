@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LoginScreen } from "@/frontend/components/LoginScreen";
+import { OnboardingGuide } from "@/frontend/components/OnboardingGuide";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { AdminView } from "@/frontend/views/AdminView";
 import { CalendarView } from "@/frontend/views/CalendarView";
@@ -82,6 +83,7 @@ export function App() {
   const [feedbackState, setFeedbackState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [feedbackError, setFeedbackError] = useState("");
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
+  const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [greetingTime, setGreetingTime] = useState(() => new Date());
@@ -435,6 +437,15 @@ export function App() {
   }, [username, vault?.notice.enabled, vault?.notice.updatedAt]);
 
   useEffect(() => {
+    if (!vault || !username) {
+      setOnboardingVisible(false);
+      return;
+    }
+    const dismissed = localStorage.getItem(onboardingDismissedKey(username)) === "true";
+    setOnboardingVisible(!dismissed && shouldShowOnboarding(vault));
+  }, [username, vault]);
+
+  useEffect(() => {
     if (!vault) return;
     rememberUnlockedSession({ selectedDate });
   }, [selectedDate]);
@@ -493,7 +504,7 @@ export function App() {
     />);
   }
 
-  const activeTitle = viewTitles[view];
+  const activeTitle = onboardingVisible ? "首次使用指引" : viewTitles[view];
   const selectedDateLabel = formatAppDateLabel(selectedDate, {
     year: "numeric",
     month: "short",
@@ -513,6 +524,26 @@ export function App() {
     saveState === "saving" ? "同步中..." : saveState === "saved" ? "已加密同步" : saveState === "error" ? "云端同步失败" : "云端加密";
   const greeting = greetingFor(greetingTime);
 
+  function dismissOnboarding() {
+    if (username) {
+      localStorage.setItem(onboardingDismissedKey(username), "true");
+    }
+    setNoticeModalOpen(false);
+    setOnboardingVisible(false);
+  }
+
+  function openOnboardingView(nextView: ViewKey) {
+    dismissOnboarding();
+    setView(nextView);
+  }
+
+  function changeView(nextView: ViewKey) {
+    if (onboardingVisible) {
+      dismissOnboarding();
+    }
+    setView(nextView);
+  }
+
   return (
     <div className="dashboard-shell flex min-h-screen">
       <Sidebar
@@ -520,12 +551,12 @@ export function App() {
         collapsed={collapsed}
         role={role}
         username={username}
-        onViewChange={setView}
+        onViewChange={changeView}
         onToggle={() => setCollapsed((v) => !v)}
       />
 
       <main className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-[1720px] px-4 py-5 sm:px-6 lg:px-9 lg:py-9">
+        <div className="mx-auto w-full max-w-[1720px] px-3 py-4 sm:px-6 lg:px-9 lg:py-9">
           <div className="mb-5 flex items-center justify-between gap-3 md:hidden">
             <button
               type="button"
@@ -559,7 +590,7 @@ export function App() {
                     type="button"
                     key={item.key}
                     onClick={() => {
-                      setView(item.key);
+                      changeView(item.key);
                       setMobileNavOpen(false);
                     }}
                     className={`rounded-[12px] px-3 py-2 text-left text-sm font-bold ${
@@ -573,11 +604,11 @@ export function App() {
             )}
           </AnimatePresence>
 
-        <motion.header
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-            className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between"
-        >
+          <motion.header
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 flex flex-col gap-4 lg:mb-8 xl:flex-row xl:items-start xl:justify-between"
+          >
             <div className="min-w-0">
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#64748b] md:hidden">
                 <span>{activeTitle}</span>
@@ -589,11 +620,11 @@ export function App() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap xl:justify-end">
+            <div className="grid grid-cols-[56px_56px_minmax(0,1fr)] gap-2 sm:flex sm:flex-wrap sm:gap-3 xl:justify-end">
               <button
                 type="button"
                 onClick={() => setNoticeModalOpen(true)}
-                className="relative flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors hover:bg-[#f8fbff]"
+                className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors hover:bg-[#f8fbff] sm:h-[58px] sm:w-[58px]"
                 aria-label="查看系统公告"
                 title="系统公告"
               >
@@ -610,21 +641,21 @@ export function App() {
                   setFeedbackState("idle");
                   setFeedbackError("");
                 }}
-                className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors hover:bg-[#f8fbff]"
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors hover:bg-[#f8fbff] sm:h-[58px] sm:w-[58px]"
                 aria-label="发送功能反馈"
                 title="功能反馈"
               >
                 <MessageSquare size={21} />
               </button>
 
-              <label className="flex h-[58px] min-w-0 items-center gap-3 rounded-[16px] border border-[#dbe4ef] bg-white px-4 shadow-[0_12px_28px_rgba(15,35,66,0.08)]">
+              <label className="flex h-14 min-w-0 items-center gap-2 rounded-[16px] border border-[#dbe4ef] bg-white px-3 shadow-[0_12px_28px_rgba(15,35,66,0.08)] sm:h-[58px] sm:gap-3 sm:px-4">
                 <Calendar size={20} className="shrink-0 text-[#25324a]" />
                 <span className="hidden truncate text-sm font-bold text-[#25324a] sm:block">{selectedDateLabel}</span>
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(event) => setSelectedDate(event.target.value)}
-                  className="h-10 rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a] outline-none focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20"
+                  className="h-10 min-w-0 flex-1 rounded-[10px] border border-[#dbe4ef] bg-white px-2 text-sm font-bold text-[#25324a] outline-none focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20 sm:flex-none sm:px-3"
                   aria-label="选择提醒日期"
                 />
               </label>
@@ -651,7 +682,7 @@ export function App() {
                 {saveFullLabel}
               </Badge>
             </div>
-        </motion.header>
+          </motion.header>
 
         {deletion && (
           <div className="mb-6 flex flex-col gap-4 rounded-[16px] border border-[#fecaca] bg-[#fff1f2] p-4 text-[#991b1b] sm:flex-row sm:items-center sm:justify-between">
@@ -671,7 +702,7 @@ export function App() {
         )}
 
         <AnimatePresence>
-          {noticeModalOpen && vault.notice.enabled && (
+          {noticeModalOpen && vault.notice.enabled && !onboardingVisible && (
             <motion.div
               className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/40 p-4 backdrop-blur-sm"
               initial={{ opacity: 0 }}
@@ -798,13 +829,20 @@ export function App() {
 
         <AnimatePresence mode="wait">
           <motion.div
-            key={view}
+            key={onboardingVisible ? "onboarding" : view}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25 }}
           >
-            {view === "today" && (
+            {onboardingVisible && (
+              <OnboardingGuide
+                vault={vault}
+                onOpenView={openOnboardingView}
+                onDismiss={dismissOnboarding}
+              />
+            )}
+            {!onboardingVisible && view === "today" && (
               <TodayView
                 vault={vault}
                 selectedDate={selectedDate}
@@ -814,10 +852,10 @@ export function App() {
                 onDeleteTodo={deleteTodo}
               />
             )}
-            {view === "calendar" && (
+            {!onboardingVisible && view === "calendar" && (
               <CalendarView vault={vault} onWeekStartChange={updateWeekStart} />
             )}
-            {view === "schedule" && (
+            {!onboardingVisible && view === "schedule" && (
               <ScheduleView
                 vault={vault}
                 onAddLesson={addLesson}
@@ -830,7 +868,7 @@ export function App() {
                 onWeekStartChange={updateWeekStart}
               />
             )}
-            {view === "students" && (
+            {!onboardingVisible && view === "students" && (
               <StudentsView
                 vault={vault}
                 onAddCampus={(campus) =>
@@ -858,17 +896,17 @@ export function App() {
                 onTransferStudentCourse={transferStudentCourse}
               />
             )}
-            {view === "grades" && (
+            {!onboardingVisible && view === "grades" && (
               <GradesView
                 vault={vault}
                 onAddGradeRecord={addGradeRecord}
                 onDeleteGradeRecord={deleteGradeRecord}
               />
             )}
-            {view === "payroll" && (
+            {!onboardingVisible && view === "payroll" && (
               <PayrollReviewView vault={vault} />
             )}
-            {view === "salary" && (
+            {!onboardingVisible && view === "salary" && (
               <SalaryView
                 vault={vault}
                 onBaseSalaryChange={(value) =>
@@ -880,7 +918,7 @@ export function App() {
                 onDeleteAdjustment={deleteSalaryAdjustment}
               />
             )}
-            {view === "admin" && role === "admin" && (
+            {!onboardingVisible && view === "admin" && role === "admin" && (
               <AdminView
                 vault={vault}
                 token={token}
@@ -920,6 +958,21 @@ const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
 
 function noticeReadKey(username: string): string {
   return `teacher-salary-tracker:notice-read:${username}`;
+}
+
+function onboardingDismissedKey(username: string): string {
+  return `teacher-salary-tracker:onboarding-dismissed:${username}`;
+}
+
+function shouldShowOnboarding(vault: TeacherVault): boolean {
+  return (
+    vault.campuses.length === 0 &&
+    vault.students.length === 0 &&
+    vault.courseGroups.length === 0 &&
+    vault.lessons.length === 0 &&
+    (vault.gradeRecords ?? []).length === 0 &&
+    vault.salaryAdjustments.length === 0
+  );
 }
 
 function readUnlockedSession(): string | null {
