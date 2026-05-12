@@ -231,12 +231,14 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
         totals.makeup += amount;
       } else if (lesson.type === "class") {
         totals.classLessons += amount;
+      } else if (lesson.type === "full_time") {
+        totals.fullTime += amount;
       } else {
         totals.oneOnOne += amount;
       }
       return totals;
     },
-    { oneOnOne: 0, classLessons: 0, makeup: 0 }
+    { oneOnOne: 0, classLessons: 0, fullTime: 0, makeup: 0 }
   );
 
   const adjustments = monthAdjustments.reduce((sum, item) => sum + item.amount, 0);
@@ -246,6 +248,7 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
     baseSalary: vault.profile.baseSalary,
     oneOnOne: lessonTotals.oneOnOne,
     classLessons: lessonTotals.classLessons,
+    fullTime: lessonTotals.fullTime,
     makeup: lessonTotals.makeup,
     adjustments,
     obligationDeduction,
@@ -253,6 +256,7 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
       vault.profile.baseSalary +
       lessonTotals.oneOnOne +
       lessonTotals.classLessons +
+      lessonTotals.fullTime +
       lessonTotals.makeup +
       adjustments -
       obligationDeduction

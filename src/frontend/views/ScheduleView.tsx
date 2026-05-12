@@ -1068,6 +1068,7 @@ export function ScheduleView({
                   <option value="one_on_one">一对一</option>
                   <option value="class">班课</option>
                   <option value="trial">试听</option>
+                  <option value="full_time">全日制</option>
                 </Select>
               </div>
             </div>

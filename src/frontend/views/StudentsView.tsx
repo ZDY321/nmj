@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Building2, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
+import { Building2, ChevronDown, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,7 +14,13 @@ import { calculateClassHeadcountFee, defaultClassFeeTiers, normalizedClassFeeTie
 import { campusName, courseTypeLabels, formatMoney, studentNames } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
-const gradeOptions = ["未设置", ...fixedGradeOptions, "自定义"];
+const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
+const courseTypeOptions: Array<{ value: CourseType; label: string }> = [
+  { value: "one_on_one", label: "一对一" },
+  { value: "class", label: "班课" },
+  { value: "trial", label: "试听" },
+  { value: "full_time", label: "全日制" }
+];
 type ArchivePanel = "campuses" | "students" | "courses";
 
 export function StudentsView({
@@ -63,10 +69,18 @@ export function StudentsView({
   const [archivePanel, setArchivePanel] = useState<ArchivePanel>("campuses");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
+  const [studentCourseTypeFilter, setStudentCourseTypeFilter] = useState<"all" | CourseType>("all");
+  const [studentSubjectFilter, setStudentSubjectFilter] = useState("all");
   const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | CourseType>("all");
+  const [courseGradeFilter, setCourseGradeFilter] = useState("all");
+  const [courseSubjectFilter, setCourseSubjectFilter] = useState("all");
+  const [courseCampusFilter, setCourseCampusFilter] = useState("all");
   const [archiveSearch, setArchiveSearch] = useState("");
   const [courseStudentSearch, setCourseStudentSearch] = useState("");
   const [courseStudentScope, setCourseStudentScope] = useState<"all" | "selected" | "available">("all");
+  const [courseStudentGradeFilter, setCourseStudentGradeFilter] = useState("all");
+  const [courseStudentCampusFilter, setCourseStudentCampusFilter] = useState("all");
+  const [transferPanelOpen, setTransferPanelOpen] = useState(false);
   const [transferStudentId, setTransferStudentId] = useState(vault.students[0]?.id ?? "");
   const [transferCourseType, setTransferCourseType] = useState<CourseType>("trial");
   const [transferTargetMode, setTransferTargetMode] = useState<"new" | "existing">("new");
@@ -79,18 +93,37 @@ export function StudentsView({
   const { confirm, dialog } = useConfirmDialog();
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
   const normalizedCourseStudentSearch = courseStudentSearch.trim().toLowerCase();
+  const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
+  const hasStudentsWithoutGrade = vault.students.some((student) => !student.grade);
+  const hasUnsetGradeFilterOption = hasStudentsWithoutGrade || vault.courseGroups.some((course) => course.studentIds.length === 0);
+  const subjectFilterOptions = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter((subject): subject is string => Boolean(subject)))).sort();
   const visibleStudents = vault.students.filter((student) => {
-    const matchesGrade = gradeFilter === "all" || (student.grade || "") === gradeFilter;
+    const matchesGrade = matchesGradeFilter(student.grade, gradeFilter);
     const matchesCampus = studentCampusFilter === "all" || student.defaultCampusId === studentCampusFilter;
+    const studentCourses = vault.courseGroups.filter((course) => course.studentIds.includes(student.id));
+    const matchesType = studentCourseTypeFilter === "all" || studentCourses.some((course) => course.type === studentCourseTypeFilter);
+    const matchesSubject = studentSubjectFilter === "all" || studentCourses.some((course) => course.subject === studentSubjectFilter);
     const matchesSearch =
       !normalizedArchiveSearch ||
       student.name.toLowerCase().includes(normalizedArchiveSearch) ||
       (student.school ?? "").toLowerCase().includes(normalizedArchiveSearch) ||
       (student.note ?? "").toLowerCase().includes(normalizedArchiveSearch);
-    return matchesGrade && matchesCampus && matchesSearch;
+    return matchesGrade && matchesCampus && matchesType && matchesSubject && matchesSearch;
   });
-  const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
-  const visibleCourses = vault.courseGroups.filter((course) => courseTypeFilter === "all" || course.type === courseTypeFilter);
+  const visibleCourses = vault.courseGroups.filter((course) => {
+    const courseStudents = course.studentIds
+      .map((studentId) => vault.students.find((student) => student.id === studentId))
+      .filter(Boolean) as Student[];
+    const matchesType = courseTypeFilter === "all" || course.type === courseTypeFilter;
+    const matchesGrade =
+      courseGradeFilter === "all" ||
+      (courseGradeFilter === "__unset"
+        ? courseStudents.length === 0 || courseStudents.some((student) => !student.grade)
+        : courseStudents.some((student) => student.grade === courseGradeFilter));
+    const matchesSubject = courseSubjectFilter === "all" || course.subject === courseSubjectFilter;
+    const matchesCampus = courseCampusFilter === "all" || course.defaultCampusId === courseCampusFilter;
+    return matchesType && matchesGrade && matchesSubject && matchesCampus;
+  });
   const activeStudents = vault.students.filter((student) => student.status === "active").length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
   const obligationCampusId = vault.profile.obligationCampusId ?? "";
@@ -112,6 +145,7 @@ export function StudentsView({
       )
     : [];
   const transferTargetCourseIds = transferTargetCourses.map((course) => course.id).join("|");
+  const campusOptionIds = vault.campuses.map((campus) => campus.id).join("|");
 
   useEffect(() => {
     setTransferStudentId((current) =>
@@ -120,10 +154,9 @@ export function StudentsView({
   }, [vault.students]);
 
   useEffect(() => {
-    setTransferCampusInput((current) =>
-      current && vault.campuses.some((campus) => campus.id === current) ? current : vault.campuses[0]?.id ?? ""
-    );
-  }, [vault.campuses]);
+    const preferredCampusId = transferStudent?.defaultCampusId || vault.campuses[0]?.id || "";
+    setTransferCampusInput(preferredCampusId);
+  }, [transferStudentId, campusOptionIds]);
 
   useEffect(() => {
     setTransferTargetCourseId((current) =>
@@ -287,6 +320,8 @@ export function StudentsView({
     setEditingCourse(course);
     setCourseStudentSearch("");
     setCourseStudentScope("all");
+    setCourseStudentGradeFilter("all");
+    setCourseStudentCampusFilter("all");
   }
 
   function updateProfile(patch: Partial<TeacherProfile>) {
@@ -344,6 +379,8 @@ export function StudentsView({
     setEditingCourse(null);
     setCourseStudentSearch("");
     setCourseStudentScope("all");
+    setCourseStudentGradeFilter("all");
+    setCourseStudentCampusFilter("all");
     flashArchiveRow("courses", courseId);
   }
 
@@ -354,6 +391,8 @@ export function StudentsView({
     setEditingCourse(null);
     setCourseStudentSearch("");
     setCourseStudentScope("all");
+    setCourseStudentGradeFilter("all");
+    setCourseStudentCampusFilter("all");
   }
 
   function flashArchiveRow(panel: ArchivePanel, id: string) {
@@ -533,9 +572,16 @@ export function StudentsView({
                   <CardTitle className="text-lg">学生课程关系</CardTitle>
                   <CardDescription>调整后只影响后续新建课时；已经生成的课时保留原学生、班型和费用快照。</CardDescription>
                 </div>
-                <Badge variant="sky" className="w-fit">{transferCurrentCourses.length} 个当前课程</Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="sky" className="w-fit">{transferCurrentCourses.length} 个当前课程</Badge>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setTransferPanelOpen((open) => !open)}>
+                    <ChevronDown size={14} className={`transition-transform ${transferPanelOpen ? "rotate-180" : ""}`} />
+                    {transferPanelOpen ? "收起" : "展开"}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
+            {transferPanelOpen && (
             <CardContent className="space-y-4">
               <form onSubmit={applyStudentCourseTransfer} className="space-y-4">
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
@@ -543,16 +589,16 @@ export function StudentsView({
                     <label className="text-sm font-medium">学生</label>
                     <Select value={transferStudentId} onChange={(event) => setTransferStudentId(event.target.value)}>
                       {vault.students.map((student) => (
-                        <option key={student.id} value={student.id}>{student.name}</option>
+                        <option key={student.id} value={student.id}>{studentOptionLabel(student)}</option>
                       ))}
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">新班型</label>
                     <Select value={transferCourseType} onChange={(event) => setTransferCourseType(event.target.value as CourseType)}>
-                      <option value="trial">试听</option>
-                      <option value="class">班课</option>
-                      <option value="one_on_one">一对一</option>
+                      {courseTypeOptions.map((type) => (
+                        <option key={type.value} value={type.value}>{type.label}</option>
+                      ))}
                     </Select>
                   </div>
                   <div className="space-y-2">
@@ -658,6 +704,7 @@ export function StudentsView({
                 </div>
               )}
             </CardContent>
+            )}
           </Card>
         )}
         {archivePanel === "campuses" && (
@@ -816,7 +863,7 @@ export function StudentsView({
               />
               <Select value={studentGradeInput} onChange={(e) => setStudentGradeInput(e.target.value)}>
                 {gradeOptions.map((grade) => (
-                  <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
+                  <option key={grade} value={grade === "未设置年级" ? "" : grade}>{grade}</option>
                 ))}
               </Select>
               {studentGradeInput === "自定义" && (
@@ -859,9 +906,10 @@ export function StudentsView({
               <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
               <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名、学校或备注" />
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} className="h-10">
                 <option value="all">全部年级</option>
+                {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
                 {gradeFilterOptions.map((grade) => (
                   <option key={grade} value={grade}>{grade}</option>
                 ))}
@@ -870,6 +918,18 @@ export function StudentsView({
                 <option value="all">全部校区</option>
                 {vault.campuses.map((campus) => (
                   <option key={campus.id} value={campus.id}>{campus.name}</option>
+                ))}
+              </Select>
+              <Select value={studentCourseTypeFilter} onChange={(event) => setStudentCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
+                <option value="all">全部班型</option>
+                {courseTypeOptions.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </Select>
+              <Select value={studentSubjectFilter} onChange={(event) => setStudentSubjectFilter(event.target.value)} className="h-10">
+                <option value="all">全部科目</option>
+                {subjectFilterOptions.map((subject) => (
+                  <option key={subject} value={subject}>{subject}</option>
                 ))}
               </Select>
             </div>
@@ -897,7 +957,7 @@ export function StudentsView({
                         onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value === "自定义" ? "__custom__" : event.target.value || undefined })}
                       >
                         {gradeOptions.map((grade) => (
-                          <option key={grade} value={grade === "未设置" ? "" : grade}>{grade}</option>
+                          <option key={grade} value={grade === "未设置年级" ? "" : grade}>{grade}</option>
                         ))}
                       </Select>
                       {gradeSelectValue(editingStudent.grade) === "自定义" && (
@@ -1057,20 +1117,41 @@ export function StudentsView({
                 value={courseType}
                 onChange={(e) => setCourseType(e.target.value as CourseType)}
               >
-                <option value="one_on_one">一对一</option>
-                <option value="class">班课</option>
-                <option value="trial">试听</option>
+                {courseTypeOptions.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
               </Select>
               <Button type="submit">
                 <Plus size={15} /> 添加课程
               </Button>
             </form>
-            <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
-              <option value="all">全部课程类型</option>
-              <option value="one_on_one">一对一</option>
-              <option value="class">班课</option>
-              <option value="trial">试听</option>
-            </Select>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
+                <option value="all">全部课程类型</option>
+                {courseTypeOptions.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </Select>
+              <Select value={courseGradeFilter} onChange={(event) => setCourseGradeFilter(event.target.value)} className="h-10">
+                <option value="all">全部年级</option>
+                {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
+                {gradeFilterOptions.map((grade) => (
+                  <option key={grade} value={grade}>{grade}</option>
+                ))}
+              </Select>
+              <Select value={courseSubjectFilter} onChange={(event) => setCourseSubjectFilter(event.target.value)} className="h-10">
+                <option value="all">全部科目</option>
+                {subjectFilterOptions.map((subject) => (
+                  <option key={subject} value={subject}>{subject}</option>
+                ))}
+              </Select>
+              <Select value={courseCampusFilter} onChange={(event) => setCourseCampusFilter(event.target.value)} className="h-10">
+                <option value="all">全部校区</option>
+                {vault.campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>{campus.name}</option>
+                ))}
+              </Select>
+            </div>
           </CardHeader>
           <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
             {visibleCourses.map((course) => {
@@ -1090,7 +1171,9 @@ export function StudentsView({
                       student.temporaryTrial ? "试听 临时试听" : ""
                     ].join(" ").toLowerCase();
                     const matchesSearch = !normalizedCourseStudentSearch || searchable.includes(normalizedCourseStudentSearch);
-                    return matchesScope && matchesSearch;
+                    const matchesGrade = matchesGradeFilter(student.grade, courseStudentGradeFilter);
+                    const matchesCampus = courseStudentCampusFilter === "all" || student.defaultCampusId === courseStudentCampusFilter;
+                    return matchesScope && matchesSearch && matchesGrade && matchesCampus;
                   })
                 : [];
               return (
@@ -1123,9 +1206,9 @@ export function StudentsView({
                             });
                           }}
                         >
-                          <option value="one_on_one">一对一</option>
-                          <option value="class">班课</option>
-                          <option value="trial">试听</option>
+                          {courseTypeOptions.map((type) => (
+                            <option key={type.value} value={type.value}>{type.label}</option>
+                          ))}
                         </Select>
                         <Select
                           value={editingCourse.defaultCampusId ?? ""}
@@ -1242,6 +1325,21 @@ export function StudentsView({
                               ))}
                             </div>
                           </div>
+                          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <Select value={courseStudentGradeFilter} onChange={(event) => setCourseStudentGradeFilter(event.target.value)} className="h-10">
+                              <option value="all">全部年级</option>
+                              {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
+                              {gradeFilterOptions.map((grade) => (
+                                <option key={grade} value={grade}>{grade}</option>
+                              ))}
+                            </Select>
+                            <Select value={courseStudentCampusFilter} onChange={(event) => setCourseStudentCampusFilter(event.target.value)} className="h-10">
+                              <option value="all">全部校区</option>
+                              {vault.campuses.map((campus) => (
+                                <option key={campus.id} value={campus.id}>{campus.name}</option>
+                              ))}
+                            </Select>
+                          </div>
                           {editingCourse.studentIds.length > 0 && (
                             <div className="mt-3 max-h-20 overflow-y-auto pr-1">
                               <div className="flex flex-wrap gap-2">
@@ -1286,7 +1384,7 @@ export function StudentsView({
                                             : "border-[#dbe4ef] bg-white text-[#25324a]"
                                     }`}
                                   >
-                                    {student.name}{student.grade ? ` · ${student.grade}` : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                                    {student.name} · {student.grade || "未设置年级"}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
                                   </button>
                                 );
                               })}
@@ -1317,7 +1415,7 @@ export function StudentsView({
                         <div className="min-w-0">
                           <span className="block truncate text-sm font-medium">{course.name}</span>
                           <span className="text-xs text-(--color-muted-foreground)">
-                            {courseTypeLabels[course.type]} · {studentNames(vault, course.studentIds) || "未关联学生"}
+                            {courseTypeLabels[course.type]} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
                           </span>
                           {course.type === "class" && (
                             <span className="mt-1 block text-xs font-bold text-[#1557c2]">
@@ -1386,6 +1484,16 @@ function canJoinCourse(vault: TeacherVault, course: CourseGroup, student: Studen
   if (course.type !== "class" || course.studentIds.length === 0) return true;
   const existingGrade = vault.students.find((item) => item.id === course.studentIds[0])?.grade ?? "";
   return existingGrade === (student.grade ?? "");
+}
+
+function matchesGradeFilter(grade: string | undefined, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "__unset") return !grade;
+  return grade === filter;
+}
+
+function studentOptionLabel(student: Student): string {
+  return `${student.name} · ${student.grade || "未设置年级"}`;
 }
 
 function defaultFeeRule(type: CourseType): FeeRule {

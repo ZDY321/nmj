@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import type { AttendanceStatus, Lesson, TeacherVault } from "@/shared/types";
+import type { AttendanceStatus, CourseType, Lesson, TeacherVault } from "@/shared/types";
 import { calculateFee, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
@@ -167,7 +167,7 @@ export function LessonsView({
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
-  const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | "one_on_one" | "class">("all");
+  const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | CourseType>("all");
   const { confirm, dialog } = useConfirmDialog();
   const normalizedStudentFilter = studentFilter.trim().toLowerCase();
   const lessons = vault.lessons
@@ -266,11 +266,13 @@ export function LessonsView({
                 <label className="text-sm font-medium">班型筛选</label>
                 <Select
                   value={courseTypeFilter}
-                  onChange={(event) => setCourseTypeFilter(event.target.value as "all" | "one_on_one" | "class")}
+                  onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)}
                 >
                   <option value="all">全部班型</option>
                   <option value="one_on_one">一对一</option>
                   <option value="class">班课</option>
+                  <option value="trial">试听</option>
+                  <option value="full_time">全日制</option>
                 </Select>
               </div>
             </div>

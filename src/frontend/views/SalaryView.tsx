@@ -116,11 +116,12 @@ export function SalaryView({
   return (
     <div className="space-y-6">
       {dialog}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="基础工资" value={formatMoney(breakdown.baseSalary)} hint="月固定项" variant={1} index={0} showSparkline={false} />
         <MetricCard label="一对一" value={formatMoney(breakdown.oneOnOne)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
         <MetricCard label="班课" value={formatMoney(breakdown.classLessons)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
-        <MetricCard label="合计" value={formatMoney(breakdown.total)} hint="含补贴/扣款" variant={4} index={3} showSparkline={false} />
+        <MetricCard label="全日制" value={formatMoney(breakdown.fullTime)} hint="已完成课程" variant={4} index={3} showSparkline={false} />
+        <MetricCard label="合计" value={formatMoney(breakdown.total)} hint="含补贴/扣款" variant={1} index={4} showSparkline={false} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -152,6 +153,7 @@ export function SalaryView({
                 {[
                   { label: "一对一", value: breakdown.oneOnOne, icon: Users, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
+                  { label: "全日制", value: breakdown.fullTime, icon: CalendarDays, color: "text-[#5161d6] bg-[#eef0ff]" },
                   { label: "补课", value: breakdown.makeup, icon: Clock, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "其他加减项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" },
                   { label: "义务课时扣费", value: -breakdown.obligationDeduction, icon: FileCheck2, color: "text-[#b91c1c] bg-[#fff1f2]", danger: true },

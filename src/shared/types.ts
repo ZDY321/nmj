@@ -9,7 +9,7 @@ export type UserStatus =
   | "delete_scheduled"
   | "deleted";
 
-export type CourseType = "one_on_one" | "class" | "trial";
+export type CourseType = "one_on_one" | "class" | "trial" | "full_time";
 
 export type LessonStatus =
   | "draft"
@@ -306,6 +306,7 @@ export type SalaryBreakdown = {
   baseSalary: number;
   oneOnOne: number;
   classLessons: number;
+  fullTime: number;
   makeup: number;
   adjustments: number;
   obligationDeduction: number;

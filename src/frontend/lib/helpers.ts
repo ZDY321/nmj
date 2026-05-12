@@ -69,7 +69,8 @@ export const lessonStatusLabels: Record<LessonStatus, string> = {
 export const courseTypeLabels: Record<CourseType, string> = {
   one_on_one: "一对一",
   class: "班课",
-  trial: "试听"
+  trial: "试听",
+  full_time: "全日制"
 };
 
 export function lessonStatusVariant(status: LessonStatus): "sage" | "amber" | "destructive" | "secondary" | "sky" | "plum" {

@@ -20,7 +20,7 @@ import {
 } from "@/frontend/lib/helpers";
 
 type TypeFilter = "all" | CourseType;
-type OverviewCampusKey = "oneOnOne" | "classLessons" | "makeup";
+type OverviewCampusKey = "oneOnOne" | "classLessons" | "fullTime" | "makeup";
 type CampusAmountDetail = {
   key: string;
   campus: string;
@@ -62,6 +62,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
     const buckets: Record<OverviewCampusKey, Record<string, CampusAmountDetail>> = {
       oneOnOne: {},
       classLessons: {},
+      fullTime: {},
       makeup: {}
     };
 
@@ -86,6 +87,8 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
         addDetail("makeup", campusId, amount);
       } else if (lesson.type === "class") {
         addDetail("classLessons", campusId, amount);
+      } else if (lesson.type === "full_time") {
+        addDetail("fullTime", campusId, amount);
       } else {
         addDetail("oneOnOne", campusId, amount);
       }
@@ -94,6 +97,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
     return {
       oneOnOne: Object.values(buckets.oneOnOne).sort((a, b) => b.amount - a.amount),
       classLessons: Object.values(buckets.classLessons).sort((a, b) => b.amount - a.amount),
+      fullTime: Object.values(buckets.fullTime).sort((a, b) => b.amount - a.amount),
       makeup: Object.values(buckets.makeup).sort((a, b) => b.amount - a.amount)
     };
   }, [monthLessons, vault]);
@@ -123,7 +127,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
       summary[lesson.type] += 1;
       return summary;
     },
-    { one_on_one: 0, class: 0, trial: 0 }
+    { one_on_one: 0, class: 0, trial: 0, full_time: 0 }
   );
 
   return (
@@ -160,6 +164,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
                 <option value="one_on_one">一对一</option>
                 <option value="class">班课</option>
                 <option value="trial">试听</option>
+                <option value="full_time">全日制</option>
               </Select>
             </div>
             <div className="space-y-2">
@@ -262,6 +267,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
                 { label: "基础工资", value: breakdown.baseSalary },
                 { label: "一对一", value: breakdown.oneOnOne, details: lessonCampusAmounts.oneOnOne },
                 { label: "班课", value: breakdown.classLessons, details: lessonCampusAmounts.classLessons },
+                { label: "全日制", value: breakdown.fullTime, details: lessonCampusAmounts.fullTime },
                 { label: "补课", value: breakdown.makeup, details: lessonCampusAmounts.makeup },
                 { label: "其他加减项", value: breakdown.adjustments },
                 { label: "义务课时扣费", value: -breakdown.obligationDeduction }
@@ -304,7 +310,7 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
               <div className="text-sm font-bold text-[#1557c2]">本月收入总和</div>
               <div className="mt-2 text-3xl font-extrabold text-[#061226]">{formatMoney(breakdown.total)}</div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {Object.entries(typeCounts).map(([type, count]) => (
                 <div key={type} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 text-center">
                   <div className="text-xs font-semibold text-[#64748b]">{courseTypeLabels[type as CourseType]}</div>
