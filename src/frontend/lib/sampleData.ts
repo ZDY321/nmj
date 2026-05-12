@@ -7,6 +7,37 @@ export const defaultNotice = {
   updatedAt: "2026-05-10T00:00:00.000Z"
 };
 
+export function createEmptyVault(displayName = ""): TeacherVault {
+  return {
+    version: 1,
+    profile: {
+      displayName,
+      baseSalary: 0,
+      currency: "CNY",
+      obligationDeductionMode: "auto_gap",
+      monthlyObligationHours: 0,
+      obligationHourlyDeduction: 0,
+      manualObligationDeduction: 0,
+      phone: "",
+      email: "",
+      note: ""
+    },
+    preferences: {
+      weekStartsOn: 0,
+      customTimePresets: []
+    },
+    notice: defaultNotice,
+    campuses: [],
+    students: [],
+    courseGroups: [],
+    scheduleRules: [],
+    lessons: [],
+    salaryAdjustments: [],
+    todoItems: [],
+    gradeRecords: []
+  };
+}
+
 export function createSampleVault(): TeacherVault {
   return {
     version: 1,

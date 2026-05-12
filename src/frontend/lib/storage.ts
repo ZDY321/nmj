@@ -7,7 +7,7 @@ import {
   encryptJson,
   randomBase64
 } from "./crypto";
-import { createSampleVault } from "./sampleData";
+import { createEmptyVault } from "./sampleData";
 
 const storagePrefix = "teacher-salary-tracker:vault:";
 const accountsKey = "teacher-salary-tracker:accounts";
@@ -157,8 +157,7 @@ export async function registerAccount(
 
   const passwordSalt = createPasswordSalt();
   const passwordVerifier = await derivePasswordVerifier(password, passwordSalt);
-  const vault = createSampleVault();
-  vault.profile.displayName = "牛马";
+  const vault = createEmptyVault(normalizedUsername);
   const notice = await cloudNoticeFallback();
   if (notice) {
     vault.notice = notice;

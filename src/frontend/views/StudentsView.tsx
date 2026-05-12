@@ -114,14 +114,13 @@ export function StudentsView({
   function addCourse(e: FormEvent) {
     e.preventDefault();
     if (!courseNameInput.trim()) return;
-    const firstStudent = vault.students[0]?.id;
     onAddCourse({
       id: makeId("course"),
       name: courseNameInput.trim(),
       type: courseType,
       subject: "未设置",
       defaultCampusId: vault.campuses[0]?.id,
-      studentIds: firstStudent ? [firstStudent] : [],
+      studentIds: [],
       feeRule: defaultFeeRule(courseType),
       status: "active"
     });
