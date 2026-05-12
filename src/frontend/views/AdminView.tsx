@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { AdminSummary, AdminUser, Notice, TeacherVault, UserStatus } from "@/shared/types";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import {
   cancelUserDeletion,
@@ -63,6 +64,7 @@ export function AdminView({
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const { confirm, dialog } = useConfirmDialog();
 
   useEffect(() => {
     setTitle(vault.notice.title);
@@ -154,6 +156,26 @@ export function AdminView({
     }
   }
 
+  function askDeleteDueUsers() {
+    confirm({
+      title: "执行到期账号删除？",
+      description: "会立即删除所有已经到期的账号和加密数据，未到期账号不会被处理。",
+      confirmLabel: "执行删除",
+      tone: "danger",
+      onConfirm: () => void deleteDueUsers()
+    });
+  }
+
+  function askClearData() {
+    confirm({
+      title: "删除当前本地缓存？",
+      description: "会清除当前浏览器里的本地加密缓存和登录状态，之后需要重新登录。",
+      confirmLabel: "删除缓存",
+      tone: "danger",
+      onConfirm: onClearData
+    });
+  }
+
   async function submitVerifiedDeleteRequest(user: AdminUser) {
     const targetPassword = deletePasswords[user.id] ?? "";
     if (!targetPassword) {
@@ -185,6 +207,22 @@ export function AdminView({
     } finally {
       setBusy(false);
     }
+  }
+
+  function askVerifiedDeleteRequest(user: AdminUser) {
+    const targetPassword = deletePasswords[user.id] ?? "";
+    if (!targetPassword) {
+      setMessage(`请先输入账号「${user.username}」的登录密码。`);
+      return;
+    }
+
+    confirm({
+      title: `验证删除账号「${user.username}」？`,
+      description: "验证通过后账号会进入删除计划。到期执行前仍可在用户列表撤销。",
+      confirmLabel: "验证删除",
+      tone: "danger",
+      onConfirm: () => void submitVerifiedDeleteRequest(user)
+    });
   }
 
   function openDeleteConfirm(user: AdminUser) {
@@ -234,6 +272,7 @@ export function AdminView({
 
   return (
     <div className="space-y-6">
+      {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard label="活跃用户" value={`${activeUsers}`} hint={`总账号 ${summary?.users.total ?? 0}`} variant={1} index={0} />
         <MetricCard label="待删除" value={`${pendingDeletion}`} hint="10 天到期后自动删除" variant={2} index={1} />
@@ -320,7 +359,7 @@ export function AdminView({
               ))}
             </div>
 
-            <Button variant="destructive" className="w-full" onClick={onClearData}>
+            <Button variant="destructive" className="w-full" onClick={askClearData}>
               <Trash2 size={15} /> 删除当前本地缓存
             </Button>
           </CardContent>
@@ -340,7 +379,7 @@ export function AdminView({
             <Button variant="outline" disabled={busy} onClick={refresh}>
               <RefreshCw size={15} /> 刷新
             </Button>
-            <Button variant="outline" disabled={busy} onClick={deleteDueUsers}>
+            <Button variant="outline" disabled={busy} onClick={askDeleteDueUsers}>
               <Trash2 size={15} /> 执行到期删除
             </Button>
           </div>
@@ -411,7 +450,7 @@ export function AdminView({
                             variant="destructive"
                             disabled={busy}
                             className="shrink-0"
-                            onClick={() => void submitVerifiedDeleteRequest(user)}
+                            onClick={() => askVerifiedDeleteRequest(user)}
                           >
                             <Trash2 size={14} /> 验证删除
                           </Button>

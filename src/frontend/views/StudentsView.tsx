@@ -61,8 +61,11 @@ export function StudentsView({
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
   const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [archiveSearch, setArchiveSearch] = useState("");
+  const [courseStudentSearch, setCourseStudentSearch] = useState("");
+  const [courseStudentScope, setCourseStudentScope] = useState<"all" | "selected" | "available">("all");
   const { confirm, dialog } = useConfirmDialog();
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
+  const normalizedCourseStudentSearch = courseStudentSearch.trim().toLowerCase();
   const visibleStudents = vault.students.filter((student) => {
     const matchesGrade = gradeFilter === "all" || (student.grade || "") === gradeFilter;
     const matchesCampus = studentCampusFilter === "all" || student.defaultCampusId === studentCampusFilter;
@@ -186,6 +189,12 @@ export function StudentsView({
     replaceEditingClassFeeTiers([{ ...tier, ...patch, maxStudents: undefined }]);
   }
 
+  function openCourseEditor(course: CourseGroup) {
+    setEditingCourse(course);
+    setCourseStudentSearch("");
+    setCourseStudentScope("all");
+  }
+
   function updateProfile(patch: Partial<TeacherProfile>) {
     onUpdateProfile({
       ...vault.profile,
@@ -239,6 +248,8 @@ export function StudentsView({
       feeRule
     });
     setEditingCourse(null);
+    setCourseStudentSearch("");
+    setCourseStudentScope("all");
     flashArchiveRow("courses", courseId);
   }
 
@@ -247,6 +258,8 @@ export function StudentsView({
       flashArchiveRow("courses", editingCourse.id);
     }
     setEditingCourse(null);
+    setCourseStudentSearch("");
+    setCourseStudentScope("all");
   }
 
   function flashArchiveRow(panel: ArchivePanel, id: string) {
@@ -821,6 +834,23 @@ export function StudentsView({
             {visibleCourses.map((course) => {
               const isEditing = editingCourse?.id === course.id;
               const used = courseInUse(course.id);
+              const courseStudentOptions = isEditing && editingCourse
+                ? vault.students.filter((student) => {
+                    const isSelected = editingCourse.studentIds.includes(student.id);
+                    const matchesScope =
+                      courseStudentScope === "all" ||
+                      (courseStudentScope === "selected" ? isSelected : !isSelected);
+                    const searchable = [
+                      student.name,
+                      student.grade ?? "",
+                      student.school ?? "",
+                      student.note ?? "",
+                      student.temporaryTrial ? "试听 临时试听" : ""
+                    ].join(" ").toLowerCase();
+                    const matchesSearch = !normalizedCourseStudentSearch || searchable.includes(normalizedCourseStudentSearch);
+                    return matchesScope && matchesSearch;
+                  })
+                : [];
               return (
                 <motion.div
                   key={course.id}
@@ -929,40 +959,102 @@ export function StudentsView({
                         </div>
                       )}
                       <div className="space-y-2">
-                        <div className="text-sm font-medium">
-                          关联学生（{editingCourse.studentIds.length} / {vault.students.length}）
-                          {editingCourse.type === "class" && (
-                            <span className="ml-2 text-xs font-bold text-[#64748b]">
-                              班课需同年级{firstCourseStudentGrade(editingCourse.studentIds) !== undefined ? `：${firstCourseStudentGrade(editingCourse.studentIds) || "未设置年级"}` : ""}
-                            </span>
-                          )}
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="text-sm font-medium">
+                            关联学生（{editingCourse.studentIds.length} / {vault.students.length}）
+                            {editingCourse.type === "class" && (
+                              <span className="ml-2 text-xs font-bold text-[#64748b]">
+                                班课需同年级{firstCourseStudentGrade(editingCourse.studentIds) !== undefined ? `：${firstCourseStudentGrade(editingCourse.studentIds) || "未设置年级"}` : ""}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs font-bold text-[#64748b]">当前显示 {courseStudentOptions.length} 人</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {vault.students.map((student) => {
-                            const isSelected = editingCourse.studentIds.includes(student.id);
-                            const selectedGrade = editingCourse.type === "class" ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
-                            const isDifferentGrade = editingCourse.type === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
-                            return (
-                              <button
-                                type="button"
-                                key={student.id}
-                                onClick={() => toggleCourseStudent(student.id)}
-                                disabled={isDifferentGrade}
-                                title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : undefined}
-                                className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
-                                  isSelected
-                                    ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
-                                    : isDifferentGrade
-                                      ? "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
-                                      : student.temporaryTrial
-                                        ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
-                                        : "border-[#dbe4ef] bg-white text-[#25324a]"
-                                }`}
-                              >
-                                {student.name}{student.grade ? ` · ${student.grade}` : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
-                              </button>
-                            );
-                          })}
+                        <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+                          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
+                            <label className="relative block">
+                              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                              <Input
+                                className="h-10 pl-9"
+                                value={courseStudentSearch}
+                                onChange={(event) => setCourseStudentSearch(event.target.value)}
+                                placeholder="搜索学生姓名、年级、学校或备注"
+                              />
+                            </label>
+                            <div className="grid grid-cols-3 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
+                              {[
+                                { key: "all" as const, label: "全部" },
+                                { key: "selected" as const, label: "已关联" },
+                                { key: "available" as const, label: "未关联" }
+                              ].map((item) => (
+                                <button
+                                  type="button"
+                                  key={item.key}
+                                  onClick={() => setCourseStudentScope(item.key)}
+                                  className={`rounded-[9px] px-2 py-2 text-xs font-bold ${
+                                    courseStudentScope === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a]"
+                                  }`}
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          {editingCourse.studentIds.length > 0 && (
+                            <div className="mt-3 max-h-20 overflow-y-auto pr-1">
+                              <div className="flex flex-wrap gap-2">
+                                {editingCourse.studentIds.map((studentId) => {
+                                  const student = vault.students.find((item) => item.id === studentId);
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={studentId}
+                                      onClick={() => toggleCourseStudent(studentId)}
+                                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1 text-xs font-bold text-[#9a3412]"
+                                      title="点击取消关联"
+                                    >
+                                      <span className="truncate">{student?.name ?? "未知学生"}</span>
+                                      <X size={12} />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          <div className="mt-3 max-h-[260px] overflow-y-auto pr-1">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                              {courseStudentOptions.map((student) => {
+                                const isSelected = editingCourse.studentIds.includes(student.id);
+                                const selectedGrade = editingCourse.type === "class" ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
+                                const isDifferentGrade = editingCourse.type === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
+                                return (
+                                  <button
+                                    type="button"
+                                    key={student.id}
+                                    onClick={() => toggleCourseStudent(student.id)}
+                                    disabled={isDifferentGrade}
+                                    title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : undefined}
+                                    className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
+                                      isSelected
+                                        ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
+                                        : isDifferentGrade
+                                          ? "cursor-not-allowed border-[#e2e8f0] bg-white text-[#94a3b8]"
+                                          : student.temporaryTrial
+                                            ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
+                                            : "border-[#dbe4ef] bg-white text-[#25324a]"
+                                    }`}
+                                  >
+                                    {student.name}{student.grade ? ` · ${student.grade}` : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {courseStudentOptions.length === 0 && (
+                              <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
+                                没有符合条件的学生
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -1003,7 +1095,7 @@ export function StudentsView({
                           className="h-8 w-8 rounded-[9px] p-0"
                           title="编辑课程"
                           aria-label={`编辑课程 ${course.name}`}
-                          onClick={() => setEditingCourse(course)}
+                          onClick={() => openCourseEditor(course)}
                         >
                           <Pencil size={13} />
                         </Button>

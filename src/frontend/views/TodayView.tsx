@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type { Lesson, TeacherVault, TodoItem } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
 import { formatAppDateLabel } from "@/frontend/lib/calculations";
@@ -51,6 +52,7 @@ export function TodayView({
 }) {
   const [todoTitle, setTodoTitle] = useState("");
   const [todoDueDate, setTodoDueDate] = useState(selectedDate);
+  const { confirm, dialog } = useConfirmDialog();
   const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
   const waitingLessons = selectedDateLessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "draft");
   const cancelledLessons = selectedDateLessons.filter((lesson) => lesson.status === "cancelled");
@@ -90,8 +92,19 @@ export function TodayView({
     setTodoTitle("");
   }
 
+  function askDeleteTodo(todo: TodoItem) {
+    confirm({
+      title: `删除待办「${todo.title}」？`,
+      description: todo.dueDate ? `截止日期：${todo.dueDate}` : "删除后这条待办不会再显示。",
+      confirmLabel: "删除",
+      tone: "danger",
+      onConfirm: () => onDeleteTodo(todo.id)
+    });
+  }
+
   return (
     <div className="space-y-6">
+      {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[ 
           { label: isToday(selectedDate) ? "今日课程" : "选中日期课程", value: `${selectedDateLessons.length} 节`, icon: CalendarDays },
@@ -184,7 +197,7 @@ export function TodayView({
                     </span>
                   </span>
                 </label>
-                <Button type="button" size="sm" variant="destructive" onClick={() => onDeleteTodo(todo.id)}>
+                <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)}>
                   <Trash2 size={14} /> 删除
                 </Button>
               </div>

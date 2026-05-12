@@ -119,6 +119,8 @@ export function ScheduleView({
   const [customPresetStart, setCustomPresetStart] = useState("08:00");
   const [customPresetEnd, setCustomPresetEnd] = useState("10:00");
   const [temporaryStudentId, setTemporaryStudentId] = useState("");
+  const [temporaryStudentSearch, setTemporaryStudentSearch] = useState("");
+  const [attendanceStudentFilter, setAttendanceStudentFilter] = useState("");
   const [makeupOriginalDateFilter, setMakeupOriginalDateFilter] = useState("");
   const [scheduleError, setScheduleError] = useState("");
   const { confirm, dialog } = useConfirmDialog();
@@ -161,6 +163,42 @@ export function ScheduleView({
   const selectedOriginalLesson = selected?.linkedOriginalLessonId
     ? vault.lessons.find((lesson) => lesson.id === selected.linkedOriginalLessonId)
     : undefined;
+  const normalizedTemporaryStudentSearch = temporaryStudentSearch.trim().toLowerCase();
+  const normalizedAttendanceStudentFilter = attendanceStudentFilter.trim().toLowerCase();
+  const temporaryStudentOptions = selected
+    ? vault.students.filter((student) => {
+        const isAvailable = !selected.expectedStudentIds.includes(student.id);
+        const searchable = [
+          student.name,
+          student.grade ?? "",
+          student.school ?? "",
+          student.note ?? "",
+          student.temporaryTrial ? "试听 临时试听" : ""
+        ].join(" ").toLowerCase();
+        return isAvailable && (!normalizedTemporaryStudentSearch || searchable.includes(normalizedTemporaryStudentSearch));
+      })
+    : [];
+  const selectedTemporaryStudent = temporaryStudentId
+    ? vault.students.find((student) => student.id === temporaryStudentId)
+    : undefined;
+  const displayedTemporaryStudentOptions =
+    selectedTemporaryStudent && !temporaryStudentOptions.some((student) => student.id === selectedTemporaryStudent.id)
+      ? [selectedTemporaryStudent, ...temporaryStudentOptions]
+      : temporaryStudentOptions;
+  const selectedAttendanceEntries = selected
+    ? selected.attendance.filter((entry) => {
+        const student = findStudent(vault, entry.studentId);
+        const searchable = [
+          student?.name ?? "",
+          student?.grade ?? "",
+          student?.school ?? "",
+          student?.note ?? "",
+          attendanceLabels[entry.status],
+          entry.temporary ? "临时加入" : ""
+        ].join(" ").toLowerCase();
+        return !normalizedAttendanceStudentFilter || searchable.includes(normalizedAttendanceStudentFilter);
+      })
+    : [];
   const allMakeupEntries = vault.lessons
     .filter((lesson) => lesson.status === "makeup_pending")
     .flatMap((lesson) =>
@@ -354,6 +392,7 @@ export function ScheduleView({
     };
     onUpdateLesson(recalculateLessonFee(next));
     setTemporaryStudentId("");
+    setTemporaryStudentSearch("");
   }
 
   function removeTemporaryStudent(studentId: string) {
@@ -364,6 +403,17 @@ export function ScheduleView({
       attendance: selected.attendance.filter((entry) => entry.studentId !== studentId)
     };
     onUpdateLesson(recalculateLessonFee(next));
+  }
+
+  function askRemoveTemporaryStudent(studentId: string) {
+    const student = findStudent(vault, studentId);
+    confirm({
+      title: `移除临时学生「${student?.name ?? "未知学生"}」？`,
+      description: "移除后这名学生的到课状态和临时费用会从本节课删除。",
+      confirmLabel: "移除",
+      tone: "danger",
+      onConfirm: () => removeTemporaryStudent(studentId)
+    });
   }
 
   function createMakeupLesson(original: Lesson, studentId: string) {
@@ -1165,80 +1215,109 @@ export function ScheduleView({
                       </div>
                     </div>
                   )}
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                  <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <label className="relative block">
+                      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                      <Input
+                        className="h-10 pl-9"
+                        value={temporaryStudentSearch}
+                        onChange={(event) => setTemporaryStudentSearch(event.target.value)}
+                        placeholder="搜索临时加入学生"
+                      />
+                    </label>
                     <Select value={temporaryStudentId} onChange={(event) => setTemporaryStudentId(event.target.value)}>
                       <option value="">选择临时加入学生</option>
-                      {vault.students
-                        .filter((student) => !selected.expectedStudentIds.includes(student.id))
-                        .map((student) => (
-                          <option key={student.id} value={student.id}>
-                            {student.name}{student.temporaryTrial ? "（试听档案）" : ""}
-                          </option>
-                        ))}
+                      {displayedTemporaryStudentOptions.map((student) => (
+                        <option key={student.id} value={student.id}>
+                          {student.name}{student.grade ? ` · ${student.grade}` : ""}{student.temporaryTrial ? "（试听档案）" : ""}
+                        </option>
+                      ))}
                     </Select>
-                    <Button type="button" variant="outline" onClick={addTemporaryStudent} disabled={!temporaryStudentId}>
+                    <Button type="button" variant="outline" onClick={addTemporaryStudent} disabled={!temporaryStudentId || selected.expectedStudentIds.includes(temporaryStudentId)}>
                       <UserPlus size={15} /> 添加临时学生
                     </Button>
                   </div>
-                  {selected.attendance.map((entry) => {
-                    const student = findStudent(vault, entry.studentId);
-                    const isTemporary = entry.temporary || student?.temporaryTrial || !selectedCourse?.studentIds.includes(entry.studentId);
-                    return (
-                      <motion.div
-                        key={entry.studentId}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className={`rounded-[14px] border p-3 ${attendanceSurfaceClass(entry.status, isTemporary)}`}
-                      >
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#fff1e2]">
-                              <span className="text-xs font-bold text-[#ff8617]">{(student?.name ?? "未知").slice(0, 1)}</span>
+                  <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-sm font-extrabold text-[#061226]">关联学生</div>
+                      <Badge variant="secondary">{selectedAttendanceEntries.length} / {selected.attendance.length} 人</Badge>
+                    </div>
+                    <label className="relative mt-3 block">
+                      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                      <Input
+                        className="h-10 bg-white pl-9"
+                        value={attendanceStudentFilter}
+                        onChange={(event) => setAttendanceStudentFilter(event.target.value)}
+                        placeholder="搜索姓名、年级、学校或到课状态"
+                      />
+                    </label>
+                    <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                      {selectedAttendanceEntries.map((entry) => {
+                        const student = findStudent(vault, entry.studentId);
+                        const isTemporary = entry.temporary || student?.temporaryTrial || !selectedCourse?.studentIds.includes(entry.studentId);
+                        return (
+                          <motion.div
+                            key={entry.studentId}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className={`rounded-[14px] border p-3 ${attendanceSurfaceClass(entry.status, isTemporary)}`}
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#fff1e2]">
+                                  <span className="text-xs font-bold text-[#ff8617]">{(student?.name ?? "未知").slice(0, 1)}</span>
+                                </div>
+                                <span className="truncate text-sm font-medium">{student?.name ?? "未知学生"}</span>
+                                {isTemporary && <Badge variant="plum" className="shrink-0">临时加入</Badge>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Select value={entry.status} onChange={(event) => updateAttendance(entry.studentId, event.target.value as AttendanceStatus)} className="h-9 max-w-[136px]">
+                                  {Object.entries(attendanceLabels).map(([key, value]) => (
+                                    <option key={key} value={key}>{value}</option>
+                                  ))}
+                                </Select>
+                                {isTemporary && (
+                                  <Button type="button" size="sm" variant="destructive" onClick={() => askRemoveTemporaryStudent(entry.studentId)}>
+                                    <Trash2 size={13} />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
-                            <span className="truncate text-sm font-medium">{student?.name ?? "未知学生"}</span>
-                            {isTemporary && <Badge variant="plum" className="shrink-0">临时加入</Badge>}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Select value={entry.status} onChange={(event) => updateAttendance(entry.studentId, event.target.value as AttendanceStatus)} className="h-9 max-w-[136px]">
-                              {Object.entries(attendanceLabels).map(([key, value]) => (
-                                <option key={key} value={key}>{value}</option>
-                              ))}
-                            </Select>
                             {isTemporary && (
-                              <Button type="button" size="sm" variant="destructive" onClick={() => removeTemporaryStudent(entry.studentId)}>
-                                <Trash2 size={13} />
-                              </Button>
+                              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px]">
+                                <div className="rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
+                                  临时加入费用会在正常排课费用基础上额外相加。
+                                </div>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                                  <Input
+                                    type="number"
+                                    value={entry.temporaryFee ?? 0}
+                                    onChange={(event) => updateTemporaryFee(entry.studentId, Number(event.target.value))}
+                                    className="bg-white pl-10"
+                                    placeholder="临时费用"
+                                  />
+                                </div>
+                              </div>
                             )}
-                          </div>
-                        </div>
-                        {isTemporary && (
-                          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px]">
-                            <div className="rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
-                              临时加入费用会在正常排课费用基础上额外相加。
-                            </div>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                            {(entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending" || entry.note) && (
                               <Input
-                                type="number"
-                                value={entry.temporaryFee ?? 0}
-                                onChange={(event) => updateTemporaryFee(entry.studentId, Number(event.target.value))}
-                                className="bg-white pl-10"
-                                placeholder="临时费用"
+                                className="mt-3 bg-white"
+                                value={entry.note ?? ""}
+                                onChange={(event) => updateAttendanceNote(entry.studentId, event.target.value)}
+                                placeholder="补课/请假备注，例如原课请假原因、已约补课时间"
                               />
-                            </div>
-                          </div>
-                        )}
-                        {(entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending" || entry.note) && (
-                          <Input
-                            className="mt-3 bg-white"
-                            value={entry.note ?? ""}
-                            onChange={(event) => updateAttendanceNote(entry.studentId, event.target.value)}
-                            placeholder="补课/请假备注，例如原课请假原因、已约补课时间"
-                          />
-                        )}
-                      </motion.div>
-                    );
-                  })}
+                            )}
+                          </motion.div>
+                        );
+                      })}
+                      {selectedAttendanceEntries.length === 0 && (
+                        <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
+                          没有符合条件的关联学生
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-2">

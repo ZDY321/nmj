@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type { AttendanceStatus, Lesson, TeacherVault } from "@/shared/types";
 import { calculateFee, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
 import {
@@ -159,6 +160,7 @@ export function LessonsView({
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | "one_on_one" | "class">("all");
+  const { confirm, dialog } = useConfirmDialog();
   const normalizedStudentFilter = studentFilter.trim().toLowerCase();
   const lessons = vault.lessons
     .filter((lesson) => {
@@ -209,8 +211,19 @@ export function LessonsView({
     onUpdateLesson(nextLesson);
   }
 
+  function askDeleteLesson(lesson: Lesson) {
+    confirm({
+      title: "删除这条课时记录？",
+      description: `${lesson.date} ${lesson.startTime}-${lesson.endTime} · ${courseName(vault, lesson.courseGroupId)}`,
+      confirmLabel: "删除",
+      tone: "danger",
+      onConfirm: () => onDeleteLesson(lesson.id)
+    });
+  }
+
   return (
     <div className="space-y-6">
+      {dialog}
       <LessonForm vault={vault} onAddLesson={onAddLesson} />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -302,7 +315,7 @@ export function LessonsView({
                   <CardTitle>课程详情</CardTitle>
                   <CardDescription>{selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
-                <Button variant="destructive" size="sm" onClick={() => onDeleteLesson(selected.id)}>
+                <Button variant="destructive" size="sm" onClick={() => askDeleteLesson(selected)}>
                   <Trash2 size={15} /> 删除
                 </Button>
               </CardHeader>
