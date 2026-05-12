@@ -668,11 +668,21 @@ export function StudentsView({
               </div>
               <Badge variant="secondary">{vault.campuses.length} 个</Badge>
             </div>
-            <form onSubmit={addCampus} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+            <form onSubmit={addCampus} className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto]">
               <Input
                 value={campusNameInput}
                 onChange={(e) => setCampusNameInput(e.target.value)}
-                placeholder="例如：中心校区"
+                placeholder="校区名称，例如：中心校区"
+              />
+              <Input
+                value={campusAddressInput}
+                onChange={(e) => setCampusAddressInput(e.target.value)}
+                placeholder="地址，例如：人民路 88 号"
+              />
+              <Input
+                value={campusNoteInput}
+                onChange={(e) => setCampusNoteInput(e.target.value)}
+                placeholder="备注，可选"
               />
               <Button type="submit">
                 <Plus size={15} /> 添加校区

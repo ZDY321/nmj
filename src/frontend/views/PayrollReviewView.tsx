@@ -283,15 +283,15 @@ export function PayrollReviewView({ vault }: { vault: TeacherVault }) {
                       )}
                     </div>
                     {details.length > 0 && (
-                      <div className="mt-3 grid max-h-[86px] grid-cols-1 gap-1 overflow-y-auto pr-1">
+                      <div className="mt-3 flex max-h-[92px] flex-wrap gap-1.5 overflow-y-auto pr-1">
                         {details.map((detail) => (
                           <div
                             key={detail.key}
-                            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[9px] border border-[#e8eef6] bg-white px-2.5 py-1.5"
+                            className="inline-flex min-w-0 max-w-[150px] items-center gap-1.5 rounded-[9px] border border-[#e8eef6] bg-white px-2 py-1"
                             title={`${detail.campus} · ${detail.count} 节 · ${formatMoney(detail.amount)}`}
                           >
-                            <span className="truncate text-[11px] font-bold text-[#64748b]">{detail.campus}</span>
-                            <span className="text-[11px] font-extrabold text-[#061226]">{formatMoney(detail.amount)}</span>
+                            <span className="max-w-[72px] truncate text-[11px] font-bold text-[#64748b]">{detail.campus}</span>
+                            <span className="shrink-0 text-[11px] font-extrabold text-[#061226]">{formatMoney(detail.amount)}</span>
                           </div>
                         ))}
                       </div>
