@@ -51,6 +51,7 @@ export function MetricCard({
 }) {
   const style = variantStyles[variant] || variantStyles[1];
   const Icon = style.icon;
+  const valueFontSize = metricValueFontSize(value);
 
   return (
     <motion.div
@@ -60,16 +61,19 @@ export function MetricCard({
       whileHover={{ y: -3 }}
     >
       <Card className="min-h-[150px] overflow-hidden rounded-[18px] border-[#dce5f0] bg-white shadow-[0_14px_34px_rgba(15,35,66,0.08)]">
-        <CardContent className="relative flex h-full items-center gap-5 p-5">
-          <div className={cn("flex h-[68px] w-[68px] shrink-0 items-center justify-center rounded-full", style.iconWrap)}>
-            <div className={cn("flex h-10 w-10 items-center justify-center rounded-full text-white shadow-[0_12px_24px_rgba(15,35,66,0.16)]", style.iconBadge)}>
-              <Icon size={22} strokeWidth={2.4} />
+        <CardContent className="relative flex h-full items-center gap-3 p-5">
+          <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-14 sm:w-14", style.iconWrap)}>
+            <div className={cn("flex h-8 w-8 items-center justify-center rounded-full text-white shadow-[0_10px_20px_rgba(15,35,66,0.14)] sm:h-9 sm:w-9", style.iconBadge)}>
+              <Icon size={18} strokeWidth={2.4} />
             </div>
           </div>
 
           <div className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-[#475569]">{label}</span>
-            <strong className="mt-2 block break-words text-[24px] font-extrabold leading-tight text-[#050b18] sm:text-[28px] xl:text-[26px] 2xl:text-[28px]">
+            <strong
+              className="mt-2 block max-w-full whitespace-nowrap font-extrabold leading-none text-[#050b18]"
+              style={{ fontSize: valueFontSize }}
+            >
               {value}
             </strong>
             <span className="mt-3 flex min-w-0 items-center gap-1 text-sm text-[#64748b]">
@@ -85,4 +89,13 @@ export function MetricCard({
       </Card>
     </motion.div>
   );
+}
+
+function metricValueFontSize(value: string): string {
+  const length = value.replace(/\s/g, "").length;
+  if (length >= 15) return "15px";
+  if (length >= 13) return "17px";
+  if (length >= 11) return "19px";
+  if (length >= 9) return "23px";
+  return "30px";
 }

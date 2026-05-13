@@ -37,6 +37,7 @@ import { MetricCard } from "@/frontend/components/MetricCard";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 
 const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+type YearTrendItem = ReturnType<typeof yearlyTrend>[number];
 
 export function SalaryView({
   vault,
@@ -264,6 +265,7 @@ export function SalaryView({
             </Select>
           </CardHeader>
           <CardContent className="space-y-5">
+            <AnnualIncomeLineChart trend={trend} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-4">
               {trend.map((item) => (
                 <button
@@ -528,6 +530,85 @@ export function SalaryView({
       </Card>
     </div>
   );
+}
+
+function AnnualIncomeLineChart({
+  trend,
+  selectedMonth,
+  onSelectMonth
+}: {
+  trend: YearTrendItem[];
+  selectedMonth: string;
+  onSelectMonth: (month: string) => void;
+}) {
+  if (trend.length === 0) {
+    return (
+      <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white px-4 py-8 text-center text-sm font-semibold text-[#64748b]">
+        当前年份暂无收入数据
+      </div>
+    );
+  }
+
+  const totals = trend.map((item) => item.total);
+  const maxTotal = niceChartMax(Math.max(0, ...totals));
+  const minTotal = Math.min(0, ...totals);
+  const range = Math.max(maxTotal - minTotal, 1);
+  const plotLeft = 76;
+  const plotRight = 744;
+  const plotTop = 24;
+  const plotBottom = 190;
+  const gridValues = Array.from({ length: 5 }, (_, index) => maxTotal - (range / 4) * index);
+  const points = trend.map((item, index) => {
+    const x = trend.length === 1 ? (plotLeft + plotRight) / 2 : plotLeft + (index / (trend.length - 1)) * (plotRight - plotLeft);
+    const y = plotTop + ((maxTotal - item.total) / range) * (plotBottom - plotTop);
+    return { ...item, x, y };
+  });
+  const line = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+  return (
+    <div className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-sm font-extrabold text-[#061226]">月收入折线</div>
+        <div className="text-xs font-bold text-[#64748b]">点击节点切换月份</div>
+      </div>
+      <svg viewBox="0 0 760 230" className="h-[240px] w-full overflow-visible" role="img" aria-label="月收入折线图">
+        {gridValues.map((value) => {
+          const y = plotTop + ((maxTotal - value) / range) * (plotBottom - plotTop);
+          return (
+            <g key={value}>
+              <line x1={plotLeft} x2={plotRight} y1={y} y2={y} stroke="#e8eef6" strokeDasharray="4 6" />
+              <text x="4" y={y + 4} className="fill-[#64748b] text-[12px] font-semibold">
+                {formatMoney(value)}
+              </text>
+            </g>
+          );
+        })}
+        {line && <polyline points={line} fill="none" stroke="#1557c2" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}
+        {points.map((point) => {
+          const selected = point.month === selectedMonth;
+          return (
+            <g key={point.month} className="cursor-pointer" onClick={() => onSelectMonth(point.month)}>
+              <circle cx={point.x} cy={point.y} r="15" fill="transparent" />
+              <circle cx={point.x} cy={point.y} r={selected ? "7" : "5"} fill={selected ? "#1557c2" : "#fff"} stroke="#1557c2" strokeWidth="3">
+                <title>{`${point.month}：${formatMoney(point.total)}，${point.count} 节`}</title>
+              </circle>
+              <text x={point.x} y="222" textAnchor="middle" className="fill-[#64748b] text-[11px] font-semibold">
+                {Number(point.month.slice(5))}月
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function niceChartMax(value: number): number {
+  if (value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10].find((candidate) => normalized <= candidate) ?? 10;
+  return step * magnitude;
 }
 
 function isCompletedLessonStatus(status: string): boolean {
