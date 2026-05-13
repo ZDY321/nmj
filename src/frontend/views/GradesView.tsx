@@ -488,7 +488,7 @@ function TrendLineChart({
                     cx={point.x}
                     cy={point.y}
                     r={isActive ? "7" : "5"}
-                    fill={isActive ? "#dc2626" : "#fff"}
+                    fill={isActive ? "#061226" : "#fff"}
                     stroke={subjectColor(point.record.subject)}
                     strokeWidth="4"
                   >

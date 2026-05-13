@@ -30,6 +30,8 @@ export function StudentsView({
   onUpdateCourse,
   onDeleteCourse,
   onAddCustomCourseType,
+  onUpdateCustomCourseType,
+  onDeleteCustomCourseType,
   onTransferStudentCourse
 }: {
   vault: TeacherVault;
@@ -44,10 +46,13 @@ export function StudentsView({
   onUpdateCourse: (course: CourseGroup) => void;
   onDeleteCourse: (courseId: string) => void;
   onAddCustomCourseType: (courseType: CustomCourseTypeOption) => void;
+  onUpdateCustomCourseType: (courseType: CustomCourseTypeOption) => void;
+  onDeleteCustomCourseType: (courseTypeId: CustomCourseType) => void;
   onTransferStudentCourse: (transition: StudentCourseTransition) => void;
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseTypeOptions = courseTypeOptionsForVault(vault);
+  const customCourseTypes = vault.preferences?.customCourseTypes ?? [];
   const preferredCampusId = campusOptions[0]?.id ?? "";
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
@@ -68,6 +73,8 @@ export function StudentsView({
   const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
   const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => defaultFeeRule("one_on_one"));
   const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
+  const [editingCustomCourseTypeId, setEditingCustomCourseTypeId] = useState<CustomCourseType | "">("");
+  const [editingCustomCourseTypeLabel, setEditingCustomCourseTypeLabel] = useState("");
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
@@ -399,6 +406,52 @@ export function StudentsView({
     onAddCustomCourseType(option);
     changeNewCourseType(option.id);
     setCustomCourseTypeInput("");
+  }
+
+  function startEditCustomCourseType(courseTypeOption: CustomCourseTypeOption) {
+    setEditingCustomCourseTypeId(courseTypeOption.id);
+    setEditingCustomCourseTypeLabel(courseTypeOption.label);
+  }
+
+  function saveCustomCourseType() {
+    const id = editingCustomCourseTypeId;
+    const label = editingCustomCourseTypeLabel.trim();
+    if (!id || !label) return;
+    const duplicated = customCourseTypes.some((item) => item.id !== id && item.label.trim() === label);
+    if (duplicated) return;
+    onUpdateCustomCourseType({ id, label });
+    setEditingCustomCourseTypeId("");
+    setEditingCustomCourseTypeLabel("");
+  }
+
+  function cancelCustomCourseTypeEdit() {
+    setEditingCustomCourseTypeId("");
+    setEditingCustomCourseTypeLabel("");
+  }
+
+  function customCourseTypeInUse(courseTypeId: CustomCourseType): boolean {
+    return (
+      vault.courseGroups.some((course) => course.type === courseTypeId) ||
+      vault.lessons.some((lesson) => lesson.type === courseTypeId)
+    );
+  }
+
+  function requestDeleteCustomCourseType(courseTypeOption: CustomCourseTypeOption) {
+    if (customCourseTypeInUse(courseTypeOption.id)) return;
+    confirm({
+      title: `删除班型「${courseTypeOption.label}」？`,
+      description: "删除后只会从班型下拉中移除，不影响内置班型。",
+      confirmLabel: "删除",
+      tone: "danger",
+      onConfirm: () => {
+        if (courseType === courseTypeOption.id) changeNewCourseType("one_on_one");
+        if (courseTypeFilter === courseTypeOption.id) setCourseTypeFilter("all");
+        if (studentCourseTypeFilter === courseTypeOption.id) setStudentCourseTypeFilter("all");
+        if (transferCourseType === courseTypeOption.id) setTransferCourseType("trial");
+        if (editingCustomCourseTypeId === courseTypeOption.id) cancelCustomCourseTypeEdit();
+        onDeleteCustomCourseType(courseTypeOption.id);
+      }
+    });
   }
 
   function updateNewCourseFee(patch: Partial<FeeRule>) {
@@ -1466,17 +1519,69 @@ export function StudentsView({
                   <option value="paused">暂停</option>
                 </Select>
               </div>
-              <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-dashed border-[#cbd6e3] bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                <Input
-                  value={customCourseTypeInput}
-                  onChange={(event) => setCustomCourseTypeInput(event.target.value)}
-                  placeholder="自定义班型，例如：小组课、冲刺课"
-                  maxLength={24}
-                  className="h-10"
-                />
-                <Button type="button" variant="outline" className="h-10" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
-                  <Plus size={14} /> 添加班型
-                </Button>
+              <div className="space-y-3 rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <Input
+                    value={customCourseTypeInput}
+                    onChange={(event) => setCustomCourseTypeInput(event.target.value)}
+                    placeholder="自定义班型，例如：小组课、冲刺课"
+                    maxLength={24}
+                    className="h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20"
+                  />
+                  <Button type="button" variant="outline" className="h-10 border-[#fdba74] bg-white text-[#9a3412] hover:bg-[#ffedd5]" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
+                    <Plus size={14} /> 添加班型
+                  </Button>
+                </div>
+                {customCourseTypes.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-bold text-[#9a3412]">已添加自定义班型</div>
+                    <div className="flex flex-wrap gap-2">
+                      {customCourseTypes.map((typeOption) => {
+                        const isEditingType = editingCustomCourseTypeId === typeOption.id;
+                        const used = customCourseTypeInUse(typeOption.id);
+                        return (
+                          <div key={typeOption.id} className="flex max-w-full items-center gap-1 rounded-[12px] border border-[#fed7aa] bg-white px-2 py-1.5">
+                            {isEditingType ? (
+                              <>
+                                <Input
+                                  value={editingCustomCourseTypeLabel}
+                                  onChange={(event) => setEditingCustomCourseTypeLabel(event.target.value)}
+                                  maxLength={24}
+                                  className="h-8 min-w-[140px] border-[#fdba74] text-xs font-bold text-[#7c2d12]"
+                                />
+                                <Button type="button" size="sm" className="h-8 w-8 rounded-[9px] p-0" disabled={!editingCustomCourseTypeLabel.trim()} onClick={saveCustomCourseType} title="保存班型">
+                                  <Save size={13} />
+                                </Button>
+                                <Button type="button" size="sm" variant="outline" className="h-8 w-8 rounded-[9px] p-0" onClick={cancelCustomCourseTypeEdit} title="取消编辑">
+                                  <X size={13} />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="max-w-[160px] truncate px-1 text-xs font-extrabold text-[#7c2d12]" title={typeOption.label}>{typeOption.label}</span>
+                                {used && <Badge variant="amber" className="text-[10px]">使用中</Badge>}
+                                <Button type="button" size="sm" variant="outline" className="h-8 w-8 rounded-[9px] p-0" onClick={() => startEditCustomCourseType(typeOption)} title="修改班型">
+                                  <Pencil size={13} />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-8 w-8 rounded-[9px] p-0"
+                                  disabled={used}
+                                  onClick={() => requestDeleteCustomCourseType(typeOption)}
+                                  title={used ? "已有课程或课时使用，不能删除" : "删除班型"}
+                                >
+                                  <Trash2 size={13} />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {courseType === "class" ? (

@@ -41,6 +41,7 @@ import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } fro
 import type {
   Campus,
   CourseGroup,
+  CustomCourseType,
   CustomCourseTypeOption,
   GradeRecord,
   Lesson,
@@ -315,6 +316,31 @@ export function App() {
       draft.preferences = {
         ...(draft.preferences ?? { weekStartsOn: 0 }),
         customCourseTypes: [...current, { ...courseType, label: normalizedLabel }]
+      };
+    });
+  }
+
+  function updateCustomCourseType(courseType: CustomCourseTypeOption) {
+    updateVault((draft) => {
+      const current = draft.preferences?.customCourseTypes ?? [];
+      const normalizedLabel = courseType.label.trim();
+      if (!normalizedLabel || current.some((item) => item.id !== courseType.id && item.label.trim() === normalizedLabel)) return;
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        customCourseTypes: current.map((item) => (item.id === courseType.id ? { ...item, label: normalizedLabel } : item))
+      };
+    });
+  }
+
+  function deleteCustomCourseType(courseTypeId: CustomCourseType) {
+    updateVault((draft) => {
+      const inUse =
+        draft.courseGroups.some((course) => course.type === courseTypeId) ||
+        draft.lessons.some((lesson) => lesson.type === courseTypeId);
+      if (inUse) return;
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        customCourseTypes: (draft.preferences?.customCourseTypes ?? []).filter((item) => item.id !== courseTypeId)
       };
     });
   }
@@ -995,6 +1021,8 @@ export function App() {
                 onUpdateCourse={updateCourse}
                 onDeleteCourse={deleteCourse}
                 onAddCustomCourseType={addCustomCourseType}
+                onUpdateCustomCourseType={updateCustomCourseType}
+                onDeleteCustomCourseType={deleteCustomCourseType}
                 onTransferStudentCourse={transferStudentCourse}
               />
             )}
