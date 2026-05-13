@@ -876,7 +876,7 @@ export function ScheduleView({
                       }
                     }}
                     disabled={calendarMode === "schedule" && !calendarCourseGroupId}
-                    className={`relative flex min-h-[86px] flex-col items-start rounded-[14px] border p-2 text-left transition-all sm:min-h-[96px] sm:p-2.5 ${
+                    className={`relative flex min-h-[56px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all sm:min-h-[96px] sm:rounded-[14px] sm:p-2.5 ${
                       selectedCalendarDate === calendarDate
                         ? isAllCompleted
                           ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
@@ -891,14 +891,19 @@ export function ScheduleView({
                     }`}
                   >
                     <span className={`text-sm font-bold ${isCurrentMonth ? "text-(--color-foreground)" : ""}`}>{Number(calendarDate.slice(8))}</span>
-                    <div className="mt-1 flex flex-wrap gap-1">
+                    <div className="mt-2 flex gap-1 sm:hidden">
+                      {hasCompleted && <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a]" />}
+                      {hasPending && <span className="h-1.5 w-1.5 rounded-full bg-[#ff8617]" />}
+                      {hasCancelled && <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626]" />}
+                    </div>
+                    <div className="mt-1 hidden flex-wrap gap-1 sm:flex">
                       {dayLessons.length > 0 && <Badge variant="secondary" className="text-[10px]">{dayLessons.length} 节</Badge>}
                       {hasCompleted && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
                       {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待</Badge>}
                       {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                     </div>
                     {dayLessons.slice(0, 2).map((lesson) => (
-                      <span key={lesson.id} className="mt-1 w-full truncate text-[10px] font-semibold text-[#64748b]">
+                      <span key={lesson.id} className="mt-1 hidden w-full truncate text-[10px] font-semibold text-[#64748b] sm:block">
                         {lesson.startTime} {courseName(vault, lesson.courseGroupId)}
                       </span>
                     ))}

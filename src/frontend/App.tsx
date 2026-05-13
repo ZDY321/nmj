@@ -940,7 +940,7 @@ export function App() {
               />
             )}
             {!onboardingVisible && view === "calendar" && (
-              <CalendarView vault={vault} onWeekStartChange={updateWeekStart} />
+              <CalendarView vault={vault} onWeekStartChange={updateWeekStart} onOpenLessonInCalendar={openLessonInCalendar} />
             )}
             {!onboardingVisible && view === "schedule" && (
               <ScheduleView
@@ -997,11 +997,6 @@ export function App() {
             {!onboardingVisible && view === "salary" && (
               <SalaryView
                 vault={vault}
-                onBaseSalaryChange={(value) =>
-                  updateVault((draft) => {
-                    draft.profile.baseSalary = Number.isFinite(value) ? value : 0;
-                  })
-                }
                 onAddAdjustment={addSalaryAdjustment}
                 onDeleteAdjustment={deleteSalaryAdjustment}
                 onOpenLessonInCalendar={openLessonInCalendar}

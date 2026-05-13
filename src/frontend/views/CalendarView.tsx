@@ -4,7 +4,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
-import type { TeacherVault, WeekStart } from "@/shared/types";
+import type { Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import {
   calendarDates,
   courseName,
@@ -26,10 +26,12 @@ import { todayIso } from "@/frontend/lib/calculations";
 
 export function CalendarView({
   vault,
-  onWeekStartChange
+  onWeekStartChange,
+  onOpenLessonInCalendar
 }: {
   vault: TeacherVault;
   onWeekStartChange: (weekStart: WeekStart) => void;
+  onOpenLessonInCalendar?: (lesson: Lesson) => void;
 }) {
   const [month, setMonth] = useState(() => todayIso().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => todayIso());
@@ -185,11 +187,13 @@ export function CalendarView({
                 <p className="text-sm text-(--color-muted-foreground) text-center py-6">这一天还没有课程</p>
               )}
               {selectedLessons.map((lesson) => (
-                <motion.div
+                <motion.button
                   key={lesson.id}
+                  type="button"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`flex flex-col gap-3 rounded-[12px] border p-3 sm:flex-row sm:items-center sm:justify-between ${lessonStatusSurfaceClass(lesson.status)}`}
+                  onClick={() => onOpenLessonInCalendar?.(lesson)}
+                  className={`flex w-full flex-col gap-3 rounded-[12px] border p-3 text-left transition-all hover:border-[#1557c2] sm:flex-row sm:items-center sm:justify-between ${lessonStatusSurfaceClass(lesson.status)}`}
                 >
                   <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -205,7 +209,7 @@ export function CalendarView({
                     </span>
                   </div>
                   <span className="shrink-0 text-sm font-bold text-[#1557c2] sm:ml-3">{formatMoney(lesson.feeSnapshot.amount)}</span>
-                </motion.div>
+                </motion.button>
               ))}
             </div>
           </CardContent>

@@ -40,13 +40,11 @@ const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8�
 
 export function SalaryView({
   vault,
-  onBaseSalaryChange,
   onAddAdjustment,
   onDeleteAdjustment,
   onOpenLessonInCalendar
 }: {
   vault: TeacherVault;
-  onBaseSalaryChange: (value: number) => void;
   onAddAdjustment: (adjustment: SalaryAdjustment) => void;
   onDeleteAdjustment: (adjustmentId: string) => void;
   onOpenLessonInCalendar?: (lesson: Lesson) => void;
@@ -60,7 +58,6 @@ export function SalaryView({
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailCampusFilter, setDetailCampusFilter] = useState("all");
-  const [hoveredTrendMonth, setHoveredTrendMonth] = useState<string | null>(null);
   const { confirm, dialog } = useConfirmDialog();
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const year = selectedMonth.slice(0, 4);
@@ -69,9 +66,11 @@ export function SalaryView({
   const currentMonth = todayIso().slice(0, 7);
   const currentYear = currentMonth.slice(0, 4);
   const trend = yearlyTrend(vault, year).filter((item) => year < currentYear || item.month <= currentMonth);
-  const maxTotal = Math.max(...trend.map((item) => item.total), 1);
-  const chartMaxTotal = niceChartMax(maxTotal);
-  const maxCount = Math.max(...trend.map((item) => item.count), 1);
+  const yearOptions = Array.from(new Set([
+    currentYear,
+    ...vault.lessons.map((lesson) => lesson.date.slice(0, 4)),
+    ...vault.salaryAdjustments.map((adjustment) => adjustment.month.slice(0, 4))
+  ])).sort((a, b) => b.localeCompare(a));
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
   const totalHours = monthLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? 0), 0);
@@ -117,6 +116,12 @@ export function SalaryView({
     setAdjustmentNote("");
   }
 
+  function changeYear(nextYear: string) {
+    const monthPart = selectedMonth.slice(5);
+    const nextMonth = `${nextYear}-${monthPart}`;
+    setSelectedMonth(nextYear === currentYear && nextMonth > currentMonth ? currentMonth : nextMonth);
+  }
+
   return (
     <div className="space-y-6">
       {dialog}
@@ -142,7 +147,7 @@ export function SalaryView({
               <p className="text-sm font-medium">收入明细</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {[
-                  { label: "基本工资", value: breakdown.baseSalary, icon: Banknote, color: "text-[#061226] bg-[#eef0ff]", editable: true },
+                  { label: "基本工资", value: breakdown.baseSalary, icon: Banknote, color: "text-[#061226] bg-[#eef0ff]" },
                   { label: "一对一", value: breakdown.oneOnOne, icon: Users, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
                   { label: "全日制", value: breakdown.fullTime, icon: CalendarDays, color: "text-[#5161d6] bg-[#eef0ff]" },
@@ -161,25 +166,9 @@ export function SalaryView({
                     </div>
                     <div className="min-w-0 flex-1">
                       <span className="block text-xs text-[#64748b]">{item.label}</span>
-                      {"editable" in item && item.editable ? (
-                        <div className="relative mt-1">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-extrabold text-[#64748b]">¥</span>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={vault.profile.baseSalary}
-                            onChange={(event) => {
-                              const value = Number(event.target.value);
-                              onBaseSalaryChange(Number.isFinite(value) ? Math.max(value, 0) : 0);
-                            }}
-                            className="h-9 bg-white pl-8 text-sm font-bold"
-                          />
-                        </div>
-                      ) : (
-                        <span className={`text-sm font-bold ${"danger" in item && item.danger ? "text-[#b91c1c]" : "text-[#061226]"}`}>
-                          {formatMoney(item.value)}
-                        </span>
-                      )}
+                      <span className={`text-sm font-bold ${"danger" in item && item.danger ? "text-[#b91c1c]" : "text-[#061226]"}`}>
+                        {formatMoney(item.value)}
+                      </span>
                     </div>
                   </motion.div>
                 ))}
@@ -268,116 +257,30 @@ export function SalaryView({
               <CardTitle className="text-xl">按月收入趋势</CardTitle>
               <CardDescription className="mt-2">包含基本工资、已完成课时费、补贴扣款和义务课时扣费</CardDescription>
             </div>
-            <div className="rounded-[10px] border border-[#dbe4ef] px-4 py-2 text-sm font-bold text-[#25324a]">
-              {year}
-            </div>
+            <Select value={year} onChange={(event) => changeYear(event.target.value)} className="h-10 w-[112px]" aria-label="选择统计年份">
+              {yearOptions.map((optionYear) => (
+                <option key={optionYear} value={optionYear}>{optionYear}年</option>
+              ))}
+            </Select>
           </CardHeader>
-          <CardContent>
-            <div className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 pb-3 pt-3">
-              <svg viewBox="0 0 760 230" className="h-[260px] w-full overflow-visible">
-                {(() => {
-                  const plotLeft = 84;
-                  const plotRight = 744;
-                  const plotTop = 18;
-                  const plotBottom = 190;
-                  const gridLines = [1, 0.75, 0.5, 0.25, 0];
-                  const points = trend.map((item, index) => {
-                    const x = trend.length <= 1 ? (plotLeft + plotRight) / 2 : plotLeft + (index / (trend.length - 1)) * (plotRight - plotLeft);
-                    const y = plotTop + (1 - item.total / chartMaxTotal) * (plotBottom - plotTop);
-                    return { x, y, month: item.month, total: item.total };
-                  });
-                  const line = points.map((point) => `${point.x},${point.y}`).join(" ");
-                  const hoveredPoint = points.find((point) => point.month === hoveredTrendMonth);
-                  const tooltipWidth = 136;
-                  const tooltipHeight = 42;
-                  const tooltipX = hoveredPoint ? Math.min(Math.max(hoveredPoint.x - tooltipWidth / 2, plotLeft), plotRight - tooltipWidth) : 0;
-                  const tooltipY = hoveredPoint ? Math.max(hoveredPoint.y - 56, 4) : 0;
-                  return (
-                    <>
-                      {gridLines.map((ratio) => {
-                        const y = plotTop + (1 - ratio) * (plotBottom - plotTop);
-                        return (
-                          <g key={ratio}>
-                            <line x1={plotLeft} x2={plotRight} y1={y} y2={y} stroke="#dbe4ef" strokeDasharray={ratio === 0 ? "0" : "4 6"} />
-                            <text x="4" y={y + 4} className="fill-[#64748b] text-[12px] font-semibold">
-                              {ratio === 0 ? "¥0" : formatMoney(chartMaxTotal * ratio)}
-                            </text>
-                          </g>
-                        );
-                      })}
-                      {line && <polyline points={line} fill="none" stroke="#1557c2" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}
-                      {points.map((point) => (
-                        <g
-                          key={point.month}
-                          className="cursor-pointer"
-                          onClick={() => setSelectedMonth(point.month)}
-                          onMouseEnter={() => setHoveredTrendMonth(point.month)}
-                          onMouseLeave={() => setHoveredTrendMonth(null)}
-                        >
-                          <circle
-                            cx={point.x}
-                            cy={point.y}
-                            r="12"
-                            fill="transparent"
-                          />
-                          <circle
-                            cx={point.x}
-                            cy={point.y}
-                            r="7"
-                            fill="#fff"
-                            stroke={selectedMonth === point.month ? "#061226" : "#1557c2"}
-                            strokeWidth={selectedMonth === point.month ? "4" : "3"}
-                          >
-                            <title>{`${point.month}：${formatMoney(point.total)}`}</title>
-                          </circle>
-                        </g>
-                      ))}
-                      {hoveredPoint && (
-                        <g>
-                          <rect
-                            x={tooltipX}
-                            y={tooltipY}
-                            width={tooltipWidth}
-                            height={tooltipHeight}
-                            rx="10"
-                            fill="#061226"
-                            opacity="0.92"
-                          />
-                          <text
-                            x={tooltipX + tooltipWidth / 2}
-                            y={tooltipY + 27}
-                            textAnchor="middle"
-                            className="fill-white font-extrabold"
-                            fontSize="17"
-                          >
-                            {formatMoney(hoveredPoint.total)}
-                          </text>
-                        </g>
-                      )}
-                    </>
-                  );
-                })()}
-              </svg>
-              <div
-                className="ml-[84px] grid gap-1 text-center text-xs font-medium text-[#64748b]"
-                style={{ gridTemplateColumns: `repeat(${Math.max(trend.length, 1)}, minmax(0, 1fr))` }}
-              >
-                {trend.map((item) => {
-                  const monthIndex = Number(item.month.slice(5)) - 1;
-                  return (
-                    <button
-                      key={item.month}
-                      type="button"
-                      onClick={() => setSelectedMonth(item.month)}
-                      className={`rounded-[6px] py-0.5 transition-colors ${
-                        selectedMonth === item.month ? "bg-white text-[#1557c2] ring-1 ring-[#bfdbfe]" : "hover:bg-white"
-                      }`}
-                    >
-                      {monthNames[monthIndex]}
-                    </button>
-                  );
-                })}
-              </div>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-4">
+              {trend.map((item) => (
+                <button
+                  key={item.month}
+                  type="button"
+                  onClick={() => setSelectedMonth(item.month)}
+                  className={`rounded-[12px] border bg-white p-3 text-left transition-colors ${
+                    selectedMonth === item.month
+                      ? "border-[#1557c2] ring-1 ring-[#1557c2]"
+                      : "border-[#dbe4ef] hover:border-[#1557c2]"
+                  }`}
+                >
+                  <div className="text-xs font-bold text-[#64748b]">{monthNames[Number(item.month.slice(5)) - 1]}</div>
+                  <div className="mt-2 break-words text-lg font-extrabold leading-tight text-[#061226]">{formatMoney(item.total)}</div>
+                  <div className="mt-2 text-[11px] font-semibold text-[#64748b]">{item.count} 节课程</div>
+                </button>
+              ))}
             </div>
             <div className="mt-5">
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -386,25 +289,18 @@ export function SalaryView({
                   <div className="mt-1 text-xs font-semibold text-[#64748b]">仅显示已发生或当前月份，避免未来月份干扰判断。</div>
                 </div>
               </div>
-              <div className="flex h-[220px] items-end gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 pb-8 pt-6 sm:gap-3 sm:px-4">
-                {trend.map((item, index) => (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-6">
+                {trend.map((item) => (
                   <button
                     key={item.month}
                     type="button"
                     onClick={() => setSelectedMonth(item.month)}
-                    className={`flex h-full flex-1 flex-col justify-end gap-2 rounded-[8px] transition-colors ${
-                      selectedMonth === item.month ? "ring-1 ring-[#bfdbfe]" : "hover:bg-white/70"
+                    className={`rounded-[12px] border bg-white px-3 py-2 text-center transition-colors ${
+                      selectedMonth === item.month ? "border-[#1557c2] ring-1 ring-[#1557c2]" : "border-[#dbe4ef] hover:border-[#1557c2]"
                     }`}
                   >
-                    <span className="text-center text-xs font-extrabold text-[#25324a]">{item.count}</span>
-                    <motion.div
-                      initial={{ height: 0 }}
-                      animate={{ height: `${Math.max((item.count / maxCount) * 150, item.count ? 24 : 8)}px` }}
-                      transition={{ delay: index * 0.035, type: "spring", stiffness: 110, damping: 18 }}
-                      className="blue-gradient mx-auto w-full max-w-[28px] rounded-t-[5px]"
-                      title={`${item.month}: ${item.count} 节`}
-                    />
-                    <span className="text-center text-[11px] font-medium text-[#64748b]">{Number(item.month.slice(5))}月</span>
+                    <span className="block text-[11px] font-bold text-[#64748b]">{Number(item.month.slice(5))}月</span>
+                    <span className="mt-1 block text-xl font-extrabold text-[#061226]">{item.count}</span>
                   </button>
                 ))}
               </div>
@@ -632,14 +528,6 @@ export function SalaryView({
       </Card>
     </div>
   );
-}
-
-function niceChartMax(value: number): number {
-  if (value <= 0) return 1;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const normalized = value / magnitude;
-  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10].find((candidate) => normalized <= candidate) ?? 10;
-  return step * magnitude;
 }
 
 function isCompletedLessonStatus(status: string): boolean {

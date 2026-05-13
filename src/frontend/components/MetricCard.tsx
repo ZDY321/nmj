@@ -69,7 +69,7 @@ export function MetricCard({
 
           <div className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-[#475569]">{label}</span>
-            <strong className="mt-2 block truncate text-[30px] font-extrabold leading-none text-[#050b18]">
+            <strong className="mt-2 block break-words text-[24px] font-extrabold leading-tight text-[#050b18] sm:text-[28px] xl:text-[26px] 2xl:text-[28px]">
               {value}
             </strong>
             <span className="mt-3 flex min-w-0 items-center gap-1 text-sm text-[#64748b]">
