@@ -778,16 +778,16 @@ export function StudentsView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 rounded-[16px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 rounded-[16px] border border-[#fecaca] bg-[#fff1f2] p-3 md:grid-cols-4">
                 {[
                   { label: "义务目标", value: `${obligation.requiredHours.toFixed(1)} 小时` },
                   { label: "本月应扣", value: `${obligation.deductedHours.toFixed(1)} 小时` },
                   { label: "补扣小时", value: `${obligation.fallbackHours.toFixed(1)} 小时` },
                   { label: "本月扣费", value: formatMoney(obligation.amount) }
                 ].map((item) => (
-                  <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
-                    <div className="text-xs font-bold text-[#64748b]">{item.label}</div>
-                    <div className="mt-1 text-lg font-extrabold text-[#061226]">{item.value}</div>
+                  <div key={item.label} className="rounded-[12px] border border-[#fecaca] bg-[#fee2e2] p-3">
+                    <div className="text-xs font-bold text-[#991b1b]">{item.label}</div>
+                    <div className="mt-1 text-lg font-extrabold text-[#7f1d1d]">{item.value}</div>
                   </div>
                 ))}
               </div>
