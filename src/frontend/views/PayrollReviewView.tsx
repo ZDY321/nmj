@@ -22,6 +22,7 @@ import {
 } from "@/frontend/lib/helpers";
 
 type TypeFilter = "all" | CourseType;
+type LessonStatusFilter = "all" | Lesson["status"];
 type OverviewCampusKey = "oneOnOne" | "classLessons" | "fullTime" | "makeup";
 type CampusAmountDetail = {
   key: string;
@@ -44,20 +45,47 @@ export function PayrollReviewView({
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
   const [campusFilter, setCampusFilter] = useState(campusOptions[0]?.id ?? "all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<LessonStatusFilter>("all");
   const [gradeFilter, setGradeFilter] = useState("all");
+  const [detailStartDateFilter, setDetailStartDateFilter] = useState("");
+  const [detailEndDateFilter, setDetailEndDateFilter] = useState("");
+  const [detailCourseFilter, setDetailCourseFilter] = useState("all");
+  const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
   const effectiveObligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId;
 
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
+  function lessonCampusId(lesson: Lesson): string | undefined {
+    return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
+  }
+
+  function matchesGradeFilter(lesson: Lesson): boolean {
+    return (
+      gradeFilter === "all" ||
+      lesson.expectedStudentIds.some((studentId) => vault.students.find((student) => student.id === studentId)?.grade === gradeFilter)
+    );
+  }
+
+  function matchesReviewFilters(lesson: Lesson, includeCampus: boolean): boolean {
+    const matchesCampus = !includeCampus || campusFilter === "all" || lessonCampusId(lesson) === campusFilter;
+    const matchesType = typeFilter === "all" || lesson.type === typeFilter;
+    const matchesStatus = statusFilter === "all" || lesson.status === statusFilter;
+    return matchesCampus && matchesType && matchesStatus && matchesGradeFilter(lesson);
+  }
+
   const filteredLessons = monthLessons
+    .filter((lesson) => matchesReviewFilters(lesson, true))
+    .sort(sortLessons);
+  const detailLessons = filteredLessons
     .filter((lesson) => {
-      const campusId = lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
-      const matchesCampus = campusFilter === "all" || campusId === campusFilter;
-      const matchesType = typeFilter === "all" || lesson.type === typeFilter;
-      const matchesGrade =
-        gradeFilter === "all" ||
-        lesson.expectedStudentIds.some((studentId) => vault.students.find((student) => student.id === studentId)?.grade === gradeFilter);
-      return matchesCampus && matchesType && matchesGrade;
+      const matchesDate =
+        (!detailStartDateFilter || lesson.date >= detailStartDateFilter) &&
+        (!detailEndDateFilter || lesson.date <= detailEndDateFilter);
+      const matchesCourse = detailCourseFilter === "all" || lesson.courseGroupId === detailCourseFilter;
+      const matchesStudent =
+        !detailStudentFilter.trim() ||
+        studentNames(vault, lesson.expectedStudentIds).toLowerCase().includes(detailStudentFilter.trim().toLowerCase());
+      return matchesDate && matchesCourse && matchesStudent;
     })
     .sort(sortLessons);
 
@@ -116,8 +144,9 @@ export function PayrollReviewView({
   }, [monthLessons, vault]);
 
   const campusSummaries = useMemo(() => {
+    const campusSummaryBaseLessons = monthLessons.filter((lesson) => matchesReviewFilters(lesson, false));
     return campusOptions.map((campus) => {
-      const lessons = monthLessons.filter((lesson) => (lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId) === campus.id);
+      const lessons = campusSummaryBaseLessons.filter((lesson) => lessonCampusId(lesson) === campus.id);
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
       const hours = lessons.reduce((sum, lesson) => {
         if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;
@@ -133,7 +162,7 @@ export function PayrollReviewView({
         net: amount - obligation
       };
     });
-  }, [campusOptions, effectiveObligationCampusId, monthLessons, selectedMonth, vault]);
+  }, [campusOptions, effectiveObligationCampusId, monthLessons, selectedMonth, vault, typeFilter, statusFilter, gradeFilter]);
 
   const typeCounts = filteredLessons.reduce<Record<string, number>>(
     (summary, lesson) => {
@@ -160,7 +189,7 @@ export function PayrollReviewView({
               先选月份和校区，再核对每节课的状态、班型、学生和扣费后小计。
             </CardDescription>
           </div>
-          <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-auto lg:min-w-[720px] xl:grid-cols-4">
+          <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-auto lg:min-w-[860px] xl:grid-cols-5">
             <div className="space-y-2">
               <label className="text-sm font-medium">月份</label>
               <Input type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} />
@@ -180,6 +209,15 @@ export function PayrollReviewView({
                 <option value="all">全部类型</option>
                 {courseTypeOptionsForVault(vault).map((type) => (
                   <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">状态</label>
+              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as LessonStatusFilter)}>
+                <option value="all">全部状态</option>
+                {Object.entries(lessonStatusLabels).map(([status, label]) => (
+                  <option key={status} value={status}>{label}</option>
                 ))}
               </Select>
             </div>
@@ -236,7 +274,7 @@ export function PayrollReviewView({
               <MapPin size={14} /> 校区合并统计
             </div>
             <CardTitle>{selectedMonth} 校区汇总</CardTitle>
-            <CardDescription>义务课时先按老师本校区最低课时费抵扣；本校区不足时，再从其他校区最低课时费抵扣，试听不参与。</CardDescription>
+            <CardDescription>义务课时先按老师本校区单节总课时费从低到高抵扣；本校区不足时，再把其他校区课次合并后从低到高抵扣，试听不参与。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {campusSummaries.map((item) => (
@@ -344,10 +382,42 @@ export function PayrollReviewView({
             <Users size={14} /> 课程明细
           </div>
           <CardTitle>校区课程明细</CardTitle>
-          <CardDescription>这里展示课程记录与课时费明细，用于核对课程信息，不直接代表总工资。</CardDescription>
+          <CardDescription>这里展示课程记录与课时费明细，可在当前月份、校区、类型、状态和年级基础上继续筛选。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {filteredLessons.map((lesson, index) => (
+          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">开始日期</label>
+              <Input type="date" value={detailStartDateFilter} onChange={(event) => setDetailStartDateFilter(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">结束日期</label>
+              <Input type="date" value={detailEndDateFilter} onChange={(event) => setDetailEndDateFilter(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">具体课程</label>
+              <Select value={detailCourseFilter} onChange={(event) => setDetailCourseFilter(event.target.value)}>
+                <option value="all">全部课程</option>
+                {vault.courseGroups.map((course) => (
+                  <option key={course.id} value={course.id}>{course.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">学生筛选</label>
+              <Input value={detailStudentFilter} onChange={(event) => setDetailStudentFilter(event.target.value)} placeholder="输入学生名" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 rounded-[14px] border border-[#e8eef6] bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-extrabold text-[#061226]">当前明细结果</div>
+              <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                明细筛选 {detailLessons.length} 条；上方工资核对筛选共 {filteredLessons.length} 条。
+              </div>
+            </div>
+            <Badge variant="secondary" className="w-fit">{detailLessons.length} 条记录</Badge>
+          </div>
+          {detailLessons.map((lesson, index) => (
             <motion.button
               key={lesson.id}
               type="button"
@@ -369,7 +439,7 @@ export function PayrollReviewView({
                     <Badge variant="secondary">{courseTypeLabel(vault, lesson.type)}</Badge>
                   </div>
                   <div className="mt-2 text-sm font-semibold text-[#475569]">
-                    {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                    {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lessonCampusId(lesson))}
                   </div>
                   <div className="mt-1 text-sm text-[#64748b]">{studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}</div>
                   {lesson.attendance.some((entry) => entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending") && (
@@ -396,7 +466,7 @@ export function PayrollReviewView({
               </div>
             </motion.button>
           ))}
-          {filteredLessons.length === 0 && (
+          {detailLessons.length === 0 && (
             <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
               当前筛选下没有课时记录
             </div>

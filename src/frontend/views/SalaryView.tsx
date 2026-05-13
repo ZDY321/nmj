@@ -59,6 +59,7 @@ export function SalaryView({
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailCampusFilter, setDetailCampusFilter] = useState("all");
+  const [detailStatusFilter, setDetailStatusFilter] = useState<"all" | Lesson["status"]>("all");
   const { confirm, dialog } = useConfirmDialog();
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const year = selectedMonth.slice(0, 4);
@@ -75,6 +76,10 @@ export function SalaryView({
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
   const totalHours = monthLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? 0), 0);
+  function lessonCampusId(lesson: Lesson): string | undefined {
+    return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
+  }
+
   const recentLessons = [...monthLessons]
     .filter((lesson) => {
       const matchesDate =
@@ -84,8 +89,9 @@ export function SalaryView({
       const matchesStudent =
         !detailStudentFilter.trim() ||
         studentNames(vault, lesson.expectedStudentIds).toLowerCase().includes(detailStudentFilter.trim().toLowerCase());
-      const matchesCampus = detailCampusFilter === "all" || lesson.campusId === detailCampusFilter;
-      return matchesDate && matchesCourse && matchesStudent && matchesCampus;
+      const matchesCampus = detailCampusFilter === "all" || lessonCampusId(lesson) === detailCampusFilter;
+      const matchesStatus = detailStatusFilter === "all" || lesson.status === detailStatusFilter;
+      return matchesDate && matchesCourse && matchesStudent && matchesCampus && matchesStatus;
     })
     .sort(sortLessons)
     .reverse();
@@ -343,7 +349,7 @@ export function SalaryView({
             ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-6">
             <div className="space-y-2">
               <label className="text-sm font-medium">开始日期</label>
               <Input type="date" value={detailStartDateFilter} onChange={(event) => setDetailStartDateFilter(event.target.value)} />
@@ -374,6 +380,15 @@ export function SalaryView({
                 ))}
               </Select>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">状态筛选</label>
+              <Select value={detailStatusFilter} onChange={(event) => setDetailStatusFilter(event.target.value as "all" | Lesson["status"])}>
+                <option value="all">全部状态</option>
+                {Object.entries(lessonStatusLabels).map(([status, label]) => (
+                  <option key={status} value={status}>{label}</option>
+                ))}
+              </Select>
+            </div>
           </div>
 
           <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4 shadow-[0_10px_24px_rgba(15,35,66,0.04)]">
@@ -381,7 +396,7 @@ export function SalaryView({
               <div>
                 <div className="text-sm font-extrabold text-[#061226]">当前筛选结果</div>
                 <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                  按上方日期、课程、学生和校区筛选后的课时汇总。
+                  按上方日期、课程、学生、校区和状态筛选后的课时汇总。
                 </div>
               </div>
               <Badge variant="secondary" className="w-fit">
@@ -439,7 +454,7 @@ export function SalaryView({
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
                     <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
-                      <MapPin size={12} /> {campusName(vault, lesson.campusId)}
+                      <MapPin size={12} /> {campusName(vault, lessonCampusId(lesson))}
                     </span>
                     <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
                       {courseTypeLabel(vault, lesson.type)}
@@ -502,7 +517,7 @@ export function SalaryView({
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-1 whitespace-nowrap">
                         <MapPin size={13} className="text-[#94a3b8]" />
-                        {campusName(vault, lesson.campusId)}
+                        {campusName(vault, lessonCampusId(lesson))}
                       </span>
                     </td>
                     <td className="px-4 py-3">

@@ -751,7 +751,7 @@ export function StudentsView({
                 <Settings size={14} /> 个人与义务课时设置
               </div>
               <CardTitle>老师个人信息</CardTitle>
-              <CardDescription>义务课时自动从本校区非试听课里按最低课时费抵扣，本校区不足时再扣其他校区最低课时费。</CardDescription>
+              <CardDescription>义务课时自动从本校区非试听课里按单节总课时费从低到高抵扣，本校区不足时再合并其他校区课次继续抵扣。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -783,7 +783,7 @@ export function StudentsView({
                     value={obligationMode}
                     onChange={(event) => updateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
                   >
-                    <option value="auto_gap">按最低课时费自动抵扣，不足按小时补扣</option>
+                    <option value="auto_gap">按单节总课时费从低到高自动抵扣，不足按小时补扣</option>
                     <option value="manual">手动填写扣除金额</option>
                   </Select>
                 </div>
@@ -864,7 +864,7 @@ export function StudentsView({
                     <div>
                       <div className="text-sm font-extrabold text-[#061226]">义务课时自动抵扣明细</div>
                       <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        {campusName(vault, obligationCampusId)} · {obligationMonth}，先扣本校区最低课时费课程；本校区不够时，再扣其他校区最低课时费课程；试听不参与抵扣。
+                        {campusName(vault, obligationCampusId)} · {obligationMonth}，先扣本校区单节总课时费较低的课次；本校区不够时，再把其他校区课次合并后从低到高继续抵扣；试听不参与抵扣。
                       </div>
                     </div>
                     <Badge variant="secondary">{obligation.courseBreakdown.length} 个课程</Badge>

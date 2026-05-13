@@ -274,7 +274,6 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
     const bPriority = !campusId || b.campusId === campusId ? 0 : 1;
     return (
       aPriority - bPriority ||
-      a.hourlyValue - b.hourlyValue ||
       a.amount - b.amount ||
       `${a.lesson.date} ${a.lesson.startTime}`.localeCompare(`${b.lesson.date} ${b.lesson.startTime}`)
     );
