@@ -7,20 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
+import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, CustomCourseTypeOption, FeeRule, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
 import { calculateClassHeadcountFee, defaultClassFeeTiers, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
-import { campusName, courseTypeLabels, formatMoney, sortCampusesForProfile, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseTypeLabel, courseTypeOptionsForVault, formatMoney, sortCampusesForProfile, studentLimitForCourseType, studentNames } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
-const courseTypeOptions: Array<{ value: CourseType; label: string }> = [
-  { value: "one_on_one", label: "一对一" },
-  { value: "class", label: "班课" },
-  { value: "trial", label: "试听" },
-  { value: "full_time", label: "全日制" }
-];
 type ArchivePanel = "profile" | "campuses" | "students" | "courses";
 
 export function StudentsView({
@@ -35,6 +29,7 @@ export function StudentsView({
   onAddCourse,
   onUpdateCourse,
   onDeleteCourse,
+  onAddCustomCourseType,
   onTransferStudentCourse
 }: {
   vault: TeacherVault;
@@ -48,9 +43,11 @@ export function StudentsView({
   onAddCourse: (course: CourseGroup) => void;
   onUpdateCourse: (course: CourseGroup) => void;
   onDeleteCourse: (courseId: string) => void;
+  onAddCustomCourseType: (courseType: CustomCourseTypeOption) => void;
   onTransferStudentCourse: (transition: StudentCourseTransition) => void;
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
+  const courseTypeOptions = courseTypeOptionsForVault(vault);
   const preferredCampusId = campusOptions[0]?.id ?? "";
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
@@ -66,9 +63,11 @@ export function StudentsView({
   const [courseType, setCourseType] = useState<CourseType>("one_on_one");
   const [courseSubjectInput, setCourseSubjectInput] = useState("");
   const [courseCampusInput, setCourseCampusInput] = useState(preferredCampusId);
+  const [courseCampusCustomized, setCourseCampusCustomized] = useState(false);
   const [courseStatusInput, setCourseStatusInput] = useState<CourseGroup["status"]>("active");
   const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
   const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => defaultFeeRule("one_on_one"));
+  const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
@@ -78,6 +77,7 @@ export function StudentsView({
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
   const [studentCourseTypeFilter, setStudentCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [studentSubjectFilter, setStudentSubjectFilter] = useState("all");
+  const [courseSearch, setCourseSearch] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [courseGradeFilter, setCourseGradeFilter] = useState("all");
   const [courseSubjectFilter, setCourseSubjectFilter] = useState("all");
@@ -102,6 +102,7 @@ export function StudentsView({
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
   const normalizedCourseStudentSearch = courseStudentSearch.trim().toLowerCase();
   const normalizedNewCourseStudentSearch = newCourseStudentSearch.trim().toLowerCase();
+  const normalizedCourseSearch = courseSearch.trim().toLowerCase();
   const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
   const hasStudentsWithoutGrade = vault.students.some((student) => !student.grade);
   const hasUnsetGradeFilterOption = hasStudentsWithoutGrade || vault.courseGroups.some((course) => course.studentIds.length === 0);
@@ -109,17 +110,12 @@ export function StudentsView({
   const primaryCourseStudent = courseStudentIds[0]
     ? vault.students.find((student) => student.id === courseStudentIds[0])
     : undefined;
-  const suggestedCourseName = primaryCourseStudent && courseType === "one_on_one" ? `${primaryCourseStudent.name}${courseTypeLabels[courseType]}` : "";
+  const suggestedCourseName = primaryCourseStudent && studentLimitForCourseType(courseType)
+    ? `${primaryCourseStudent.name}${courseTypeLabel(vault, courseType)}`
+    : "";
   const addCourseStudentOptions = vault.students.filter((student) => {
-    const searchable = [
-      student.name,
-      student.grade ?? "",
-      student.school ?? "",
-      student.note ?? "",
-      campusName(vault, student.defaultCampusId),
-      student.temporaryTrial ? "试听 临时试听" : ""
-    ].join(" ").toLowerCase();
-    return !normalizedNewCourseStudentSearch || searchable.includes(normalizedNewCourseStudentSearch);
+    const searchable = studentCourseSearchText(vault, student);
+    return matchesKeywordSearch(searchable, normalizedNewCourseStudentSearch);
   });
   const visibleStudents = vault.students.filter((student) => {
     const matchesGrade = matchesGradeFilter(student.grade, gradeFilter);
@@ -146,7 +142,17 @@ export function StudentsView({
         : courseStudents.some((student) => student.grade === courseGradeFilter));
     const matchesSubject = courseSubjectFilter === "all" || course.subject === courseSubjectFilter;
     const matchesCampus = courseCampusFilter === "all" || course.defaultCampusId === courseCampusFilter;
-    return matchesType && matchesGrade && matchesSubject && matchesCampus;
+    const searchable = [
+      course.name,
+      course.subject,
+      courseTypeLabel(vault, course.type),
+      campusName(vault, course.defaultCampusId),
+      studentNames(vault, course.studentIds),
+      course.note ?? "",
+      ...courseStudents.flatMap((student) => [student.name, student.grade ?? "", student.school ?? "", student.note ?? ""])
+    ].join(" ").toLowerCase();
+    const matchesSearch = matchesKeywordSearch(searchable, normalizedCourseSearch);
+    return matchesType && matchesGrade && matchesSubject && matchesCampus && matchesSearch;
   });
   const activeStudents = vault.students.filter((student) => student.status === "active").length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
@@ -251,7 +257,7 @@ export function StudentsView({
     e.preventDefault();
     const resolvedName = courseNameInput.trim() || suggestedCourseName;
     if (!resolvedName) return;
-    const normalizedStudentIds = courseType === "one_on_one" ? courseStudentIds.slice(0, 1) : courseStudentIds;
+    const normalizedStudentIds = normalizeCourseStudentIds(courseType, courseStudentIds);
     const feeRule = courseType === "class"
       ? {
           ...courseFeeRule,
@@ -273,6 +279,7 @@ export function StudentsView({
     setCourseSubjectInput("");
     setCourseStudentIds([]);
     setCourseCampusInput(preferredCampusId);
+    setCourseCampusCustomized(false);
     setCourseStatusInput("active");
     setCourseFeeRule(defaultFeeRule(courseType));
     setNewCourseStudentSearch("");
@@ -298,7 +305,7 @@ export function StudentsView({
       return;
     }
 
-    const nextCourseName = transferCourseNameInput.trim() || `${transferStudent.name}${courseTypeLabels[transferCourseType]}`;
+    const nextCourseName = transferCourseNameInput.trim() || `${transferStudent.name}${courseTypeLabel(vault, transferCourseType)}`;
     const nextCourse: CourseGroup = {
       id: makeId("course"),
       name: nextCourseName,
@@ -351,18 +358,47 @@ export function StudentsView({
   }
 
   function syncNewCourseCampusFromStudents(studentIds: string[]) {
+    if (courseCampusCustomized) return;
     const campusId = firstCourseStudentCampus(studentIds);
     if (campusId) {
       setCourseCampusInput(campusId);
     }
   }
 
+  function changeNewCourseCampus(campusId: string) {
+    setCourseCampusInput(campusId);
+    setCourseCampusCustomized(true);
+  }
+
+  function normalizeCourseStudentIds(type: CourseType, studentIds: string[]): string[] {
+    const limit = studentLimitForCourseType(type);
+    return limit ? studentIds.slice(0, limit) : studentIds;
+  }
+
   function changeNewCourseType(nextType: CourseType) {
-    const nextStudentIds = nextType === "one_on_one" ? courseStudentIds.slice(0, 1) : courseStudentIds;
+    const nextStudentIds = normalizeCourseStudentIds(nextType, courseStudentIds);
     setCourseType(nextType);
     setCourseStudentIds(nextStudentIds);
     setCourseFeeRule(defaultFeeRule(nextType));
     syncNewCourseCampusFromStudents(nextStudentIds);
+  }
+
+  function addCustomCourseType() {
+    const label = customCourseTypeInput.trim();
+    if (!label) return;
+    const existingType = courseTypeOptions.find((option) => option.label === label || option.value === label);
+    if (existingType) {
+      changeNewCourseType(existingType.value);
+      setCustomCourseTypeInput("");
+      return;
+    }
+    const option: CustomCourseTypeOption = {
+      id: `custom_${makeId("ctype")}` as CustomCourseType,
+      label
+    };
+    onAddCustomCourseType(option);
+    changeNewCourseType(option.id);
+    setCustomCourseTypeInput("");
   }
 
   function updateNewCourseFee(patch: Partial<FeeRule>) {
@@ -389,20 +425,21 @@ export function StudentsView({
   }
 
   function setNewCourseStudents(nextStudentIds: string[]) {
-    const normalizedStudentIds = courseType === "one_on_one" ? nextStudentIds.slice(0, 1) : nextStudentIds;
+    const normalizedStudentIds = normalizeCourseStudentIds(courseType, nextStudentIds);
     setCourseStudentIds(normalizedStudentIds);
     syncNewCourseCampusFromStudents(normalizedStudentIds);
-  }
-
-  function chooseNewOneOnOneStudent(studentId: string) {
-    setNewCourseStudents(studentId ? [studentId] : []);
   }
 
   function toggleNewCourseStudent(studentId: string) {
     const isSelected = courseStudentIds.includes(studentId);
     const student = vault.students.find((item) => item.id === studentId);
-    if (courseType === "one_on_one") {
-      setNewCourseStudents(isSelected ? [] : [studentId]);
+    const limit = studentLimitForCourseType(courseType);
+    if (limit) {
+      if (isSelected) {
+        setNewCourseStudents(courseStudentIds.filter((id) => id !== studentId));
+      } else if (courseStudentIds.length < limit) {
+        setNewCourseStudents([...courseStudentIds, studentId]);
+      }
       return;
     }
     if (courseType === "class" && !isSelected) {
@@ -532,8 +569,14 @@ export function StudentsView({
       if (!current) return current;
       const isSelected = current.studentIds.includes(studentId);
       const student = vault.students.find((item) => item.id === studentId);
-      if (current.type === "one_on_one") {
-        const studentIds = isSelected ? [] : [studentId];
+      const limit = studentLimitForCourseType(current.type);
+      if (limit) {
+        if (!isSelected && current.studentIds.length >= limit) {
+          return current;
+        }
+        const studentIds = isSelected
+          ? current.studentIds.filter((id) => id !== studentId)
+          : [...current.studentIds, studentId];
         return {
           ...current,
           studentIds,
@@ -812,7 +855,7 @@ export function StudentsView({
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={course.id === vault.profile.obligationCourseGroupId ? "amber" : "secondary"}>{index + 1}</Badge>
                               <span className="truncate text-sm font-extrabold text-[#061226]">{course.name}</span>
-                              <span className="text-xs font-semibold text-[#64748b]">{courseTypeLabels[course.type]} · {course.subject}</span>
+                              <span className="text-xs font-semibold text-[#64748b]">{courseTypeLabel(vault, course.type)} · {course.subject}</span>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
                               <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">本月 {item?.lessonCount ?? 0} 节</span>
@@ -920,7 +963,7 @@ export function StudentsView({
                       <Input
                         value={transferCourseNameInput}
                         onChange={(event) => setTransferCourseNameInput(event.target.value)}
-                        placeholder={transferStudent ? `${transferStudent.name}${courseTypeLabels[transferCourseType]}` : "新课程名称"}
+                        placeholder={transferStudent ? `${transferStudent.name}${courseTypeLabel(vault, transferCourseType)}` : "新课程名称"}
                       />
                     </div>
                     <div className="space-y-2">
@@ -968,7 +1011,7 @@ export function StudentsView({
                     <div className="mt-2 flex flex-wrap gap-2">
                       {transferCurrentCourses.length > 0 ? transferCurrentCourses.map((course) => (
                         <Badge key={course.id} variant={course.type === "class" ? "sky" : course.type === "trial" ? "plum" : "sage"}>
-                          {course.name} · {courseTypeLabels[course.type]}
+                          {course.name} · {courseTypeLabel(vault, course.type)}
                         </Badge>
                       )) : (
                         <Badge variant="secondary">暂无当前课程</Badge>
@@ -1412,7 +1455,7 @@ export function StudentsView({
                     <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </Select>
-                <Select value={courseCampusInput} onChange={(event) => setCourseCampusInput(event.target.value)}>
+                <Select value={courseCampusInput} onChange={(event) => changeNewCourseCampus(event.target.value)}>
                   <option value="">未设置校区</option>
                   {campusOptions.map((campus) => (
                     <option key={campus.id} value={campus.id}>{campus.name}</option>
@@ -1422,6 +1465,18 @@ export function StudentsView({
                   <option value="active">启用</option>
                   <option value="paused">暂停</option>
                 </Select>
+              </div>
+              <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-dashed border-[#cbd6e3] bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <Input
+                  value={customCourseTypeInput}
+                  onChange={(event) => setCustomCourseTypeInput(event.target.value)}
+                  placeholder="自定义班型，例如：小组课、冲刺课"
+                  maxLength={24}
+                  className="h-10"
+                />
+                <Button type="button" variant="outline" className="h-10" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
+                  <Plus size={14} /> 添加班型
+                </Button>
               </div>
 
               {courseType === "class" ? (
@@ -1499,87 +1554,82 @@ export function StudentsView({
                         班课需同年级{firstCourseStudentGrade(courseStudentIds) !== undefined ? `：${firstCourseStudentGrade(courseStudentIds) || "未设置年级"}` : ""}
                       </span>
                     )}
+                    {studentLimitForCourseType(courseType) && courseType !== "one_on_one" && (
+                      <span className="ml-2 text-xs font-bold text-[#64748b]">
+                        最多选择 {studentLimitForCourseType(courseType)} 人
+                      </span>
+                    )}
                   </div>
-                  <span className="text-xs font-bold text-[#64748b]">默认校区跟随所选学生档案</span>
+                  <span className="text-xs font-bold text-[#64748b]">
+                    {courseCampusCustomized ? "已手动选择校区" : "默认校区跟随所选学生档案"}
+                  </span>
                 </div>
 
-                {courseType === "one_on_one" ? (
-                  <Select value={courseStudentIds[0] ?? ""} onChange={(event) => chooseNewOneOnOneStudent(event.target.value)}>
-                    <option value="">选择一对一学生</option>
-                    {vault.students.map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}
-                      </option>
-                    ))}
-                  </Select>
-                ) : (
-                  <>
-                    <label className="relative block">
-                      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                      <Input
-                        className="h-10 bg-white pl-9"
-                        value={newCourseStudentSearch}
-                        onChange={(event) => setNewCourseStudentSearch(event.target.value)}
-                        placeholder="搜索学生姓名、年级、学校、校区或备注"
-                      />
-                    </label>
-                    {courseStudentIds.length > 0 && (
-                      <div className="max-h-20 overflow-y-auto pr-1">
-                        <div className="flex flex-wrap gap-2">
-                          {courseStudentIds.map((studentId) => {
-                            const student = vault.students.find((item) => item.id === studentId);
-                            return (
-                              <button
-                                type="button"
-                                key={studentId}
-                                onClick={() => toggleNewCourseStudent(studentId)}
-                                className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1 text-xs font-bold text-[#9a3412]"
-                                title="点击取消关联"
-                              >
-                                <span className="truncate">{student?.name ?? "未知学生"}</span>
-                                <X size={12} />
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    <div className="max-h-[220px] overflow-y-auto pr-1">
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        {addCourseStudentOptions.map((student) => {
-                          const isSelected = courseStudentIds.includes(student.id);
-                          const selectedGrade = courseType === "class" ? firstCourseStudentGrade(courseStudentIds) : undefined;
-                          const isDifferentGrade = courseType === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
-                          return (
-                            <button
-                              type="button"
-                              key={student.id}
-                              onClick={() => toggleNewCourseStudent(student.id)}
-                              disabled={isDifferentGrade}
-                              title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : undefined}
-                              className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
-                                isSelected
-                                  ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
-                                  : isDifferentGrade
-                                    ? "cursor-not-allowed border-[#e2e8f0] bg-white text-[#94a3b8]"
-                                    : student.temporaryTrial
-                                      ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
-                                      : "border-[#dbe4ef] bg-white text-[#25324a]"
-                              }`}
-                            >
-                              {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {addCourseStudentOptions.length === 0 && (
-                        <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
-                          没有符合条件的学生
-                        </div>
-                      )}
+                <label className="relative block">
+                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                  <Input
+                    className="h-10 bg-white pl-9"
+                    value={newCourseStudentSearch}
+                    onChange={(event) => setNewCourseStudentSearch(event.target.value)}
+                    placeholder="搜索学生姓名、学科、校区、年级、学校或备注"
+                  />
+                </label>
+                {courseStudentIds.length > 0 && (
+                  <div className="max-h-20 overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-2">
+                      {courseStudentIds.map((studentId) => {
+                        const student = vault.students.find((item) => item.id === studentId);
+                        return (
+                          <button
+                            type="button"
+                            key={studentId}
+                            onClick={() => toggleNewCourseStudent(studentId)}
+                            className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1 text-xs font-bold text-[#9a3412]"
+                            title="点击取消关联"
+                          >
+                            <span className="truncate">{student?.name ?? "未知学生"}</span>
+                            <X size={12} />
+                          </button>
+                        );
+                      })}
                     </div>
-                  </>
+                  </div>
                 )}
+                <div className="max-h-[220px] overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {addCourseStudentOptions.map((student) => {
+                      const isSelected = courseStudentIds.includes(student.id);
+                      const selectedGrade = courseType === "class" ? firstCourseStudentGrade(courseStudentIds) : undefined;
+                      const isDifferentGrade = courseType === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
+                      const isAtStudentLimit = !isSelected && Boolean(studentLimitForCourseType(courseType)) && courseStudentIds.length >= (studentLimitForCourseType(courseType) ?? 0);
+                      return (
+                        <button
+                          type="button"
+                          key={student.id}
+                          onClick={() => toggleNewCourseStudent(student.id)}
+                          disabled={isDifferentGrade || isAtStudentLimit}
+                          title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(courseType)} 人` : undefined}
+                          className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
+                            isSelected
+                              ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
+                              : isDifferentGrade || isAtStudentLimit
+                                ? "cursor-not-allowed border-[#e2e8f0] bg-white text-[#94a3b8]"
+                                : student.temporaryTrial
+                                  ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
+                                  : "border-[#dbe4ef] bg-white text-[#25324a]"
+                          }`}
+                        >
+                          {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {addCourseStudentOptions.length === 0 && (
+                    <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
+                      没有符合条件的学生
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end">
@@ -1605,6 +1655,15 @@ export function StudentsView({
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
+            <label className="relative block">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+              <Input
+                className="h-10 pl-9"
+                value={courseSearch}
+                onChange={(event) => setCourseSearch(event.target.value)}
+                placeholder="搜索课程名称、学科、校区、学生或班型"
+              />
+            </label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
                 <option value="all">全部课程类型</option>
@@ -1642,14 +1701,8 @@ export function StudentsView({
                     const matchesScope =
                       courseStudentScope === "all" ||
                       (courseStudentScope === "selected" ? isSelected : !isSelected);
-                    const searchable = [
-                      student.name,
-                      student.grade ?? "",
-                      student.school ?? "",
-                      student.note ?? "",
-                      student.temporaryTrial ? "试听 临时试听" : ""
-                    ].join(" ").toLowerCase();
-                    const matchesSearch = !normalizedCourseStudentSearch || searchable.includes(normalizedCourseStudentSearch);
+                    const searchable = studentCourseSearchText(vault, student);
+                    const matchesSearch = matchesKeywordSearch(searchable, normalizedCourseStudentSearch);
                     const matchesGrade = matchesGradeFilter(student.grade, courseStudentGradeFilter);
                     const matchesCampus = courseStudentCampusFilter === "all" || student.defaultCampusId === courseStudentCampusFilter;
                     return matchesScope && matchesSearch && matchesGrade && matchesCampus;
@@ -1679,7 +1732,7 @@ export function StudentsView({
                           value={editingCourse.type}
                           onChange={(event) => {
                             const nextType = event.target.value as CourseType;
-                            const nextStudentIds = nextType === "one_on_one" ? editingCourse.studentIds.slice(0, 1) : editingCourse.studentIds;
+                            const nextStudentIds = normalizeCourseStudentIds(nextType, editingCourse.studentIds);
                             updateEditingCourse({
                               type: nextType,
                               feeRule: defaultFeeRule(nextType),
@@ -1774,6 +1827,11 @@ export function StudentsView({
                                 班课需同年级{firstCourseStudentGrade(editingCourse.studentIds) !== undefined ? `：${firstCourseStudentGrade(editingCourse.studentIds) || "未设置年级"}` : ""}
                               </span>
                             )}
+                            {studentLimitForCourseType(editingCourse.type) && editingCourse.type !== "one_on_one" && (
+                              <span className="ml-2 text-xs font-bold text-[#64748b]">
+                                最多选择 {studentLimitForCourseType(editingCourse.type)} 人
+                              </span>
+                            )}
                           </div>
                           <span className="text-xs font-bold text-[#64748b]">当前显示 {courseStudentOptions.length} 人</span>
                         </div>
@@ -1785,7 +1843,7 @@ export function StudentsView({
                                 className="h-10 pl-9"
                                 value={courseStudentSearch}
                                 onChange={(event) => setCourseStudentSearch(event.target.value)}
-                                placeholder="搜索学生姓名、年级、学校或备注"
+                                placeholder="搜索学生姓名、学科、校区、年级、学校或备注"
                               />
                             </label>
                             <div className="grid grid-cols-3 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
@@ -1849,17 +1907,18 @@ export function StudentsView({
                                 const isSelected = editingCourse.studentIds.includes(student.id);
                                 const selectedGrade = editingCourse.type === "class" ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
                                 const isDifferentGrade = editingCourse.type === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
+                                const isAtStudentLimit = !isSelected && Boolean(studentLimitForCourseType(editingCourse.type)) && editingCourse.studentIds.length >= (studentLimitForCourseType(editingCourse.type) ?? 0);
                                 return (
                                   <button
                                     type="button"
                                     key={student.id}
                                     onClick={() => toggleCourseStudent(student.id)}
-                                    disabled={isDifferentGrade}
-                                    title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : undefined}
+                                    disabled={isDifferentGrade || isAtStudentLimit}
+                                    title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(editingCourse.type)} 人` : undefined}
                                     className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
                                       isSelected
                                         ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
-                                        : isDifferentGrade
+                                        : isDifferentGrade || isAtStudentLimit
                                           ? "cursor-not-allowed border-[#e2e8f0] bg-white text-[#94a3b8]"
                                           : student.temporaryTrial
                                             ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
@@ -1897,7 +1956,7 @@ export function StudentsView({
                         <div className="min-w-0">
                           <span className="block truncate text-sm font-medium">{course.name}</span>
                           <span className="text-xs text-(--color-muted-foreground)">
-                            {courseTypeLabels[course.type]} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
+                            {courseTypeLabel(vault, course.type)} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
                           </span>
                           {course.type === "class" && (
                             <span className="mt-1 block text-xs font-bold text-[#1557c2]">
@@ -1965,9 +2024,34 @@ export function StudentsView({
 }
 
 function canJoinCourse(vault: TeacherVault, course: CourseGroup, student: Student): boolean {
+  const limit = studentLimitForCourseType(course.type);
+  if (limit && course.studentIds.length >= limit) return false;
   if (course.type !== "class" || course.studentIds.length === 0) return true;
   const existingGrade = vault.students.find((item) => item.id === course.studentIds[0])?.grade ?? "";
   return existingGrade === (student.grade ?? "");
+}
+
+function studentCourseSearchText(vault: TeacherVault, student: Student): string {
+  const studentCourses = vault.courseGroups.filter((course) => course.studentIds.includes(student.id));
+  return [
+    student.name,
+    student.grade ?? "",
+    student.school ?? "",
+    student.note ?? "",
+    campusName(vault, student.defaultCampusId),
+    student.temporaryTrial ? "试听 临时试听" : "",
+    ...studentCourses.flatMap((course) => [
+      course.name,
+      course.subject,
+      courseTypeLabel(vault, course.type),
+      campusName(vault, course.defaultCampusId)
+    ])
+  ].join(" ").toLowerCase();
+}
+
+function matchesKeywordSearch(searchable: string, normalizedQuery: string): boolean {
+  const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+  return terms.length === 0 || terms.every((term) => searchable.includes(term));
 }
 
 function matchesGradeFilter(grade: string | undefined, filter: string): boolean {

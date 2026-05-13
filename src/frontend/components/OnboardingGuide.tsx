@@ -50,7 +50,7 @@ export function OnboardingGuide({
     {
       key: "student_course",
       title: "录入学生和课程",
-      description: "给学生建档，再创建一对一、班课或试听课程，并设置计费方式。",
+      description: "给学生建档，再创建一对一、一对二、班课或试听课程，并设置计费方式。",
       detail: "课程会绑定学生、校区和收费规则；后面排课时只需要选择课程，金额会自动带出。",
       view: "students",
       button: "添加学生课程"

@@ -36,6 +36,7 @@ import {
   calendarDates,
   campusName,
   courseName,
+  courseTypeOptionsForVault,
   createLessonFromCourse,
   findStudent,
   formatDateIso,
@@ -1341,10 +1342,9 @@ export function ScheduleView({
                 <label className="text-sm font-medium">班型筛选</label>
                 <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as CourseTypeFilter)}>
                   <option value="all">全部班型</option>
-                  <option value="one_on_one">一对一</option>
-                  <option value="class">班课</option>
-                  <option value="trial">试听</option>
-                  <option value="full_time">全日制</option>
+                  {courseTypeOptionsForVault(vault).map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
                 </Select>
               </div>
             </div>

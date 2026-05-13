@@ -25,7 +25,7 @@ import {
   attendanceLabels,
   campusName,
   courseName,
-  courseTypeLabels,
+  courseTypeLabel,
   formatMoney,
   lessonStatusLabels,
   lessonStatusVariant,
@@ -442,7 +442,7 @@ export function SalaryView({
                       <MapPin size={12} /> {campusName(vault, lesson.campusId)}
                     </span>
                     <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
-                      {courseTypeLabels[lesson.type]}
+                      {courseTypeLabel(vault, lesson.type)}
                     </span>
                   </div>
                   {lesson.note && (
@@ -495,7 +495,7 @@ export function SalaryView({
                         {courseName(vault, lesson.courseGroupId)}
                       </div>
                       <div className="mt-1 text-xs text-[#64748b]">
-                        {lesson.startTime}-{lesson.endTime} · {courseTypeLabels[lesson.type]}
+                        {lesson.startTime}-{lesson.endTime} · {courseTypeLabel(vault, lesson.type)}
                       </div>
                     </td>
                     <td className="max-w-[200px] truncate px-4 py-3">{studentNames(vault, lesson.expectedStudentIds)}</td>

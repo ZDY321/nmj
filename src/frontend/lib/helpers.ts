@@ -11,9 +11,11 @@ import {
 } from "lucide-react";
 import type {
   AttendanceStatus,
+  BuiltInCourseType,
   Campus,
   CourseGroup,
   CourseType,
+  CustomCourseTypeOption,
   Lesson,
   LessonStatus,
   Student,
@@ -66,12 +68,58 @@ export const lessonStatusLabels: Record<LessonStatus, string> = {
   makeup_completed: "补课完成"
 };
 
-export const courseTypeLabels: Record<CourseType, string> = {
+export const courseTypeLabels: Record<BuiltInCourseType, string> = {
   one_on_one: "一对一",
+  one_on_two: "一对二",
   class: "班课",
   trial: "试听",
   full_time: "全日制"
 };
+
+export const builtInCourseTypeOptions: Array<{ value: BuiltInCourseType; label: string }> = (
+  Object.keys(courseTypeLabels) as BuiltInCourseType[]
+).map((value) => ({ value, label: courseTypeLabels[value] }));
+
+export function isBuiltInCourseType(type: string): type is BuiltInCourseType {
+  return Object.prototype.hasOwnProperty.call(courseTypeLabels, type);
+}
+
+export function courseTypeLabel(vault: TeacherVault, type: CourseType): string {
+  if (isBuiltInCourseType(type)) return courseTypeLabels[type];
+  return vault.preferences?.customCourseTypes?.find((item) => item.id === type)?.label || type;
+}
+
+export function courseTypeOptionsForVault(vault: TeacherVault): Array<{ value: CourseType; label: string }> {
+  const customCourseTypes = normalizedCustomCourseTypes(vault.preferences?.customCourseTypes ?? []);
+  const knownValues = new Set<string>([
+    ...builtInCourseTypeOptions.map((option) => option.value),
+    ...customCourseTypes.map((option) => option.id)
+  ]);
+  const dataCourseTypes = [...vault.courseGroups.map((course) => course.type), ...vault.lessons.map((lesson) => lesson.type)];
+  const unknownCourseTypes = Array.from(new Set(dataCourseTypes)).filter((type) => !knownValues.has(type));
+
+  return [
+    ...builtInCourseTypeOptions,
+    ...customCourseTypes.map((option) => ({ value: option.id as CourseType, label: option.label })),
+    ...unknownCourseTypes.map((type) => ({ value: type, label: courseTypeLabel(vault, type) }))
+  ];
+}
+
+export function studentLimitForCourseType(type: CourseType): number | undefined {
+  if (type === "one_on_one") return 1;
+  if (type === "one_on_two") return 2;
+  return undefined;
+}
+
+function normalizedCustomCourseTypes(customCourseTypes: CustomCourseTypeOption[]): CustomCourseTypeOption[] {
+  const seen = new Set<string>();
+  return customCourseTypes.filter((option) => {
+    const label = option.label.trim();
+    if (!option.id || !label || seen.has(option.id)) return false;
+    seen.add(option.id);
+    return true;
+  });
+}
 
 export function lessonStatusVariant(status: LessonStatus): "sage" | "amber" | "destructive" | "secondary" | "sky" | "plum" {
   if (status === "completed" || status === "makeup_completed") return "sage";

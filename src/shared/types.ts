@@ -9,7 +9,11 @@ export type UserStatus =
   | "delete_scheduled"
   | "deleted";
 
-export type CourseType = "one_on_one" | "class" | "trial" | "full_time";
+export type BuiltInCourseType = "one_on_one" | "one_on_two" | "class" | "trial" | "full_time";
+
+export type CustomCourseType = `custom_${string}`;
+
+export type CourseType = BuiltInCourseType | CustomCourseType;
 
 export type LessonStatus =
   | "draft"
@@ -214,9 +218,15 @@ export type TimePreset = {
   endTime: string;
 };
 
+export type CustomCourseTypeOption = {
+  id: CustomCourseType;
+  label: string;
+};
+
 export type AppPreferences = {
   weekStartsOn: WeekStart;
   customTimePresets?: TimePreset[];
+  customCourseTypes?: CustomCourseTypeOption[];
 };
 
 export type TeacherVault = {

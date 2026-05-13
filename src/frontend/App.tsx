@@ -41,6 +41,7 @@ import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } fro
 import type {
   Campus,
   CourseGroup,
+  CustomCourseTypeOption,
   GradeRecord,
   Lesson,
   SalaryAdjustment,
@@ -302,6 +303,18 @@ export function App() {
       draft.preferences = {
         ...(draft.preferences ?? { weekStartsOn: 0 }),
         customTimePresets: (draft.preferences?.customTimePresets ?? []).filter((preset) => preset.id !== presetId)
+      };
+    });
+  }
+
+  function addCustomCourseType(courseType: CustomCourseTypeOption) {
+    updateVault((draft) => {
+      const current = draft.preferences?.customCourseTypes ?? [];
+      const normalizedLabel = courseType.label.trim();
+      if (!normalizedLabel || current.some((item) => item.id === courseType.id || item.label.trim() === normalizedLabel)) return;
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        customCourseTypes: [...current, { ...courseType, label: normalizedLabel }]
       };
     });
   }
@@ -981,6 +994,7 @@ export function App() {
                 }
                 onUpdateCourse={updateCourse}
                 onDeleteCourse={deleteCourse}
+                onAddCustomCourseType={addCustomCourseType}
                 onTransferStudentCourse={transferStudentCourse}
               />
             )}

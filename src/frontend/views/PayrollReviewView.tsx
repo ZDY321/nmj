@@ -10,7 +10,8 @@ import { completedAmount, hoursBetween, obligationSummary, salaryBreakdown, toda
 import {
   campusName,
   courseName,
-  courseTypeLabels,
+  courseTypeLabel,
+  courseTypeOptionsForVault,
   formatMoney,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
@@ -134,13 +135,17 @@ export function PayrollReviewView({
     });
   }, [campusOptions, effectiveObligationCampusId, monthLessons, selectedMonth, vault]);
 
-  const typeCounts = filteredLessons.reduce<Record<CourseType, number>>(
+  const typeCounts = filteredLessons.reduce<Record<string, number>>(
     (summary, lesson) => {
-      summary[lesson.type] += 1;
+      summary[lesson.type] = (summary[lesson.type] ?? 0) + 1;
       return summary;
     },
-    { one_on_one: 0, class: 0, trial: 0, full_time: 0 }
+    {}
   );
+  const typeCountCards = courseTypeOptionsForVault(vault).map((type) => ({
+    ...type,
+    count: typeCounts[type.value] ?? 0
+  }));
 
   return (
     <div className="space-y-6">
@@ -173,10 +178,9 @@ export function PayrollReviewView({
               <label className="text-sm font-medium">课程类型</label>
               <Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}>
                 <option value="all">全部类型</option>
-                <option value="one_on_one">一对一</option>
-                <option value="class">班课</option>
-                <option value="trial">试听</option>
-                <option value="full_time">全日制</option>
+                {courseTypeOptionsForVault(vault).map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
               </Select>
             </div>
             <div className="space-y-2">
@@ -323,10 +327,10 @@ export function PayrollReviewView({
               <div className="mt-2 text-3xl font-extrabold text-[#061226]">{formatMoney(breakdown.total)}</div>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {Object.entries(typeCounts).map(([type, count]) => (
-                <div key={type} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 text-center">
-                  <div className="text-xs font-semibold text-[#64748b]">{courseTypeLabels[type as CourseType]}</div>
-                  <div className="mt-1 text-xl font-extrabold text-[#061226]">{count}</div>
+              {typeCountCards.map((type) => (
+                <div key={type.value} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 text-center">
+                  <div className="text-xs font-semibold text-[#64748b]">{type.label}</div>
+                  <div className="mt-1 text-xl font-extrabold text-[#061226]">{type.count}</div>
                 </div>
               ))}
             </div>
@@ -362,7 +366,7 @@ export function PayrollReviewView({
                   <div className="flex flex-wrap items-center gap-2">
                     <strong className="text-base text-[#061226]">{courseName(vault, lesson.courseGroupId)}</strong>
                     <Badge variant={lessonStatusVariant(lesson.status)}>{lessonStatusLabels[lesson.status]}</Badge>
-                    <Badge variant="secondary">{courseTypeLabels[lesson.type]}</Badge>
+                    <Badge variant="secondary">{courseTypeLabel(vault, lesson.type)}</Badge>
                   </div>
                   <div className="mt-2 text-sm font-semibold text-[#475569]">
                     {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
