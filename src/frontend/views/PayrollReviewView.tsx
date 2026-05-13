@@ -236,7 +236,7 @@ export function PayrollReviewView({
               <MapPin size={14} /> 校区合并统计
             </div>
             <CardTitle>{selectedMonth} 校区汇总</CardTitle>
-            <CardDescription>义务课时按老师个人信息里的课程顺序扣课时费；校区课程不足时，剩余小时按每小时费用补扣。</CardDescription>
+            <CardDescription>义务课时先按老师本校区最低课时费抵扣；本校区不足时，再从其他校区最低课时费抵扣，试听不参与。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {campusSummaries.map((item) => (

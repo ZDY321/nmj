@@ -3,6 +3,7 @@ import type {
   Campus,
   ClassFeeTier,
   CourseGroup,
+  CourseType,
   FeeRule,
   Lesson,
   SalaryAdjustment,
@@ -156,6 +157,25 @@ export function calculateFee(rule: FeeRule, lesson: Lesson): number {
   return Math.round(calculateClassHeadcountFee(rule, presentCount(lesson)) + extraFee);
 }
 
+export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
+  if (type === "class" || type === "one_on_two" || type.startsWith("custom_")) {
+    const baseFee = 80;
+    const perPresentStudentFee = 10;
+    return {
+      mode: "class_headcount",
+      baseFee,
+      perPresentStudentFee,
+      classFeeTiers: defaultClassFeeTiers({ mode: "class_headcount", baseFee, perPresentStudentFee }),
+      makeupFeeMode: "perStudentFee"
+    };
+  }
+  return { mode: "hourly", hourlyRate: type === "trial" ? 0 : 200 };
+}
+
+export function feeRuleForCourseType(vault: TeacherVault, type: CourseType): FeeRule {
+  return vault.preferences?.courseTypeFeeRules?.[type] ?? defaultFeeRuleForCourseType(type);
+}
+
 export function getCourse(vault: TeacherVault, courseId: string): CourseGroup | undefined {
   return vault.courseGroups.find((course) => course.id === courseId);
 }
@@ -210,72 +230,76 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
   const targetAmount = Math.round(requiredHours * hourlyDeduction);
   const campus = vault.campuses.find((item) => item.id === campusId);
   const course = vault.courseGroups.find((item) => item.id === courseId);
-  const campusCourses = vault.courseGroups.filter((item) => !campusId || item.defaultCampusId === campusId);
-  const campusCourseIds = new Set(campusCourses.map((item) => item.id));
-  const orderedCourseIds = Array.from(new Set([
-    ...(courseId ? [courseId] : []),
-    ...(vault.profile.obligationCourseOrder ?? []),
-    ...campusCourses.map((item) => item.id)
-  ])).filter((id) => campusCourseIds.has(id));
   let remainingHours = requiredHours;
-  let remainingAmount = targetAmount;
   let availableHours = 0;
   let courseDeductedHours = 0;
   let courseDeductionAmount = 0;
-  const courseBreakdown: ObligationCourseDeduction[] = orderedCourseIds.map((id) => {
-    const item = vault.courseGroups.find((candidate) => candidate.id === id);
-    const lessons = vault.lessons
-      .filter((lesson) => {
-        const lessonCampusId = lesson.campusId ?? getCourse(vault, lesson.courseGroupId)?.defaultCampusId;
-        return (
-          lesson.courseGroupId === id &&
-          monthOf(lesson.date) === month &&
-          (!campusId || lessonCampusId === campusId) &&
-          completedHours(lesson) > 0
-        );
-      })
-      .sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`));
-    const courseAvailableHours = lessons.reduce((sum, lesson) => sum + completedHours(lesson), 0);
-    let deductedHours = 0;
-    let amount = 0;
-    availableHours += courseAvailableHours;
-
-    for (const lesson of lessons) {
-      if (remainingHours <= 0.0001 && remainingAmount <= 0.0001) break;
+  const breakdown = new Map<string, ObligationCourseDeduction>();
+  const eligibleLessons = vault.lessons
+    .filter((lesson) => monthOf(lesson.date) === month && lesson.type !== "trial" && completedHours(lesson) > 0)
+    .map((lesson) => {
+      const lessonCourse = getCourse(vault, lesson.courseGroupId);
       const lessonHours = completedHours(lesson);
       const lessonAmount = completedAmount(lesson);
-      if (lessonHours <= 0) continue;
-      const lessonHourlyValue = lessonAmount / lessonHours;
-      const hoursNeededByAmount = remainingAmount > 0 && lessonHourlyValue > 0
-        ? remainingAmount / lessonHourlyValue
-        : 0;
-      const hoursToDeduct = Math.min(lessonHours, Math.max(remainingHours, hoursNeededByAmount, 0));
-      const amountToDeduct = lessonHourlyValue * hoursToDeduct;
+      return {
+        lesson,
+        course: lessonCourse,
+        campusId: lesson.campusId ?? lessonCourse?.defaultCampusId,
+        hours: lessonHours,
+        amount: lessonAmount,
+        hourlyValue: lessonHours > 0 ? lessonAmount / lessonHours : Number.POSITIVE_INFINITY
+      };
+    });
 
-      deductedHours += hoursToDeduct;
-      amount += amountToDeduct;
-      courseDeductedHours += hoursToDeduct;
-      courseDeductionAmount += amountToDeduct;
-      remainingHours -= hoursToDeduct;
-      remainingAmount -= amountToDeduct;
-    }
-
-    return {
-      courseId: id,
-      courseName: item?.name ?? "未知课程",
-      lessonCount: lessons.length,
-      availableHours: courseAvailableHours,
-      deductedHours,
-      amount: Math.round(amount)
+  eligibleLessons.forEach((item) => {
+    const current = breakdown.get(item.lesson.courseGroupId) ?? {
+      courseId: item.lesson.courseGroupId,
+      courseName: item.course?.name ?? "未知课程",
+      lessonCount: 0,
+      availableHours: 0,
+      deductedHours: 0,
+      amount: 0
     };
+    current.lessonCount += 1;
+    current.availableHours += item.hours;
+    breakdown.set(item.lesson.courseGroupId, current);
+    availableHours += item.hours;
   });
+
+  const sortedEligibleLessons = [
+    ...eligibleLessons.filter((item) => !campusId || item.campusId === campusId),
+    ...eligibleLessons.filter((item) => campusId && item.campusId !== campusId)
+  ].sort((a, b) => {
+    const aPriority = !campusId || a.campusId === campusId ? 0 : 1;
+    const bPriority = !campusId || b.campusId === campusId ? 0 : 1;
+    return (
+      aPriority - bPriority ||
+      a.hourlyValue - b.hourlyValue ||
+      a.amount - b.amount ||
+      `${a.lesson.date} ${a.lesson.startTime}`.localeCompare(`${b.lesson.date} ${b.lesson.startTime}`)
+    );
+  });
+
+  sortedEligibleLessons.forEach((item) => {
+    if (remainingHours <= 0.0001) return;
+    const hoursToDeduct = Math.min(item.hours, remainingHours);
+    const amountToDeduct = item.hourlyValue * hoursToDeduct;
+    const current = breakdown.get(item.lesson.courseGroupId);
+    if (current) {
+      current.deductedHours += hoursToDeduct;
+      current.amount += amountToDeduct;
+    }
+    courseDeductedHours += hoursToDeduct;
+    courseDeductionAmount += amountToDeduct;
+    remainingHours -= hoursToDeduct;
+  });
+
+  const courseBreakdown = Array.from(breakdown.values())
+    .map((item) => ({ ...item, amount: Math.round(item.amount) }))
+    .sort((a, b) => b.deductedHours - a.deductedHours || b.availableHours - a.availableHours || a.courseName.localeCompare(b.courseName));
   const fallbackHours = mode === "manual"
     ? 0
-    : Math.max(
-        remainingHours,
-        hourlyDeduction > 0 ? remainingAmount / hourlyDeduction : 0,
-        0
-      );
+    : Math.max(remainingHours, 0);
   const fallbackAmount = Math.round(fallbackHours * hourlyDeduction);
   const autoAmount = Math.round(courseDeductionAmount) + fallbackAmount;
 

@@ -227,6 +227,7 @@ export type AppPreferences = {
   weekStartsOn: WeekStart;
   customTimePresets?: TimePreset[];
   customCourseTypes?: CustomCourseTypeOption[];
+  courseTypeFeeRules?: Partial<Record<CourseType, FeeRule>>;
 };
 
 export type TeacherVault = {

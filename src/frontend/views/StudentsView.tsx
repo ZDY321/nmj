@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { ArrowDown, ArrowUp, Building2, ChevronDown, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
+import { Building2, ChevronDown, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, CustomCourseTypeOption, FeeRule, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
-import { calculateClassHeadcountFee, defaultClassFeeTiers, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, feeRuleForCourseType, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
 import { campusName, courseTypeLabel, courseTypeOptionsForVault, formatMoney, sortCampusesForProfile, studentLimitForCourseType, studentNames } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
@@ -32,6 +32,7 @@ export function StudentsView({
   onAddCustomCourseType,
   onUpdateCustomCourseType,
   onDeleteCustomCourseType,
+  onUpdateCourseTypeFeeRule,
   onTransferStudentCourse
 }: {
   vault: TeacherVault;
@@ -48,11 +49,16 @@ export function StudentsView({
   onAddCustomCourseType: (courseType: CustomCourseTypeOption) => void;
   onUpdateCustomCourseType: (courseType: CustomCourseTypeOption) => void;
   onDeleteCustomCourseType: (courseTypeId: CustomCourseType) => void;
+  onUpdateCourseTypeFeeRule: (courseType: CourseType, feeRule: FeeRule) => void;
   onTransferStudentCourse: (transition: StudentCourseTransition) => void;
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseTypeOptions = courseTypeOptionsForVault(vault);
   const customCourseTypes = vault.preferences?.customCourseTypes ?? [];
+  const managedCourseTypes: Array<{ value: CourseType; label: string }> = [
+    { value: "one_on_two", label: courseTypeLabel(vault, "one_on_two") },
+    ...customCourseTypes.map((item) => ({ value: item.id as CourseType, label: item.label }))
+  ];
   const preferredCampusId = campusOptions[0]?.id ?? "";
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
@@ -71,7 +77,7 @@ export function StudentsView({
   const [courseCampusCustomized, setCourseCampusCustomized] = useState(false);
   const [courseStatusInput, setCourseStatusInput] = useState<CourseGroup["status"]>("active");
   const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
-  const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => defaultFeeRule("one_on_one"));
+  const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => feeRuleForCourseType(vault, "one_on_one"));
   const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
   const [editingCustomCourseTypeId, setEditingCustomCourseTypeId] = useState<CustomCourseType | "">("");
   const [editingCustomCourseTypeLabel, setEditingCustomCourseTypeLabel] = useState("");
@@ -166,21 +172,8 @@ export function StudentsView({
   const obligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId ?? "";
   const obligationMode = vault.profile.obligationDeductionMode ?? "auto_gap";
   const isManualObligationMode = obligationMode === "manual";
-  const obligationCourses = vault.courseGroups.filter((course) => !obligationCampusId || course.defaultCampusId === obligationCampusId);
   const obligationMonth = todayIso().slice(0, 7);
   const obligation = obligationSummary(vault, obligationMonth, obligationCampusId || undefined);
-  const obligationCourseIds = obligationCourses.map((course) => course.id);
-  const orderedObligationCourseIds = Array.from(new Set([
-    ...(vault.profile.obligationCourseGroupId ? [vault.profile.obligationCourseGroupId] : []),
-    ...(vault.profile.obligationCourseOrder ?? []),
-    ...obligationCourseIds
-  ])).filter((id) => obligationCourseIds.includes(id));
-  const orderedObligationCourses = orderedObligationCourseIds
-    .map((courseId) => vault.courseGroups.find((course) => course.id === courseId))
-    .filter(Boolean) as CourseGroup[];
-  const selectedObligationCourseStats = vault.profile.obligationCourseGroupId
-    ? obligation.courseBreakdown.find((item) => item.courseId === vault.profile.obligationCourseGroupId)
-    : undefined;
   const transferStudent = vault.students.find((student) => student.id === transferStudentId);
   const transferCurrentCourses = transferStudent
     ? vault.courseGroups.filter((course) => course.status === "active" && course.studentIds.includes(transferStudent.id))
@@ -265,7 +258,7 @@ export function StudentsView({
     const resolvedName = courseNameInput.trim() || suggestedCourseName;
     if (!resolvedName) return;
     const normalizedStudentIds = normalizeCourseStudentIds(courseType, courseStudentIds);
-    const feeRule = courseType === "class"
+    const feeRule = usesClassFeeTemplate(courseType)
       ? {
           ...courseFeeRule,
           mode: "class_headcount" as const,
@@ -288,7 +281,7 @@ export function StudentsView({
     setCourseCampusInput(preferredCampusId);
     setCourseCampusCustomized(false);
     setCourseStatusInput("active");
-    setCourseFeeRule(defaultFeeRule(courseType));
+    setCourseFeeRule(courseTypeDefaultFeeRule(courseType));
     setNewCourseStudentSearch("");
   }
 
@@ -320,7 +313,7 @@ export function StudentsView({
       subject: transferSubject,
       defaultCampusId: transferCampusInput || transferStudent.defaultCampusId || preferredCampusId,
       studentIds: [transferStudent.id],
-      feeRule: defaultFeeRule(transferCourseType),
+      feeRule: courseTypeDefaultFeeRule(transferCourseType),
       status: "active"
     };
     onTransferStudentCourse({
@@ -382,11 +375,15 @@ export function StudentsView({
     return limit ? studentIds.slice(0, limit) : studentIds;
   }
 
+  function courseTypeDefaultFeeRule(type: CourseType): FeeRule {
+    return feeRuleForCourseType(vault, type);
+  }
+
   function changeNewCourseType(nextType: CourseType) {
     const nextStudentIds = normalizeCourseStudentIds(nextType, courseStudentIds);
     setCourseType(nextType);
     setCourseStudentIds(nextStudentIds);
-    setCourseFeeRule(defaultFeeRule(nextType));
+    setCourseFeeRule(courseTypeDefaultFeeRule(nextType));
     syncNewCourseCampusFromStudents(nextStudentIds);
   }
 
@@ -395,7 +392,6 @@ export function StudentsView({
     if (!label) return;
     const existingType = courseTypeOptions.find((option) => option.label === label || option.value === label);
     if (existingType) {
-      changeNewCourseType(existingType.value);
       setCustomCourseTypeInput("");
       return;
     }
@@ -404,7 +400,6 @@ export function StudentsView({
       label
     };
     onAddCustomCourseType(option);
-    changeNewCourseType(option.id);
     setCustomCourseTypeInput("");
   }
 
@@ -434,6 +429,38 @@ export function StudentsView({
       vault.courseGroups.some((course) => course.type === courseTypeId) ||
       vault.lessons.some((lesson) => lesson.type === courseTypeId)
     );
+  }
+
+  function replaceCourseTypeClassFeeTiers(type: CourseType, nextTiers: ClassFeeTier[]) {
+    const current = feeRuleForCourseType(vault, type);
+    const sortedTiers = [...nextTiers].sort((a, b) => a.minStudents - b.minStudents);
+    const firstTier = sortedTiers[0];
+    const nextRule: FeeRule = {
+      ...current,
+      mode: "class_headcount",
+      baseFee: firstTier?.baseFee ?? current.baseFee,
+      perPresentStudentFee: firstTier?.perStudentFee ?? current.perPresentStudentFee,
+      classFeeTiers: sortedTiers,
+      makeupFeeMode: current.makeupFeeMode ?? "perStudentFee"
+    };
+    onUpdateCourseTypeFeeRule(type, nextRule);
+    if (courseType === type) {
+      setCourseFeeRule(nextRule);
+    }
+  }
+
+  function updateCourseTypeClassFeeTier(type: CourseType, tierId: string, patch: Partial<ClassFeeTier>) {
+    const rule = feeRuleForCourseType(vault, type);
+    const tier = normalizedClassFeeTiers(rule).find((item) => item.id === tierId) ?? normalizedClassFeeTiers(rule)[0] ?? defaultClassFeeTiers(defaultFeeRuleForCourseType(type))[0];
+    replaceCourseTypeClassFeeTiers(type, [{ ...tier, ...patch, maxStudents: undefined }]);
+  }
+
+  function resetCourseTypeFeeRule(type: CourseType) {
+    const nextRule = defaultFeeRuleForCourseType(type);
+    onUpdateCourseTypeFeeRule(type, nextRule);
+    if (courseType === type) {
+      setCourseFeeRule(nextRule);
+    }
   }
 
   function requestDeleteCustomCourseType(courseTypeOption: CustomCourseTypeOption) {
@@ -557,58 +584,19 @@ export function StudentsView({
 
   function updateHomeCampus(campusId: string) {
     const nextCampusId = campusId || undefined;
-    const nextObligationCampusId = vault.profile.obligationCampusId ?? nextCampusId;
     onUpdateProfile({
       ...vault.profile,
       homeCampusId: nextCampusId,
-      obligationCampusId: vault.profile.obligationCampusId,
-      obligationCourseGroupId:
-        vault.profile.obligationCourseGroupId &&
-        vault.courseGroups.some((course) => course.id === vault.profile.obligationCourseGroupId && (!nextObligationCampusId || course.defaultCampusId === nextObligationCampusId))
-          ? vault.profile.obligationCourseGroupId
-          : undefined,
-      obligationCourseOrder: normalizeObligationCourseOrder(vault.profile.obligationCourseOrder ?? [], nextObligationCampusId)
+      obligationCampusId: vault.profile.obligationCampusId
     });
   }
 
   function updateObligationCampus(campusId: string) {
     const nextCampusId = campusId || undefined;
-    const effectiveNextCampusId = nextCampusId ?? vault.profile.homeCampusId;
     onUpdateProfile({
       ...vault.profile,
-      obligationCampusId: nextCampusId,
-      obligationCourseGroupId: undefined,
-      obligationCourseOrder: normalizeObligationCourseOrder([], effectiveNextCampusId)
+      obligationCampusId: nextCampusId
     });
-  }
-
-  function updateObligationCourseGroup(courseId: string) {
-    const nextCourseId = courseId || undefined;
-    const nextOrder = nextCourseId
-      ? [nextCourseId, ...orderedObligationCourseIds.filter((id) => id !== nextCourseId)]
-      : orderedObligationCourseIds;
-    updateProfile({
-      obligationCourseGroupId: nextCourseId,
-      obligationCourseOrder: nextOrder
-    });
-  }
-
-  function normalizeObligationCourseOrder(courseIds: string[], campusId = obligationCampusId): string[] {
-    const availableIds = new Set(
-      vault.courseGroups
-        .filter((course) => !campusId || course.defaultCampusId === campusId)
-        .map((course) => course.id)
-    );
-    return Array.from(new Set(courseIds)).filter((courseId) => availableIds.has(courseId));
-  }
-
-  function moveObligationCourse(courseId: string, direction: -1 | 1) {
-    const index = orderedObligationCourseIds.indexOf(courseId);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= orderedObligationCourseIds.length) return;
-    const nextOrder = [...orderedObligationCourseIds];
-    [nextOrder[index], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[index]];
-    updateProfile({ obligationCourseOrder: nextOrder });
   }
 
   function gradeSelectValue(grade?: string): string {
@@ -661,7 +649,7 @@ export function StudentsView({
   function saveCourseDraft() {
     if (!editingCourse?.name.trim()) return;
     const courseId = editingCourse.id;
-    const feeRule = editingCourse.type === "class"
+    const feeRule = usesClassFeeTemplate(editingCourse.type)
       ? {
           ...editingCourse.feeRule,
           mode: "class_headcount" as const,
@@ -737,7 +725,7 @@ export function StudentsView({
         <div className="grid grid-cols-2 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1 md:grid-cols-4">
           {[
             { key: "profile" as ArchivePanel, label: "老师个人信息" },
-            { key: "campuses" as ArchivePanel, label: "校区列表" },
+            { key: "campuses" as ArchivePanel, label: "校区与班型" },
             { key: "students" as ArchivePanel, label: "学生列表" },
             { key: "courses" as ArchivePanel, label: "课程与班课" }
           ].map((item) => (
@@ -763,7 +751,7 @@ export function StudentsView({
                 <Settings size={14} /> 个人与义务课时设置
               </div>
               <CardTitle>老师个人信息</CardTitle>
-              <CardDescription>所在校区会作为义务课时扣费的默认校区；扣费顺序按下方课程从上到下执行。</CardDescription>
+              <CardDescription>义务课时自动从本校区非试听课里按最低课时费抵扣，本校区不足时再扣其他校区最低课时费。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -781,7 +769,7 @@ export function StudentsView({
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">义务课时扣费校区</label>
+                  <label className="text-sm font-medium">义务课时本校区</label>
                   <Select value={vault.profile.obligationCampusId ?? ""} onChange={(event) => updateObligationCampus(event.target.value)}>
                     <option value="">跟随所在校区</option>
                     {campusOptions.map((campus) => (
@@ -795,27 +783,9 @@ export function StudentsView({
                     value={obligationMode}
                     onChange={(event) => updateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
                   >
-                    <option value="auto_gap">按课程顺序扣课时费，不足按小时补扣</option>
+                    <option value="auto_gap">按最低课时费自动抵扣，不足按小时补扣</option>
                     <option value="manual">手动填写扣除金额</option>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">优先扣费班级 / 课程</label>
-                  <Select
-                    value={vault.profile.obligationCourseGroupId ?? ""}
-                    onChange={(event) => updateObligationCourseGroup(event.target.value)}
-                    disabled={isManualObligationMode}
-                  >
-                    <option value="">按下方顺序扣本校区全部课程</option>
-                    {obligationCourses.map((course) => (
-                      <option key={course.id} value={course.id}>{course.name}</option>
-                    ))}
-                  </Select>
-                  {selectedObligationCourseStats && (
-                    <div className="text-xs font-semibold text-[#64748b]">
-                      {obligationMonth} 已完成 {selectedObligationCourseStats.lessonCount} 节，{selectedObligationCourseStats.availableHours.toFixed(1)} 小时
-                    </div>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">每月义务小时</label>
@@ -892,45 +862,37 @@ export function StudentsView({
                 <div className="space-y-3 rounded-[16px] border border-[#dbe4ef] bg-white p-3">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <div className="text-sm font-extrabold text-[#061226]">本校区课程扣费顺序</div>
+                      <div className="text-sm font-extrabold text-[#061226]">义务课时自动抵扣明细</div>
                       <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        {campusName(vault, obligationCampusId)} · {obligationMonth}，先扣排在上面的课程；本校区课程不够时，剩余小时按每小时补扣费用计算。
+                        {campusName(vault, obligationCampusId)} · {obligationMonth}，先扣本校区最低课时费课程；本校区不够时，再扣其他校区最低课时费课程；试听不参与抵扣。
                       </div>
                     </div>
-                    <Badge variant="secondary">{orderedObligationCourses.length} 个课程</Badge>
+                    <Badge variant="secondary">{obligation.courseBreakdown.length} 个课程</Badge>
                   </div>
                   <div className="space-y-2">
-                    {orderedObligationCourses.map((course, index) => {
-                      const item = obligation.courseBreakdown.find((entry) => entry.courseId === course.id);
+                    {obligation.courseBreakdown.map((item, index) => {
+                      const course = vault.courseGroups.find((candidate) => candidate.id === item.courseId);
                       return (
-                        <div key={course.id} className="grid grid-cols-1 gap-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[1fr_auto] md:items-center">
+                        <div key={item.courseId} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant={course.id === vault.profile.obligationCourseGroupId ? "amber" : "secondary"}>{index + 1}</Badge>
-                              <span className="truncate text-sm font-extrabold text-[#061226]">{course.name}</span>
-                              <span className="text-xs font-semibold text-[#64748b]">{courseTypeLabel(vault, course.type)} · {course.subject}</span>
+                              <Badge variant={index === 0 ? "amber" : "secondary"}>{index + 1}</Badge>
+                              <span className="truncate text-sm font-extrabold text-[#061226]">{item.courseName}</span>
+                              {course && <span className="text-xs font-semibold text-[#64748b]">{courseTypeLabel(vault, course.type)} · {course.subject} · {campusName(vault, course.defaultCampusId)}</span>}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
-                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">本月 {item?.lessonCount ?? 0} 节</span>
-                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">可扣 {(item?.availableHours ?? 0).toFixed(1)} 小时</span>
-                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">已扣 {(item?.deductedHours ?? 0).toFixed(1)} 小时</span>
-                              <span className="rounded-full bg-[#fee2e2] px-2.5 py-1 text-[#b91c1c]">扣 {formatMoney(item?.amount ?? 0)}</span>
+                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">本月 {item.lessonCount} 节</span>
+                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">可扣 {item.availableHours.toFixed(1)} 小时</span>
+                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">已扣 {item.deductedHours.toFixed(1)} 小时</span>
+                              <span className="rounded-full bg-[#fee2e2] px-2.5 py-1 text-[#b91c1c]">扣 {formatMoney(item.amount)}</span>
                             </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button type="button" size="sm" variant="outline" onClick={() => moveObligationCourse(course.id, -1)} disabled={index === 0}>
-                              <ArrowUp size={14} /> 上移
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => moveObligationCourse(course.id, 1)} disabled={index === orderedObligationCourses.length - 1}>
-                              <ArrowDown size={14} /> 下移
-                            </Button>
                           </div>
                         </div>
                       );
                     })}
-                    {orderedObligationCourses.length === 0 && (
+                    {obligation.courseBreakdown.length === 0 && (
                       <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                        当前校区还没有课程，义务小时会全部按每小时补扣费用计算。
+                        本月没有可用于义务抵扣的非试听已完成课程，义务小时会全部按每小时补扣费用计算。
                       </div>
                     )}
                   </div>
@@ -1086,12 +1048,13 @@ export function StudentsView({
           </Card>
         )}
         {archivePanel === "campuses" && (
+        <div className="space-y-4">
         <Card className="h-fit overflow-hidden">
           <CardHeader className="gap-3">
             <div className="flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
                 <Building2 size={18} className="text-[#ff8617]" />
-                <CardTitle className="text-lg">校区列表</CardTitle>
+                <CardTitle className="text-lg">校区与班型</CardTitle>
               </div>
               <Badge variant="secondary">{vault.campuses.length} 个</Badge>
             </div>
@@ -1201,7 +1164,7 @@ export function StudentsView({
                           onClick={() =>
                             confirm({
                               title: `删除校区「${campus.name}」？`,
-                              description: "删除后无法从校区列表中恢复。",
+                              description: "删除后无法从校区与班型中恢复。",
                               confirmLabel: "删除",
                               tone: "danger",
                               onConfirm: () => onDeleteCampus(campus.id)
@@ -1221,6 +1184,140 @@ export function StudentsView({
             )}
           </CardContent>
         </Card>
+        <Card className="h-fit overflow-hidden">
+          <CardHeader className="gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                  <GraduationCap size={14} /> 班型管理
+                </div>
+                <CardTitle className="text-lg">班型与默认计费</CardTitle>
+                <CardDescription>一对一、班课、试听、全日制按系统规则；一对二和自定义班型使用班课计费模板，可在这里调整默认计费。</CardDescription>
+              </div>
+              <Badge variant="secondary" className="w-fit">{managedCourseTypes.length} 个可配置</Badge>
+            </div>
+            <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <Input
+                value={customCourseTypeInput}
+                onChange={(event) => setCustomCourseTypeInput(event.target.value)}
+                placeholder="自定义班型，例如：小组课、冲刺课"
+                maxLength={24}
+                className="h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20"
+              />
+              <Button type="button" variant="outline" className="h-10 border-[#fdba74] bg-white text-[#9a3412] hover:bg-[#ffedd5]" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
+                <Plus size={14} /> 添加班型
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {managedCourseTypes.map((typeOption) => {
+              const type = typeOption.value;
+              const rule = feeRuleForCourseType(vault, type);
+              const tier = normalizedClassFeeTiers(rule)[0] ?? defaultClassFeeTiers(defaultFeeRuleForCourseType(type))[0];
+              const isCustom = type.startsWith("custom_");
+              const isEditingType = isCustom && editingCustomCourseTypeId === type;
+              const used = isCustom ? customCourseTypeInUse(type as CustomCourseType) : vault.courseGroups.some((course) => course.type === type) || vault.lessons.some((lesson) => lesson.type === type);
+              return (
+                <div key={type} className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      {isEditingType ? (
+                        <>
+                          <Input
+                            value={editingCustomCourseTypeLabel}
+                            onChange={(event) => setEditingCustomCourseTypeLabel(event.target.value)}
+                            maxLength={24}
+                            className="h-9 max-w-[220px] border-[#fdba74] bg-white text-sm font-bold text-[#7c2d12]"
+                          />
+                          <Button type="button" size="sm" className="h-9" disabled={!editingCustomCourseTypeLabel.trim()} onClick={saveCustomCourseType}>
+                            <Save size={14} /> 保存
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" className="h-9" onClick={cancelCustomCourseTypeEdit}>
+                            <X size={14} /> 取消
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="truncate text-base font-extrabold text-[#061226]">{typeOption.label}</span>
+                          <Badge variant={isCustom ? "amber" : "sky"}>{isCustom ? "自定义" : "内置"}</Badge>
+                          {used && <Badge variant="secondary">使用中</Badge>}
+                        </>
+                      )}
+                    </div>
+                    {!isEditingType && (
+                      <div className="flex flex-wrap gap-2">
+                        {isCustom && (
+                          <Button type="button" size="sm" variant="outline" onClick={() => startEditCustomCourseType({ id: type as CustomCourseType, label: typeOption.label })}>
+                            <Pencil size={14} /> 改名
+                          </Button>
+                        )}
+                        <Button type="button" size="sm" variant="outline" onClick={() => resetCourseTypeFeeRule(type)}>
+                          重置计费
+                        </Button>
+                        {isCustom && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={used}
+                            onClick={() => requestDeleteCustomCourseType({ id: type as CustomCourseType, label: typeOption.label })}
+                            title={used ? "已有课程或课时使用，不能删除" : "删除班型"}
+                          >
+                            <Trash2 size={14} /> 删除
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
+                    <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-sm font-extrabold text-[#061226]">默认班课人数计费</div>
+                      <div className="text-xs font-semibold text-[#64748b]">新建该班型课程时自动带入，可在课程里单独微调。</div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={tier.minStudents}
+                          onChange={(event) => updateCourseTypeClassFeeTier(type, tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#64748b]">基础费用</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={tier.baseFee}
+                          onChange={(event) => updateCourseTypeClassFeeTier(type, tier.id, { baseFee: Math.max(Number(event.target.value), 0) })}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#64748b]">每增加一人</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={tier.perStudentFee ?? 0}
+                          onChange={(event) => updateCourseTypeClassFeeTier(type, tier.id, { perStudentFee: Math.max(Number(event.target.value), 0) })}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {managedCourseTypes.length === 0 && (
+              <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+                暂无可配置班型，可以先添加自定义班型。
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        </div>
         )}
 
         {archivePanel === "students" && (
@@ -1519,75 +1616,11 @@ export function StudentsView({
                   <option value="paused">暂停</option>
                 </Select>
               </div>
-              <div className="space-y-3 rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                  <Input
-                    value={customCourseTypeInput}
-                    onChange={(event) => setCustomCourseTypeInput(event.target.value)}
-                    placeholder="自定义班型，例如：小组课、冲刺课"
-                    maxLength={24}
-                    className="h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20"
-                  />
-                  <Button type="button" variant="outline" className="h-10 border-[#fdba74] bg-white text-[#9a3412] hover:bg-[#ffedd5]" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
-                    <Plus size={14} /> 添加班型
-                  </Button>
-                </div>
-                {customCourseTypes.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs font-bold text-[#9a3412]">已添加自定义班型</div>
-                    <div className="flex flex-wrap gap-2">
-                      {customCourseTypes.map((typeOption) => {
-                        const isEditingType = editingCustomCourseTypeId === typeOption.id;
-                        const used = customCourseTypeInUse(typeOption.id);
-                        return (
-                          <div key={typeOption.id} className="flex max-w-full items-center gap-1 rounded-[12px] border border-[#fed7aa] bg-white px-2 py-1.5">
-                            {isEditingType ? (
-                              <>
-                                <Input
-                                  value={editingCustomCourseTypeLabel}
-                                  onChange={(event) => setEditingCustomCourseTypeLabel(event.target.value)}
-                                  maxLength={24}
-                                  className="h-8 min-w-[140px] border-[#fdba74] text-xs font-bold text-[#7c2d12]"
-                                />
-                                <Button type="button" size="sm" className="h-8 w-8 rounded-[9px] p-0" disabled={!editingCustomCourseTypeLabel.trim()} onClick={saveCustomCourseType} title="保存班型">
-                                  <Save size={13} />
-                                </Button>
-                                <Button type="button" size="sm" variant="outline" className="h-8 w-8 rounded-[9px] p-0" onClick={cancelCustomCourseTypeEdit} title="取消编辑">
-                                  <X size={13} />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <span className="max-w-[160px] truncate px-1 text-xs font-extrabold text-[#7c2d12]" title={typeOption.label}>{typeOption.label}</span>
-                                {used && <Badge variant="amber" className="text-[10px]">使用中</Badge>}
-                                <Button type="button" size="sm" variant="outline" className="h-8 w-8 rounded-[9px] p-0" onClick={() => startEditCustomCourseType(typeOption)} title="修改班型">
-                                  <Pencil size={13} />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="destructive"
-                                  className="h-8 w-8 rounded-[9px] p-0"
-                                  disabled={used}
-                                  onClick={() => requestDeleteCustomCourseType(typeOption)}
-                                  title={used ? "已有课程或课时使用，不能删除" : "删除班型"}
-                                >
-                                  <Trash2 size={13} />
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
 
-              {courseType === "class" ? (
+              {usesClassFeeTemplate(courseType) ? (
                 <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-white p-3">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm font-extrabold text-[#061226]">班课人数计费</div>
+                    <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                     <div className="text-xs font-semibold text-[#64748b]">
                       当前关联 {courseStudentIds.length} 人，预计 {formatMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length))}
                     </div>
@@ -1840,7 +1873,7 @@ export function StudentsView({
                             const nextStudentIds = normalizeCourseStudentIds(nextType, editingCourse.studentIds);
                             updateEditingCourse({
                               type: nextType,
-                              feeRule: defaultFeeRule(nextType),
+                              feeRule: courseTypeDefaultFeeRule(nextType),
                               studentIds: nextStudentIds,
                               defaultCampusId: firstCourseStudentCampus(nextStudentIds) ?? editingCourse.defaultCampusId
                             });
@@ -1867,10 +1900,10 @@ export function StudentsView({
                         <option value="active">启用</option>
                         <option value="paused">暂停</option>
                       </Select>
-                      {editingCourse.type === "class" ? (
+                      {usesClassFeeTemplate(editingCourse.type) ? (
                         <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                           <div>
-                            <div className="text-sm font-extrabold text-[#061226]">班课人数计费</div>
+                            <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                             <div className="mt-1 text-xs font-semibold text-[#64748b]">
                               当前关联 {editingCourse.studentIds.length} 人，预计 {formatMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length))}
                             </div>
@@ -2063,7 +2096,7 @@ export function StudentsView({
                           <span className="text-xs text-(--color-muted-foreground)">
                             {courseTypeLabel(vault, course.type)} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
                           </span>
-                          {course.type === "class" && (
+                          {usesClassFeeTemplate(course.type) && (
                             <span className="mt-1 block text-xs font-bold text-[#1557c2]">
                               当前 {course.studentIds.length} 人预估：{formatMoney(calculateClassHeadcountFee(course.feeRule, course.studentIds.length))}
                             </span>
@@ -2136,6 +2169,10 @@ function canJoinCourse(vault: TeacherVault, course: CourseGroup, student: Studen
   return existingGrade === (student.grade ?? "");
 }
 
+function usesClassFeeTemplate(type: CourseType): boolean {
+  return type === "class" || type === "one_on_two" || type.startsWith("custom_");
+}
+
 function studentCourseSearchText(vault: TeacherVault, student: Student): string {
   const studentCourses = vault.courseGroups.filter((course) => course.studentIds.includes(student.id));
   return [
@@ -2167,19 +2204,4 @@ function matchesGradeFilter(grade: string | undefined, filter: string): boolean 
 
 function studentOptionLabel(student: Student): string {
   return `${student.name} · ${student.grade || "未设置年级"}`;
-}
-
-function defaultFeeRule(type: CourseType): FeeRule {
-  if (type === "class") {
-    const baseFee = 80;
-    const perPresentStudentFee = 10;
-    return {
-      mode: "class_headcount",
-      baseFee,
-      perPresentStudentFee,
-      classFeeTiers: defaultClassFeeTiers({ mode: "class_headcount", baseFee, perPresentStudentFee }),
-      makeupFeeMode: "perStudentFee"
-    };
-  }
-  return { mode: "hourly", hourlyRate: type === "trial" ? 0 : 200 };
 }

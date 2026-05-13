@@ -26,7 +26,7 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
-import { currentAppHour, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { currentAppHour, defaultFeeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
 import { cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   cloneVault,
@@ -41,8 +41,10 @@ import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } fro
 import type {
   Campus,
   CourseGroup,
+  CourseType,
   CustomCourseType,
   CustomCourseTypeOption,
+  FeeRule,
   GradeRecord,
   Lesson,
   SalaryAdjustment,
@@ -315,7 +317,11 @@ export function App() {
       if (!normalizedLabel || current.some((item) => item.id === courseType.id || item.label.trim() === normalizedLabel)) return;
       draft.preferences = {
         ...(draft.preferences ?? { weekStartsOn: 0 }),
-        customCourseTypes: [...current, { ...courseType, label: normalizedLabel }]
+        customCourseTypes: [...current, { ...courseType, label: normalizedLabel }],
+        courseTypeFeeRules: {
+          ...(draft.preferences?.courseTypeFeeRules ?? {}),
+          [courseType.id]: draft.preferences?.courseTypeFeeRules?.[courseType.id] ?? defaultFeeRuleForCourseType(courseType.id)
+        }
       };
     });
   }
@@ -332,6 +338,18 @@ export function App() {
     });
   }
 
+  function updateCourseTypeFeeRule(courseType: CourseType, feeRule: FeeRule) {
+    updateVault((draft) => {
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        courseTypeFeeRules: {
+          ...(draft.preferences?.courseTypeFeeRules ?? {}),
+          [courseType]: feeRule
+        }
+      };
+    });
+  }
+
   function deleteCustomCourseType(courseTypeId: CustomCourseType) {
     updateVault((draft) => {
       const inUse =
@@ -340,7 +358,10 @@ export function App() {
       if (inUse) return;
       draft.preferences = {
         ...(draft.preferences ?? { weekStartsOn: 0 }),
-        customCourseTypes: (draft.preferences?.customCourseTypes ?? []).filter((item) => item.id !== courseTypeId)
+        customCourseTypes: (draft.preferences?.customCourseTypes ?? []).filter((item) => item.id !== courseTypeId),
+        courseTypeFeeRules: Object.fromEntries(
+          Object.entries(draft.preferences?.courseTypeFeeRules ?? {}).filter(([type]) => type !== courseTypeId)
+        )
       };
     });
   }
@@ -1023,6 +1044,7 @@ export function App() {
                 onAddCustomCourseType={addCustomCourseType}
                 onUpdateCustomCourseType={updateCustomCourseType}
                 onDeleteCustomCourseType={deleteCustomCourseType}
+                onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
                 onTransferStudentCourse={transferStudentCourse}
               />
             )}

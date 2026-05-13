@@ -25,7 +25,8 @@ export function createEmptyVault(displayName = ""): TeacherVault {
     preferences: {
       weekStartsOn: 0,
       customTimePresets: [],
-      customCourseTypes: []
+      customCourseTypes: [],
+      courseTypeFeeRules: {}
     },
     notice: defaultNotice,
     campuses: [],
@@ -59,7 +60,8 @@ export function createSampleVault(): TeacherVault {
     preferences: {
       weekStartsOn: 0,
       customTimePresets: [],
-      customCourseTypes: []
+      customCourseTypes: [],
+      courseTypeFeeRules: {}
     },
     notice: defaultNotice,
     campuses: [
