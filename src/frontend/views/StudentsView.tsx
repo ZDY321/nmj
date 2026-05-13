@@ -1193,6 +1193,9 @@ export function StudentsView({
                 </div>
                 <CardTitle className="text-lg">班型与默认计费</CardTitle>
                 <CardDescription>一对一、班课、试听、全日制按系统规则；一对二和自定义班型使用班课计费模板，可在这里调整默认计费。</CardDescription>
+                <div className="mt-1 text-[11px] font-semibold leading-4 text-[#94a3b8]">
+                  恢复默认计费会把一对二或自定义班型恢复为班课人数计费模板，只影响以后新建的课程，已添加课程不会自动修改。
+                </div>
               </div>
               <Badge variant="secondary" className="w-fit">{managedCourseTypes.length} 个可配置</Badge>
             </div>
@@ -1252,7 +1255,7 @@ export function StudentsView({
                           </Button>
                         )}
                         <Button type="button" size="sm" variant="outline" onClick={() => resetCourseTypeFeeRule(type)}>
-                          重置计费
+                          恢复默认计费
                         </Button>
                         {isCustom && (
                           <Button
