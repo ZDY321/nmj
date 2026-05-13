@@ -56,7 +56,7 @@ import {
 
 type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
-type SchedulePanel = "schedule" | "calendar" | "records";
+type SchedulePanel = "schedule" | "calendar" | "records" | "studentStats";
 type CalendarFocus = { date: string; lessonId?: string; nonce: number } | null;
 
 export function ScheduleView({
@@ -112,6 +112,15 @@ export function ScheduleView({
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
+  const [studentStatsNameFilter, setStudentStatsNameFilter] = useState("");
+  const [studentStatsCourseFilter, setStudentStatsCourseFilter] = useState("all");
+  const [studentStatsSubjectFilter, setStudentStatsSubjectFilter] = useState("all");
+  const [studentStatsCampusFilter, setStudentStatsCampusFilter] = useState("all");
+  const [studentStatsStatusFilter, setStudentStatsStatusFilter] = useState<"all" | Lesson["status"]>("all");
+  const [studentStatsDateStart, setStudentStatsDateStart] = useState(todayIso().slice(0, 7) + "-01");
+  const [studentStatsDateEnd, setStudentStatsDateEnd] = useState(todayIso());
+  const [studentStatsStartTime, setStudentStatsStartTime] = useState("");
+  const [studentStatsEndTime, setStudentStatsEndTime] = useState("");
   const [lessonScope, setLessonScope] = useState<LessonScope>("month");
   const [lessonMonth, setLessonMonth] = useState(todayIso().slice(0, 7));
   const [lessonDay, setLessonDay] = useState(todayIso());
@@ -162,6 +171,8 @@ export function ScheduleView({
   const selectedCalendarCancelledCount = selectedCalendarLessons.filter((lesson) => lesson.status === "cancelled").length;
   const selectedCalendarAmount = selectedCalendarLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const normalizedStudentFilter = studentFilter.trim().toLowerCase();
+  const normalizedStudentStatsNameFilter = studentStatsNameFilter.trim().toLowerCase();
+  const studentStatsSubjects = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter(Boolean))).sort();
   const effectiveLessonScope = syncRecordsWithCalendarDate ? "day" : lessonScope;
   const effectiveLessonDay = syncRecordsWithCalendarDate ? selectedCalendarDate : lessonDay;
   const scopeDates = effectiveLessonScope === "week" ? datesForIsoWeekValue(lessonWeek) : [];
@@ -189,6 +200,34 @@ export function ScheduleView({
     })
     .sort(sortLessons)
     .reverse();
+  const studentStatsLessons = vault.lessons
+    .filter((lesson) => {
+      const course = getCourse(vault, lesson.courseGroupId);
+      const campusId = lesson.campusId ?? course?.defaultCampusId;
+      const studentIds = lessonStudentIds(lesson);
+      const matchesStudent =
+        !normalizedStudentStatsNameFilter ||
+        studentIds.some((studentId) =>
+          (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(normalizedStudentStatsNameFilter)
+        );
+      const matchesCourse = studentStatsCourseFilter === "all" || lesson.courseGroupId === studentStatsCourseFilter;
+      const matchesSubject = studentStatsSubjectFilter === "all" || course?.subject === studentStatsSubjectFilter;
+      const matchesCampus = studentStatsCampusFilter === "all" || campusId === studentStatsCampusFilter;
+      const matchesStatus = studentStatsStatusFilter === "all" || lesson.status === studentStatsStatusFilter;
+      const matchesDate =
+        (!studentStatsDateStart || lesson.date >= studentStatsDateStart) &&
+        (!studentStatsDateEnd || lesson.date <= studentStatsDateEnd) &&
+        (!studentStatsDateStart || !studentStatsDateEnd || studentStatsDateStart <= studentStatsDateEnd);
+      const matchesTime =
+        (!studentStatsStartTime || timeToMinutes(lesson.startTime) >= timeToMinutes(studentStatsStartTime)) &&
+        (!studentStatsEndTime || timeToMinutes(lesson.endTime) <= timeToMinutes(studentStatsEndTime)) &&
+        (!studentStatsStartTime || !studentStatsEndTime || timeToMinutes(studentStatsStartTime) <= timeToMinutes(studentStatsEndTime));
+      return matchesStudent && matchesCourse && matchesSubject && matchesCampus && matchesStatus && matchesDate && matchesTime;
+    })
+    .sort(sortLessons);
+  const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
+  const studentStatsTotalHours = studentStatsLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime)), 0);
+  const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const selected = vault.lessons.find((lesson) => lesson.id === selectedId) ?? lessons[0];
   const selectedCourse = selected ? getCourse(vault, selected.courseGroupId) : undefined;
   const selectedOriginalLesson = selected?.linkedOriginalLessonId
@@ -530,11 +569,12 @@ export function ScheduleView({
   return (
     <div className="space-y-6">
       {dialog}
-      <div className="grid grid-cols-3 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1">
+      <div className="grid grid-cols-2 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1 sm:grid-cols-4">
         {[
           { key: "schedule" as SchedulePanel, label: "排课" },
           { key: "calendar" as SchedulePanel, label: "日历查看" },
-          { key: "records" as SchedulePanel, label: "课程记录" }
+          { key: "records" as SchedulePanel, label: "课程记录" },
+          { key: "studentStats" as SchedulePanel, label: "学生课次" }
         ].map((item) => (
           <button
             key={item.key}
@@ -1021,6 +1061,169 @@ export function ScheduleView({
           </Card>
         </div>
       </div>
+      )}
+
+      {schedulePanel === "studentStats" && (
+        <div className="space-y-6">
+          <Card className="overflow-hidden">
+            <CardHeader>
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                <UserCheck size={14} /> 学生课次统计
+              </div>
+              <CardTitle>按学生查看课程数量</CardTitle>
+              <CardDescription>学生、课程、科目、校区、日期、时间和状态会同时生效，筛选结果为合并条件后的交集。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label className="relative block">
+                  <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                  <Input
+                    className="pl-9"
+                    value={studentStatsNameFilter}
+                    onChange={(event) => setStudentStatsNameFilter(event.target.value)}
+                    placeholder="筛选学生姓名"
+                  />
+                </label>
+                <Select value={studentStatsCourseFilter} onChange={(event) => setStudentStatsCourseFilter(event.target.value)}>
+                  <option value="all">全部课程</option>
+                  {vault.courseGroups.map((course) => (
+                    <option key={course.id} value={course.id}>{course.name}</option>
+                  ))}
+                </Select>
+                <Select value={studentStatsSubjectFilter} onChange={(event) => setStudentStatsSubjectFilter(event.target.value)}>
+                  <option value="all">全部科目</option>
+                  {studentStatsSubjects.map((subject) => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
+                </Select>
+                <Select value={studentStatsCampusFilter} onChange={(event) => setStudentStatsCampusFilter(event.target.value)}>
+                  <option value="all">全部校区</option>
+                  {vault.campuses.map((campus) => (
+                    <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  ))}
+                </Select>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">开始日期</label>
+                  <Input
+                    type="date"
+                    value={studentStatsDateStart}
+                    onChange={(event) => setStudentStatsDateStart(event.target.value)}
+                    className={!isStudentStatsDateRangeValid(studentStatsDateStart, studentStatsDateEnd) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">结束日期</label>
+                  <Input
+                    type="date"
+                    value={studentStatsDateEnd}
+                    min={studentStatsDateStart}
+                    onChange={(event) => setStudentStatsDateEnd(event.target.value)}
+                    className={!isStudentStatsDateRangeValid(studentStatsDateStart, studentStatsDateEnd) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">开始时间</label>
+                  <Input
+                    type="time"
+                    value={studentStatsStartTime}
+                    max={studentStatsEndTime || undefined}
+                    onChange={(event) => setStudentStatsStartTime(event.target.value)}
+                    className={!isStudentStatsTimeRangeValid(studentStatsStartTime, studentStatsEndTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">结束时间</label>
+                  <Input
+                    type="time"
+                    value={studentStatsEndTime}
+                    min={studentStatsStartTime || undefined}
+                    onChange={(event) => setStudentStatsEndTime(event.target.value)}
+                    className={!isStudentStatsTimeRangeValid(studentStatsStartTime, studentStatsEndTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2 xl:col-span-1">
+                  <label className="text-sm font-medium">上课状态</label>
+                  <Select value={studentStatsStatusFilter} onChange={(event) => setStudentStatsStatusFilter(event.target.value as "all" | Lesson["status"])}>
+                    <option value="all">全部状态</option>
+                    {Object.entries(lessonStatusLabels).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { label: "筛选后课次", value: `${studentStatsLessons.length} 节` },
+                  { label: "涉及学生", value: `${studentStatsRows.length} 人` },
+                  { label: "已完成", value: `${studentStatsCompletedCount} 节` },
+                  { label: "课时合计", value: `${studentStatsTotalHours.toFixed(1)} 小时` }
+                ].map((item) => (
+                  <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
+                    <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
+                    <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>学生课程数量</CardTitle>
+                <CardDescription className="mt-1">同一节班课会分别计入每个关联学生的课次数。</CardDescription>
+              </div>
+              <Badge variant="secondary" className="w-fit">{studentStatsRows.length} 人</Badge>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {studentStatsRows.map((row, index) => (
+                <motion.div
+                  key={row.studentId}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.02 }}
+                  className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4"
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff] text-sm font-extrabold text-[#1557c2]">
+                          {row.studentName.slice(0, 1)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-extrabold text-[#061226]">{row.studentName}</div>
+                          <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                            {row.courseNames.length > 0 ? row.courseNames.join("、") : "未关联课程名"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:min-w-[520px]">
+                      {[
+                        { label: "总课次", value: `${row.total} 节` },
+                        { label: "已完成", value: `${row.completed} 节` },
+                        { label: "待上/待补", value: `${row.pending} 节` },
+                        { label: "已取消", value: `${row.cancelled} 节` },
+                        { label: "课时", value: `${row.hours.toFixed(1)} 小时` }
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                          <div className="text-[11px] font-semibold text-[#64748b]">{item.label}</div>
+                          <div className="mt-1 text-sm font-extrabold text-[#061226]">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+              {studentStatsRows.length === 0 && (
+                <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
+                  没有符合当前筛选条件的学生课次
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {schedulePanel === "records" && (
@@ -1513,9 +1716,74 @@ function isPendingLessonStatus(status: string): boolean {
   return status === "draft" || status === "scheduled" || status === "makeup_pending";
 }
 
+function isStudentStatsDateRangeValid(startDate: string, endDate: string): boolean {
+  return !startDate || !endDate || startDate <= endDate;
+}
+
+function isStudentStatsTimeRangeValid(startTime: string, endTime: string): boolean {
+  return !startTime || !endTime || timeToMinutes(startTime) <= timeToMinutes(endTime);
+}
+
 function timeToMinutes(value: string): number {
   const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
+}
+
+function lessonStudentIds(lesson: Lesson): string[] {
+  return Array.from(new Set([
+    ...lesson.expectedStudentIds,
+    ...lesson.attendance.map((entry) => entry.studentId)
+  ]));
+}
+
+function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalizedNameFilter: string) {
+  const rows = new Map<string, {
+    studentId: string;
+    studentName: string;
+    total: number;
+    completed: number;
+    pending: number;
+    cancelled: number;
+    hours: number;
+    courseNames: string[];
+  }>();
+
+  lessons.forEach((lesson) => {
+    const hours = lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime);
+    lessonStudentIds(lesson).forEach((studentId) => {
+      const student = findStudent(vault, studentId);
+      const studentName = student?.name ?? "未知学生";
+      if (normalizedNameFilter && !studentName.toLowerCase().includes(normalizedNameFilter)) return;
+      const current = rows.get(studentId) ?? {
+        studentId,
+        studentName,
+        total: 0,
+        completed: 0,
+        pending: 0,
+        cancelled: 0,
+        hours: 0,
+        courseNames: []
+      };
+
+      current.total += 1;
+      current.hours += hours;
+      if (isCompletedLessonStatus(lesson.status)) {
+        current.completed += 1;
+      } else if (isPendingLessonStatus(lesson.status)) {
+        current.pending += 1;
+      } else if (lesson.status === "cancelled") {
+        current.cancelled += 1;
+      }
+
+      const name = courseName(vault, lesson.courseGroupId);
+      if (!current.courseNames.includes(name)) {
+        current.courseNames.push(name);
+      }
+      rows.set(studentId, current);
+    });
+  });
+
+  return [...rows.values()].sort((a, b) => b.total - a.total || a.studentName.localeCompare(b.studentName, "zh-Hans-CN"));
 }
 
 function attendanceSurfaceClass(status: AttendanceStatus, isTemporary: boolean): string {
