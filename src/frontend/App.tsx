@@ -470,16 +470,17 @@ export function App() {
         if (!session.username || !session.password || !session.token || !session.vault) {
           clearUnlockedSession();
         } else {
+          const today = todayIso();
           setUsername(session.username);
           setPassword(session.password);
           setToken(session.token);
           setRole(session.role);
           setDeletion(session.deletion);
           setVault(session.vault);
-          setSelectedDate(session.selectedDate || todayIso());
+          setSelectedDate(today);
           writeUnlockedSession({
             ...session,
-            selectedDate: session.selectedDate || todayIso()
+            selectedDate: today
           });
         }
       } catch {
