@@ -51,6 +51,7 @@ export function PayrollReviewView({
   const [detailEndDateFilter, setDetailEndDateFilter] = useState("");
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
+  const [detailStatusFilter, setDetailStatusFilter] = useState<LessonStatusFilter>("all");
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
   const effectiveObligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId;
 
@@ -85,7 +86,8 @@ export function PayrollReviewView({
       const matchesStudent =
         !detailStudentFilter.trim() ||
         studentNames(vault, lesson.expectedStudentIds).toLowerCase().includes(detailStudentFilter.trim().toLowerCase());
-      return matchesDate && matchesCourse && matchesStudent;
+      const matchesStatus = detailStatusFilter === "all" || lesson.status === detailStatusFilter;
+      return matchesDate && matchesCourse && matchesStudent && matchesStatus;
     })
     .sort(sortLessons);
 
@@ -385,7 +387,7 @@ export function PayrollReviewView({
           <CardDescription>这里展示课程记录与课时费明细，可在当前月份、校区、类型、状态和年级基础上继续筛选。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-5">
             <div className="space-y-2">
               <label className="text-sm font-medium">开始日期</label>
               <Input type="date" value={detailStartDateFilter} onChange={(event) => setDetailStartDateFilter(event.target.value)} />
@@ -406,6 +408,15 @@ export function PayrollReviewView({
             <div className="space-y-2">
               <label className="text-sm font-medium">学生筛选</label>
               <Input value={detailStudentFilter} onChange={(event) => setDetailStudentFilter(event.target.value)} placeholder="输入学生名" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">状态筛选</label>
+              <Select value={detailStatusFilter} onChange={(event) => setDetailStatusFilter(event.target.value as LessonStatusFilter)}>
+                <option value="all">全部状态</option>
+                {Object.entries(lessonStatusLabels).map(([status, label]) => (
+                  <option key={status} value={status}>{label}</option>
+                ))}
+              </Select>
             </div>
           </div>
           <div className="flex flex-col gap-2 rounded-[14px] border border-[#e8eef6] bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
