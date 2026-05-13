@@ -1150,6 +1150,15 @@ export function ScheduleView({
                       <option key={key} value={key}>{label}</option>
                     ))}
                   </Select>
+                  <div className="flex flex-wrap gap-1.5">
+                    {studentStatsStatusFilter === "all" ? (
+                      <Badge variant="secondary">全部状态</Badge>
+                    ) : (
+                      <Badge variant={lessonStatusVariant(studentStatsStatusFilter)}>
+                        {lessonStatusLabels[studentStatsStatusFilter]}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1229,8 +1238,11 @@ export function ScheduleView({
                         >
                           <div className="min-w-0">
                             <div className="truncate font-extrabold text-[#061226]">{detail.courseName}</div>
-                            <div className="mt-1">
-                              {detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName} · {lessonStatusLabels[detail.status]}
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span>{detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName}</span>
+                              <Badge variant={lessonStatusVariant(detail.status)} className="text-[10px]">
+                                {lessonStatusLabels[detail.status]}
+                              </Badge>
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-2 md:justify-end">
