@@ -227,6 +227,7 @@ export function ScheduleView({
     .sort(sortLessons);
   const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
   const studentStatsTotalHours = studentStatsLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime)), 0);
+  const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const selected = vault.lessons.find((lesson) => lesson.id === selectedId) ?? lessons[0];
   const selectedCourse = selected ? getCourse(vault, selected.courseGroupId) : undefined;
@@ -1157,7 +1158,7 @@ export function ScheduleView({
                   { label: "筛选后课次", value: `${studentStatsLessons.length} 节` },
                   { label: "涉及学生", value: `${studentStatsRows.length} 人` },
                   { label: "已完成", value: `${studentStatsCompletedCount} 节` },
-                  { label: "课时合计", value: `${studentStatsTotalHours.toFixed(1)} 小时` }
+                  { label: "课时费合计", value: formatMoney(studentStatsTotalFee) }
                 ].map((item) => (
                   <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
                     <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
@@ -1199,17 +1200,43 @@ export function ScheduleView({
                         </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:min-w-[520px]">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:min-w-[640px] xl:grid-cols-6">
                       {[
                         { label: "总课次", value: `${row.total} 节` },
                         { label: "已完成", value: `${row.completed} 节` },
                         { label: "待上/待补", value: `${row.pending} 节` },
                         { label: "已取消", value: `${row.cancelled} 节` },
-                        { label: "课时", value: `${row.hours.toFixed(1)} 小时` }
+                        { label: "课时", value: `${row.hours.toFixed(1)} 小时` },
+                        { label: "课时费", value: formatMoney(row.amount) }
                       ].map((item) => (
                         <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
                           <div className="text-[11px] font-semibold text-[#64748b]">{item.label}</div>
                           <div className="mt-1 text-sm font-extrabold text-[#061226]">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-[12px] border border-[#e8eef6] bg-white p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="text-xs font-bold text-[#64748b]">符合筛选的课程明细</div>
+                      <Badge variant="secondary">{row.details.length} 节</Badge>
+                    </div>
+                    <div className="max-h-[220px] space-y-2 overflow-y-auto pr-1">
+                      {row.details.map((detail) => (
+                        <div
+                          key={`${row.studentId}-${detail.lessonId}`}
+                          className="grid grid-cols-1 gap-2 rounded-[10px] border border-[#eef2f7] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-extrabold text-[#061226]">{detail.courseName}</div>
+                            <div className="mt-1">
+                              {detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName} · {lessonStatusLabels[detail.status]}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 md:justify-end">
+                            <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{detail.hours.toFixed(1)} 小时</span>
+                            <span className="rounded-full bg-[#eaf2ff] px-2.5 py-1 font-extrabold text-[#1557c2]">{formatMoney(detail.amount)}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1745,11 +1772,24 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
     pending: number;
     cancelled: number;
     hours: number;
+    amount: number;
     courseNames: string[];
+    details: Array<{
+      lessonId: string;
+      courseName: string;
+      campusName: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      status: Lesson["status"];
+      hours: number;
+      amount: number;
+    }>;
   }>();
 
   lessons.forEach((lesson) => {
     const hours = lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime);
+    const amount = lesson.feeSnapshot.amount;
     lessonStudentIds(lesson).forEach((studentId) => {
       const student = findStudent(vault, studentId);
       const studentName = student?.name ?? "未知学生";
@@ -1762,11 +1802,14 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
         pending: 0,
         cancelled: 0,
         hours: 0,
-        courseNames: []
+        amount: 0,
+        courseNames: [],
+        details: []
       };
 
       current.total += 1;
       current.hours += hours;
+      current.amount += amount;
       if (isCompletedLessonStatus(lesson.status)) {
         current.completed += 1;
       } else if (isPendingLessonStatus(lesson.status)) {
@@ -1779,6 +1822,17 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
       if (!current.courseNames.includes(name)) {
         current.courseNames.push(name);
       }
+      current.details.push({
+        lessonId: lesson.id,
+        courseName: name,
+        campusName: campusName(vault, lesson.campusId),
+        date: lesson.date,
+        startTime: lesson.startTime,
+        endTime: lesson.endTime,
+        status: lesson.status,
+        hours,
+        amount
+      });
       rows.set(studentId, current);
     });
   });
