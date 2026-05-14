@@ -64,10 +64,14 @@ export function StudentsView({
   const courseTypeOptions = courseTypeOptionsForVault(vault);
   const customCourseTypes = vault.preferences?.customCourseTypes ?? [];
   const disabledCourseTypes = new Set(vault.preferences?.disabledCourseTypes ?? []);
-  const managedCourseTypes: Array<{ value: CourseType; label: string }> = [
+  const allManagedCourseTypes: Array<{ value: CourseType; label: string }> = [
     ...builtInCourseTypeOptions.map((item) => ({ value: item.value as CourseType, label: courseTypeLabel(vault, item.value) })),
     ...customCourseTypes.map((item) => ({ value: item.id as CourseType, label: item.label }))
   ].sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN") || a.value.localeCompare(b.value));
+  const managedCourseTypes = allManagedCourseTypes.filter((item) => !disabledCourseTypes.has(item.value));
+  const deletedBuiltInCourseTypes = allManagedCourseTypes.filter(
+    (item) => !item.value.startsWith("custom_") && disabledCourseTypes.has(item.value)
+  );
   const preferredCampusId = campusOptions[0]?.id ?? "";
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
@@ -88,6 +92,7 @@ export function StudentsView({
   const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
   const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => feeRuleForCourseType(vault, "one_on_one"));
   const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
+  const [courseTypeMessage, setCourseTypeMessage] = useState("");
   const [editingCustomCourseTypeId, setEditingCustomCourseTypeId] = useState<CourseType | "">("");
   const [editingCustomCourseTypeLabel, setEditingCustomCourseTypeLabel] = useState("");
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
@@ -411,9 +416,12 @@ export function StudentsView({
   function addCustomCourseType() {
     const label = customCourseTypeInput.trim();
     if (!label) return;
-    const existingType = managedCourseTypes.find((option) => option.label === label || option.value === label);
+    const normalizedLabel = normalizeCourseTypeLabel(label);
+    const existingType = allManagedCourseTypes.find(
+      (option) => normalizeCourseTypeLabel(option.label) === normalizedLabel || normalizeCourseTypeLabel(option.value) === normalizedLabel
+    );
     if (existingType) {
-      setCustomCourseTypeInput("");
+      setCourseTypeMessage(`已存在班型「${existingType.label}」，不能重复添加同名班型。`);
       return;
     }
     const option: CustomCourseTypeOption = {
@@ -422,6 +430,7 @@ export function StudentsView({
     };
     onAddCustomCourseType(option);
     setCustomCourseTypeInput("");
+    setCourseTypeMessage("");
   }
 
   function startEditCustomCourseType(courseTypeOption: { id: CourseType; label: string }) {
@@ -433,16 +442,24 @@ export function StudentsView({
     const id = editingCustomCourseTypeId;
     const label = editingCustomCourseTypeLabel.trim();
     if (!id || !label) return;
-    const duplicated = managedCourseTypes.some((item) => item.value !== id && item.label.trim() === label);
-    if (duplicated) return;
+    const normalizedLabel = normalizeCourseTypeLabel(label);
+    const duplicated = allManagedCourseTypes.find(
+      (item) => item.value !== id && normalizeCourseTypeLabel(item.label) === normalizedLabel
+    );
+    if (duplicated) {
+      setCourseTypeMessage(`已存在班型「${duplicated.label}」，不能改成同名班型。`);
+      return;
+    }
     onUpdateCourseTypeLabel(id, label);
     setEditingCustomCourseTypeId("");
     setEditingCustomCourseTypeLabel("");
+    setCourseTypeMessage("");
   }
 
   function cancelCustomCourseTypeEdit() {
     setEditingCustomCourseTypeId("");
     setEditingCustomCourseTypeLabel("");
+    setCourseTypeMessage("");
   }
 
   function customCourseTypeInUse(courseTypeId: CustomCourseType): boolean {
@@ -511,7 +528,7 @@ export function StudentsView({
       title: `删除班型「${courseTypeOption.label}」？`,
       description: isCustom
         ? "自定义班型会从班型列表中直接删除；已被课程或历史课时使用的自定义班型不能直接删除。"
-        : "内置班型会从新增课程和筛选下拉中隐藏，已有课程和历史课时仍会保留显示。",
+        : "内置班型会从主列表、新增课程和筛选下拉中移除，已有课程和历史课时仍会保留显示，可在已删除内置班型中恢复。",
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => {
@@ -1249,7 +1266,7 @@ export function StudentsView({
                   <GraduationCap size={14} /> 班型管理
                 </div>
                 <CardTitle className="text-lg">班型与默认计费</CardTitle>
-                <CardDescription>班型可改名、按名称排序并设置默认计费；内置班型删除后会隐藏，自定义班型未使用时会直接删除。</CardDescription>
+                <CardDescription>班型可改名、按名称排序并设置默认计费；内置班型删除后会从主列表移除，自定义班型未使用时会直接删除。</CardDescription>
                 <div className="mt-1 text-sm font-semibold leading-5 text-[#64748b]">
                   恢复默认计费会把该班型的默认价格恢复为 0，只影响以后新建的课程，已添加课程不会自动修改。
                 </div>
@@ -1259,15 +1276,23 @@ export function StudentsView({
             <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <Input
                 value={customCourseTypeInput}
-                onChange={(event) => setCustomCourseTypeInput(event.target.value)}
+                onChange={(event) => {
+                  setCustomCourseTypeInput(event.target.value);
+                  if (courseTypeMessage) setCourseTypeMessage("");
+                }}
                 placeholder="自定义班型，例如：小组课、冲刺课"
                 maxLength={24}
-                className="h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20"
+                className={`h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20 ${courseTypeMessage ? "border-[#fca5a5] bg-[#fff1f2]" : ""}`}
               />
               <Button type="button" variant="outline" className="h-10 border-[#fdba74] bg-white text-[#9a3412] hover:bg-[#ffedd5]" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
                 <Plus size={14} /> 添加班型
               </Button>
             </div>
+            {courseTypeMessage && (
+              <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
+                {courseTypeMessage}
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-3">
             {managedCourseTypes.map((typeOption) => {
@@ -1286,9 +1311,12 @@ export function StudentsView({
                         <>
                           <Input
                             value={editingCustomCourseTypeLabel}
-                            onChange={(event) => setEditingCustomCourseTypeLabel(event.target.value)}
+                            onChange={(event) => {
+                              setEditingCustomCourseTypeLabel(event.target.value);
+                              if (courseTypeMessage) setCourseTypeMessage("");
+                            }}
                             maxLength={24}
-                            className="h-9 max-w-[220px] border-[#fdba74] bg-white text-sm font-bold text-[#7c2d12]"
+                            className={`h-9 max-w-[220px] border-[#fdba74] bg-white text-sm font-bold text-[#7c2d12] ${courseTypeMessage ? "border-[#fca5a5] bg-[#fff1f2]" : ""}`}
                           />
                           <Button type="button" size="sm" className="h-9" disabled={!editingCustomCourseTypeLabel.trim()} onClick={saveCustomCourseType}>
                             <Save size={14} /> 保存
@@ -1301,7 +1329,6 @@ export function StudentsView({
                         <>
                           <span className="truncate text-base font-extrabold text-[#061226]">{typeOption.label}</span>
                           <Badge variant={isCustom ? "amber" : "sky"}>{isCustom ? "自定义" : "内置"}</Badge>
-                          {isDisabled && <Badge variant="destructive">已隐藏</Badge>}
                           {used && <span className="text-xs font-extrabold text-[#15803d]">使用中</span>}
                         </>
                       )}
@@ -1311,23 +1338,16 @@ export function StudentsView({
                         <Button type="button" size="sm" variant="outline" onClick={() => startEditCustomCourseType({ id: type, label: typeOption.label })}>
                           <Pencil size={14} /> 改名
                         </Button>
-                        {isDisabled ? (
-                          <Button type="button" size="sm" variant="outline" onClick={() => onRestoreCourseType(type)}>
-                            恢复班型
-                          </Button>
-                        ) : null}
-                        {(!isDisabled || isCustom) && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            disabled={isCustom && used}
-                            onClick={() => requestDeleteCourseType({ id: type, label: typeOption.label })}
-                            title={isCustom && used ? "这个自定义班型已有课程或历史课时使用，不能直接删除" : isCustom ? "直接删除自定义班型" : "内置班型会从新增课程和筛选下拉中隐藏"}
-                          >
-                            <Trash2 size={14} /> 删除
-                          </Button>
-                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          disabled={isCustom && used}
+                          onClick={() => requestDeleteCourseType({ id: type, label: typeOption.label })}
+                          title={isCustom && used ? "这个自定义班型已有课程或历史课时使用，不能直接删除" : isCustom ? "直接删除自定义班型" : "内置班型会从主列表和新增课程中移除"}
+                        >
+                          <Trash2 size={14} /> 删除
+                        </Button>
                         <Button type="button" size="sm" variant="outline" onClick={() => resetCourseTypeFeeRule(type)}>
                           恢复默认计费
                         </Button>
@@ -1391,6 +1411,25 @@ export function StudentsView({
                 </div>
               );
             })}
+            {deletedBuiltInCourseTypes.length > 0 && (
+              <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-white p-3">
+                <div className="mb-2 text-xs font-extrabold text-[#64748b]">已删除内置班型</div>
+                <div className="flex flex-wrap gap-2">
+                  {deletedBuiltInCourseTypes.map((typeOption) => (
+                    <Button
+                      key={typeOption.value}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 bg-[#f8fbff] text-xs"
+                      onClick={() => onRestoreCourseType(typeOption.value)}
+                    >
+                      恢复 {typeOption.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
             {managedCourseTypes.length === 0 && (
               <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
                 暂无可配置班型，可以先添加自定义班型。
@@ -2282,6 +2321,10 @@ function studentCourseSearchText(vault: TeacherVault, student: Student): string 
       campusName(vault, course.defaultCampusId)
     ])
   ].join(" ").toLowerCase();
+}
+
+function normalizeCourseTypeLabel(value: string): string {
+  return value.trim().replace(/\s+/g, "").toLowerCase();
 }
 
 function matchesKeywordSearch(searchable: string, normalizedQuery: string): boolean {
