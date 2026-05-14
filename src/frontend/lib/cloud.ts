@@ -9,6 +9,20 @@ export type AuthLookupResponse = {
   passwordSalt: string;
 };
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  body?: Record<string, unknown>;
+
+  constructor(message: string, status: number, code?: string, body?: Record<string, unknown>) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.body = body;
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit & { token?: string } = {}
@@ -28,15 +42,18 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     let message = `请求失败 (${response.status})`;
+    let code: string | undefined;
+    let body: Record<string, unknown> | undefined;
     try {
-      const body = (await response.json()) as { error?: string };
-      if (body.error) {
+      body = (await response.json()) as Record<string, unknown>;
+      if (typeof body.error === "string") {
+        code = body.error;
         message = translateApiError(body.error);
       }
     } catch {
       // Keep the status-based message when the response is not JSON.
     }
-    throw new Error(message);
+    throw new ApiError(message, response.status, code, body);
   }
 
   return response.json() as Promise<T>;
@@ -50,6 +67,7 @@ function translateApiError(error: string): string {
     "Registration is closed": "当前暂未开放注册，请联系管理员。",
     "Account already exists": "账号已存在。",
     "Invalid username": "用户名请使用英文字母、数字、下划线、短横线或点，3-32 位，首尾必须是英文字母或数字。",
+    "Vault version conflict": "云端已有其他设备更新，请先同步云端数据后再保存。",
     "Password confirmation required": "请先输入当前管理员密码。",
     "Password confirmation failed": "管理员密码确认失败。",
     "Target password confirmation failed": "被删除账号密码验证失败。",

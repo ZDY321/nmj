@@ -24,6 +24,10 @@ type VaultDocumentResponse = {
   updated_at: string;
 };
 
+type VaultMetaResponse = {
+  updatedAt: string;
+};
+
 export type LocalAccount = {
   id?: string;
   username: string;
@@ -42,6 +46,12 @@ export type AuthenticatedVault = {
   account: LocalAccount;
   vault: TeacherVault;
   deletion: UserDeletionState | null;
+  cloudVersion: string;
+};
+
+export type CloudVaultResult = {
+  vault: TeacherVault;
+  updatedAt: string;
 };
 
 function storageKey(username: string): string {
@@ -179,15 +189,16 @@ export async function registerAccount(
   });
 
   const account = accountFromSession(session);
+  const cloudVault = await loadCloudVaultWithVersion(session.token, password, normalizedUsername);
   upsertAccount(account);
   saveSession({ token: session.token, account });
-  localStorage.setItem(storageKey(normalizedUsername), JSON.stringify(encryptedVault));
 
   return {
     token: session.token,
     account,
-    vault,
-    deletion: session.user.deletion
+    vault: cloudVault.vault,
+    deletion: session.user.deletion,
+    cloudVersion: cloudVault.updatedAt
   };
 }
 
@@ -210,37 +221,56 @@ export async function loginAccount(username: string, password: string): Promise<
   });
 
   const account = accountFromSession(session);
-  const vault = await loadCloudVault(session.token, password, normalizedUsername);
+  const cloudVault = await loadCloudVaultWithVersion(session.token, password, normalizedUsername);
   upsertAccount(account);
   saveSession({ token: session.token, account });
 
   return {
     token: session.token,
     account,
-    vault,
-    deletion: session.user.deletion
+    vault: cloudVault.vault,
+    deletion: session.user.deletion,
+    cloudVersion: cloudVault.updatedAt
   };
 }
 
-export async function loadCloudVault(
+export async function loadCloudVaultWithVersion(
   token: string,
   password: string,
-  username: string
-): Promise<TeacherVault> {
+  username: string,
+  options: { allowLocalFallback?: boolean } = {}
+): Promise<CloudVaultResult> {
   try {
     const document = await apiRequest<VaultDocumentResponse>("/api/me/vault", { token });
     const box = JSON.parse(document.encrypted_payload) as EncryptedBox;
     const vault = await decryptJson<TeacherVault>(box, password);
     localStorage.setItem(storageKey(username), JSON.stringify(box));
-    return withCloudNotice(vault);
+    return {
+      vault: await withCloudNotice(vault),
+      updatedAt: document.updated_at
+    };
   } catch (error) {
+    if (options.allowLocalFallback === false) {
+      throw error;
+    }
     const stored = localStorage.getItem(storageKey(username));
     if (!stored) {
       throw error;
     }
     const vault = await decryptJson<TeacherVault>(JSON.parse(stored) as EncryptedBox, password);
-    return withCloudNotice(vault);
+    return {
+      vault: await withCloudNotice(vault),
+      updatedAt: ""
+    };
   }
+}
+
+export async function loadCloudVault(token: string, password: string, username: string): Promise<TeacherVault> {
+  return (await loadCloudVaultWithVersion(token, password, username)).vault;
+}
+
+export async function getCloudVaultMeta(token: string): Promise<VaultMetaResponse> {
+  return apiRequest<VaultMetaResponse>("/api/me/vault/meta", { token });
 }
 
 export async function loadVault(username: string, password: string): Promise<TeacherVault> {
@@ -256,23 +286,29 @@ export async function saveVault(
   username: string,
   password: string,
   vault: TeacherVault,
-  token?: string
-): Promise<void> {
+  tokenOrOptions?: string | { token?: string; expectedUpdatedAt?: string; force?: boolean }
+): Promise<{ updatedAt?: string }> {
+  const options = typeof tokenOrOptions === "string" ? { token: tokenOrOptions } : tokenOrOptions ?? {};
   const existing = localStorage.getItem(storageKey(username));
   const existingBox = existing ? (JSON.parse(existing) as EncryptedBox) : undefined;
   const encrypted = await encryptJson(vault, password, existingBox?.salt);
   encrypted.createdAt = existingBox?.createdAt ?? encrypted.createdAt;
   localStorage.setItem(storageKey(username), JSON.stringify(encrypted));
 
-  if (token) {
-    await apiRequest<{ ok: boolean; updatedAt: string }>("/api/me/vault", {
+  if (options.token) {
+    const result = await apiRequest<{ ok: boolean; updatedAt: string }>("/api/me/vault", {
       method: "PUT",
-      token,
+      token: options.token,
       body: JSON.stringify({
-        encryptedPayload: JSON.stringify(encrypted)
+        encryptedPayload: JSON.stringify(encrypted),
+        expectedUpdatedAt: options.expectedUpdatedAt,
+        force: options.force
       })
     });
+    return { updatedAt: result.updatedAt };
   }
+
+  return {};
 }
 
 export async function logoutCloud(token: string): Promise<void> {

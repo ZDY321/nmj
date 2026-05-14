@@ -32,6 +32,8 @@ type LoginRequest = {
 
 type EncryptedDocumentRequest = {
   encryptedPayload: string;
+  expectedUpdatedAt?: string | null;
+  force?: boolean;
 };
 
 type PublicSettings = {
@@ -655,6 +657,23 @@ async function getMyVault(request: Request, env: Env): Promise<Response> {
   return row ? json(row) : notFound();
 }
 
+async function getMyVaultMeta(request: Request, env: Env): Promise<Response> {
+  const context = await requireAuth(request, env);
+  if (context instanceof Response) {
+    return context;
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT updated_at
+     FROM encrypted_documents
+     WHERE user_id = ? AND doc_type = ? AND doc_key = ?`
+  )
+    .bind(context.user.id, vaultDocType, vaultDocKey)
+    .first<{ updated_at: string }>();
+
+  return row ? json({ updatedAt: row.updated_at }) : notFound();
+}
+
 async function putMyVault(request: Request, env: Env): Promise<Response> {
   const context = await requireAuth(request, env);
   if (context instanceof Response) {
@@ -664,6 +683,19 @@ async function putMyVault(request: Request, env: Env): Promise<Response> {
   const body = await readJson<EncryptedDocumentRequest>(request);
   if (!body.encryptedPayload) {
     return json({ error: "Missing encrypted payload" }, 400);
+  }
+
+  if (!body.force && body.expectedUpdatedAt) {
+    const current = await env.DB.prepare(
+      `SELECT updated_at
+       FROM encrypted_documents
+       WHERE user_id = ? AND doc_type = ? AND doc_key = ?`
+    )
+      .bind(context.user.id, vaultDocType, vaultDocKey)
+      .first<{ updated_at: string }>();
+    if (current && current.updated_at !== body.expectedUpdatedAt) {
+      return json({ error: "Vault version conflict", currentUpdatedAt: current.updated_at }, 409);
+    }
   }
 
   const updatedAt = await upsertEncryptedPayload(env, context.user.id, vaultDocType, vaultDocKey, body.encryptedPayload);
@@ -1158,6 +1190,10 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
 
   if (request.method === "GET" && pathname === "/api/me/vault") {
     return getMyVault(request, env);
+  }
+
+  if (request.method === "GET" && pathname === "/api/me/vault/meta") {
+    return getMyVaultMeta(request, env);
   }
 
   if (request.method === "PUT" && pathname === "/api/me/vault") {

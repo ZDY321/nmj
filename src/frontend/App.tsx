@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  RefreshCw,
   Send
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +28,7 @@ import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
 import { currentAppHour, defaultFeeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
-import { cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
+import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   cloneVault,
   type ViewKey,
@@ -37,7 +38,7 @@ import {
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
-import { clearVault, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
+import { clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import type {
   Campus,
   CourseGroup,
@@ -67,6 +68,7 @@ type UnlockedSession = {
   deletion: UserDeletionState | null;
   vault: TeacherVault;
   selectedDate: string;
+  cloudVersion?: string;
 };
 
 type ScheduleCalendarFocus = {
@@ -98,9 +100,15 @@ export function App() {
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [onboardingVisitedSteps, setOnboardingVisitedSteps] = useState<OnboardingStepKey[]>([]);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [cloudVersion, setCloudVersion] = useState("");
+  const [remoteCloudVersion, setRemoteCloudVersion] = useState("");
+  const [syncState, setSyncState] = useState<"idle" | "checking" | "syncing" | "outdated" | "conflict" | "error">("idle");
+  const [syncMessage, setSyncMessage] = useState("");
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
+  const cloudVersionRef = useRef("");
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   function rememberUnlockedSession(next?: Partial<UnlockedSession>) {
     const session: UnlockedSession = {
@@ -111,6 +119,7 @@ export function App() {
       deletion,
       vault: vault!,
       selectedDate,
+      cloudVersion,
       ...next
     };
     if (!session.username || !session.password || !session.token || !session.vault) return;
@@ -125,13 +134,19 @@ export function App() {
     setRole(result.account.role);
     setDeletion(result.deletion);
     setVault(result.vault);
+    cloudVersionRef.current = result.cloudVersion;
+    setCloudVersion(result.cloudVersion);
+    setRemoteCloudVersion("");
+    setSyncState("idle");
+    setSyncMessage("");
     rememberUnlockedSession({
       username: result.account.username,
       password: nextPassword,
       token: result.token,
       role: result.account.role,
       deletion: result.deletion,
-      vault: result.vault
+      vault: result.vault,
+      cloudVersion: result.cloudVersion
     });
     if (view === "admin" && result.account.role !== "admin") {
       setView("today");
@@ -146,30 +161,65 @@ export function App() {
     setRole(result.account.role);
     setDeletion(result.deletion);
     setVault(result.vault);
+    cloudVersionRef.current = result.cloudVersion;
+    setCloudVersion(result.cloudVersion);
+    setRemoteCloudVersion("");
+    setSyncState("idle");
+    setSyncMessage("");
     rememberUnlockedSession({
       username: result.account.username,
       password: nextPassword,
       token: result.token,
       role: result.account.role,
       deletion: result.deletion,
-      vault: result.vault
+      vault: result.vault,
+      cloudVersion: result.cloudVersion
     });
     return result.account.role;
   }
 
-  async function persist(nextVault: TeacherVault) {
+  async function persist(nextVault: TeacherVault, options: { force?: boolean } = {}) {
     if (!username || !password) return;
     setVault(nextVault);
-    setSaveState("saving");
-    try {
-      await saveVault(username, password, nextVault, token);
-      rememberUnlockedSession({ vault: nextVault });
-      setSaveState("saved");
-      window.setTimeout(() => setSaveState("idle"), 900);
-    } catch {
+    if (token && !options.force && !cloudVersionRef.current) {
       rememberUnlockedSession({ vault: nextVault });
       setSaveState("error");
+      setSyncState("error");
+      setSyncMessage("云端版本尚未确认。当前修改已保存在本机页面，请先同步云端数据后再继续保存，避免覆盖其他设备的数据。");
+      return;
     }
+    setSaveState("saving");
+    const saveJob = saveChainRef.current.then(async () => {
+      try {
+        const result = await saveVault(username, password, nextVault, {
+          token,
+          expectedUpdatedAt: options.force ? undefined : cloudVersionRef.current || undefined,
+          force: options.force
+        });
+        const nextCloudVersion = result.updatedAt ?? cloudVersionRef.current;
+        if (nextCloudVersion) {
+          cloudVersionRef.current = nextCloudVersion;
+          setCloudVersion(nextCloudVersion);
+        }
+        setRemoteCloudVersion("");
+        setSyncState("idle");
+        setSyncMessage("");
+        rememberUnlockedSession({ vault: nextVault, cloudVersion: nextCloudVersion });
+        setSaveState("saved");
+        window.setTimeout(() => setSaveState("idle"), 900);
+      } catch (error) {
+        rememberUnlockedSession({ vault: nextVault });
+        setSaveState("error");
+        if (error instanceof ApiError && error.status === 409) {
+          const currentUpdatedAt = typeof error.body?.currentUpdatedAt === "string" ? error.body.currentUpdatedAt : "";
+          setRemoteCloudVersion(currentUpdatedAt);
+          setSyncState("conflict");
+          setSyncMessage("云端已有其他设备更新。当前页面的修改只保存在本机，继续保存前请先同步云端，或明确覆盖云端。");
+        }
+      }
+    });
+    saveChainRef.current = saveJob.catch(() => undefined);
+    await saveJob;
   }
 
   function updateVault(updater: (draft: TeacherVault) => void) {
@@ -177,6 +227,65 @@ export function App() {
     const next = cloneVault(vault);
     updater(next);
     void persist(next);
+  }
+
+  async function syncLatestCloudVault() {
+    if (!username || !password || !token) return;
+    if (saveState === "saving") {
+      setSyncState("error");
+      setSyncMessage("正在保存当前修改，请保存完成后再同步云端数据。");
+      return;
+    }
+    setSyncState("syncing");
+    setSyncMessage("正在同步云端最新数据...");
+    try {
+      const cloud = await loadCloudVaultWithVersion(token, password, username, { allowLocalFallback: false });
+      const nextCloudVersion = cloud.updatedAt || cloudVersion;
+      setVault(cloud.vault);
+      cloudVersionRef.current = nextCloudVersion;
+      setCloudVersion(nextCloudVersion);
+      setRemoteCloudVersion("");
+      setSyncState("idle");
+      setSyncMessage("");
+      setSaveState("idle");
+      rememberUnlockedSession({ vault: cloud.vault, cloudVersion: nextCloudVersion });
+    } catch (error) {
+      setSyncState("error");
+      setSyncMessage(error instanceof Error ? error.message : "云端同步失败，请稍后重试。");
+    }
+  }
+
+  async function checkCloudVersion(silent = true) {
+    if (!token || !cloudVersion || document.hidden) return;
+    if (saveState === "saving") return;
+    if (!silent) {
+      setSyncState("checking");
+      setSyncMessage("正在检查云端版本...");
+    }
+    try {
+      const meta = await getCloudVaultMeta(token);
+      if (meta.updatedAt && meta.updatedAt !== cloudVersion) {
+        setRemoteCloudVersion(meta.updatedAt);
+        setSyncState("outdated");
+        setSyncMessage("云端已有其他设备保存的新版本，建议先同步后继续编辑。");
+        return;
+      }
+      setRemoteCloudVersion("");
+      if (syncState === "checking" || syncState === "outdated") {
+        setSyncState("idle");
+        setSyncMessage("");
+      }
+    } catch (error) {
+      if (!silent) {
+        setSyncState("error");
+        setSyncMessage(error instanceof Error ? error.message : "云端版本检查失败。");
+      }
+    }
+  }
+
+  function forceOverwriteCloud() {
+    if (!vault) return;
+    void persist(vault, { force: true });
   }
 
   function updateWeekStart(weekStart: WeekStart) {
@@ -471,17 +580,39 @@ export function App() {
           clearUnlockedSession();
         } else {
           const today = todayIso();
+          const cachedCloudVersion = session.cloudVersion ?? "";
           setUsername(session.username);
           setPassword(session.password);
           setToken(session.token);
           setRole(session.role);
           setDeletion(session.deletion);
           setVault(session.vault);
+          setCloudVersion(cachedCloudVersion);
           setSelectedDate(today);
           writeUnlockedSession({
             ...session,
-            selectedDate: today
+            selectedDate: today,
+            cloudVersion: cachedCloudVersion
           });
+          void loadCloudVaultWithVersion(session.token, session.password, session.username, { allowLocalFallback: false })
+            .then((cloud) => {
+              const nextCloudVersion = cloud.updatedAt || cachedCloudVersion;
+              setVault(cloud.vault);
+              setCloudVersion(nextCloudVersion);
+              setRemoteCloudVersion("");
+              setSyncState("idle");
+              setSyncMessage("");
+              writeUnlockedSession({
+                ...session,
+                vault: cloud.vault,
+                selectedDate: today,
+                cloudVersion: nextCloudVersion
+              });
+            })
+            .catch(() => {
+              setSyncState("error");
+              setSyncMessage("云端数据读取失败，当前显示本机缓存。");
+            });
         }
       } catch {
         clearUnlockedSession();
@@ -494,6 +625,10 @@ export function App() {
     const timer = window.setInterval(() => setGreetingTime(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    cloudVersionRef.current = cloudVersion;
+  }, [cloudVersion]);
 
   useEffect(() => {
     if (!vault || vault.scheduleRules.length === 0 || !username || !password) return;
@@ -528,6 +663,33 @@ export function App() {
     if (!vault) return;
     rememberUnlockedSession({ selectedDate });
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (!token || !cloudVersion) return;
+    const checkWhenVisible = () => {
+      if (!document.hidden) {
+        void checkCloudVersion(true);
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void checkCloudVersion(true);
+      }
+    };
+    checkWhenVisible();
+    window.addEventListener("focus", checkWhenVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const timer = window.setInterval(() => {
+      if (!document.hidden && syncState !== "outdated" && syncState !== "conflict") {
+        void checkCloudVersion(true);
+      }
+    }, 90_000);
+    return () => {
+      window.removeEventListener("focus", checkWhenVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(timer);
+    };
+  }, [token, cloudVersion, syncState, saveState]);
 
   function acknowledgeNotice() {
     if (!vault || !username) return;
@@ -601,6 +763,9 @@ export function App() {
     saveState === "saving" ? "同步中" : saveState === "saved" ? "已同步" : saveState === "error" ? "同步失败" : "云端";
   const saveFullLabel =
     saveState === "saving" ? "同步中..." : saveState === "saved" ? "已加密同步" : saveState === "error" ? "云端同步失败" : "云端加密";
+  const syncButtonLabel =
+    syncState === "checking" ? "检查中" : syncState === "syncing" ? "同步中" : remoteCloudVersion ? "有更新" : "同步";
+  const showSyncAlert = Boolean(syncMessage) && (syncState === "outdated" || syncState === "conflict" || syncState === "error");
   const greeting = greetingFor(greetingTime);
   const guideNeedsAttention = !isOnboardingSetupComplete(vault, onboardingVisitedSteps);
 
@@ -740,8 +905,8 @@ export function App() {
             <div
               className={`grid ${
                 role === "admin"
-                  ? "grid-cols-[56px_56px_minmax(0,1fr)]"
-                  : "grid-cols-[56px_56px_56px_minmax(0,1fr)]"
+                  ? "grid-cols-[56px_56px_56px_minmax(0,1fr)]"
+                  : "grid-cols-[56px_56px_56px_56px_minmax(0,1fr)]"
               } gap-2 sm:flex sm:flex-wrap sm:gap-3 xl:justify-end`}
             >
               <button
@@ -795,6 +960,25 @@ export function App() {
                 </button>
               )}
 
+              <button
+                type="button"
+                onClick={() => void syncLatestCloudVault()}
+                disabled={syncState === "syncing" || saveState === "saving"}
+                className={`relative flex h-14 min-w-[56px] shrink-0 items-center justify-center rounded-[16px] border transition-colors sm:h-[58px] sm:w-auto sm:gap-2 sm:px-4 ${
+                  remoteCloudVersion || syncState === "conflict"
+                    ? "border-[#ffb15c] bg-[#fff7ed] text-[#9a3412] shadow-[0_12px_28px_rgba(255,134,23,0.12)]"
+                    : "border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] hover:bg-[#f8fbff]"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+                aria-label="同步云端数据"
+                title="同步云端最新数据"
+              >
+                <RefreshCw size={20} className={syncState === "syncing" || syncState === "checking" ? "animate-spin" : undefined} />
+                <span className="hidden text-sm font-extrabold sm:inline">{syncButtonLabel}</span>
+                {(remoteCloudVersion || syncState === "conflict") && (
+                  <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-[#ef4444] ring-2 ring-white" />
+                )}
+              </button>
+
               <label className="flex h-14 min-w-0 items-center gap-2 rounded-[16px] border border-[#dbe4ef] bg-white px-3 shadow-[0_12px_28px_rgba(15,35,66,0.08)] sm:h-[58px] sm:gap-3 sm:px-4">
                 <Calendar size={20} className="shrink-0 text-[#25324a]" />
                 <span className="hidden truncate text-sm font-bold text-[#25324a] sm:block">{selectedDateLabel}</span>
@@ -816,6 +1000,10 @@ export function App() {
                   setPassword("");
                   setToken("");
                   setDeletion(null);
+                  setCloudVersion("");
+                  setRemoteCloudVersion("");
+                  setSyncState("idle");
+                  setSyncMessage("");
                   clearUnlockedSession();
                 }}>
                   <LogOut size={18} /> 退出
@@ -830,6 +1018,44 @@ export function App() {
               </Badge>
             </div>
           </motion.header>
+
+        {showSyncAlert && (
+          <div className={`mb-6 rounded-[16px] border p-4 ${
+            syncState === "conflict" || syncState === "error"
+              ? "border-[#fecaca] bg-[#fff1f2] text-[#991b1b]"
+              : "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
+          }`}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="text-sm font-extrabold">
+                  {syncState === "conflict" ? "保存被阻止，云端已有新版本" : syncState === "error" ? "云端同步异常" : "云端已有新版本"}
+                </div>
+                <div className="mt-1 text-sm font-semibold leading-6">{syncMessage}</div>
+              </div>
+              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-current bg-white/80"
+                  disabled={saveState === "saving"}
+                  onClick={() => void syncLatestCloudVault()}
+                >
+                  <RefreshCw size={15} /> 同步云端最新数据
+                </Button>
+                {syncState === "conflict" && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={saveState === "saving"}
+                    onClick={forceOverwriteCloud}
+                  >
+                    确认覆盖云端
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {deletion && (
           <div className="mb-6 flex flex-col gap-4 rounded-[16px] border border-[#fecaca] bg-[#fff1f2] p-4 text-[#991b1b] sm:flex-row sm:items-center sm:justify-between">
@@ -1083,6 +1309,10 @@ export function App() {
                   setPassword("");
                   setToken("");
                   setDeletion(null);
+                  setCloudVersion("");
+                  setRemoteCloudVersion("");
+                  setSyncState("idle");
+                  setSyncMessage("");
                   clearUnlockedSession();
                 }}
               />
