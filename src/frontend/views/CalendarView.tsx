@@ -8,6 +8,7 @@ import type { Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import {
   calendarDates,
   courseName,
+  courseTypeLabel,
   campusName,
   formatMoney,
   lessonStatusLabels,
@@ -144,7 +145,7 @@ export function CalendarView({
                     </div>
                     {dayLessons.slice(0, 2).map((l) => (
                       <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
-                        {l.startTime} {courseName(vault, l.courseGroupId)}
+                        {l.startTime} {courseTypeLabel(vault, l.type)} · {courseName(vault, l.courseGroupId)}
                       </span>
                     ))}
                     {dayLessons.length > 2 && (
@@ -202,6 +203,9 @@ export function CalendarView({
                     </strong>
                       <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
                         {lessonStatusLabels[lesson.status]}
+                      </Badge>
+                      <Badge variant="secondary" className="shrink-0 text-[10px]">
+                        {courseTypeLabel(vault, lesson.type)}
                       </Badge>
                     </div>
                     <span className="text-xs text-(--color-muted-foreground)">

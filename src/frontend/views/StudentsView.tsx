@@ -65,7 +65,7 @@ export function StudentsView({
   const managedCourseTypes: Array<{ value: CourseType; label: string }> = [
     ...builtInCourseTypeOptions.map((item) => ({ value: item.value as CourseType, label: courseTypeLabel(vault, item.value) })),
     ...customCourseTypes.map((item) => ({ value: item.id as CourseType, label: item.label }))
-  ];
+  ].sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN") || a.value.localeCompare(b.value));
   const preferredCampusId = campusOptions[0]?.id ?? "";
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
@@ -504,9 +504,12 @@ export function StudentsView({
   }
 
   function requestDeleteCourseType(courseTypeOption: { id: CourseType; label: string }) {
+    const isCustom = courseTypeOption.id.startsWith("custom_");
     confirm({
       title: `删除班型「${courseTypeOption.label}」？`,
-      description: "删除后会从新增课程和筛选下拉中隐藏，已有课程和历史课时仍会保留显示。",
+      description: isCustom
+        ? "自定义班型会从班型列表中直接删除；已被课程或历史课时使用的自定义班型不能直接删除。"
+        : "内置班型会从新增课程和筛选下拉中隐藏，已有课程和历史课时仍会保留显示。",
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => {
@@ -516,7 +519,11 @@ export function StudentsView({
         if (studentCourseTypeFilter === courseTypeOption.id) setStudentCourseTypeFilter("all");
         if (transferCourseType === courseTypeOption.id) setTransferCourseType(fallbackType);
         if (editingCustomCourseTypeId === courseTypeOption.id) cancelCustomCourseTypeEdit();
-        onDeleteCourseType(courseTypeOption.id);
+        if (isCustom) {
+          onDeleteCustomCourseType(courseTypeOption.id as CustomCourseType);
+        } else {
+          onDeleteCourseType(courseTypeOption.id);
+        }
       }
     });
   }
@@ -1232,7 +1239,7 @@ export function StudentsView({
                   <GraduationCap size={14} /> 班型管理
                 </div>
                 <CardTitle className="text-lg">班型与默认计费</CardTitle>
-                <CardDescription>所有班型都可改名、隐藏和设置默认计费；一对二、班课和自定义班型使用人数计费模板。</CardDescription>
+                <CardDescription>班型可改名、按名称排序并设置默认计费；内置班型删除后会隐藏，自定义班型未使用时会直接删除。</CardDescription>
                 <div className="mt-1 text-sm font-semibold leading-5 text-[#64748b]">
                   恢复默认计费会把该班型的默认价格恢复为 0，只影响以后新建的课程，已添加课程不会自动修改。
                 </div>
@@ -1285,7 +1292,7 @@ export function StudentsView({
                           <span className="truncate text-base font-extrabold text-[#061226]">{typeOption.label}</span>
                           <Badge variant={isCustom ? "amber" : "sky"}>{isCustom ? "自定义" : "内置"}</Badge>
                           {isDisabled && <Badge variant="destructive">已隐藏</Badge>}
-                          {used && <Badge variant="secondary">使用中</Badge>}
+                          {used && <span className="text-xs font-extrabold text-[#15803d]">使用中</span>}
                         </>
                       )}
                     </div>
@@ -1298,13 +1305,15 @@ export function StudentsView({
                           <Button type="button" size="sm" variant="outline" onClick={() => onRestoreCourseType(type)}>
                             恢复班型
                           </Button>
-                        ) : (
+                        ) : null}
+                        {(!isDisabled || isCustom) && (
                           <Button
                             type="button"
                             size="sm"
                             variant="destructive"
+                            disabled={isCustom && used}
                             onClick={() => requestDeleteCourseType({ id: type, label: typeOption.label })}
-                            title="从新增课程和筛选下拉中隐藏"
+                            title={isCustom && used ? "这个自定义班型已有课程或历史课时使用，不能直接删除" : isCustom ? "直接删除自定义班型" : "内置班型会从新增课程和筛选下拉中隐藏"}
                           >
                             <Trash2 size={14} /> 删除
                           </Button>

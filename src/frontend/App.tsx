@@ -524,12 +524,16 @@ export function App() {
         draft.courseGroups.some((course) => course.type === courseTypeId) ||
         draft.lessons.some((lesson) => lesson.type === courseTypeId);
       if (inUse) return;
+      const courseTypeFeeRules = { ...(draft.preferences?.courseTypeFeeRules ?? {}) };
+      const courseTypeLabels = { ...(draft.preferences?.courseTypeLabels ?? {}) };
+      delete courseTypeFeeRules[courseTypeId];
+      delete courseTypeLabels[courseTypeId];
       draft.preferences = {
         ...(draft.preferences ?? { weekStartsOn: 0 }),
         customCourseTypes: (draft.preferences?.customCourseTypes ?? []).filter((item) => item.id !== courseTypeId),
-        courseTypeFeeRules: Object.fromEntries(
-          Object.entries(draft.preferences?.courseTypeFeeRules ?? {}).filter(([type]) => type !== courseTypeId)
-        )
+        disabledCourseTypes: (draft.preferences?.disabledCourseTypes ?? []).filter((type) => type !== courseTypeId),
+        courseTypeLabels,
+        courseTypeFeeRules
       };
     });
   }

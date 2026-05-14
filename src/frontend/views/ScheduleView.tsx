@@ -36,6 +36,7 @@ import {
   calendarDates,
   campusName,
   courseName,
+  courseTypeLabel,
   courseTypeOptionsForVault,
   createLessonFromCourse,
   findStudent,
@@ -115,6 +116,7 @@ export function ScheduleView({
   const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
   const [studentStatsNameFilter, setStudentStatsNameFilter] = useState("");
   const [studentStatsCourseFilter, setStudentStatsCourseFilter] = useState("all");
+  const [studentStatsCourseTypeFilter, setStudentStatsCourseTypeFilter] = useState<CourseTypeFilter>("all");
   const [studentStatsSubjectFilter, setStudentStatsSubjectFilter] = useState("all");
   const [studentStatsCampusFilter, setStudentStatsCampusFilter] = useState("all");
   const [studentStatsStatusFilter, setStudentStatsStatusFilter] = useState<"all" | Lesson["status"]>("all");
@@ -212,6 +214,7 @@ export function ScheduleView({
           (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(normalizedStudentStatsNameFilter)
         );
       const matchesCourse = studentStatsCourseFilter === "all" || lesson.courseGroupId === studentStatsCourseFilter;
+      const matchesType = studentStatsCourseTypeFilter === "all" || lesson.type === studentStatsCourseTypeFilter;
       const matchesSubject = studentStatsSubjectFilter === "all" || course?.subject === studentStatsSubjectFilter;
       const matchesCampus = studentStatsCampusFilter === "all" || campusId === studentStatsCampusFilter;
       const matchesStatus = studentStatsStatusFilter === "all" || lesson.status === studentStatsStatusFilter;
@@ -223,7 +226,7 @@ export function ScheduleView({
         (!studentStatsStartTime || timeToMinutes(lesson.startTime) >= timeToMinutes(studentStatsStartTime)) &&
         (!studentStatsEndTime || timeToMinutes(lesson.endTime) <= timeToMinutes(studentStatsEndTime)) &&
         (!studentStatsStartTime || !studentStatsEndTime || timeToMinutes(studentStatsStartTime) <= timeToMinutes(studentStatsEndTime));
-      return matchesStudent && matchesCourse && matchesSubject && matchesCampus && matchesStatus && matchesDate && matchesTime;
+      return matchesStudent && matchesCourse && matchesType && matchesSubject && matchesCampus && matchesStatus && matchesDate && matchesTime;
     })
     .sort(sortLessons);
   const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
@@ -949,7 +952,7 @@ export function ScheduleView({
                     </div>
                     {dayLessons.slice(0, 2).map((lesson) => (
                       <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
-                        {lesson.startTime} {courseName(vault, lesson.courseGroupId)}
+                        {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)}
                       </span>
                     ))}
                     {dayLessons.length > 2 && (
@@ -993,6 +996,7 @@ export function ScheduleView({
                       <button type="button" onClick={() => setSelectedId(lesson.id)} className="min-w-0 flex-1 text-left">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
+                          <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
                           <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
                         </div>
                         <div className="mt-1 text-xs font-semibold text-[#64748b]">
@@ -1089,7 +1093,13 @@ export function ScheduleView({
                 <Select value={studentStatsCourseFilter} onChange={(event) => setStudentStatsCourseFilter(event.target.value)}>
                   <option value="all">全部课程</option>
                   {vault.courseGroups.map((course) => (
-                    <option key={course.id} value={course.id}>{course.name}</option>
+                    <option key={course.id} value={course.id}>{course.name} · {courseTypeLabel(vault, course.type)}</option>
+                  ))}
+                </Select>
+                <Select value={studentStatsCourseTypeFilter} onChange={(event) => setStudentStatsCourseTypeFilter(event.target.value as CourseTypeFilter)}>
+                  <option value="all">全部班型</option>
+                  {courseTypeOptionsForVault(vault).map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </Select>
                 <Select value={studentStatsSubjectFilter} onChange={(event) => setStudentStatsSubjectFilter(event.target.value)}>
@@ -1241,6 +1251,9 @@ export function ScheduleView({
                             <div className="truncate font-extrabold text-[#061226]">{detail.courseName}</div>
                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
                               <span>{detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName}</span>
+                              <Badge variant="secondary" className="text-[10px]">
+                                {detail.courseTypeLabel}
+                              </Badge>
                               <Badge variant={lessonStatusVariant(detail.status)} className="text-[10px]">
                                 {lessonStatusLabels[detail.status]}
                               </Badge>
@@ -1382,7 +1395,7 @@ export function ScheduleView({
                     <div className="min-w-0">
                       <span className="block truncate text-sm font-medium">{courseName(vault, lesson.courseGroupId)}</span>
                       <span className="text-xs text-(--color-muted-foreground)">
-                        {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                        {courseTypeLabel(vault, lesson.type)} · {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
                       </span>
                     </div>
                   </div>
@@ -1407,7 +1420,7 @@ export function ScheduleView({
               <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-[#e8eef6] bg-white">
                 <div>
                   <CardTitle>课程详情</CardTitle>
-                  <CardDescription>{selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
+                  <CardDescription>{courseTypeLabel(vault, selected.type)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
                 <Button variant="destructive" size="sm" onClick={() => askDeleteLesson(selected)}>
                   <Trash2 size={15} /> 删除
@@ -1789,6 +1802,7 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
     details: Array<{
       lessonId: string;
       courseName: string;
+      courseTypeLabel: string;
       campusName: string;
       date: string;
       startTime: string;
@@ -1831,12 +1845,15 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
       }
 
       const name = courseName(vault, lesson.courseGroupId);
-      if (!current.courseNames.includes(name)) {
-        current.courseNames.push(name);
+      const typeLabel = courseTypeLabel(vault, lesson.type);
+      const typedName = `${name}（${typeLabel}）`;
+      if (!current.courseNames.includes(typedName)) {
+        current.courseNames.push(typedName);
       }
       current.details.push({
         lessonId: lesson.id,
         courseName: name,
+        courseTypeLabel: typeLabel,
         campusName: campusName(vault, lesson.campusId),
         date: lesson.date,
         startTime: lesson.startTime,

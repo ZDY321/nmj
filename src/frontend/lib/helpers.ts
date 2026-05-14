@@ -107,11 +107,11 @@ export function courseTypeOptionsForVault(vault: TeacherVault): Array<{ value: C
   const dataCourseTypes = [...vault.courseGroups.map((course) => course.type), ...vault.lessons.map((lesson) => lesson.type)];
   const unknownCourseTypes = Array.from(new Set(dataCourseTypes)).filter((type) => !knownValues.has(type));
 
-  return [
+  return sortCourseTypeOptions([
     ...activeBuiltInOptions,
     ...activeCustomOptions,
     ...unknownCourseTypes.map((type) => ({ value: type, label: courseTypeLabel(vault, type) }))
-  ];
+  ]);
 }
 
 export function studentLimitForCourseType(type: CourseType): number | undefined {
@@ -128,6 +128,12 @@ function normalizedCustomCourseTypes(customCourseTypes: CustomCourseTypeOption[]
     seen.add(option.id);
     return true;
   });
+}
+
+function sortCourseTypeOptions<T extends { value: string; label: string }>(options: T[]): T[] {
+  return [...options].sort(
+    (a, b) => a.label.localeCompare(b.label, "zh-Hans-CN") || a.value.localeCompare(b.value)
+  );
 }
 
 export function lessonStatusVariant(status: LessonStatus): "sage" | "amber" | "destructive" | "secondary" | "sky" | "plum" {
