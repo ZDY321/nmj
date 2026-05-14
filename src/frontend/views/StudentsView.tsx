@@ -144,19 +144,21 @@ export function StudentsView({
     const searchable = studentCourseSearchText(vault, student);
     return matchesKeywordSearch(searchable, normalizedNewCourseStudentSearch);
   });
-  const visibleStudents = vault.students.filter((student) => {
-    const matchesGrade = matchesGradeFilter(student.grade, gradeFilter);
-    const matchesCampus = studentCampusFilter === "all" || student.defaultCampusId === studentCampusFilter;
-    const studentCourses = vault.courseGroups.filter((course) => course.studentIds.includes(student.id));
-    const matchesType = studentCourseTypeFilter === "all" || studentCourses.some((course) => course.type === studentCourseTypeFilter);
-    const matchesSubject = studentSubjectFilter === "all" || studentCourses.some((course) => course.subject === studentSubjectFilter);
-    const matchesSearch =
-      !normalizedArchiveSearch ||
-      student.name.toLowerCase().includes(normalizedArchiveSearch) ||
-      (student.school ?? "").toLowerCase().includes(normalizedArchiveSearch) ||
-      (student.note ?? "").toLowerCase().includes(normalizedArchiveSearch);
-    return matchesGrade && matchesCampus && matchesType && matchesSubject && matchesSearch;
-  });
+  const visibleStudents = vault.students
+    .filter((student) => {
+      const matchesGrade = matchesGradeFilter(student.grade, gradeFilter);
+      const matchesCampus = studentCampusFilter === "all" || student.defaultCampusId === studentCampusFilter;
+      const studentCourses = vault.courseGroups.filter((course) => course.studentIds.includes(student.id));
+      const matchesType = studentCourseTypeFilter === "all" || studentCourses.some((course) => course.type === studentCourseTypeFilter);
+      const matchesSubject = studentSubjectFilter === "all" || studentCourses.some((course) => course.subject === studentSubjectFilter);
+      const matchesSearch =
+        !normalizedArchiveSearch ||
+        student.name.toLowerCase().includes(normalizedArchiveSearch) ||
+        (student.school ?? "").toLowerCase().includes(normalizedArchiveSearch) ||
+        (student.note ?? "").toLowerCase().includes(normalizedArchiveSearch);
+      return matchesGrade && matchesCampus && matchesType && matchesSubject && matchesSearch;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN") || a.id.localeCompare(b.id));
   const visibleCourses = vault.courseGroups.filter((course) => {
     const courseStudents = course.studentIds
       .map((studentId) => vault.students.find((student) => student.id === studentId))
