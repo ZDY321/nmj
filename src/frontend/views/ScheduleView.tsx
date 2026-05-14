@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -574,24 +574,32 @@ export function ScheduleView({
   return (
     <div className="space-y-6">
       {dialog}
-      <div className="grid grid-cols-2 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1 sm:grid-cols-4">
+      <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
+        <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
         {[
           { key: "schedule" as SchedulePanel, label: "排课" },
           { key: "calendar" as SchedulePanel, label: "日历查看" },
           { key: "records" as SchedulePanel, label: "课程记录" },
           { key: "studentStats" as SchedulePanel, label: "学生课次" }
-        ].map((item) => (
+        ].map((item, index, items) => (
+          <Fragment key={item.key}>
           <button
-            key={item.key}
             type="button"
             onClick={() => setSchedulePanel(item.key)}
-            className={`rounded-[12px] px-3 py-2 text-sm font-extrabold transition-colors ${
+            className={`min-w-[112px] flex-1 rounded-[12px] px-3 py-2 text-sm font-extrabold transition-colors ${
               schedulePanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
             }`}
           >
             {item.label}
           </button>
+          {index < items.length - 1 && (
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f8fbff] text-[#94a3b8] ring-1 ring-[#e8eef6]">
+              <ChevronRight size={14} />
+            </div>
+          )}
+          </Fragment>
         ))}
+        </div>
       </div>
       {scheduleError && (
         <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-4 py-3 text-sm font-extrabold text-[#b91c1c]">
@@ -1080,7 +1088,7 @@ export function ScheduleView({
               <CardDescription>学生、课程、科目、校区、日期、时间和状态会同时生效，筛选结果为合并条件后的交集。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
                 <label className="relative block">
                   <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                   <Input
@@ -1153,7 +1161,7 @@ export function ScheduleView({
                     className={!isStudentStatsTimeRangeValid(studentStatsStartTime, studentStatsEndTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
                   />
                 </div>
-                <div className="space-y-2 md:col-span-2 xl:col-span-1">
+                <div className="space-y-2">
                   <label className="text-sm font-medium">上课状态</label>
                   <Select value={studentStatsStatusFilter} onChange={(event) => setStudentStatsStatusFilter(event.target.value as "all" | Lesson["status"])}>
                     <option value="all">全部状态</option>
@@ -1161,15 +1169,6 @@ export function ScheduleView({
                       <option key={key} value={key}>{label}</option>
                     ))}
                   </Select>
-                  <div className="flex flex-wrap gap-1.5">
-                    {studentStatsStatusFilter === "all" ? (
-                      <Badge variant="secondary">全部状态</Badge>
-                    ) : (
-                      <Badge variant={lessonStatusVariant(studentStatsStatusFilter)}>
-                        {lessonStatusLabels[studentStatsStatusFilter]}
-                      </Badge>
-                    )}
-                  </div>
                 </div>
               </div>
 

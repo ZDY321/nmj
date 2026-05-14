@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Building2, ChevronDown, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
+import { Building2, CalendarDays, ChevronDown, ChevronRight, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -36,7 +36,8 @@ export function StudentsView({
   onDeleteCourseType,
   onRestoreCourseType,
   onUpdateCourseTypeFeeRule,
-  onTransferStudentCourse
+  onTransferStudentCourse,
+  onOpenSchedule
 }: {
   vault: TeacherVault;
   onAddCampus: (campus: Campus) => void;
@@ -57,6 +58,7 @@ export function StudentsView({
   onRestoreCourseType: (courseType: CourseType) => void;
   onUpdateCourseTypeFeeRule: (courseType: CourseType, feeRule: FeeRule) => void;
   onTransferStudentCourse: (transition: StudentCourseTransition) => void;
+  onOpenSchedule: () => void;
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseTypeOptions = courseTypeOptionsForVault(vault);
@@ -769,24 +771,32 @@ export function StudentsView({
       </div>
 
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2 rounded-[16px] border border-[#dbe4ef] bg-white p-1 md:grid-cols-4">
+        <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
+          <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
           {[
             { key: "profile" as ArchivePanel, label: "老师个人信息" },
             { key: "campuses" as ArchivePanel, label: "校区与班型" },
             { key: "students" as ArchivePanel, label: "学生列表" },
             { key: "courses" as ArchivePanel, label: "课程与班课" }
-          ].map((item) => (
+          ].map((item, index, items) => (
+            <Fragment key={item.key}>
             <button
-              key={item.key}
               type="button"
               onClick={() => setArchivePanel(item.key)}
-              className={`rounded-[12px] px-3 py-2 text-sm font-extrabold transition-colors ${
+              className={`min-w-[126px] flex-1 rounded-[12px] px-3 py-2 text-sm font-extrabold transition-colors ${
                 archivePanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
               }`}
             >
               {item.label}
             </button>
+            {index < items.length - 1 && (
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f8fbff] text-[#94a3b8] ring-1 ring-[#e8eef6]">
+                <ChevronRight size={14} />
+              </div>
+            )}
+            </Fragment>
           ))}
+          </div>
         </div>
         <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
           删除限制：已有学生、课程或历史课时引用的数据不能直接删除，建议将对应的引用数据全部删除或改为暂停状态。
@@ -1652,6 +1662,15 @@ export function StudentsView({
                 <GraduationCap size={18} className="text-[#ff8617]" />
                 <CardTitle className="text-lg">添加课程</CardTitle>
               </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-[#bfdbfe] bg-[#eaf2ff] px-2.5 text-xs font-extrabold text-[#1557c2] hover:bg-[#dbeafe] hover:text-[#0f3f8f]"
+                onClick={onOpenSchedule}
+              >
+                <CalendarDays size={13} /> 去排课
+              </Button>
             </div>
             <CardDescription>新增时直接设置类型、科目、校区、费用和关联学生。</CardDescription>
           </CardHeader>

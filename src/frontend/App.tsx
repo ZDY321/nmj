@@ -1361,6 +1361,7 @@ export function App() {
                 onRestoreCourseType={restoreCourseType}
                 onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
                 onTransferStudentCourse={transferStudentCourse}
+                onOpenSchedule={() => changeView("schedule")}
               />
             )}
             {!onboardingVisible && view === "grades" && (
