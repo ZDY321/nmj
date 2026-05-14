@@ -437,7 +437,7 @@ export function App() {
     });
   }
 
-  function addCustomCourseType(courseType: CustomCourseTypeOption) {
+  function addCustomCourseType(courseType: CustomCourseTypeOption, feeRule?: FeeRule) {
     updateVault((draft) => {
       const current = draft.preferences?.customCourseTypes ?? [];
       const normalizedLabel = courseType.label.trim();
@@ -447,7 +447,7 @@ export function App() {
         customCourseTypes: [...current, { ...courseType, label: normalizedLabel }],
         courseTypeFeeRules: {
           ...(draft.preferences?.courseTypeFeeRules ?? {}),
-          [courseType.id]: draft.preferences?.courseTypeFeeRules?.[courseType.id] ?? defaultFeeRuleForCourseType(courseType.id)
+          [courseType.id]: feeRule ?? draft.preferences?.courseTypeFeeRules?.[courseType.id] ?? defaultFeeRuleForCourseType(courseType.id)
         }
       };
     });

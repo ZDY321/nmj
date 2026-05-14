@@ -50,7 +50,7 @@ export function StudentsView({
   onAddCourse: (course: CourseGroup) => void;
   onUpdateCourse: (course: CourseGroup) => void;
   onDeleteCourse: (courseId: string) => void;
-  onAddCustomCourseType: (courseType: CustomCourseTypeOption) => void;
+  onAddCustomCourseType: (courseType: CustomCourseTypeOption, feeRule?: FeeRule) => void;
   onUpdateCustomCourseType: (courseType: CustomCourseTypeOption) => void;
   onDeleteCustomCourseType: (courseTypeId: CustomCourseType) => void;
   onUpdateCourseTypeLabel: (courseType: CourseType, label: string) => void;
@@ -91,7 +91,9 @@ export function StudentsView({
   const [courseStatusInput, setCourseStatusInput] = useState<CourseGroup["status"]>("active");
   const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
   const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => feeRuleForCourseType(vault, "one_on_one"));
+  const [courseNameAutoFilled, setCourseNameAutoFilled] = useState(false);
   const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
+  const [customCourseTypeTemplate, setCustomCourseTypeTemplate] = useState<"class" | "hourly">("class");
   const [courseTypeMessage, setCourseTypeMessage] = useState("");
   const [editingCustomCourseTypeId, setEditingCustomCourseTypeId] = useState<CourseType | "">("");
   const [editingCustomCourseTypeLabel, setEditingCustomCourseTypeLabel] = useState("");
@@ -134,12 +136,7 @@ export function StudentsView({
   const hasStudentsWithoutGrade = vault.students.some((student) => !student.grade);
   const hasUnsetGradeFilterOption = hasStudentsWithoutGrade || vault.courseGroups.some((course) => course.studentIds.length === 0);
   const subjectFilterOptions = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter((subject): subject is string => Boolean(subject)))).sort();
-  const primaryCourseStudent = courseStudentIds[0]
-    ? vault.students.find((student) => student.id === courseStudentIds[0])
-    : undefined;
-  const suggestedCourseName = primaryCourseStudent && studentLimitForCourseType(courseType)
-    ? `${primaryCourseStudent.name}${courseTypeLabel(vault, courseType)}`
-    : "";
+  const suggestedCourseName = buildSuggestedCourseName(courseType, courseStudentIds);
   const addCourseStudentOptions = vault.students.filter((student) => {
     const searchable = studentCourseSearchText(vault, student);
     return matchesKeywordSearch(searchable, normalizedNewCourseStudentSearch);
@@ -159,30 +156,32 @@ export function StudentsView({
       return matchesGrade && matchesCampus && matchesType && matchesSubject && matchesSearch;
     })
     .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN") || a.id.localeCompare(b.id));
-  const visibleCourses = vault.courseGroups.filter((course) => {
-    const courseStudents = course.studentIds
-      .map((studentId) => vault.students.find((student) => student.id === studentId))
-      .filter(Boolean) as Student[];
-    const matchesType = courseTypeFilter === "all" || course.type === courseTypeFilter;
-    const matchesGrade =
-      courseGradeFilter === "all" ||
-      (courseGradeFilter === "__unset"
-        ? courseStudents.length === 0 || courseStudents.some((student) => !student.grade)
-        : courseStudents.some((student) => student.grade === courseGradeFilter));
-    const matchesSubject = courseSubjectFilter === "all" || course.subject === courseSubjectFilter;
-    const matchesCampus = courseCampusFilter === "all" || course.defaultCampusId === courseCampusFilter;
-    const searchable = [
-      course.name,
-      course.subject,
-      courseTypeLabel(vault, course.type),
-      campusName(vault, course.defaultCampusId),
-      studentNames(vault, course.studentIds),
-      course.note ?? "",
-      ...courseStudents.flatMap((student) => [student.name, student.grade ?? "", student.school ?? "", student.note ?? ""])
-    ].join(" ").toLowerCase();
-    const matchesSearch = matchesKeywordSearch(searchable, normalizedCourseSearch);
-    return matchesType && matchesGrade && matchesSubject && matchesCampus && matchesSearch;
-  });
+  const visibleCourses = vault.courseGroups
+    .filter((course) => {
+      const courseStudents = course.studentIds
+        .map((studentId) => vault.students.find((student) => student.id === studentId))
+        .filter(Boolean) as Student[];
+      const matchesType = courseTypeFilter === "all" || course.type === courseTypeFilter;
+      const matchesGrade =
+        courseGradeFilter === "all" ||
+        (courseGradeFilter === "__unset"
+          ? courseStudents.length === 0 || courseStudents.some((student) => !student.grade)
+          : courseStudents.some((student) => student.grade === courseGradeFilter));
+      const matchesSubject = courseSubjectFilter === "all" || course.subject === courseSubjectFilter;
+      const matchesCampus = courseCampusFilter === "all" || course.defaultCampusId === courseCampusFilter;
+      const searchable = [
+        course.name,
+        course.subject,
+        courseTypeLabel(vault, course.type),
+        campusName(vault, course.defaultCampusId),
+        studentNames(vault, course.studentIds),
+        course.note ?? "",
+        ...courseStudents.flatMap((student) => [student.name, student.grade ?? "", student.school ?? "", student.note ?? ""])
+      ].join(" ").toLowerCase();
+      const matchesSearch = matchesKeywordSearch(searchable, normalizedCourseSearch);
+      return matchesType && matchesGrade && matchesSubject && matchesCampus && matchesSearch;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN") || a.id.localeCompare(b.id));
   const activeStudents = vault.students.filter((student) => student.status === "active").length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
   const obligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId ?? "";
@@ -283,10 +282,26 @@ export function StudentsView({
 
   function addCourse(e: FormEvent) {
     e.preventDefault();
+    submitCourse();
+  }
+
+  function submitCourse(forceDuplicate = false) {
     const resolvedName = courseNameInput.trim() || suggestedCourseName;
     if (!resolvedName) return;
     const normalizedStudentIds = normalizeCourseStudentIds(courseType, courseStudentIds);
-    const feeRule = usesClassFeeTemplate(courseType)
+    const resolvedCampusId = courseCampusInput || firstCourseStudentCampus(normalizedStudentIds) || preferredCampusId;
+    const duplicateCourse = findDuplicateCourse(courseType, resolvedCampusId, courseSubjectInput.trim() || "未设置", normalizedStudentIds);
+    if (duplicateCourse && !forceDuplicate) {
+      confirm({
+        title: "可能重复添加课程",
+        description: `已有「${duplicateCourse.name}」使用相同班型、校区、科目和学生。请确认是否仍要新增一条课程。`,
+        confirmLabel: "仍然添加",
+        tone: "danger",
+        onConfirm: () => submitCourse(true)
+      });
+      return;
+    }
+    const feeRule = courseFeeRule.mode === "class_headcount"
       ? {
           ...courseFeeRule,
           mode: "class_headcount" as const,
@@ -298,7 +313,7 @@ export function StudentsView({
       name: resolvedName,
       type: courseType,
       subject: courseSubjectInput.trim() || "未设置",
-      defaultCampusId: courseCampusInput || firstCourseStudentCampus(normalizedStudentIds) || preferredCampusId,
+      defaultCampusId: resolvedCampusId,
       studentIds: normalizedStudentIds,
       feeRule,
       status: courseStatusInput
@@ -311,6 +326,7 @@ export function StudentsView({
     setCourseStatusInput("active");
     setCourseFeeRule(courseTypeDefaultFeeRule(courseType));
     setNewCourseStudentSearch("");
+    setCourseNameAutoFilled(false);
   }
 
   function applyStudentCourseTransfer(event: FormEvent) {
@@ -379,6 +395,18 @@ export function StudentsView({
     );
   }
 
+  function findDuplicateCourse(type: CourseType, campusId: string | undefined, subject: string, studentIds: string[]): CourseGroup | undefined {
+    const studentKey = normalizedStudentIdKey(studentIds);
+    const normalizedSubject = subject.trim().toLowerCase();
+    return vault.courseGroups.find(
+      (course) =>
+        course.type === type &&
+        (course.defaultCampusId ?? "") === (campusId ?? "") &&
+        course.subject.trim().toLowerCase() === normalizedSubject &&
+        normalizedStudentIdKey(course.studentIds) === studentKey
+    );
+  }
+
   function firstCourseStudentCampus(studentIds: string[]): string | undefined {
     return studentIds
       .map((studentId) => vault.students.find((student) => student.id === studentId)?.defaultCampusId)
@@ -407,12 +435,35 @@ export function StudentsView({
     return feeRuleForCourseType(vault, type);
   }
 
+  function buildSuggestedCourseName(type: CourseType, studentIds: string[]): string {
+    const primaryStudent = studentIds[0] ? vault.students.find((student) => student.id === studentIds[0]) : undefined;
+    return primaryStudent && studentLimitForCourseType(type)
+      ? `${primaryStudent.name}${courseTypeLabel(vault, type)}`
+      : "";
+  }
+
+  function syncAutoCourseName(type: CourseType, studentIds: string[]) {
+    const nextName = buildSuggestedCourseName(type, studentIds);
+    if (!nextName) {
+      if (courseNameAutoFilled) {
+        setCourseNameInput("");
+        setCourseNameAutoFilled(false);
+      }
+      return;
+    }
+    if (!courseNameInput.trim() || courseNameAutoFilled) {
+      setCourseNameInput(nextName);
+      setCourseNameAutoFilled(true);
+    }
+  }
+
   function changeNewCourseType(nextType: CourseType) {
     const nextStudentIds = normalizeCourseStudentIds(nextType, courseStudentIds);
     setCourseType(nextType);
     setCourseStudentIds(nextStudentIds);
     setCourseFeeRule(courseTypeDefaultFeeRule(nextType));
     syncNewCourseCampusFromStudents(nextStudentIds);
+    syncAutoCourseName(nextType, nextStudentIds);
   }
 
   function addCustomCourseType() {
@@ -430,8 +481,9 @@ export function StudentsView({
       id: `custom_${makeId("ctype")}` as CustomCourseType,
       label
     };
-    onAddCustomCourseType(option);
+    onAddCustomCourseType(option, defaultFeeRuleForCustomTemplate(customCourseTypeTemplate));
     setCustomCourseTypeInput("");
+    setCustomCourseTypeTemplate("class");
     setCourseTypeMessage("");
   }
 
@@ -499,14 +551,6 @@ export function StudentsView({
     replaceCourseTypeClassFeeTiers(type, [{ ...tier, ...patch, maxStudents: undefined }]);
   }
 
-  function resetCourseTypeFeeRule(type: CourseType) {
-    const nextRule = defaultFeeRuleForCourseType(type);
-    onUpdateCourseTypeFeeRule(type, nextRule);
-    if (courseType === type) {
-      setCourseFeeRule(nextRule);
-    }
-  }
-
   function updateCourseTypeHourlyRule(type: CourseType, hourlyRate: number) {
     const current = feeRuleForCourseType(vault, type);
     const nextRule: FeeRule = {
@@ -522,6 +566,28 @@ export function StudentsView({
     if (courseType === type) {
       setCourseFeeRule(nextRule);
     }
+  }
+
+  function resetCourseTypeFeeRule(type: CourseType) {
+    const current = feeRuleForCourseType(vault, type);
+    const nextRule = current.mode === "class_headcount"
+      ? defaultFeeRuleForCourseType("class")
+      : { mode: "hourly" as const, hourlyRate: 0 };
+    onUpdateCourseTypeFeeRule(type, nextRule);
+    if (courseType === type) {
+      setCourseFeeRule(nextRule);
+    }
+  }
+
+  function courseFeeSummary(course: CourseGroup): string {
+    if (course.feeRule.mode === "class_headcount") {
+      return `当前 ${course.studentIds.length} 人单节预估：${formatMoney(calculateClassHeadcountFee(course.feeRule, course.studentIds.length))}`;
+    }
+    if (course.feeRule.mode === "fixed") {
+      return `单节固定费用：${formatMoney(course.feeRule.fixedFee ?? 0)}`;
+    }
+    const hourlyRate = course.feeRule.hourlyRate ?? 0;
+    return `每小时：${formatMoney(hourlyRate)}；2小时预估：${formatMoney(hourlyRate * 2)}`;
   }
 
   function requestDeleteCourseType(courseTypeOption: { id: CourseType; label: string }) {
@@ -576,6 +642,7 @@ export function StudentsView({
     const normalizedStudentIds = normalizeCourseStudentIds(courseType, nextStudentIds);
     setCourseStudentIds(normalizedStudentIds);
     syncNewCourseCampusFromStudents(normalizedStudentIds);
+    syncAutoCourseName(courseType, normalizedStudentIds);
   }
 
   function toggleNewCourseStudent(studentId: string) {
@@ -717,7 +784,7 @@ export function StudentsView({
   function saveCourseDraft() {
     if (!editingCourse?.name.trim()) return;
     const courseId = editingCourse.id;
-    const feeRule = usesClassFeeTemplate(editingCourse.type)
+    const feeRule = editingCourse.feeRule.mode === "class_headcount"
       ? {
           ...editingCourse.feeRule,
           mode: "class_headcount" as const,
@@ -1275,7 +1342,7 @@ export function StudentsView({
               </div>
               <Badge variant="secondary" className="w-fit">{managedCourseTypes.length} 个可配置</Badge>
             </div>
-            <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-center">
               <Input
                 value={customCourseTypeInput}
                 onChange={(event) => {
@@ -1286,6 +1353,15 @@ export function StudentsView({
                 maxLength={24}
                 className={`h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20 ${courseTypeMessage ? "border-[#fca5a5] bg-[#fff1f2]" : ""}`}
               />
+              <Select
+                value={customCourseTypeTemplate}
+                onChange={(event) => setCustomCourseTypeTemplate(event.target.value as "class" | "hourly")}
+                className="h-10 border-[#fdba74] bg-white text-[#7c2d12]"
+                aria-label="选择自定义班型计费模板"
+              >
+                <option value="class">班课人数计费模板</option>
+                <option value="hourly">一对一按小时模板</option>
+              </Select>
               <Button type="button" variant="outline" className="h-10 border-[#fdba74] bg-white text-[#9a3412] hover:bg-[#ffedd5]" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
                 <Plus size={14} /> 添加班型
               </Button>
@@ -1302,7 +1378,6 @@ export function StudentsView({
               const rule = feeRuleForCourseType(vault, type);
               const tier = normalizedClassFeeTiers(rule)[0] ?? defaultClassFeeTiers(defaultFeeRuleForCourseType(type))[0];
               const isCustom = type.startsWith("custom_");
-              const isDisabled = disabledCourseTypes.has(type);
               const isEditingType = editingCustomCourseTypeId === type;
               const used = courseTypeInUse(type);
               return (
@@ -1356,11 +1431,11 @@ export function StudentsView({
                       </div>
                     )}
                   </div>
-                  {usesClassFeeTemplate(type) ? (
+                  {rule.mode === "class_headcount" ? (
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm font-extrabold text-[#061226]">默认人数计费</div>
-                      <div className="text-xs font-semibold text-[#64748b]">新建该班型课程时自动带入，可在课程里单独微调。</div>
+                      <div className="text-xs font-semibold text-[#64748b]">按单节课计费，不按小时相乘；新建课程后可单独微调。</div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <div className="space-y-1">
@@ -1720,8 +1795,11 @@ export function StudentsView({
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
                 <Input
                   value={courseNameInput}
-                  onChange={(event) => setCourseNameInput(event.target.value)}
-                  placeholder={suggestedCourseName || "课程名称，例如：初三数学班"}
+                  onChange={(event) => {
+                    setCourseNameInput(event.target.value);
+                    setCourseNameAutoFilled(false);
+                  }}
+                  placeholder="课程名称，例如：初三数学班"
                 />
                 <Input
                   value={courseSubjectInput}
@@ -1748,12 +1826,12 @@ export function StudentsView({
                 </Select>
               </div>
 
-              {usesClassFeeTemplate(courseType) ? (
+              {courseFeeRule.mode === "class_headcount" ? (
                 <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-white p-3">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                     <div className="text-xs font-semibold text-[#64748b]">
-                      当前关联 {courseStudentIds.length} 人，预计 {formatMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length))}
+                      当前关联 {courseStudentIds.length} 人，单节预计 {formatMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length))}，不按小时相乘
                     </div>
                   </div>
                   {normalizedClassFeeTiers(courseFeeRule).slice(0, 1).map((tier) => (
@@ -2034,12 +2112,12 @@ export function StudentsView({
                         <option value="active">启用</option>
                         <option value="paused">暂停</option>
                       </Select>
-                      {usesClassFeeTemplate(editingCourse.type) ? (
+                      {editingCourse.feeRule.mode === "class_headcount" ? (
                         <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                           <div>
                             <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                             <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                              当前关联 {editingCourse.studentIds.length} 人，预计 {formatMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length))}
+                              当前关联 {editingCourse.studentIds.length} 人，单节预计 {formatMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length))}，不按小时相乘
                             </div>
                           </div>
                           {normalizedClassFeeTiers(editingCourse.feeRule).slice(0, 1).map((tier) => (
@@ -2230,11 +2308,9 @@ export function StudentsView({
                           <span className="text-xs text-(--color-muted-foreground)">
                             {courseTypeLabel(vault, course.type)} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
                           </span>
-                          {usesClassFeeTemplate(course.type) && (
-                            <span className="mt-1 block text-xs font-bold text-[#1557c2]">
-                              当前 {course.studentIds.length} 人预估：{formatMoney(calculateClassHeadcountFee(course.feeRule, course.studentIds.length))}
-                            </span>
-                          )}
+                          <span className="mt-1 block text-xs font-bold text-[#1557c2]">
+                            {courseFeeSummary(course)}
+                          </span>
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
@@ -2303,10 +2379,6 @@ function canJoinCourse(vault: TeacherVault, course: CourseGroup, student: Studen
   return existingGrade === (student.grade ?? "");
 }
 
-function usesClassFeeTemplate(type: CourseType): boolean {
-  return type === "class" || type === "one_on_two" || type.startsWith("custom_");
-}
-
 function studentCourseSearchText(vault: TeacherVault, student: Student): string {
   const studentCourses = vault.courseGroups.filter((course) => course.studentIds.includes(student.id));
   return [
@@ -2327,6 +2399,17 @@ function studentCourseSearchText(vault: TeacherVault, student: Student): string 
 
 function normalizeCourseTypeLabel(value: string): string {
   return value.trim().replace(/\s+/g, "").toLowerCase();
+}
+
+function normalizedStudentIdKey(studentIds: string[]): string {
+  return [...studentIds].sort().join("|");
+}
+
+function defaultFeeRuleForCustomTemplate(template: "class" | "hourly"): FeeRule {
+  if (template === "hourly") {
+    return { mode: "hourly", hourlyRate: 0 };
+  }
+  return defaultFeeRuleForCourseType("class");
 }
 
 function matchesKeywordSearch(searchable: string, normalizedQuery: string): boolean {

@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import type { AttendanceStatus, CourseType, Lesson, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
+import type { AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
 import { calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, hoursBetween, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -91,14 +91,18 @@ export function ScheduleView({
   onWeekStartChange: (weekStart: WeekStart) => void;
   calendarFocus?: CalendarFocus;
 }) {
-  const courseSelectionOptions = vault.courseGroups.filter((course) => course.status === "active");
+  const courseSelectionOptions = vault.courseGroups
+    .filter((course) => course.status === "active")
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN") || a.id.localeCompare(b.id));
   const courseSelectionOptionIds = courseSelectionOptions.map((course) => course.id).join("|");
   const firstCourseId = courseSelectionOptions[0]?.id ?? "";
   const [singleCourseGroupId, setSingleCourseGroupId] = useState(firstCourseId);
+  const [singleCourseSearch, setSingleCourseSearch] = useState("");
   const [singleDate, setSingleDate] = useState(todayIso());
   const [singleStartTime, setSingleStartTime] = useState("19:00");
   const [singleEndTime, setSingleEndTime] = useState("21:00");
   const [ruleCourseGroupId, setRuleCourseGroupId] = useState(firstCourseId);
+  const [ruleCourseSearch, setRuleCourseSearch] = useState("");
   const [selectedWeekdays, setSelectedWeekdays] = useState<Weekday[]>([3]);
   const [ruleStartTime, setRuleStartTime] = useState("19:00");
   const [ruleEndTime, setRuleEndTime] = useState("21:00");
@@ -168,6 +172,8 @@ export function ScheduleView({
   const visibleWeekdays = orderedWeekdays(weekStartPreference);
   const visibleWeekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
   const customTimePresets = vault.preferences?.customTimePresets ?? [];
+  const singleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, singleCourseSearch, singleCourseGroupId);
+  const ruleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, ruleCourseSearch, ruleCourseGroupId);
   const selectedCalendarLessons = vault.lessons.filter((lesson) => lesson.date === selectedCalendarDate).sort(sortLessons);
   const selectedCalendarCompletedCount = selectedCalendarLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const selectedCalendarPendingCount = selectedCalendarLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
@@ -620,9 +626,18 @@ export function ScheduleView({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium">课程</label>
+                <label className="relative block">
+                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                  <Input
+                    value={singleCourseSearch}
+                    onChange={(event) => setSingleCourseSearch(event.target.value)}
+                    placeholder="筛选课程、学生、科目或校区"
+                    className="h-10 bg-white pl-9"
+                  />
+                </label>
                 <Select value={singleCourseGroupId} onChange={(event) => setSingleCourseGroupId(event.target.value)}>
-                  {courseSelectionOptions.map((course) => (
-                    <option key={course.id} value={course.id}>{course.name}</option>
+                  {singleCourseOptions.map((course) => (
+                    <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
                   ))}
                 </Select>
               </div>
@@ -760,9 +775,18 @@ export function ScheduleView({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">课程</label>
+                  <label className="relative block">
+                    <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                    <Input
+                      value={ruleCourseSearch}
+                      onChange={(event) => setRuleCourseSearch(event.target.value)}
+                      placeholder="筛选课程、学生、科目或校区"
+                      className="h-10 bg-white pl-9"
+                    />
+                  </label>
                   <Select value={ruleCourseGroupId} onChange={(event) => setRuleCourseGroupId(event.target.value)}>
-                    {courseSelectionOptions.map((course) => (
-                      <option key={course.id} value={course.id}>{course.name}</option>
+                    {ruleCourseOptions.map((course) => (
+                      <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
                     ))}
                   </Select>
                 </div>
@@ -1785,6 +1809,27 @@ function lessonStudentIds(lesson: Lesson): string[] {
     ...lesson.expectedStudentIds,
     ...lesson.attendance.map((entry) => entry.studentId)
   ]));
+}
+
+function filterScheduleCourseOptions(vault: TeacherVault, courses: CourseGroup[], query: string, currentCourseId: string): CourseGroup[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = normalizedQuery
+    ? courses.filter((course) => {
+        const searchable = [
+          course.name,
+          course.subject,
+          courseTypeLabel(vault, course.type),
+          campusName(vault, course.defaultCampusId),
+          studentNames(vault, course.studentIds)
+        ].join(" ").toLowerCase();
+        return normalizedQuery.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
+      })
+    : courses;
+  const currentCourse = courses.find((course) => course.id === currentCourseId);
+  if (currentCourse && !filtered.some((course) => course.id === currentCourse.id)) {
+    return [currentCourse, ...filtered];
+  }
+  return filtered;
 }
 
 function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalizedNameFilter: string) {
