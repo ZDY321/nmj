@@ -26,6 +26,8 @@ export function createEmptyVault(displayName = ""): TeacherVault {
       weekStartsOn: 0,
       customTimePresets: [],
       customCourseTypes: [],
+      courseTypeLabels: {},
+      disabledCourseTypes: [],
       courseTypeFeeRules: {}
     },
     notice: defaultNotice,
@@ -61,6 +63,8 @@ export function createSampleVault(): TeacherVault {
       weekStartsOn: 0,
       customTimePresets: [],
       customCourseTypes: [],
+      courseTypeLabels: {},
+      disabledCourseTypes: [],
       courseTypeFeeRules: {}
     },
     notice: defaultNotice,
@@ -82,7 +86,7 @@ export function createSampleVault(): TeacherVault {
         subject: "数学",
         defaultCampusId: "campus_main",
         studentIds: ["student_a"],
-        feeRule: { mode: "hourly", hourlyRate: 220 },
+        feeRule: { mode: "hourly", hourlyRate: 0 },
         status: "active"
       },
       {
@@ -94,10 +98,10 @@ export function createSampleVault(): TeacherVault {
         studentIds: ["student_b", "student_c", "student_d"],
         feeRule: {
           mode: "class_headcount",
-          baseFee: 80,
-          perPresentStudentFee: 10,
+          baseFee: 0,
+          perPresentStudentFee: 0,
           classFeeTiers: [
-            { id: "tier_class_math_1_plus", minStudents: 1, baseFee: 80, perStudentFee: 10 }
+            { id: "tier_class_math_1_plus", minStudents: 1, baseFee: 0, perStudentFee: 0 }
           ],
           makeupFeeMode: "perStudentFee"
         },
@@ -117,7 +121,7 @@ export function createSampleVault(): TeacherVault {
         status: "completed",
         expectedStudentIds: ["student_a"],
         attendance: [{ studentId: "student_a", status: "attended" }],
-        feeSnapshot: { hourlyRate: 220, hours: 2, amount: 440 },
+        feeSnapshot: { hourlyRate: 0, hours: 2, amount: 0 },
         linkedOriginalLessonId: null,
         content: {
           taught: "一次函数图像与应用题",
@@ -145,13 +149,13 @@ export function createSampleVault(): TeacherVault {
         trialStudentCount: 0,
         trialFee: 0,
         feeSnapshot: {
-          baseFee: 80,
-          perPresentStudentFee: 10,
+          baseFee: 0,
+          perPresentStudentFee: 0,
           classFeeTierId: "tier_class_math_1_plus",
           presentStudentCount: 2,
           trialStudentCount: 0,
           trialFee: 0,
-          amount: 90
+          amount: 0
         },
         linkedOriginalLessonId: null,
         content: {
@@ -173,7 +177,7 @@ export function createSampleVault(): TeacherVault {
         status: "scheduled",
         expectedStudentIds: ["student_a"],
         attendance: [{ studentId: "student_a", status: "attended" }],
-        feeSnapshot: { hourlyRate: 220, hours: 2, amount: 440 },
+        feeSnapshot: { hourlyRate: 0, hours: 2, amount: 0 },
         linkedOriginalLessonId: null,
         content: {
           taught: "",

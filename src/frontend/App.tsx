@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LoginScreen } from "@/frontend/components/LoginScreen";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { OnboardingGuide } from "@/frontend/components/OnboardingGuide";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { AdminView } from "@/frontend/views/AdminView";
@@ -78,6 +79,7 @@ type ScheduleCalendarFocus = {
 };
 
 const unlockedSessionKey = "teacher-salary-tracker:unlocked-session";
+const syncCheckIntervalSeconds = 90;
 
 export function App() {
   const [username, setUsername] = useState("");
@@ -104,11 +106,13 @@ export function App() {
   const [remoteCloudVersion, setRemoteCloudVersion] = useState("");
   const [syncState, setSyncState] = useState<"idle" | "checking" | "syncing" | "outdated" | "conflict" | "error">("idle");
   const [syncMessage, setSyncMessage] = useState("");
+  const [syncCountdownSeconds, setSyncCountdownSeconds] = useState(syncCheckIntervalSeconds);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
   const cloudVersionRef = useRef("");
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const { confirm, dialog } = useConfirmDialog();
 
   function rememberUnlockedSession(next?: Partial<UnlockedSession>) {
     const session: UnlockedSession = {
@@ -248,6 +252,7 @@ export function App() {
       setSyncState("idle");
       setSyncMessage("");
       setSaveState("idle");
+      setSyncCountdownSeconds(syncCheckIntervalSeconds);
       rememberUnlockedSession({ vault: cloud.vault, cloudVersion: nextCloudVersion });
     } catch (error) {
       setSyncState("error");
@@ -268,6 +273,7 @@ export function App() {
         setRemoteCloudVersion(meta.updatedAt);
         setSyncState("outdated");
         setSyncMessage("云端已有其他设备保存的新版本，建议先同步后继续编辑。");
+        setSyncCountdownSeconds(0);
         return;
       }
       setRemoteCloudVersion("");
@@ -275,6 +281,7 @@ export function App() {
         setSyncState("idle");
         setSyncMessage("");
       }
+      setSyncCountdownSeconds(syncCheckIntervalSeconds);
     } catch (error) {
       if (!silent) {
         setSyncState("error");
@@ -286,6 +293,17 @@ export function App() {
   function forceOverwriteCloud() {
     if (!vault) return;
     void persist(vault, { force: true });
+  }
+
+  function confirmForceOverwriteCloud() {
+    confirm({
+      title: "确认用当前页面覆盖云端？",
+      description: "这会把当前页面里的整份档案保存为云端最新版本。其他设备稍后会提示云端已有更新；如果当前页面缺少其他设备刚改的数据，那些数据会被覆盖。",
+      confirmLabel: "覆盖云端",
+      cancelLabel: "先不同步",
+      tone: "danger",
+      onConfirm: forceOverwriteCloud
+    });
   }
 
   function updateWeekStart(weekStart: WeekStart) {
@@ -443,6 +461,47 @@ export function App() {
       draft.preferences = {
         ...(draft.preferences ?? { weekStartsOn: 0 }),
         customCourseTypes: current.map((item) => (item.id === courseType.id ? { ...item, label: normalizedLabel } : item))
+      };
+    });
+  }
+
+  function updateCourseTypeLabel(courseType: CourseType, label: string) {
+    updateVault((draft) => {
+      const normalizedLabel = label.trim();
+      if (!normalizedLabel) return;
+      if (courseType.startsWith("custom_")) {
+        const current = draft.preferences?.customCourseTypes ?? [];
+        if (current.some((item) => item.id !== courseType && item.label.trim() === normalizedLabel)) return;
+        draft.preferences = {
+          ...(draft.preferences ?? { weekStartsOn: 0 }),
+          customCourseTypes: current.map((item) => (item.id === courseType ? { ...item, label: normalizedLabel } : item))
+        };
+        return;
+      }
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        courseTypeLabels: {
+          ...(draft.preferences?.courseTypeLabels ?? {}),
+          [courseType]: normalizedLabel
+        }
+      };
+    });
+  }
+
+  function deleteCourseType(courseType: CourseType) {
+    updateVault((draft) => {
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        disabledCourseTypes: Array.from(new Set([...(draft.preferences?.disabledCourseTypes ?? []), courseType]))
+      };
+    });
+  }
+
+  function restoreCourseType(courseType: CourseType) {
+    updateVault((draft) => {
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        disabledCourseTypes: (draft.preferences?.disabledCourseTypes ?? []).filter((type) => type !== courseType)
       };
     });
   }
@@ -666,6 +725,16 @@ export function App() {
 
   useEffect(() => {
     if (!token || !cloudVersion) return;
+    if (syncState === "outdated" || syncState === "conflict") return;
+    const timer = window.setInterval(() => {
+      if (document.hidden || saveState === "saving") return;
+      setSyncCountdownSeconds((current) => Math.max(current - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [token, cloudVersion, syncState, saveState]);
+
+  useEffect(() => {
+    if (!token || !cloudVersion) return;
     const checkWhenVisible = () => {
       if (!document.hidden) {
         void checkCloudVersion(true);
@@ -683,7 +752,7 @@ export function App() {
       if (!document.hidden && syncState !== "outdated" && syncState !== "conflict") {
         void checkCloudVersion(true);
       }
-    }, 90_000);
+    }, syncCheckIntervalSeconds * 1000);
     return () => {
       window.removeEventListener("focus", checkWhenVisible);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -765,6 +834,14 @@ export function App() {
     saveState === "saving" ? "同步中..." : saveState === "saved" ? "已加密同步" : saveState === "error" ? "云端同步失败" : "云端加密";
   const syncButtonLabel =
     syncState === "checking" ? "检查中" : syncState === "syncing" ? "同步中" : remoteCloudVersion ? "有更新" : "同步";
+  const syncCountdownTone =
+    syncState === "outdated" || syncState === "conflict" || remoteCloudVersion
+      ? "bg-[#ef4444] text-white"
+      : syncCountdownSeconds <= 15
+        ? "bg-[#fee2e2] text-[#b91c1c]"
+        : syncCountdownSeconds <= 45
+          ? "bg-[#ffedd5] text-[#9a3412]"
+          : "bg-[#dcfce7] text-[#166534]";
   const showSyncAlert = Boolean(syncMessage) && (syncState === "outdated" || syncState === "conflict" || syncState === "error");
   const greeting = greetingFor(greetingTime);
   const guideNeedsAttention = !isOnboardingSetupComplete(vault, onboardingVisitedSteps);
@@ -819,6 +896,7 @@ export function App() {
 
   return (
     <div className="dashboard-shell flex min-h-screen">
+      {dialog}
       <Sidebar
         view={view}
         collapsed={collapsed}
@@ -977,6 +1055,9 @@ export function App() {
                 {(remoteCloudVersion || syncState === "conflict") && (
                   <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-[#ef4444] ring-2 ring-white" />
                 )}
+                <span className={`absolute -bottom-1 -right-1 min-w-7 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold leading-none ring-2 ring-white ${syncCountdownTone}`}>
+                  {syncState === "checking" || syncState === "syncing" ? "..." : `${syncCountdownSeconds}s`}
+                </span>
               </button>
 
               <label className="flex h-14 min-w-0 items-center gap-2 rounded-[16px] border border-[#dbe4ef] bg-white px-3 shadow-[0_12px_28px_rgba(15,35,66,0.08)] sm:h-[58px] sm:gap-3 sm:px-4">
@@ -1047,7 +1128,7 @@ export function App() {
                     type="button"
                     variant="destructive"
                     disabled={saveState === "saving"}
-                    onClick={forceOverwriteCloud}
+                    onClick={confirmForceOverwriteCloud}
                   >
                     确认覆盖云端
                   </Button>
@@ -1271,6 +1352,9 @@ export function App() {
                 onAddCustomCourseType={addCustomCourseType}
                 onUpdateCustomCourseType={updateCustomCourseType}
                 onDeleteCustomCourseType={deleteCustomCourseType}
+                onUpdateCourseTypeLabel={updateCourseTypeLabel}
+                onDeleteCourseType={deleteCourseType}
+                onRestoreCourseType={restoreCourseType}
                 onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
                 onTransferStudentCourse={transferStudentCourse}
               />

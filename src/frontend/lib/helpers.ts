@@ -85,12 +85,21 @@ export function isBuiltInCourseType(type: string): type is BuiltInCourseType {
 }
 
 export function courseTypeLabel(vault: TeacherVault, type: CourseType): string {
+  const preferenceLabel = vault.preferences?.courseTypeLabels?.[type]?.trim();
+  if (preferenceLabel) return preferenceLabel;
   if (isBuiltInCourseType(type)) return courseTypeLabels[type];
   return vault.preferences?.customCourseTypes?.find((item) => item.id === type)?.label || type;
 }
 
 export function courseTypeOptionsForVault(vault: TeacherVault): Array<{ value: CourseType; label: string }> {
   const customCourseTypes = normalizedCustomCourseTypes(vault.preferences?.customCourseTypes ?? []);
+  const disabledCourseTypes = new Set(vault.preferences?.disabledCourseTypes ?? []);
+  const activeBuiltInOptions = builtInCourseTypeOptions
+    .filter((option) => !disabledCourseTypes.has(option.value))
+    .map((option) => ({ value: option.value as CourseType, label: courseTypeLabel(vault, option.value) }));
+  const activeCustomOptions = customCourseTypes
+    .filter((option) => !disabledCourseTypes.has(option.id))
+    .map((option) => ({ value: option.id as CourseType, label: courseTypeLabel(vault, option.id) }));
   const knownValues = new Set<string>([
     ...builtInCourseTypeOptions.map((option) => option.value),
     ...customCourseTypes.map((option) => option.id)
@@ -99,8 +108,8 @@ export function courseTypeOptionsForVault(vault: TeacherVault): Array<{ value: C
   const unknownCourseTypes = Array.from(new Set(dataCourseTypes)).filter((type) => !knownValues.has(type));
 
   return [
-    ...builtInCourseTypeOptions,
-    ...customCourseTypes.map((option) => ({ value: option.id as CourseType, label: option.label })),
+    ...activeBuiltInOptions,
+    ...activeCustomOptions,
     ...unknownCourseTypes.map((type) => ({ value: type, label: courseTypeLabel(vault, type) }))
   ];
 }

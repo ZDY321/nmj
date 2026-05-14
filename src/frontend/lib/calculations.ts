@@ -159,8 +159,8 @@ export function calculateFee(rule: FeeRule, lesson: Lesson): number {
 
 export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
   if (type === "class" || type === "one_on_two" || type.startsWith("custom_")) {
-    const baseFee = 80;
-    const perPresentStudentFee = 10;
+    const baseFee = 0;
+    const perPresentStudentFee = 0;
     return {
       mode: "class_headcount",
       baseFee,
@@ -169,7 +169,7 @@ export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
       makeupFeeMode: "perStudentFee"
     };
   }
-  return { mode: "hourly", hourlyRate: type === "trial" ? 0 : 200 };
+  return { mode: "hourly", hourlyRate: 0 };
 }
 
 export function feeRuleForCourseType(vault: TeacherVault, type: CourseType): FeeRule {
