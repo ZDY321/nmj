@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import type { Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import {
+  addDays,
   calendarDates,
   courseName,
   courseTypeLabel,
@@ -25,6 +26,8 @@ import {
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { todayIso } from "@/frontend/lib/calculations";
 
+type CalendarOverviewPage = "month" | "week";
+
 export function CalendarView({
   vault,
   amountsVisible,
@@ -38,18 +41,30 @@ export function CalendarView({
 }) {
   const [month, setMonth] = useState(() => todayIso().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => todayIso());
+  const [overviewPage, setOverviewPage] = useState<CalendarOverviewPage>("month");
   const weekStartPreference = weekStartsOn(vault);
   const days = calendarDates(month, weekStartPreference);
 
   const selectedLessons = vault.lessons.filter((l) => l.date === selectedDate).sort(sortLessons);
   const weekDates = weekDatesFor(selectedDate, weekStartPreference);
-  const weekLessons = vault.lessons.filter((l) => weekDates.includes(l.date));
+  const weekLessons = vault.lessons.filter((l) => weekDates.includes(l.date)).sort(sortLessons);
   const monthLessons = vault.lessons.filter((l) => l.date.startsWith(month));
   const selectedTotal = selectedLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const weekTotal = weekLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const monthTotal = monthLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
 
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
+  const weekRangeLabel = `${weekDates[0].slice(5)} - ${weekDates[6].slice(5)}`;
+  const weekTimeSlots = Array.from(new Set(weekLessons.map((lesson) => `${lesson.startTime}-${lesson.endTime}`))).sort();
+
+  function selectCalendarDate(date: string) {
+    setSelectedDate(date);
+    setMonth(date.slice(0, 7));
+  }
+
+  function shiftSelectedWeek(days: number) {
+    selectCalendarDate(addDays(selectedDate, days));
+  }
 
   return (
     <div className="space-y-6">
@@ -69,15 +84,39 @@ export function CalendarView({
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr]">
         <Card className="overflow-hidden">
-          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <CardHeader className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
-                <div className="flex items-center gap-2 text-[#ff8617] text-xs font-bold uppercase tracking-widest mb-1">
+              <div className="flex items-center gap-2 text-[#ff8617] text-xs font-bold uppercase tracking-widest mb-1">
                 <CalendarDays size={14} /> 日历总览
               </div>
-              <CardTitle>{month}</CardTitle>
-              <CardDescription>每天的课程、状态、校区和课时金额都排在日历上</CardDescription>
+              <CardTitle>{overviewPage === "month" ? month : weekRangeLabel}</CardTitle>
+              <CardDescription>
+                {overviewPage === "month"
+                  ? "当前月历保留为第一页，可按日期查看每日明细。"
+                  : "周课表按日期和时间展开课程，方便一次看清这一周的上课情况。"}
+              </CardDescription>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setOverviewPage("month")}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-[9px] px-3 py-2 text-xs font-bold ${
+                    overviewPage === "month" ? "orange-gradient text-white" : "text-[#25324a]"
+                  }`}
+                >
+                  <CalendarDays size={14} /> 月历
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOverviewPage("week")}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-[9px] px-3 py-2 text-xs font-bold ${
+                    overviewPage === "week" ? "bg-[#1557c2] text-white" : "text-[#25324a]"
+                  }`}
+                >
+                  <Table2 size={14} /> 周课表
+                </button>
+              </div>
               <Select
                 value={String(weekStartPreference)}
                 onChange={(event) => onWeekStartChange(Number(event.target.value) as WeekStart)}
@@ -87,76 +126,205 @@ export function CalendarView({
                 <option value="0">周日开始</option>
                 <option value="1">周一开始</option>
               </Select>
-              <button onClick={() => setMonth((m) => monthShift(m, -1))} className="p-2 rounded-[10px] hover:bg-[#f3f7fb] transition-colors">
+              <button
+                type="button"
+                onClick={() => {
+                  if (overviewPage === "month") {
+                    setMonth((m) => monthShift(m, -1));
+                  } else {
+                    shiftSelectedWeek(-7);
+                  }
+                }}
+                className="p-2 rounded-[10px] hover:bg-[#f3f7fb] transition-colors"
+              >
                 <ChevronLeft size={18} />
               </button>
-              <span className="font-bold min-w-[80px] text-center">{month}</span>
-              <button onClick={() => setMonth((m) => monthShift(m, 1))} className="p-2 rounded-[10px] hover:bg-[#f3f7fb] transition-colors">
+              <span className="font-bold min-w-[80px] text-center">{overviewPage === "month" ? month : weekRangeLabel}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (overviewPage === "month") {
+                    setMonth((m) => monthShift(m, 1));
+                  } else {
+                    shiftSelectedWeek(7);
+                  }
+                }}
+                className="p-2 rounded-[10px] hover:bg-[#f3f7fb] transition-colors"
+              >
                 <ChevronRight size={18} />
               </button>
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
-            <div className="grid grid-cols-7 gap-1 sm:gap-2">
-              {weekdayLabels.map((d) => (
-                <div key={d} className="text-center text-xs font-bold text-(--color-muted-foreground) py-2">{d}</div>
-              ))}
-              {days.map((date) => {
-                const dayLessons = vault.lessons.filter((l) => l.date === date).sort(sortLessons);
-                const amount = dayLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
-                const hasPending = dayLessons.some((l) => l.status === "scheduled" || l.status === "makeup_pending");
-                const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
-                const hasCancelled = dayLessons.some((l) => l.status === "cancelled");
-                const isAllCompleted = dayLessons.length > 0 && dayLessons.every((l) => l.status === "completed" || l.status === "makeup_completed");
-                const isCurrentMonth = date.startsWith(month);
-                const isSelected = date === selectedDate;
+            {overviewPage === "month" ? (
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                {weekdayLabels.map((d) => (
+                  <div key={d} className="text-center text-xs font-bold text-(--color-muted-foreground) py-2">{d}</div>
+                ))}
+                {days.map((date) => {
+                  const dayLessons = vault.lessons.filter((l) => l.date === date).sort(sortLessons);
+                  const amount = dayLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
+                  const hasPending = dayLessons.some((l) => l.status === "scheduled" || l.status === "makeup_pending");
+                  const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
+                  const hasCancelled = dayLessons.some((l) => l.status === "cancelled");
+                  const isAllCompleted = dayLessons.length > 0 && dayLessons.every((l) => l.status === "completed" || l.status === "makeup_completed");
+                  const isCurrentMonth = date.startsWith(month);
+                  const isSelected = date === selectedDate;
 
-                return (
-                  <motion.button
-                    key={date}
-                    whileHover={{ scale: 1.03, y: -2 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setSelectedDate(date)}
-                    className={`relative flex min-h-[66px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[100px] sm:rounded-[14px] sm:p-2.5 ${
-                      isSelected
-                        ? isAllCompleted
-                          ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
-                          : "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
-                      : isCurrentMonth
-                          ? hasCancelled
-                            ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
-                            : isAllCompleted
-                              ? "border-[#bbf7d0] bg-[#f0fdf4] hover:border-[#86efac] hover:shadow-[0_10px_24px_rgba(22,163,74,0.1)]"
-                              : "border-[#dbe4ef] bg-white hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
-                          : "border-transparent bg-white opacity-40"
-                    }`}
-                  >
-                    <span className={`text-sm font-bold ${isSelected ? (isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
-                      {Number(date.slice(8))}
-                    </span>
-                    <div className="mt-2 flex gap-1 sm:hidden">
-                      {hasDone && <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a]" />}
-                      {hasCancelled && <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626]" />}
-                      {hasPending && <span className="h-1.5 w-1.5 rounded-full bg-[#ff8617]" />}
-                    </div>
-                    <div className="mt-1.5 hidden flex-wrap gap-1 sm:flex">
-                      {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
-                      {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
-                      {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
-                      {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
-                    </div>
-                    {dayLessons.slice(0, 2).map((l) => (
-                      <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
-                        {l.startTime} {courseTypeLabel(vault, l.type)} · {courseName(vault, l.courseGroupId)}
+                  return (
+                    <motion.button
+                      key={date}
+                      whileHover={{ scale: 1.03, y: -2 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => selectCalendarDate(date)}
+                      className={`relative flex min-h-[66px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[100px] sm:rounded-[14px] sm:p-2.5 ${
+                        isSelected
+                          ? isAllCompleted
+                            ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
+                            : "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
+                        : isCurrentMonth
+                            ? hasCancelled
+                              ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
+                              : isAllCompleted
+                                ? "border-[#bbf7d0] bg-[#f0fdf4] hover:border-[#86efac] hover:shadow-[0_10px_24px_rgba(22,163,74,0.1)]"
+                                : "border-[#dbe4ef] bg-white hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
+                            : "border-transparent bg-white opacity-40"
+                      }`}
+                    >
+                      <span className={`text-sm font-bold ${isSelected ? (isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
+                        {Number(date.slice(8))}
                       </span>
-                    ))}
-                    {dayLessons.length > 2 && (
-                      <span className="hidden text-[10px] text-(--color-muted-foreground) sm:block">+{dayLessons.length - 2} 节</span>
+                      <div className="mt-2 flex gap-1 sm:hidden">
+                        {hasDone && <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a]" />}
+                        {hasCancelled && <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626]" />}
+                        {hasPending && <span className="h-1.5 w-1.5 rounded-full bg-[#ff8617]" />}
+                      </div>
+                      <div className="mt-1.5 hidden flex-wrap gap-1 sm:flex">
+                        {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
+                        {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
+                        {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
+                        {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
+                      </div>
+                      {dayLessons.slice(0, 2).map((l) => (
+                        <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
+                          {l.startTime} {courseTypeLabel(vault, l.type)} · {courseName(vault, l.courseGroupId)}
+                        </span>
+                      ))}
+                      {dayLessons.length > 2 && (
+                        <span className="hidden text-[10px] text-(--color-muted-foreground) sm:block">+{dayLessons.length - 2} 节</span>
+                      )}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2">
+                  <div className="text-sm font-extrabold text-[#061226]">周课表</div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#64748b]">
+                    <Badge variant="sage" className="text-[10px]">完成</Badge>
+                    <Badge variant="amber" className="text-[10px]">待上课</Badge>
+                    <Badge variant="yellow" className="text-[10px]">待补课</Badge>
+                    <Badge variant="destructive" className="text-[10px]">取消</Badge>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-[14px] border border-[#dbe4ef] bg-white">
+                  <div className="min-w-[880px]">
+                    <div className="grid grid-cols-[86px_repeat(7,minmax(110px,1fr))] border-b border-[#e8eef6] bg-[#f8fbff]">
+                      <div className="sticky left-0 z-10 border-r border-[#e8eef6] bg-[#f8fbff] px-3 py-3 text-xs font-extrabold text-[#64748b]">
+                        时间
+                      </div>
+                      {weekDates.map((date, index) => {
+                        const dayLessons = vault.lessons.filter((lesson) => lesson.date === date);
+                        const isSelected = date === selectedDate;
+                        return (
+                          <button
+                            key={date}
+                            type="button"
+                            onClick={() => selectCalendarDate(date)}
+                            className={`border-r border-[#e8eef6] px-3 py-2 text-left transition-colors last:border-r-0 ${
+                              isSelected ? "bg-[#fff7ed]" : "hover:bg-[#f3f7fb]"
+                            }`}
+                          >
+                            <span className={`block text-sm font-extrabold ${isSelected ? "text-[#ff8617]" : "text-[#061226]"}`}>
+                              {date.slice(5)}
+                            </span>
+                            <span className="mt-0.5 block text-xs font-bold text-[#64748b]">
+                              {weekdayLabels[index]} · {dayLessons.length} 节
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {weekTimeSlots.length === 0 ? (
+                      <div className="p-8 text-center text-sm font-semibold text-[#64748b]">
+                        这一周还没有课程
+                      </div>
+                    ) : (
+                      weekTimeSlots.map((timeSlot) => (
+                        <div key={timeSlot} className="grid grid-cols-[86px_repeat(7,minmax(110px,1fr))] border-b border-[#e8eef6] last:border-b-0">
+                          <div className="sticky left-0 z-10 flex min-h-[88px] items-start border-r border-[#e8eef6] bg-[#f8fbff] px-3 py-3 text-left text-xs font-extrabold text-[#25324a]">
+                            {timeSlot}
+                          </div>
+                          {weekDates.map((date) => {
+                            const cellLessons = weekLessons.filter((lesson) => lesson.date === date && `${lesson.startTime}-${lesson.endTime}` === timeSlot);
+                            const isSelected = date === selectedDate;
+                            return (
+                              <div
+                                key={`${date}-${timeSlot}`}
+                                onClick={() => selectCalendarDate(date)}
+                                className={`min-h-[88px] border-r border-[#e8eef6] p-2 text-left transition-colors last:border-r-0 ${
+                                  isSelected ? "bg-[#fffaf2]" : "hover:bg-[#f8fbff]"
+                                }`}
+                              >
+                                {cellLessons.length === 0 ? (
+                                  <span className="block h-full min-h-[62px] rounded-[10px] border border-dashed border-[#e2e8f0] bg-[#fbfdff]" />
+                                ) : (
+                                  <span className="flex flex-col gap-2">
+                                    {cellLessons.map((lesson) => (
+                                      <button
+                                        key={lesson.id}
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          selectCalendarDate(date);
+                                          onOpenLessonInCalendar?.(lesson);
+                                        }}
+                                        className={`block w-full rounded-[10px] border p-2 text-left text-xs transition-all hover:border-[#1557c2] ${lessonStatusSurfaceClass(lesson.status)}`}
+                                      >
+                                        <span className="flex min-w-0 items-center justify-between gap-2">
+                                          <strong className="truncate">{courseName(vault, lesson.courseGroupId)}</strong>
+                                          <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
+                                            {lessonStatusLabels[lesson.status]}
+                                          </Badge>
+                                        </span>
+                                        <span className="mt-1 block truncate font-semibold">
+                                          {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}
+                                        </span>
+                                        <span className="mt-0.5 block truncate text-[11px] font-semibold opacity-80">
+                                          {studentNames(vault, lesson.expectedStudentIds)}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))
                     )}
-                  </motion.button>
-                );
-              })}
-            </div>
+                    {weekLessons.length > 0 && weekTimeSlots.length === 0 && (
+                      <div className="p-8 text-center text-sm font-semibold text-[#64748b]">
+                        这一周的课程缺少开始或结束时间，无法生成时间表。
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
