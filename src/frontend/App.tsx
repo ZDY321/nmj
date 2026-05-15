@@ -333,6 +333,13 @@ export function App() {
     });
   }
 
+  function addLessonAndUpdateLesson(lessonToAdd: Lesson, lessonToUpdate: Lesson) {
+    updateVault((draft) => {
+      draft.lessons.push(lessonToAdd);
+      draft.lessons = draft.lessons.map((item) => (item.id === lessonToUpdate.id ? lessonToUpdate : item));
+    });
+  }
+
   function updateLesson(lesson: Lesson) {
     updateVault((draft) => {
       draft.lessons = draft.lessons.map((item) => (item.id === lesson.id ? lesson : item));
@@ -1333,6 +1340,7 @@ export function App() {
                 amountsVisible={amountsVisible}
                 onAddLesson={addLesson}
                 onAddLessons={addLessons}
+                onAddLessonAndUpdateLesson={addLessonAndUpdateLesson}
                 onUpdateLesson={updateLesson}
                 onDeleteLesson={deleteLesson}
                 onAddCustomTimePreset={addCustomTimePreset}

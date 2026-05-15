@@ -354,7 +354,14 @@ export function TodayView({
                             return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
                           })
                           .map((entry) => (
-                          <span key={entry.studentId} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#475569] ring-1 ring-[#dbe4ef]">
+                          <span
+                            key={entry.studentId}
+                            className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${
+                              entry.status === "makeup_pending"
+                                ? "bg-[#fef9c3] text-[#854d0e] ring-[#facc15]"
+                                : "bg-white text-[#475569] ring-[#dbe4ef]"
+                            }`}
+                          >
                             {findStudent(vault, entry.studentId)?.name ?? "未知学生"} · {attendanceLabels[entry.status]}
                           </span>
                         )) : [...lesson.expectedStudentIds]

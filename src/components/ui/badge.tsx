@@ -16,6 +16,7 @@ const badgeVariants = cva(
         outline: "border-[#dbe4ef] text-[#25324a]",
         sage: "border-transparent bg-[#e8f8ef] text-[#16a34a]",
         amber: "border-transparent bg-[#fff3e4] text-[#f97316]",
+        yellow: "border-transparent bg-[#fef9c3] text-[#854d0e]",
         sky: "border-transparent bg-[#eaf2ff] text-[#1557c2]",
         plum: "border-transparent bg-[#eef0ff] text-[#5161d6]"
       }
