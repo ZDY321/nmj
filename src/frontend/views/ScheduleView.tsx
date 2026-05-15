@@ -21,7 +21,8 @@ import {
   Search,
   Trash2,
   UserCheck,
-  UserPlus
+  UserPlus,
+  X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -133,7 +134,8 @@ export function ScheduleView({
   const [syncSourceDate, setSyncSourceDate] = useState(addDays(todayIso(), -7));
   const [syncTargetDate, setSyncTargetDate] = useState(todayIso());
   const [selectedSyncLessonIds, setSelectedSyncLessonIds] = useState<string[]>([]);
-  const [syncPanelOpen, setSyncPanelOpen] = useState(true);
+  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
+  const [calendarDetailDate, setCalendarDetailDate] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
@@ -252,6 +254,11 @@ export function ScheduleView({
   const selectedCalendarPendingCount = selectedCalendarLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
   const selectedCalendarCancelledCount = selectedCalendarLessons.filter((lesson) => lesson.status === "cancelled").length;
   const selectedCalendarAmount = selectedCalendarLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
+  const calendarDetailLessons = calendarDetailDate ? calendarLessonsForDate(calendarDetailDate) : [];
+  const calendarDetailAmount = calendarDetailLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
+  const calendarDetailCompletedCount = calendarDetailLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
+  const calendarDetailPendingCount = calendarDetailLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
+  const calendarDetailCancelledCount = calendarDetailLessons.filter((lesson) => lesson.status === "cancelled").length;
   const normalizedStudentFilter = studentFilter.trim().toLowerCase();
   const normalizedStudentStatsNameFilter = studentStatsNameFilter.trim().toLowerCase();
   const studentStatsSubjects = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter(Boolean))).sort(compareByName);
@@ -928,6 +935,90 @@ export function ScheduleView({
   return (
     <div className="space-y-6">
       {dialog}
+      <AnimatePresence>
+        {calendarDetailDate && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/45 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              className="flex max-h-[86vh] w-full max-w-[760px] flex-col overflow-hidden rounded-[18px] border border-[#dbe4ef] bg-white shadow-[0_30px_80px_rgba(6,18,38,0.24)]"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-[#e8eef6] p-5">
+                <div className="min-w-0">
+                  <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                    <CalendarDays size={14} /> 当日课程
+                  </div>
+                  <h2 className="text-2xl font-extrabold leading-tight text-[#061226]">{calendarDetailDate}</h2>
+                  <p className="mt-1 text-sm font-semibold text-[#64748b]">点击课程可同步选中到课程记录。</p>
+                </div>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setCalendarDetailDate(null)} className="shrink-0 rounded-full">
+                  <X size={18} />
+                </Button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {[
+                    { label: "当天课次", value: `${calendarDetailLessons.length} 节` },
+                    { label: "待上/待补", value: `${calendarDetailPendingCount} 节` },
+                    { label: "已完成", value: `${calendarDetailCompletedCount} 节` },
+                    { label: "已取消", value: `${calendarDetailCancelledCount} 节` },
+                    { label: "当天金额", value: formatPrivateMoney(calendarDetailAmount, amountsVisible) }
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
+                      <div className="text-[11px] font-semibold text-[#64748b]">{item.label}</div>
+                      <div className="mt-0.5 break-words text-sm font-extrabold text-[#061226]">{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  {calendarDetailLessons.map((lesson) => (
+                    <div key={lesson.id} className={`rounded-[12px] border p-3 ${lessonStatusSurfaceClass(lesson.status)}`}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedId(lesson.id);
+                            setCalendarDetailDate(null);
+                          }}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
+                            <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
+                            <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
+                          </div>
+                          <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                            {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {studentNames(vault, lesson.expectedStudentIds)}
+                          </div>
+                        </button>
+                        <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteLesson(lesson)}>
+                          <Trash2 size={14} /> 删除
+                        </Button>
+                      </div>
+                      {lesson.note && (
+                        <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#7f1d1d]">{lesson.note}</div>
+                      )}
+                    </div>
+                  ))}
+                  {calendarDetailLessons.length === 0 && (
+                    <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
+                      这一天没有课程
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
         <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
         {[
@@ -1346,7 +1437,7 @@ export function ScheduleView({
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="w-fit">{selectedSyncLessons.length} / {syncSourceLessons.length} 节</Badge>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setSyncPanelOpen((value) => !value)} className="h-9 px-3 text-[#25324a] hover:bg-white">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setSyncPanelOpen((value) => !value)} className="h-9 border border-[#facc15] bg-[#fefce8] px-3 font-extrabold text-[#854d0e] hover:bg-[#fef3c7]">
                     {syncPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     {syncPanelOpen ? "折叠" : "展开"}
                   </Button>
@@ -1452,7 +1543,9 @@ export function ScheduleView({
                       if (calendarMode === "schedule") {
                         if (!validateTimeRange(calendarStartTime, calendarEndTime, "日历排课的结束时间必须晚于开始时间。")) return;
                         addLessonFromCourse(calendarCourseGroupId, calendarDate, calendarStartTime, calendarEndTime, "scheduled");
+                        return;
                       }
+                      setCalendarDetailDate(calendarDate);
                     }}
                     disabled={calendarMode === "schedule" && !calendarCourseGroupId}
                     className={`relative flex min-h-[74px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[132px] sm:rounded-[14px] sm:p-2.5 xl:min-h-[150px] ${
