@@ -712,6 +712,9 @@ export function ScheduleView({
     setSelectedId(lesson.id);
     setSelectedCalendarDate(lesson.date);
     setCalendarMonth(lesson.date.slice(0, 7));
+    setLessonDay(lesson.date);
+    setLessonMonth(lesson.date.slice(0, 7));
+    setSyncRecordsWithCalendarDate(true);
     setSchedulePanel("records");
   }
 
@@ -1065,7 +1068,7 @@ export function ScheduleView({
           { key: "schedule" as SchedulePanel, label: "排课" },
           { key: "calendar" as SchedulePanel, label: "日历查看" },
           { key: "records" as SchedulePanel, label: "课程记录" },
-          { key: "studentStats" as SchedulePanel, label: "学生课次" }
+          { key: "studentStats" as SchedulePanel, label: "学生课次统计" }
         ].map((item, index, items) => (
           <Fragment key={item.key}>
           <button
@@ -1351,13 +1354,13 @@ export function ScheduleView({
 
       {schedulePanel === "calendar" && (
       <div className="space-y-6">
-        <Card className="overflow-hidden">
+        <Card className={`overflow-hidden border-2 ${calendarMode === "schedule" ? "border-[#ffb15c]" : "border-[#93c5fd]"}`}>
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                 <CalendarDays size={14} /> 日历排课 / 查看
               </div>
-              <CardTitle>日历排课</CardTitle>
+              <CardTitle>{calendarMode === "schedule" ? "日历排课 · 排课模式" : "日历排课 · 查看模式"}</CardTitle>
               <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课；下方可调整排课课程和时间。" : "查看模式：点击日期切换下方明细，可按课程筛选。"}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -1391,6 +1394,13 @@ export function ScheduleView({
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            <div className={`rounded-[14px] border px-4 py-3 text-sm font-extrabold ${
+              calendarMode === "schedule"
+                ? "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
+                : "border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2]"
+            }`}>
+              {calendarMode === "schedule" ? "当前是排课模式：点击日期会直接新增待上课。" : "当前是查看模式：点击日期只查看课程明细，不会新增排课。"}
+            </div>
             {calendarMode === "schedule" ? (
               <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -2173,8 +2183,13 @@ export function ScheduleView({
               <CardContent className="space-y-5">
                 {selectedOriginalLesson && (
                   <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
-                    <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#9a3412]">
-                      <Link2 size={16} /> 补课来源
+                    <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2 text-sm font-extrabold text-[#9a3412]">
+                        <Link2 size={16} /> 补课来源
+                      </div>
+                      <Button type="button" size="sm" variant="outline" className="w-fit border-[#fed7aa] bg-white text-[#9a3412]" onClick={() => openLessonInRecords(selectedOriginalLesson)}>
+                        返回原课
+                      </Button>
                     </div>
                     <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#7c2d12] sm:grid-cols-2">
                       <div>原课日期：{selectedOriginalLesson.date}</div>
