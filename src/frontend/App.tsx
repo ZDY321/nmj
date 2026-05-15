@@ -983,7 +983,7 @@ export function App() {
             <div
               className={`grid ${
                 role === "admin"
-                  ? "grid-cols-[56px_56px_56px_minmax(0,1fr)]"
+                  ? "grid-cols-[56px_56px_56px_56px_minmax(0,1fr)]"
                   : "grid-cols-[56px_56px_56px_56px_56px_minmax(0,1fr)]"
               } gap-2 sm:flex sm:flex-wrap sm:gap-3 xl:justify-end`}
             >
@@ -1038,22 +1038,20 @@ export function App() {
                 </button>
               )}
 
-              {role !== "admin" && (
-                <button
-                  type="button"
-                  onClick={() => setAmountsVisible((visible) => !visible)}
-                  className={`flex h-14 min-w-[56px] shrink-0 items-center justify-center rounded-[16px] border transition-colors sm:h-[58px] sm:w-auto sm:gap-2 sm:px-4 ${
-                    amountsVisible
-                      ? "border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2] shadow-[0_12px_28px_rgba(21,87,194,0.12)]"
-                      : "border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] hover:bg-[#f8fbff]"
-                  }`}
-                  aria-label={amountsVisible ? "隐藏课时费金额" : "显示课时费金额"}
-                  title={amountsVisible ? "隐藏课时费金额" : "显示课时费金额"}
-                >
-                  {amountsVisible ? <EyeOff size={21} /> : <Eye size={21} />}
-                  <span className="hidden text-sm font-extrabold sm:inline">{amountsVisible ? "隐藏金额" : "显示金额"}</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setAmountsVisible((visible) => !visible)}
+                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] border shadow-[0_12px_28px_rgba(15,35,66,0.08)] transition-colors sm:h-[58px] sm:w-[58px] ${
+                  amountsVisible
+                    ? "border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2] ring-2 ring-[#bfdbfe]/60"
+                    : "border-[#dbe4ef] bg-white text-[#25324a] hover:bg-[#f8fbff]"
+                }`}
+                aria-label={amountsVisible ? "隐藏课时费金额" : "显示课时费金额"}
+                aria-pressed={amountsVisible}
+                title={amountsVisible ? "隐藏课时费金额" : "显示课时费金额"}
+              >
+                {amountsVisible ? <EyeOff size={21} /> : <Eye size={21} />}
+              </button>
 
               <button
                 type="button"
