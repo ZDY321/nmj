@@ -394,6 +394,10 @@ export function ScheduleView({
     return new Set((activeMakeupLessonsByOriginal[originalLessonId] ?? []).flatMap((lesson) => lessonStudentIds(lesson)));
   }
 
+  function scheduledMakeupLessonForStudent(originalLessonId: string, studentId: string): Lesson | undefined {
+    return (activeMakeupLessonsByOriginal[originalLessonId] ?? []).find((lesson) => lessonStudentIds(lesson).includes(studentId));
+  }
+
   function isFullyScheduledMakeupOriginal(lesson: Lesson): boolean {
     if (lesson.linkedOriginalLessonId || lesson.status !== "makeup_pending") return false;
     const neededStudentIds = lessonStudentIds(lesson);
@@ -1778,7 +1782,7 @@ export function ScheduleView({
                               setCalendarMonth(lesson.date.slice(0, 7));
                             }}
                           >
-                            查看 / 修改
+                            查看补课详情
                           </Button>
                           <Button
                             type="button"
@@ -2415,6 +2419,9 @@ export function ScheduleView({
                       {selectedAttendanceEntries.map((entry) => {
                         const student = findStudent(vault, entry.studentId);
                         const isTemporary = entry.temporary || student?.temporaryTrial || !selectedCourse?.studentIds.includes(entry.studentId);
+                        const scheduledMakeupLesson = selected && !selected.linkedOriginalLessonId
+                          ? scheduledMakeupLessonForStudent(selected.id, entry.studentId)
+                          : undefined;
                         return (
                           <motion.div
                             key={entry.studentId}
@@ -2431,6 +2438,17 @@ export function ScheduleView({
                                 {isTemporary && <Badge variant="plum" className="shrink-0">临时加入</Badge>}
                               </div>
                               <div className="flex items-center gap-2">
+                                {scheduledMakeupLesson && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-[#bfdbfe] bg-white text-[#1557c2]"
+                                    onClick={() => openLessonInRecords(scheduledMakeupLesson)}
+                                  >
+                                    <Link2 size={13} /> 补课详情
+                                  </Button>
+                                )}
                                 <Select value={entry.status} onChange={(event) => updateAttendance(entry.studentId, event.target.value as AttendanceStatus)} className="h-9 max-w-[136px]">
                                   {Object.entries(attendanceLabels).map(([key, value]) => (
                                     <option key={key} value={key}>{value}</option>
