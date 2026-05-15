@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
-import { findStudent } from "@/frontend/lib/helpers";
+import { compareByName, findStudent, sortStudentsByName } from "@/frontend/lib/helpers";
 import { todayIso } from "@/frontend/lib/calculations";
 import type { GradeRecord, TeacherVault } from "@/shared/types";
 
@@ -22,7 +22,8 @@ export function GradesView({
   onAddGradeRecord: (record: GradeRecord) => void;
   onDeleteGradeRecord: (recordId: string) => void;
 }) {
-  const [studentId, setStudentId] = useState(vault.students[0]?.id ?? "");
+  const studentOptions = sortStudentsByName(vault.students);
+  const [studentId, setStudentId] = useState(studentOptions[0]?.id ?? "");
   const [subject, setSubject] = useState("");
   const [examName, setExamName] = useState("");
   const [date, setDate] = useState(todayIso());
@@ -43,7 +44,7 @@ export function GradesView({
     const matchesSubject = subjectFilter === "all" || record.subject === subjectFilter;
     return matchesStudent && matchesSubject;
   });
-  const subjects = Array.from(new Set(records.map((record) => record.subject).filter(Boolean)));
+  const subjects = Array.from(new Set(records.map((record) => record.subject).filter(Boolean))).sort(compareByName);
   const selectedStudentRecords = useMemo(() => {
     const targetId = studentFilter === "all" ? studentId : studentFilter;
     return records
@@ -122,7 +123,7 @@ export function GradesView({
           <CardContent>
             <form onSubmit={addRecord} className="space-y-3">
               <Select value={studentId} onChange={(event) => setStudentId(event.target.value)}>
-                {vault.students.map((student) => (
+                {studentOptions.map((student) => (
                   <option key={student.id} value={student.id}>{student.name}</option>
                 ))}
               </Select>
@@ -155,7 +156,7 @@ export function GradesView({
               <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:w-[420px]">
                 <Select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)}>
                   <option value="all">全部学生</option>
-                  {vault.students.map((student) => (
+                  {studentOptions.map((student) => (
                     <option key={student.id} value={student.id}>{student.name}</option>
                   ))}
                 </Select>

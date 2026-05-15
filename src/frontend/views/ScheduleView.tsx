@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Copy,
   GraduationCap,
   Link2,
   NotebookPen,
@@ -28,20 +29,21 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type { AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
-import { calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, hoursBetween, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
   addDays,
   calendarDates,
   campusName,
+  compareByName,
   courseName,
   courseTypeLabel,
   courseTypeOptionsForVault,
   createLessonFromCourse,
   findStudent,
   formatDateIso,
-  formatMoney,
+  formatPrivateMoney,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
@@ -49,7 +51,10 @@ import {
   orderedWeekdayLabels,
   orderedWeekdays,
   shortWeekdayLabels,
+  sortCampusesForProfile,
+  sortCoursesByName,
   sortLessons,
+  sortStudentsByName,
   studentNames,
   weekStartsOn,
   weekdayOfDateIso,
@@ -63,18 +68,21 @@ type CalendarFocus = { date: string; lessonId?: string; nonce: number } | null;
 
 export function ScheduleView({
   vault,
+  amountsVisible,
   onAddLesson,
+  onAddLessons,
   onUpdateLesson,
   onDeleteLesson,
   onAddCustomTimePreset,
   onDeleteCustomTimePreset,
   onGenerateDrafts,
-  onAddScheduledLesson,
   onWeekStartChange,
   calendarFocus
 }: {
   vault: TeacherVault;
+  amountsVisible: boolean;
   onAddLesson: (lesson: Lesson) => void;
+  onAddLessons: (lessons: Lesson[]) => void;
   onUpdateLesson: (lesson: Lesson) => void;
   onDeleteLesson: (lessonId: string) => void;
   onAddCustomTimePreset: (preset: TimePreset) => void;
@@ -87,14 +95,15 @@ export function ScheduleView({
     startTime: string,
     endTime: string
   ) => void;
-  onAddScheduledLesson: (date: string, courseGroupId: string, startTime: string, endTime: string) => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
   calendarFocus?: CalendarFocus;
 }) {
-  const courseSelectionOptions = vault.courseGroups
-    .filter((course) => course.status === "active")
-    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN") || a.id.localeCompare(b.id));
+  const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
+  const courseGroupOptions = sortCoursesByName(vault.courseGroups);
+  const studentOptions = sortStudentsByName(vault.students);
+  const courseSelectionOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active"));
   const courseSelectionOptionIds = courseSelectionOptions.map((course) => course.id).join("|");
+  const courseGroupOptionIds = courseGroupOptions.map((course) => course.id).join("|");
   const firstCourseId = courseSelectionOptions[0]?.id ?? "";
   const [singleCourseGroupId, setSingleCourseGroupId] = useState(firstCourseId);
   const [singleCourseSearch, setSingleCourseSearch] = useState("");
@@ -109,11 +118,17 @@ export function ScheduleView({
   const [rangeStart, setRangeStart] = useState(todayIso());
   const [rangeEnd, setRangeEnd] = useState(monthShift(todayIso().slice(0, 7), 1) + "-01");
   const [calendarCourseGroupId, setCalendarCourseGroupId] = useState(firstCourseId);
+  const [calendarCourseSearch, setCalendarCourseSearch] = useState("");
+  const [calendarViewCourseFilter, setCalendarViewCourseFilter] = useState("all");
+  const [calendarViewCourseSearch, setCalendarViewCourseSearch] = useState("");
   const [calendarStartTime, setCalendarStartTime] = useState("19:00");
   const [calendarEndTime, setCalendarEndTime] = useState("21:00");
   const [calendarMonth, setCalendarMonth] = useState(todayIso().slice(0, 7));
   const [calendarMode, setCalendarMode] = useState<"schedule" | "view">("view");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(todayIso());
+  const [syncSourceDate, setSyncSourceDate] = useState(addDays(todayIso(), -7));
+  const [syncTargetDate, setSyncTargetDate] = useState(todayIso());
+  const [selectedSyncLessonIds, setSelectedSyncLessonIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
@@ -145,6 +160,12 @@ export function ScheduleView({
   const [makeupOriginalDateFilter, setMakeupOriginalDateFilter] = useState("");
   const [scheduleError, setScheduleError] = useState("");
   const { confirm, dialog } = useConfirmDialog();
+  const syncSourceLessons = vault.lessons
+    .filter((lesson) => lesson.date === syncSourceDate && lesson.status !== "cancelled")
+    .sort(sortLessons);
+  const syncSourceLessonIds = syncSourceLessons.map((lesson) => lesson.id).join("|");
+  const selectableSyncLessons = syncSourceLessons.filter((lesson) => getCourse(vault, lesson.courseGroupId)?.status === "active");
+  const selectableSyncLessonIds = selectableSyncLessons.map((lesson) => lesson.id).join("|");
 
   useEffect(() => {
     const fallbackCourseId = courseSelectionOptions[0]?.id ?? "";
@@ -153,6 +174,25 @@ export function ScheduleView({
     setRuleCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
     setCalendarCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
   }, [courseSelectionOptionIds]);
+
+  useEffect(() => {
+    setCalendarViewCourseFilter((current) =>
+      current === "all" || courseGroupOptions.some((course) => course.id === current) ? current : "all"
+    );
+  }, [courseGroupOptionIds]);
+
+  useEffect(() => {
+    setSyncTargetDate(selectedCalendarDate);
+  }, [selectedCalendarDate]);
+
+  useEffect(() => {
+    setSelectedSyncLessonIds((current) => {
+      const availableIds = new Set(selectableSyncLessons.map((lesson) => lesson.id));
+      const kept = current.filter((lessonId) => availableIds.has(lessonId));
+      if (kept.length > 0 || selectableSyncLessons.length === 0) return kept;
+      return selectableSyncLessons.map((lesson) => lesson.id);
+    });
+  }, [selectableSyncLessonIds]);
 
   useEffect(() => {
     if (!calendarFocus?.date) return;
@@ -174,14 +214,22 @@ export function ScheduleView({
   const customTimePresets = vault.preferences?.customTimePresets ?? [];
   const singleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, singleCourseSearch, singleCourseGroupId);
   const ruleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, ruleCourseSearch, ruleCourseGroupId);
-  const selectedCalendarLessons = vault.lessons.filter((lesson) => lesson.date === selectedCalendarDate).sort(sortLessons);
+  const calendarCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, calendarCourseSearch, calendarCourseGroupId);
+  const calendarViewCourseOptions = filterScheduleCourseOptions(
+    vault,
+    courseGroupOptions,
+    calendarViewCourseSearch,
+    calendarViewCourseFilter === "all" ? "" : calendarViewCourseFilter
+  );
+  const selectedSyncLessons = syncSourceLessons.filter((lesson) => selectedSyncLessonIds.includes(lesson.id));
+  const selectedCalendarLessons = calendarLessonsForDate(selectedCalendarDate);
   const selectedCalendarCompletedCount = selectedCalendarLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const selectedCalendarPendingCount = selectedCalendarLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
   const selectedCalendarCancelledCount = selectedCalendarLessons.filter((lesson) => lesson.status === "cancelled").length;
   const selectedCalendarAmount = selectedCalendarLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const normalizedStudentFilter = studentFilter.trim().toLowerCase();
   const normalizedStudentStatsNameFilter = studentStatsNameFilter.trim().toLowerCase();
-  const studentStatsSubjects = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter(Boolean))).sort();
+  const studentStatsSubjects = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter(Boolean))).sort(compareByName);
   const effectiveLessonScope = syncRecordsWithCalendarDate ? "day" : lessonScope;
   const effectiveLessonDay = syncRecordsWithCalendarDate ? selectedCalendarDate : lessonDay;
   const scopeDates = effectiveLessonScope === "week" ? datesForIsoWeekValue(lessonWeek) : [];
@@ -189,6 +237,7 @@ export function ScheduleView({
     .filter((lesson) => {
       const course = getCourse(vault, lesson.courseGroupId);
       const campusId = lesson.campusId ?? course?.defaultCampusId;
+      const searchText = lessonSearchText(vault, lesson);
       const matchesScope =
         effectiveLessonScope === "month"
           ? lesson.date.startsWith(lessonMonth)
@@ -201,9 +250,7 @@ export function ScheduleView({
       const matchesType = courseTypeFilter === "all" || lesson.type === courseTypeFilter;
       const matchesStudent =
         !normalizedStudentFilter ||
-        lesson.expectedStudentIds.some((studentId) =>
-          (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(normalizedStudentFilter)
-        );
+        normalizedStudentFilter.split(/\s+/).filter(Boolean).every((term) => searchText.includes(term));
       const matchesMakeup = !showOnlyMakeup || lesson.status === "makeup_pending" || Boolean(lesson.linkedOriginalLessonId);
       return matchesScope && matchesCampus && matchesType && matchesStudent && matchesMakeup;
     })
@@ -236,7 +283,7 @@ export function ScheduleView({
     })
     .sort(sortLessons);
   const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
-  const studentStatsTotalHours = studentStatsLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime)), 0);
+  const studentStatsTotalHours = studentStatsLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
   const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const selected = vault.lessons.find((lesson) => lesson.id === selectedId) ?? lessons[0];
@@ -247,12 +294,12 @@ export function ScheduleView({
   const normalizedTemporaryStudentSearch = temporaryStudentSearch.trim().toLowerCase();
   const normalizedAttendanceStudentFilter = attendanceStudentFilter.trim().toLowerCase();
   const temporaryStudentOptions = selected
-    ? vault.students.filter((student) => {
+    ? studentOptions.filter((student) => {
         const isAvailable = !selected.expectedStudentIds.includes(student.id);
         const searchable = [
           student.name,
           student.grade ?? "",
-          student.school ?? "",
+          campusName(vault, student.defaultCampusId),
           student.note ?? "",
           student.temporaryTrial ? "试听 临时试听" : ""
         ].join(" ").toLowerCase();
@@ -272,12 +319,16 @@ export function ScheduleView({
         const searchable = [
           student?.name ?? "",
           student?.grade ?? "",
-          student?.school ?? "",
+          campusName(vault, student?.defaultCampusId),
           student?.note ?? "",
           attendanceLabels[entry.status],
           entry.temporary ? "临时加入" : ""
         ].join(" ").toLowerCase();
         return !normalizedAttendanceStudentFilter || searchable.includes(normalizedAttendanceStudentFilter);
+      }).sort((a, b) => {
+        const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
+        const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
+        return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
       })
     : [];
   const allMakeupEntries = vault.lessons
@@ -304,7 +355,18 @@ export function ScheduleView({
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
   }
 
+  function matchesCalendarCourseFilter(lesson: Lesson): boolean {
+    return calendarViewCourseFilter === "all" || lesson.courseGroupId === calendarViewCourseFilter;
+  }
+
+  function calendarLessonsForDate(date: string): Lesson[] {
+    return vault.lessons
+      .filter((lesson) => lesson.date === date && matchesCalendarCourseFilter(lesson))
+      .sort(sortLessons);
+  }
+
   function goToCalendarSchedulingFromSingle() {
+    if (!validateTimeRange(singleStartTime, singleEndTime)) return;
     setCalendarCourseGroupId(singleCourseGroupId);
     setCalendarStartTime(singleStartTime);
     setCalendarEndTime(singleEndTime);
@@ -352,6 +414,71 @@ export function ScheduleView({
     );
   }
 
+  function toggleSyncLesson(lessonId: string) {
+    setSelectedSyncLessonIds((current) =>
+      current.includes(lessonId) ? current.filter((id) => id !== lessonId) : [...current, lessonId]
+    );
+  }
+
+  function setAllSyncLessons(selected: boolean) {
+    setSelectedSyncLessonIds(selected ? selectableSyncLessons.map((lesson) => lesson.id) : []);
+  }
+
+  function copySelectedLessonsToDate(force = false) {
+    if (!syncSourceDate || !syncTargetDate) {
+      showScheduleError("请选择要同步的来源日期和目标日期。");
+      return;
+    }
+    if (syncSourceDate === syncTargetDate) {
+      showScheduleError("来源日期和目标日期不能相同。");
+      return;
+    }
+    if (selectedSyncLessons.length === 0) {
+      showScheduleError("请至少勾选一节要同步的课程。");
+      return;
+    }
+
+    const activeLessons = selectedSyncLessons.filter((lesson) => getCourse(vault, lesson.courseGroupId)?.status === "active");
+    const pausedCount = selectedSyncLessons.length - activeLessons.length;
+    const conflictedLessons = activeLessons.filter((lesson) => findTimeConflict(syncTargetDate, lesson.startTime, lesson.endTime));
+    if (conflictedLessons.length > 0 && !force) {
+      confirm({
+        title: "目标日期已有时间冲突",
+        description: `${syncTargetDate} 有 ${conflictedLessons.length} 节课时间冲突。系统会跳过冲突课程，只同步没有冲突的课程。`,
+        confirmLabel: "跳过冲突并同步",
+        onConfirm: () => copySelectedLessonsToDate(true)
+      });
+      return;
+    }
+
+    const lessonsToCopy = activeLessons.filter((lesson) => !findTimeConflict(syncTargetDate, lesson.startTime, lesson.endTime));
+    if (lessonsToCopy.length === 0) {
+      showScheduleError(pausedCount > 0 ? "可同步课程已暂停或全部与目标日期冲突。" : "勾选课程都与目标日期已有课程冲突。");
+      return;
+    }
+
+    const copiedLessons = lessonsToCopy.flatMap((lesson) => {
+      const course = getCourse(vault, lesson.courseGroupId);
+      if (!course) return [];
+      return [
+        createLessonFromCourse(vault, course, {
+          date: syncTargetDate,
+          startTime: lesson.startTime,
+          endTime: lesson.endTime,
+          campusId: lesson.campusId ?? course.defaultCampusId,
+          status: "scheduled"
+        })
+      ];
+    });
+    onAddLessons(copiedLessons);
+    setSelectedCalendarDate(syncTargetDate);
+    setCalendarMonth(syncTargetDate.slice(0, 7));
+    setScheduleError("");
+    if (pausedCount > 0) {
+      showScheduleError(`已同步 ${lessonsToCopy.length} 节；${pausedCount} 节来源课程已暂停，未同步。`);
+    }
+  }
+
   function toggleWeekday(day: Weekday) {
     setSelectedWeekdays((current) =>
       current.includes(day) ? current.filter((item) => item !== day) : [...current, day].sort()
@@ -391,7 +518,7 @@ export function ScheduleView({
         presentStudentCount,
         trialStudentCount: lesson.trialStudentCount ?? 0,
         trialFee: lesson.trialFee ?? 0,
-        hours: hoursBetween(lesson.startTime, lesson.endTime),
+        hours: billableHoursForLesson(lesson, course.feeRule),
         manualAdjustment: extraFeeTotal(lesson),
         amount: calculateFee(course.feeRule, lesson)
       }
@@ -631,7 +758,7 @@ export function ScheduleView({
                   <Input
                     value={singleCourseSearch}
                     onChange={(event) => setSingleCourseSearch(event.target.value)}
-                    placeholder="筛选课程、学生、科目或校区"
+                    placeholder="搜索姓名、年级、校区或班型"
                     className="h-10 bg-white pl-9"
                   />
                 </label>
@@ -647,11 +774,14 @@ export function ScheduleView({
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">开始时间</label>
-                <Input type="time" value={singleStartTime} max={singleEndTime} onChange={(event) => setSingleStartTime(event.target.value)} />
+                <Input type="time" value={singleStartTime} max={singleEndTime} onChange={(event) => setSingleStartTime(event.target.value)} className={!isSingleTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">结束时间</label>
                 <Input type="time" value={singleEndTime} min={singleStartTime} onChange={(event) => setSingleEndTime(event.target.value)} className={!isSingleTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                {!isSingleTimeValid && (
+                  <div className="text-xs font-bold text-[#b91c1c]">结束时间必须晚于开始时间。</div>
+                )}
               </div>
             </div>
 
@@ -706,12 +836,15 @@ export function ScheduleView({
             <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
               <div className="mb-3 text-sm font-medium">自定义常用时段</div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,140px)_minmax(0,140px)_minmax(122px,auto)]">
-                <Input type="time" value={customPresetStart} max={customPresetEnd} onChange={(event) => setCustomPresetStart(event.target.value)} />
+                <Input type="time" value={customPresetStart} max={customPresetEnd} onChange={(event) => setCustomPresetStart(event.target.value)} className={!isCustomPresetTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
                 <Input type="time" value={customPresetEnd} min={customPresetStart} onChange={(event) => setCustomPresetEnd(event.target.value)} className={!isCustomPresetTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
                 <Button type="button" variant="outline" onClick={addCustomPreset} className="w-full" disabled={!isCustomPresetTimeValid}>
                   <Plus size={15} /> 保存时段
                 </Button>
               </div>
+              {!isCustomPresetTimeValid && (
+                <div className="mt-2 text-xs font-bold text-[#b91c1c]">常用时段的结束时间必须晚于开始时间。</div>
+              )}
               {customTimePresets.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {customTimePresets.map((preset) => (
@@ -744,17 +877,17 @@ export function ScheduleView({
                 size="sm"
                 variant="outline"
                 onClick={goToCalendarSchedulingFromSingle}
-                disabled={!singleCourseGroupId || !isSingleTimeValid}
+                disabled={!singleCourseGroupId}
                 className="border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2] hover:bg-[#dbeafe] hover:text-[#0f3f8f]"
               >
                 <CalendarDays size={14} /> 前往日历排课
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Button type="button" onClick={() => addSingleLesson("scheduled")} disabled={!singleCourseGroupId || !isSingleTimeValid}>
+              <Button type="button" onClick={() => addSingleLesson("scheduled")} disabled={!singleCourseGroupId}>
                 <CalendarCheck size={16} /> 添加待上课
               </Button>
-              <Button type="button" variant="outline" onClick={() => addSingleLesson("completed")} disabled={!singleCourseGroupId || !isSingleTimeValid}>
+              <Button type="button" variant="outline" onClick={() => addSingleLesson("completed")} disabled={!singleCourseGroupId}>
                 <CheckCircle2 size={16} /> 补录已完成
               </Button>
             </div>
@@ -780,7 +913,7 @@ export function ScheduleView({
                     <Input
                       value={ruleCourseSearch}
                       onChange={(event) => setRuleCourseSearch(event.target.value)}
-                      placeholder="筛选课程、学生、科目或校区"
+                      placeholder="搜索姓名、年级、校区或班型"
                       className="h-10 bg-white pl-9"
                     />
                   </label>
@@ -793,21 +926,27 @@ export function ScheduleView({
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">开始</label>
-                    <Input type="time" value={ruleStartTime} max={ruleEndTime} onChange={(event) => setRuleStartTime(event.target.value)} />
+                    <Input type="time" value={ruleStartTime} max={ruleEndTime} onChange={(event) => setRuleStartTime(event.target.value)} className={!isBatchTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">结束</label>
                     <Input type="time" value={ruleEndTime} min={ruleStartTime} onChange={(event) => setRuleEndTime(event.target.value)} className={!isBatchTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                    {!isBatchTimeValid && (
+                      <div className="text-xs font-bold text-[#b91c1c]">结束时间必须晚于开始时间。</div>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">日期开始</label>
-                    <Input type="date" value={rangeStart} max={rangeEnd} onChange={(event) => setRangeStart(event.target.value)} />
+                    <Input type="date" value={rangeStart} max={rangeEnd} onChange={(event) => setRangeStart(event.target.value)} className={!isBatchDateRangeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">日期结束</label>
                     <Input type="date" value={rangeEnd} min={rangeStart} onChange={(event) => setRangeEnd(event.target.value)} className={!isBatchDateRangeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                    {!isBatchDateRangeValid && (
+                      <div className="text-xs font-bold text-[#b91c1c]">结束日期不能早于开始日期。</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -834,7 +973,7 @@ export function ScheduleView({
                 type="button"
                 variant="outline"
                 className="w-full"
-                disabled={!ruleCourseGroupId || selectedWeekdays.length === 0 || !isBatchTimeValid || !isBatchDateRangeValid}
+                disabled={!ruleCourseGroupId || selectedWeekdays.length === 0}
                 onClick={() => {
                   if (!validateDateRange(rangeStart, rangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
                     return;
@@ -867,7 +1006,7 @@ export function ScheduleView({
                 <CalendarDays size={14} /> 日历排课 / 查看
               </div>
               <CardTitle>日历排课</CardTitle>
-              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课；课程和时间是新课预设，不作为筛选条件。" : "查看模式：点击日期切换右侧明细。"}</CardDescription>
+              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课；课程筛选只影响已排课程展示。" : "查看模式：点击日期切换右侧明细，可按课程筛选。"}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
@@ -905,37 +1044,156 @@ export function ScheduleView({
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">排课课程</label>
+                    <label className="relative block">
+                      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                      <Input
+                        value={calendarCourseSearch}
+                        onChange={(event) => setCalendarCourseSearch(event.target.value)}
+                        placeholder="搜索姓名、年级、校区或班型"
+                        className="h-10 bg-white pl-9"
+                      />
+                    </label>
                     <Select value={calendarCourseGroupId} onChange={(event) => setCalendarCourseGroupId(event.target.value)}>
-                      {courseSelectionOptions.map((course) => (
+                      {calendarCourseOptions.map((course) => (
                         <option key={course.id} value={course.id}>{course.name}</option>
                       ))}
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">开始时间</label>
-                    <Input type="time" value={calendarStartTime} max={calendarEndTime} onChange={(event) => setCalendarStartTime(event.target.value)} />
+                    <Input type="time" value={calendarStartTime} max={calendarEndTime} onChange={(event) => setCalendarStartTime(event.target.value)} className={!isCalendarTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">结束时间</label>
                     <Input type="time" value={calendarEndTime} min={calendarStartTime} onChange={(event) => setCalendarEndTime(event.target.value)} className={!isCalendarTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                    {!isCalendarTimeValid && (
+                      <div className="text-xs font-bold text-[#b91c1c]">日历排课的结束时间必须晚于开始时间。</div>
+                    )}
                   </div>
                 </div>
                 <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">
-                  说明：这里的排课课程、开始时间和结束时间只用于点击日期时生成新课，不会筛选日历或右侧每日课程详情。
+                  说明：这里的排课课程、开始时间和结束时间只用于点击日期时生成新课；下方“查看课程筛选”只影响已排课程展示。
                 </div>
               </div>
             ) : (
-              <div className="space-y-1 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] px-4 py-3 text-sm font-semibold leading-6 text-[#64748b]">
-                <div>查看模式只按日期切换右侧“每日课程详情”，不会用课程和时间做筛选。</div>
-                <div>需要新增课时请切到“排课”模式；需要筛选记录请切到“课时记录”。</div>
+              <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] px-4 py-3 text-sm font-semibold leading-6 text-[#64748b]">
+                查看模式只按日期切换右侧“每日课程详情”；需要新增课时请切到“排课”模式。
               </div>
             )}
+            <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm font-extrabold text-[#061226]">查看课程筛选</div>
+                <div className="text-xs font-bold text-[#64748b]">
+                  当前每日明细 {selectedCalendarLessons.length} 节
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <label className="relative block">
+                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                  <Input
+                    value={calendarViewCourseSearch}
+                    onChange={(event) => setCalendarViewCourseSearch(event.target.value)}
+                    placeholder="搜索姓名、年级、校区或班型"
+                    className="h-10 bg-white pl-9"
+                  />
+                </label>
+                <Select value={calendarViewCourseFilter} onChange={(event) => setCalendarViewCourseFilter(event.target.value)} className="h-10">
+                  <option value="all">全部课程</option>
+                  {calendarViewCourseOptions.map((course) => (
+                    <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
+                  ))}
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setCalendarViewCourseFilter("all");
+                    setCalendarViewCourseSearch("");
+                  }}
+                  disabled={calendarViewCourseFilter === "all" && !calendarViewCourseSearch}
+                  className="h-10"
+                >
+                  清除筛选
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-extrabold text-[#061226]">同步某一天课程</div>
+                  <div className="mt-1 text-xs font-semibold text-[#64748b]">从来源日期勾选课程，复制到目标日期，生成待上课。</div>
+                </div>
+                <Badge variant="secondary" className="w-fit">{selectedSyncLessons.length} / {syncSourceLessons.length} 节</Badge>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">来源日期</label>
+                  <Input type="date" value={syncSourceDate} onChange={(event) => setSyncSourceDate(event.target.value)} className="h-10 bg-white" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">目标日期</label>
+                  <Input type="date" value={syncTargetDate} onChange={(event) => setSyncTargetDate(event.target.value)} className="h-10 bg-white" />
+                </div>
+                <Button type="button" className="self-end" onClick={() => copySelectedLessonsToDate()} disabled={selectedSyncLessons.length === 0 || syncSourceDate === syncTargetDate}>
+                  <Copy size={15} /> 同步课程
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => setSyncSourceDate(addDays(syncTargetDate || selectedCalendarDate, -7))}>
+                  上周同日
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setAllSyncLessons(true)} disabled={selectableSyncLessons.length === 0}>
+                  全选
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setAllSyncLessons(false)} disabled={selectedSyncLessons.length === 0}>
+                  清空
+                </Button>
+              </div>
+              <div className="max-h-[190px] space-y-2 overflow-y-auto pr-1">
+                {syncSourceLessons.map((lesson) => {
+                  const course = getCourse(vault, lesson.courseGroupId);
+                  const disabled = course?.status !== "active";
+                  const conflicted = Boolean(syncTargetDate && findTimeConflict(syncTargetDate, lesson.startTime, lesson.endTime));
+                  return (
+                    <label
+                      key={lesson.id}
+                      className={`flex items-start gap-3 rounded-[12px] border px-3 py-2 text-sm ${
+                        disabled
+                          ? "border-[#e2e8f0] bg-white text-[#94a3b8]"
+                          : conflicted
+                            ? "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
+                            : "border-[#dbe4ef] bg-white text-[#25324a]"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedSyncLessonIds.includes(lesson.id)}
+                        onChange={() => toggleSyncLesson(lesson.id)}
+                        disabled={disabled}
+                        className="mt-1 h-4 w-4 accent-[#ff8617]"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-extrabold">{lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}</span>
+                        <span className="mt-1 block text-xs font-semibold">
+                          {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期有冲突" : ""}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+                {syncSourceLessons.length === 0 && (
+                  <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
+                    来源日期没有可同步课程
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {visibleWeekdayLabels.map((day) => (
                 <div key={day} className="py-2 text-center text-xs font-bold text-(--color-muted-foreground)">{day}</div>
               ))}
               {calendarDates(calendarMonth, weekStartPreference).map((calendarDate) => {
-                const dayLessons = vault.lessons.filter((lesson) => lesson.date === calendarDate);
+                const dayLessons = calendarLessonsForDate(calendarDate);
                 const amount = dayLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
                 const isCurrentMonth = calendarDate.startsWith(calendarMonth);
                 const hasCancelled = dayLessons.some((lesson) => lesson.status === "cancelled");
@@ -950,6 +1208,7 @@ export function ScheduleView({
                     onClick={() => {
                       setSelectedCalendarDate(calendarDate);
                       if (calendarMode === "schedule") {
+                        if (!validateTimeRange(calendarStartTime, calendarEndTime, "日历排课的结束时间必须晚于开始时间。")) return;
                         addLessonFromCourse(calendarCourseGroupId, calendarDate, calendarStartTime, calendarEndTime, "scheduled");
                       }
                     }}
@@ -980,7 +1239,7 @@ export function ScheduleView({
                       {hasCompleted && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
                       {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                       {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
-                      {amount > 0 && <Badge variant="default" className="px-1.5 py-0 text-[10px]">{formatMoney(amount)}</Badge>}
+                      {amount > 0 && <Badge variant="default" className="px-1.5 py-0 text-[10px]">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                     </div>
                     {dayLessons.slice(0, 2).map((lesson) => (
                       <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
@@ -1012,7 +1271,7 @@ export function ScheduleView({
                   { label: "当天课次", value: `${selectedCalendarLessons.length} 节` },
                   { label: "待上/待补", value: `${selectedCalendarPendingCount} 节` },
                   { label: "已完成", value: `${selectedCalendarCompletedCount} 节` },
-                  { label: "当天金额", value: formatMoney(selectedCalendarAmount) },
+                  { label: "当天金额", value: formatPrivateMoney(selectedCalendarAmount, amountsVisible) },
                   { label: "已取消", value: `${selectedCalendarCancelledCount} 节` }
                 ].map((item) => (
                   <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
@@ -1124,7 +1383,7 @@ export function ScheduleView({
                 </label>
                 <Select value={studentStatsCourseFilter} onChange={(event) => setStudentStatsCourseFilter(event.target.value)}>
                   <option value="all">全部课程</option>
-                  {vault.courseGroups.map((course) => (
+                  {courseGroupOptions.map((course) => (
                     <option key={course.id} value={course.id}>{course.name} · {courseTypeLabel(vault, course.type)}</option>
                   ))}
                 </Select>
@@ -1142,7 +1401,7 @@ export function ScheduleView({
                 </Select>
                 <Select value={studentStatsCampusFilter} onChange={(event) => setStudentStatsCampusFilter(event.target.value)}>
                   <option value="all">全部校区</option>
-                  {vault.campuses.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <option key={campus.id} value={campus.id}>{campus.name}</option>
                   ))}
                 </Select>
@@ -1201,7 +1460,7 @@ export function ScheduleView({
                   { label: "筛选后课次", value: `${studentStatsLessons.length} 节` },
                   { label: "涉及学生", value: `${studentStatsRows.length} 人` },
                   { label: "已完成", value: `${studentStatsCompletedCount} 节` },
-                  { label: "课时费合计", value: formatMoney(studentStatsTotalFee) }
+                  { label: "课时费合计", value: formatPrivateMoney(studentStatsTotalFee, amountsVisible) }
                 ].map((item) => (
                   <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
                     <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
@@ -1250,7 +1509,7 @@ export function ScheduleView({
                         { label: "待上/待补", value: `${row.pending} 节` },
                         { label: "已取消", value: `${row.cancelled} 节` },
                         { label: "课时", value: `${row.hours.toFixed(1)} 小时` },
-                        { label: "课时费", value: formatMoney(row.amount) }
+                        { label: "课时费", value: formatPrivateMoney(row.amount, amountsVisible) }
                       ].map((item) => (
                         <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
                           <div className="text-[11px] font-semibold text-[#64748b]">{item.label}</div>
@@ -1284,7 +1543,7 @@ export function ScheduleView({
                           </div>
                           <div className="flex flex-wrap gap-2 md:justify-end">
                             <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{detail.hours.toFixed(1)} 小时</span>
-                            <span className="rounded-full bg-[#eaf2ff] px-2.5 py-1 font-extrabold text-[#1557c2]">{formatMoney(detail.amount)}</span>
+                            <span className="rounded-full bg-[#eaf2ff] px-2.5 py-1 font-extrabold text-[#1557c2]">{formatPrivateMoney(detail.amount, amountsVisible)}</span>
                           </div>
                         </div>
                       ))}
@@ -1369,7 +1628,7 @@ export function ScheduleView({
                 <label className="text-sm font-medium">校区筛选</label>
                 <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
                   <option value="all">全部校区</option>
-                  {vault.campuses.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <option key={campus.id} value={campus.id}>{campus.name}</option>
                   ))}
                 </Select>
@@ -1388,7 +1647,7 @@ export function ScheduleView({
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
               <label className="relative block">
                 <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                <Input className="pl-9" value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} placeholder="输入学生名筛选" />
+                <Input className="pl-9" value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} placeholder="搜索姓名、年级、校区或班型" />
               </label>
               <Button type="button" variant={showOnlyMakeup ? "default" : "outline"} onClick={() => setShowOnlyMakeup((value) => !value)}>
                 <RotateCcw size={15} /> 只看补课
@@ -1423,7 +1682,7 @@ export function ScheduleView({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <span className="hidden text-sm font-semibold sm:inline">{formatMoney(lesson.feeSnapshot.amount)}</span>
+                    <span className="hidden text-sm font-semibold sm:inline">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</span>
                     <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">
                       {lessonStatusLabels[lesson.status]}
                     </Badge>
@@ -1468,7 +1727,7 @@ export function ScheduleView({
                   <div className="space-y-2">
                     <label className="text-sm font-medium">课程</label>
                     <Select value={selected.courseGroupId} onChange={(event) => updateSelectedCourse(event.target.value)}>
-                      {vault.courseGroups.map((course) => (
+                      {courseGroupOptions.map((course) => (
                         <option key={course.id} value={course.id}>{course.name}</option>
                       ))}
                     </Select>
@@ -1477,7 +1736,7 @@ export function ScheduleView({
                     <label className="text-sm font-medium">校区</label>
                     <Select value={selected.campusId ?? ""} onChange={(event) => updateSelected({ campusId: event.target.value || undefined })}>
                       <option value="">课程默认校区</option>
-                      {vault.campuses.map((campus) => (
+                      {campusOptions.map((campus) => (
                         <option key={campus.id} value={campus.id}>{campus.name}</option>
                       ))}
                     </Select>
@@ -1524,15 +1783,21 @@ export function ScheduleView({
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">金额</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
-                      <Input
-                        type="number"
-                        value={selected.feeSnapshot.amount}
-                        onChange={(event) => updateSelected({ feeSnapshot: { ...selected.feeSnapshot, amount: Number(event.target.value) } })}
-                        className="pl-10"
-                      />
-                    </div>
+                    {amountsVisible ? (
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                        <Input
+                          type="number"
+                          value={selected.feeSnapshot.amount}
+                          onChange={(event) => updateSelected({ feeSnapshot: { ...selected.feeSnapshot, amount: Number(event.target.value) } })}
+                          className="pl-10"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex h-10 items-center rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 text-sm font-extrabold text-[#64748b]">
+                        ***
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1570,16 +1835,22 @@ export function ScheduleView({
                         </div>
                         <div className="space-y-1">
                           <label className="text-xs font-bold text-[#64748b]">试听费用</label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={selected.trialFee ?? 0}
-                              onChange={(event) => updateTrialStats({ trialFee: Math.max(Number(event.target.value), 0) })}
-                              className="bg-white pl-10"
-                            />
-                          </div>
+                          {amountsVisible ? (
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={selected.trialFee ?? 0}
+                                onChange={(event) => updateTrialStats({ trialFee: Math.max(Number(event.target.value), 0) })}
+                                className="bg-white pl-10"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-10 items-center rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-extrabold text-[#64748b]">
+                              ***
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1617,7 +1888,7 @@ export function ScheduleView({
                         className="h-10 bg-white pl-9"
                         value={attendanceStudentFilter}
                         onChange={(event) => setAttendanceStudentFilter(event.target.value)}
-                        placeholder="搜索姓名、年级、学校或到课状态"
+                        placeholder="搜索姓名、年级、校区或到课状态"
                       />
                     </label>
                     <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
@@ -1657,16 +1928,22 @@ export function ScheduleView({
                                 <div className="rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
                                   临时加入费用会在正常排课费用基础上额外相加。
                                 </div>
-                                <div className="relative">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
-                                  <Input
-                                    type="number"
-                                    value={entry.temporaryFee ?? 0}
-                                    onChange={(event) => updateTemporaryFee(entry.studentId, Number(event.target.value))}
-                                    className="bg-white pl-10"
-                                    placeholder="临时费用"
-                                  />
-                                </div>
+                                {amountsVisible ? (
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                                    <Input
+                                      type="number"
+                                      value={entry.temporaryFee ?? 0}
+                                      onChange={(event) => updateTemporaryFee(entry.studentId, Number(event.target.value))}
+                                      className="bg-white pl-10"
+                                      placeholder="临时费用"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex h-10 items-center rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-extrabold text-[#64748b]">
+                                    ***
+                                  </div>
+                                )}
                               </div>
                             )}
                             {(entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending" || entry.note) && (
@@ -1811,16 +2088,47 @@ function lessonStudentIds(lesson: Lesson): string[] {
   ]));
 }
 
+function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {
+  const course = getCourse(vault, lesson.courseGroupId);
+  const studentFields = lessonStudentIds(lesson).flatMap((studentId) => {
+    const student = findStudent(vault, studentId);
+    return [
+      student?.name ?? "",
+      student?.grade ?? "",
+      campusName(vault, student?.defaultCampusId),
+      student?.note ?? ""
+    ];
+  });
+  return [
+    course?.name ?? "",
+    course?.subject ?? "",
+    courseTypeLabel(vault, lesson.type),
+    campusName(vault, lesson.campusId ?? course?.defaultCampusId),
+    lessonStatusLabels[lesson.status],
+    studentNames(vault, lesson.expectedStudentIds),
+    ...studentFields
+  ].join(" ").toLowerCase();
+}
+
 function filterScheduleCourseOptions(vault: TeacherVault, courses: CourseGroup[], query: string, currentCourseId: string): CourseGroup[] {
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = normalizedQuery
     ? courses.filter((course) => {
+        const courseStudents = course.studentIds
+          .map((studentId) => findStudent(vault, studentId))
+          .filter((student): student is NonNullable<typeof student> => Boolean(student));
         const searchable = [
           course.name,
           course.subject,
           courseTypeLabel(vault, course.type),
           campusName(vault, course.defaultCampusId),
-          studentNames(vault, course.studentIds)
+          studentNames(vault, course.studentIds),
+          ...courseStudents.flatMap((student) => [
+            student?.name ?? "",
+            student?.grade ?? "",
+            campusName(vault, student?.defaultCampusId),
+            student?.note ?? ""
+          ])
         ].join(" ").toLowerCase();
         return normalizedQuery.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
       })
@@ -1858,7 +2166,7 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
   }>();
 
   lessons.forEach((lesson) => {
-    const hours = lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime);
+    const hours = lessonBillableHours(lesson);
     const amount = lesson.feeSnapshot.amount;
     lessonStudentIds(lesson).forEach((studentId) => {
       const student = findStudent(vault, studentId);
@@ -1910,7 +2218,9 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
     });
   });
 
-  return [...rows.values()].sort((a, b) => b.total - a.total || a.studentName.localeCompare(b.studentName, "zh-Hans-CN"));
+  return [...rows.values()]
+    .map((row) => ({ ...row, courseNames: [...row.courseNames].sort(compareByName) }))
+    .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
 }
 
 function attendanceSurfaceClass(status: AttendanceStatus, isTemporary: boolean): string {

@@ -6,18 +6,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
-import { completedAmount, hoursBetween, obligationSummary, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { completedAmount, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import {
   campusName,
+  compareByName,
   courseName,
   courseTypeLabel,
   courseTypeOptionsForVault,
-  formatMoney,
+  formatPrivateMoney,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
   sortLessons,
   sortCampusesForProfile,
+  sortCoursesByName,
   studentNames
 } from "@/frontend/lib/helpers";
 
@@ -33,15 +35,18 @@ type CampusAmountDetail = {
 
 export function PayrollReviewView({
   vault,
+  amountsVisible,
   onOpenLessonInCalendar
 }: {
   vault: TeacherVault;
+  amountsVisible: boolean;
   onOpenLessonInCalendar?: (lesson: Lesson) => void;
 }) {
   const campusOptions = useMemo(
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
     [vault.campuses, vault.profile.homeCampusId]
   );
+  const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
   const [campusFilter, setCampusFilter] = useState(campusOptions[0]?.id ?? "all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -52,7 +57,7 @@ export function PayrollReviewView({
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailStatusFilter, setDetailStatusFilter] = useState<LessonStatusFilter>("all");
-  const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]));
+  const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[])).sort(compareByName);
   const effectiveObligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId;
 
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
@@ -96,7 +101,7 @@ export function PayrollReviewView({
   const campusLessonFee = filteredLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
   const campusHours = filteredLessons.reduce((sum, lesson) => {
     if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;
-    return sum + (lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime));
+    return sum + lessonBillableHours(lesson);
   }, 0);
   const campusDeduction = campusFilter === "all" || campusFilter === effectiveObligationCampusId ? currentCampusObligation.amount : 0;
   const campusNet = campusLessonFee - campusDeduction;
@@ -152,7 +157,7 @@ export function PayrollReviewView({
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
       const hours = lessons.reduce((sum, lesson) => {
         if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;
-        return sum + (lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime));
+        return sum + lessonBillableHours(lesson);
       }, 0);
       const obligation = campus.id === effectiveObligationCampusId ? obligationSummary(vault, selectedMonth, campus.id).amount : 0;
       return {
@@ -239,17 +244,17 @@ export function PayrollReviewView({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `已完成 ${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
-          { label: "课时费小计", value: formatMoney(campusLessonFee), hint: "仅统计已完成/补课完成", icon: Banknote },
+          { label: "课时费小计", value: formatPrivateMoney(campusLessonFee, amountsVisible), hint: "仅统计已完成/补课完成", icon: Banknote },
           {
             label: "义务课时扣费",
-            value: `-${formatMoney(campusDeduction)}`,
+            value: `-${formatPrivateMoney(campusDeduction, amountsVisible)}`,
             hint: currentCampusObligation.mode === "manual"
               ? "手动填写扣除"
               : `缺口 ${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0} 小时`,
             icon: SlidersHorizontal,
             danger: true
           },
-          { label: "当前校区扣后", value: formatMoney(campusNet), hint: campusFilter === "all" ? "全部校区扣后课时费" : campusName(vault, campusFilter), icon: FileCheck2 }
+          { label: "当前校区扣后", value: formatPrivateMoney(campusNet, amountsVisible), hint: campusFilter === "all" ? "全部校区扣后课时费" : campusName(vault, campusFilter), icon: FileCheck2 }
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -295,13 +300,13 @@ export function PayrollReviewView({
                       <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{item.lessons.length} 节</span>
                       <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{item.hours.toFixed(1)} 小时</span>
                       {item.obligation > 0 && (
-                        <span className="rounded-full bg-[#fee2e2] px-2.5 py-1 text-[#b91c1c]">义务扣 {formatMoney(item.obligation)}</span>
+                        <span className="rounded-full bg-[#fee2e2] px-2.5 py-1 text-[#b91c1c]">义务扣 {formatPrivateMoney(item.obligation, amountsVisible)}</span>
                       )}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="text-xs font-bold text-[#64748b]">扣后小计</div>
-                    <div className="mt-1 text-lg font-extrabold text-[#061226]">{formatMoney(item.net)}</div>
+                    <div className="mt-1 text-lg font-extrabold text-[#061226]">{formatPrivateMoney(item.net, amountsVisible)}</div>
                   </div>
                 </div>
               </button>
@@ -335,7 +340,7 @@ export function PayrollReviewView({
                       <div className="min-w-0">
                         <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
                         <div className={`mt-2 text-xl font-extrabold ${item.value < 0 ? "text-[#b91c1c]" : "text-[#061226]"}`}>
-                          {formatMoney(item.value)}
+                          {formatPrivateMoney(item.value, amountsVisible)}
                         </div>
                       </div>
                       {details.length > 0 && (
@@ -350,10 +355,10 @@ export function PayrollReviewView({
                           <div
                             key={detail.key}
                             className="inline-flex min-w-0 max-w-[150px] items-center gap-1.5 rounded-[9px] border border-[#e8eef6] bg-white px-2 py-1"
-                            title={`${detail.campus} · ${detail.count} 节 · ${formatMoney(detail.amount)}`}
+                            title={`${detail.campus} · ${detail.count} 节 · ${formatPrivateMoney(detail.amount, amountsVisible)}`}
                           >
                             <span className="max-w-[72px] truncate text-[11px] font-bold text-[#64748b]">{detail.campus}</span>
-                            <span className="shrink-0 text-[11px] font-extrabold text-[#061226]">{formatMoney(detail.amount)}</span>
+                            <span className="shrink-0 text-[11px] font-extrabold text-[#061226]">{formatPrivateMoney(detail.amount, amountsVisible)}</span>
                           </div>
                         ))}
                       </div>
@@ -364,7 +369,7 @@ export function PayrollReviewView({
             </div>
             <div className="rounded-[16px] border border-[#bfdbfe] bg-[#eaf2ff] p-5">
               <div className="text-sm font-bold text-[#1557c2]">本月收入总和</div>
-              <div className="mt-2 text-3xl font-extrabold text-[#061226]">{formatMoney(breakdown.total)}</div>
+              <div className="mt-2 text-3xl font-extrabold text-[#061226]">{formatPrivateMoney(breakdown.total, amountsVisible)}</div>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {typeCountCards.map((type) => (
@@ -400,7 +405,7 @@ export function PayrollReviewView({
               <label className="text-sm font-medium">具体课程</label>
               <Select value={detailCourseFilter} onChange={(event) => setDetailCourseFilter(event.target.value)}>
                 <option value="all">全部课程</option>
-                {vault.courseGroups.map((course) => (
+                {courseOptions.map((course) => (
                   <option key={course.id} value={course.id}>{course.name}</option>
                 ))}
               </Select>
@@ -472,7 +477,7 @@ export function PayrollReviewView({
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-xs font-bold text-[#64748b]">确认金额</div>
-                  <div className="mt-1 text-lg font-extrabold text-[#061226]">{formatMoney(completedAmount(lesson))}</div>
+                  <div className="mt-1 text-lg font-extrabold text-[#061226]">{formatPrivateMoney(completedAmount(lesson), amountsVisible)}</div>
                 </div>
               </div>
             </motion.button>

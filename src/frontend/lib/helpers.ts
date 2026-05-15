@@ -24,7 +24,7 @@ import type {
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, hoursBetween, monthOf, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, monthOf, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 
 export type ViewKey = "today" | "calendar" | "schedule" | "students" | "grades" | "payroll" | "salary" | "admin";
@@ -179,6 +179,10 @@ export function formatMoney(value: number): string {
   }).format(value);
 }
 
+export function formatPrivateMoney(value: number, visible: boolean): string {
+  return visible ? formatMoney(value) : "***";
+}
+
 export function isToday(date: string): boolean {
   return date === todayIso();
 }
@@ -247,10 +251,14 @@ export function findCampus(vault: TeacherVault, campusId?: string): Campus | und
   return vault.campuses.find((campus) => campus.id === campusId);
 }
 
-const campusNameCollator = new Intl.Collator("zh-Hans-CN-u-co-pinyin", {
+const nameCollator = new Intl.Collator("zh-Hans-CN-u-co-pinyin", {
   numeric: true,
   sensitivity: "base"
 });
+
+export function compareByName(a: string, b: string): number {
+  return nameCollator.compare(a, b);
+}
 
 export function sortCampusesForProfile(campuses: Campus[], homeCampusId?: string): Campus[] {
   return [...campuses].sort((a, b) => {
@@ -258,9 +266,22 @@ export function sortCampusesForProfile(campuses: Campus[], homeCampusId?: string
       if (a.id === homeCampusId && b.id !== homeCampusId) return -1;
       if (b.id === homeCampusId && a.id !== homeCampusId) return 1;
     }
-    const nameOrder = campusNameCollator.compare(a.name, b.name);
+    const nameOrder = compareByName(a.name, b.name);
     return nameOrder || a.id.localeCompare(b.id);
   });
+}
+
+export function sortStudentsByName(students: Student[]): Student[] {
+  return [...students].sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id));
+}
+
+export function sortCoursesByName(courses: CourseGroup[]): CourseGroup[] {
+  return [...courses].sort(
+    (a, b) =>
+      compareByName(a.name, b.name) ||
+      compareByName(a.subject, b.subject) ||
+      a.id.localeCompare(b.id)
+  );
 }
 
 export function findStudent(vault: TeacherVault, studentId: string): Student | undefined {
@@ -276,7 +297,11 @@ export function campusName(vault: TeacherVault, campusId?: string): string {
 }
 
 export function studentNames(vault: TeacherVault, studentIds: string[]): string {
-  return studentIds.map((id) => findStudent(vault, id)?.name ?? "未知学生").join("、");
+  return studentIds
+    .map((id) => ({ id, name: findStudent(vault, id)?.name ?? "未知学生" }))
+    .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id))
+    .map((item) => item.name)
+    .join("、");
 }
 
 export function previousHomework(vault: TeacherVault, lesson: Lesson): string {
@@ -346,7 +371,7 @@ export function createLessonFromCourse(
     presentStudentCount,
     trialStudentCount: lesson.trialStudentCount ?? 0,
     trialFee: lesson.trialFee ?? 0,
-    hours: hoursBetween(lesson.startTime, lesson.endTime),
+    hours: billableHoursForLesson(lesson, course.feeRule),
     manualAdjustment: extraFeeTotal(lesson),
     amount: calculateFee(course.feeRule, lesson)
   };

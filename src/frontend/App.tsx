@@ -9,6 +9,8 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Eye,
+  EyeOff,
   RefreshCw,
   Send
 } from "lucide-react";
@@ -101,6 +103,7 @@ export function App() {
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [onboardingVisitedSteps, setOnboardingVisitedSteps] = useState<OnboardingStepKey[]>([]);
+  const [amountsVisible, setAmountsVisible] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [cloudVersion, setCloudVersion] = useState("");
   const [remoteCloudVersion, setRemoteCloudVersion] = useState("");
@@ -138,6 +141,7 @@ export function App() {
     setRole(result.account.role);
     setDeletion(result.deletion);
     setVault(result.vault);
+    setAmountsVisible(false);
     cloudVersionRef.current = result.cloudVersion;
     setCloudVersion(result.cloudVersion);
     setRemoteCloudVersion("");
@@ -165,6 +169,7 @@ export function App() {
     setRole(result.account.role);
     setDeletion(result.deletion);
     setVault(result.vault);
+    setAmountsVisible(false);
     cloudVersionRef.current = result.cloudVersion;
     setCloudVersion(result.cloudVersion);
     setRemoteCloudVersion("");
@@ -318,6 +323,13 @@ export function App() {
   function addLesson(lesson: Lesson) {
     updateVault((draft) => {
       draft.lessons.push(lesson);
+    });
+  }
+
+  function addLessons(lessons: Lesson[]) {
+    if (lessons.length === 0) return;
+    updateVault((draft) => {
+      draft.lessons.push(...lessons);
     });
   }
 
@@ -578,22 +590,6 @@ export function App() {
     updateVault((draft) => {
       draft.gradeRecords = (draft.gradeRecords ?? []).filter((record) => record.id !== recordId);
     });
-  }
-
-  function addScheduledLesson(date: string, courseGroupId: string, startTime: string, endTime: string) {
-    if (!vault) return;
-    const course = getCourse(vault, courseGroupId);
-    if (!course || course.status !== "active") return;
-    if (hasLessonConflict(vault.lessons, date, startTime, endTime)) return;
-    addLesson(
-      createLessonFromCourse(vault, course, {
-        date,
-        startTime,
-        endTime,
-        campusId: course.defaultCampusId,
-        status: "scheduled"
-      })
-    );
   }
 
   function generateDrafts(
@@ -988,7 +984,7 @@ export function App() {
               className={`grid ${
                 role === "admin"
                   ? "grid-cols-[56px_56px_56px_minmax(0,1fr)]"
-                  : "grid-cols-[56px_56px_56px_56px_minmax(0,1fr)]"
+                  : "grid-cols-[56px_56px_56px_56px_56px_minmax(0,1fr)]"
               } gap-2 sm:flex sm:flex-wrap sm:gap-3 xl:justify-end`}
             >
               <button
@@ -1042,6 +1038,23 @@ export function App() {
                 </button>
               )}
 
+              {role !== "admin" && (
+                <button
+                  type="button"
+                  onClick={() => setAmountsVisible((visible) => !visible)}
+                  className={`flex h-14 min-w-[56px] shrink-0 items-center justify-center rounded-[16px] border transition-colors sm:h-[58px] sm:w-auto sm:gap-2 sm:px-4 ${
+                    amountsVisible
+                      ? "border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2] shadow-[0_12px_28px_rgba(21,87,194,0.12)]"
+                      : "border-[#dbe4ef] bg-white text-[#25324a] shadow-[0_12px_28px_rgba(15,35,66,0.08)] hover:bg-[#f8fbff]"
+                  }`}
+                  aria-label={amountsVisible ? "隐藏课时费金额" : "显示课时费金额"}
+                  title={amountsVisible ? "隐藏课时费金额" : "显示课时费金额"}
+                >
+                  {amountsVisible ? <EyeOff size={21} /> : <Eye size={21} />}
+                  <span className="hidden text-sm font-extrabold sm:inline">{amountsVisible ? "隐藏金额" : "显示金额"}</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => void syncLatestCloudVault()}
@@ -1082,6 +1095,7 @@ export function App() {
                     void logoutCloud(token);
                   }
                   setVault(null);
+                  setAmountsVisible(false);
                   setPassword("");
                   setToken("");
                   setDeletion(null);
@@ -1305,6 +1319,7 @@ export function App() {
               <TodayView
                 vault={vault}
                 selectedDate={selectedDate}
+                amountsVisible={amountsVisible}
                 onUpdateLesson={updateLesson}
                 onAddTodo={addTodo}
                 onUpdateTodo={updateTodo}
@@ -1312,18 +1327,19 @@ export function App() {
               />
             )}
             {!onboardingVisible && view === "calendar" && (
-              <CalendarView vault={vault} onWeekStartChange={updateWeekStart} onOpenLessonInCalendar={openLessonInCalendar} />
+              <CalendarView vault={vault} amountsVisible={amountsVisible} onWeekStartChange={updateWeekStart} onOpenLessonInCalendar={openLessonInCalendar} />
             )}
             {!onboardingVisible && view === "schedule" && (
               <ScheduleView
                 vault={vault}
+                amountsVisible={amountsVisible}
                 onAddLesson={addLesson}
+                onAddLessons={addLessons}
                 onUpdateLesson={updateLesson}
                 onDeleteLesson={deleteLesson}
                 onAddCustomTimePreset={addCustomTimePreset}
                 onDeleteCustomTimePreset={deleteCustomTimePreset}
                 onGenerateDrafts={generateDrafts}
-                onAddScheduledLesson={addScheduledLesson}
                 onWeekStartChange={updateWeekStart}
                 calendarFocus={scheduleCalendarFocus}
               />
@@ -1331,6 +1347,7 @@ export function App() {
             {!onboardingVisible && view === "students" && (
               <StudentsView
                 vault={vault}
+                amountsVisible={amountsVisible}
                 onAddCampus={(campus) =>
                   updateVault((draft) => {
                     draft.campuses.push(campus);
@@ -1372,11 +1389,12 @@ export function App() {
               />
             )}
             {!onboardingVisible && view === "payroll" && (
-              <PayrollReviewView vault={vault} onOpenLessonInCalendar={openLessonInCalendar} />
+              <PayrollReviewView vault={vault} amountsVisible={amountsVisible} onOpenLessonInCalendar={openLessonInCalendar} />
             )}
             {!onboardingVisible && view === "salary" && (
               <SalaryView
                 vault={vault}
+                amountsVisible={amountsVisible}
                 onAddAdjustment={addSalaryAdjustment}
                 onDeleteAdjustment={deleteSalaryAdjustment}
                 onOpenLessonInCalendar={openLessonInCalendar}
@@ -1395,6 +1413,7 @@ export function App() {
                 onClearData={() => {
                   clearVault(username);
                   setVault(null);
+                  setAmountsVisible(false);
                   setPassword("");
                   setToken("");
                   setDeletion(null);
@@ -1474,15 +1493,6 @@ function greetingFor(date: Date): string {
   if (hour >= 11 && hour < 14) return "中午好";
   if (hour >= 14 && hour < 18) return "下午好";
   return "晚上好";
-}
-
-function hasLessonConflict(lessons: Lesson[], date: string, startTime: string, endTime: string): boolean {
-  return lessons.some(
-    (lesson) =>
-      lesson.date === date &&
-      lesson.status !== "cancelled" &&
-      timesOverlap(lesson.startTime, lesson.endTime, startTime, endTime)
-  );
 }
 
 function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {

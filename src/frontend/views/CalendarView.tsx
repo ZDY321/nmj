@@ -10,7 +10,7 @@ import {
   courseName,
   courseTypeLabel,
   campusName,
-  formatMoney,
+  formatPrivateMoney,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
@@ -27,10 +27,12 @@ import { todayIso } from "@/frontend/lib/calculations";
 
 export function CalendarView({
   vault,
+  amountsVisible,
   onWeekStartChange,
   onOpenLessonInCalendar
 }: {
   vault: TeacherVault;
+  amountsVisible: boolean;
   onWeekStartChange: (weekStart: WeekStart) => void;
   onOpenLessonInCalendar?: (lesson: Lesson) => void;
 }) {
@@ -52,9 +54,9 @@ export function CalendarView({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="选中日期" value={`${selectedLessons.length} 节`} hint={formatMoney(selectedTotal)} variant={1} index={0} showSparkline={false} />
-        <MetricCard label="本周课程" value={`${weekLessons.length} 节`} hint={formatMoney(weekTotal)} variant={2} index={1} showSparkline={false} />
-        <MetricCard label="本月课程" value={`${monthLessons.length} 节`} hint={formatMoney(monthTotal)} variant={3} index={2} showSparkline={false} />
+        <MetricCard label="选中日期" value={`${selectedLessons.length} 节`} hint={formatPrivateMoney(selectedTotal, amountsVisible)} variant={1} index={0} showSparkline={false} />
+        <MetricCard label="本周课程" value={`${weekLessons.length} 节`} hint={formatPrivateMoney(weekTotal, amountsVisible)} variant={2} index={1} showSparkline={false} />
+        <MetricCard label="本月课程" value={`${monthLessons.length} 节`} hint={formatPrivateMoney(monthTotal, amountsVisible)} variant={3} index={2} showSparkline={false} />
         <MetricCard
           label="待处理"
           value={`${monthLessons.filter((l) => l.status === "makeup_pending" || l.status === "scheduled").length}`}
@@ -141,7 +143,7 @@ export function CalendarView({
                       {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
                       {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                       {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
-                      {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatMoney(amount)}</Badge>}
+                      {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                     </div>
                     {dayLessons.slice(0, 2).map((l) => (
                       <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
@@ -167,15 +169,15 @@ export function CalendarView({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">
                 <span className="text-xs text-(--color-muted-foreground)">当天课时费</span>
-                <strong className="block text-xl font-extrabold mt-1">{formatMoney(selectedTotal)}</strong>
+                <strong className="block text-xl font-extrabold mt-1">{formatPrivateMoney(selectedTotal, amountsVisible)}</strong>
               </div>
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">
                 <span className="text-xs text-(--color-muted-foreground)">本周课时费</span>
-                <strong className="block text-xl font-extrabold mt-1">{formatMoney(weekTotal)}</strong>
+                <strong className="block text-xl font-extrabold mt-1">{formatPrivateMoney(weekTotal, amountsVisible)}</strong>
               </div>
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">
                 <span className="text-xs text-(--color-muted-foreground)">本月课时费</span>
-                <strong className="block text-xl font-extrabold mt-1">{formatMoney(monthTotal)}</strong>
+                <strong className="block text-xl font-extrabold mt-1">{formatPrivateMoney(monthTotal, amountsVisible)}</strong>
               </div>
               <div className="p-3 rounded-[12px] bg-[#f8fbff] border border-[#e8eef6]">
                 <span className="text-xs text-(--color-muted-foreground)">本月节数</span>
@@ -212,7 +214,7 @@ export function CalendarView({
                       {campusName(vault, lesson.campusId)} · {studentNames(vault, lesson.expectedStudentIds)}
                     </span>
                   </div>
-                  <span className="shrink-0 text-sm font-bold text-[#1557c2] sm:ml-3">{formatMoney(lesson.feeSnapshot.amount)}</span>
+                  <span className="shrink-0 text-sm font-bold text-[#1557c2] sm:ml-3">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</span>
                 </motion.button>
               ))}
             </div>

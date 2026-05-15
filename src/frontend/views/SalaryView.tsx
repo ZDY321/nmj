@@ -20,17 +20,18 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { Lesson, SalaryAdjustment, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
-import { attendanceSummary, obligationSummary, salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
+import { attendanceSummary, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
   campusName,
   courseName,
   courseTypeLabel,
-  formatMoney,
+  formatPrivateMoney,
   lessonStatusLabels,
   lessonStatusVariant,
   sortLessons,
   sortCampusesForProfile,
+  sortCoursesByName,
   studentNames
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
@@ -41,11 +42,13 @@ type YearTrendItem = ReturnType<typeof yearlyTrend>[number];
 
 export function SalaryView({
   vault,
+  amountsVisible,
   onAddAdjustment,
   onDeleteAdjustment,
   onOpenLessonInCalendar
 }: {
   vault: TeacherVault;
+  amountsVisible: boolean;
   onAddAdjustment: (adjustment: SalaryAdjustment) => void;
   onDeleteAdjustment: (adjustmentId: string) => void;
   onOpenLessonInCalendar?: (lesson: Lesson) => void;
@@ -62,6 +65,7 @@ export function SalaryView({
   const [detailStatusFilter, setDetailStatusFilter] = useState<"all" | Lesson["status"]>("all");
   const { confirm, dialog } = useConfirmDialog();
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
+  const courseOptions = sortCoursesByName(vault.courseGroups);
   const year = selectedMonth.slice(0, 4);
   const breakdown = salaryBreakdown(vault, selectedMonth);
   const summary = attendanceSummary(vault, selectedMonth);
@@ -75,7 +79,7 @@ export function SalaryView({
   ])).sort((a, b) => b.localeCompare(a));
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
-  const totalHours = monthLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? 0), 0);
+  const totalHours = monthLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
   function lessonCampusId(lesson: Lesson): string | undefined {
     return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
   }
@@ -99,7 +103,7 @@ export function SalaryView({
   const filteredPendingLessons = recentLessons.filter((lesson) => isPendingLessonStatus(lesson.status));
   const filteredCancelledLessons = recentLessons.filter((lesson) => lesson.status === "cancelled");
   const filteredTotalAmount = recentLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
-  const filteredTotalHours = recentLessons.reduce((sum, lesson) => sum + (lesson.feeSnapshot.hours ?? 0), 0);
+  const filteredTotalHours = recentLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
   const filteredMissedAttendanceCount = recentLessons.reduce(
     (sum, lesson) => sum + lesson.attendance.filter((entry) => isMissedAttendanceStatus(entry.status)).length,
     0
@@ -133,11 +137,11 @@ export function SalaryView({
     <div className="space-y-6">
       {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="基本工资" value={formatMoney(breakdown.baseSalary)} hint="月固定项" variant={1} index={0} showSparkline={false} />
-        <MetricCard label="一对一" value={formatMoney(breakdown.oneOnOne)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
-        <MetricCard label="班课" value={formatMoney(breakdown.classLessons)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
-        <MetricCard label="全日制" value={formatMoney(breakdown.fullTime)} hint="已完成课程" variant={4} index={3} showSparkline={false} />
-        <MetricCard label="合计" value={formatMoney(breakdown.total)} hint="含补贴/扣款" variant={1} index={4} showSparkline={false} />
+        <MetricCard label="基本工资" value={formatPrivateMoney(breakdown.baseSalary, amountsVisible)} hint="月固定项" variant={1} index={0} showSparkline={false} />
+        <MetricCard label="一对一" value={formatPrivateMoney(breakdown.oneOnOne, amountsVisible)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
+        <MetricCard label="班课" value={formatPrivateMoney(breakdown.classLessons, amountsVisible)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
+        <MetricCard label="全日制" value={formatPrivateMoney(breakdown.fullTime, amountsVisible)} hint="已完成课程" variant={4} index={3} showSparkline={false} />
+        <MetricCard label="合计" value={formatPrivateMoney(breakdown.total, amountsVisible)} hint="含补贴/扣款" variant={1} index={4} showSparkline={false} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -174,7 +178,7 @@ export function SalaryView({
                     <div className="min-w-0 flex-1">
                       <span className="block text-xs text-[#64748b]">{item.label}</span>
                       <span className={`text-sm font-bold ${"danger" in item && item.danger ? "text-[#b91c1c]" : "text-[#061226]"}`}>
-                        {formatMoney(item.value)}
+                        {formatPrivateMoney(item.value, amountsVisible)}
                       </span>
                     </div>
                   </motion.div>
@@ -191,12 +195,12 @@ export function SalaryView({
                     <div className="mt-1 text-xs font-semibold leading-5 text-[#9f1239]">
                       {obligation.campus?.name ?? "未设置义务校区"}
                       {obligation.mode === "manual"
-                        ? ` · 手动扣 ${formatMoney(obligation.manualAmount)}`
-                        : `${obligation.course ? ` · ${obligation.course.name}` : ""} · 课程扣 ${formatMoney(obligation.courseDeductionAmount)}，补扣 ${obligation.fallbackHours.toFixed(1)} / ${obligation.requiredHours || 0} 小时`}
+                        ? ` · 手动扣 ${formatPrivateMoney(obligation.manualAmount, amountsVisible)}`
+                        : `${obligation.course ? ` · ${obligation.course.name}` : ""} · 课程扣 ${formatPrivateMoney(obligation.courseDeductionAmount, amountsVisible)}，补扣 ${obligation.fallbackHours.toFixed(1)} / ${obligation.requiredHours || 0} 小时`}
                     </div>
                   </div>
                   <div className="shrink-0 text-sm font-extrabold text-[#b91c1c]">
-                    -{formatMoney(obligation.amount)}
+                    -{formatPrivateMoney(obligation.amount, amountsVisible)}
                   </div>
                 </div>
               </div>
@@ -209,7 +213,7 @@ export function SalaryView({
                         <div className="mt-1 text-xs text-[#64748b]">{item.note || "无备注"}</div>
                       </div>
                       <div className={`shrink-0 text-sm font-extrabold ${item.amount >= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}`}>
-                        {item.amount >= 0 ? "+" : ""}{formatMoney(item.amount)}
+                        {item.amount >= 0 ? "+" : ""}{formatPrivateMoney(item.amount, amountsVisible)}
                       </div>
                     </div>
                     <div className="mt-3 flex justify-end">
@@ -271,7 +275,7 @@ export function SalaryView({
             </Select>
           </CardHeader>
           <CardContent className="space-y-5">
-            <AnnualIncomeLineChart trend={trend} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
+            <AnnualIncomeLineChart trend={trend} selectedMonth={selectedMonth} amountsVisible={amountsVisible} onSelectMonth={setSelectedMonth} />
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-4">
               {trend.map((item) => (
                 <button
@@ -285,7 +289,7 @@ export function SalaryView({
                   }`}
                 >
                   <div className="text-xs font-bold text-[#64748b]">{monthNames[Number(item.month.slice(5)) - 1]}</div>
-                  <div className="mt-2 break-words text-lg font-extrabold leading-tight text-[#061226]">{formatMoney(item.total)}</div>
+                  <div className="mt-2 break-words text-lg font-extrabold leading-tight text-[#061226]">{formatPrivateMoney(item.total, amountsVisible)}</div>
                   <div className="mt-2 text-[11px] font-semibold text-[#64748b]">{item.count} 节课程</div>
                 </button>
               ))}
@@ -328,7 +332,7 @@ export function SalaryView({
         <CardContent className="space-y-5">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-9">
             {[
-              { label: "总收入", value: formatMoney(breakdown.total) },
+              { label: "总收入", value: formatPrivateMoney(breakdown.total, amountsVisible) },
               { label: "课时", value: `${(totalHours || completedThisMonth.length * 2).toFixed(1)} 小时` },
               { label: "课程", value: `${monthLessons.length} 节` },
               ...Object.entries(summary).map(([key, value]) => ({
@@ -362,7 +366,7 @@ export function SalaryView({
               <label className="text-sm font-medium">课程筛选</label>
               <Select value={detailCourseFilter} onChange={(event) => setDetailCourseFilter(event.target.value)}>
                 <option value="all">全部课程</option>
-                {vault.courseGroups.map((course) => (
+                {courseOptions.map((course) => (
                   <option key={course.id} value={course.id}>{course.name}</option>
                 ))}
               </Select>
@@ -406,7 +410,7 @@ export function SalaryView({
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
               {[
                 { label: "总课次", value: `${recentLessons.length} 节` },
-                { label: "课时金额", value: formatMoney(filteredTotalAmount) },
+                { label: "课时金额", value: formatPrivateMoney(filteredTotalAmount, amountsVisible) },
                 { label: "课时合计", value: `${filteredTotalHours.toFixed(1)} 小时` },
                 { label: "已完成", value: `${filteredCompletedLessons.length} 节` },
                 { label: "未上/待补", value: `${filteredPendingLessons.length} 节` },
@@ -446,7 +450,7 @@ export function SalaryView({
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <div className="text-sm font-extrabold text-[#061226]">{formatMoney(lesson.feeSnapshot.amount)}</div>
+                      <div className="text-sm font-extrabold text-[#061226]">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</div>
                       <Badge variant={lessonStatusVariant(lesson.status)} className="mt-2">
                         {lessonStatusLabels[lesson.status]}
                       </Badge>
@@ -529,7 +533,7 @@ export function SalaryView({
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-[#061226]">
-                      {formatMoney(lesson.feeSnapshot.amount)}
+                      {formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}
                     </td>
                   </tr>
                 ))}
@@ -550,10 +554,12 @@ export function SalaryView({
 function AnnualIncomeLineChart({
   trend,
   selectedMonth,
+  amountsVisible,
   onSelectMonth
 }: {
   trend: YearTrendItem[];
   selectedMonth: string;
+  amountsVisible: boolean;
   onSelectMonth: (month: string) => void;
 }) {
   if (trend.length === 0) {
@@ -593,7 +599,7 @@ function AnnualIncomeLineChart({
             <g key={value}>
               <line x1={plotLeft} x2={plotRight} y1={y} y2={y} stroke="#e8eef6" strokeDasharray="4 6" />
               <text x="4" y={y + 4} className="fill-[#64748b] text-[12px] font-semibold">
-                {formatMoney(value)}
+                {formatPrivateMoney(value, amountsVisible)}
               </text>
             </g>
           );
@@ -605,7 +611,7 @@ function AnnualIncomeLineChart({
             <g key={point.month} className="cursor-pointer" onClick={() => onSelectMonth(point.month)}>
               <circle cx={point.x} cy={point.y} r="15" fill="transparent" />
               <circle cx={point.x} cy={point.y} r={selected ? "7" : "5"} fill={selected ? "#1557c2" : "#fff"} stroke="#1557c2" strokeWidth="3">
-                <title>{`${point.month}：${formatMoney(point.total)}，${point.count} 节`}</title>
+                <title>{`${point.month}：${formatPrivateMoney(point.total, amountsVisible)}，${point.count} 节`}</title>
               </circle>
               <text x={point.x} y="222" textAnchor="middle" className="fill-[#64748b] text-[11px] font-semibold">
                 {Number(point.month.slice(5))}月

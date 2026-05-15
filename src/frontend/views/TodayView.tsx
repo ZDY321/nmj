@@ -26,14 +26,16 @@ import { formatAppDateLabel } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
   campusName,
+  compareByName,
   courseName,
   findStudent,
-  formatMoney,
+  formatPrivateMoney,
   isToday,
   lessonStatusLabels,
   lessonStatusVariant,
   previousHomework,
   previousLesson,
+  sortCampusesForProfile,
   sortLessons,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -41,6 +43,7 @@ import {
 export function TodayView({
   vault,
   selectedDate,
+  amountsVisible,
   onUpdateLesson,
   onAddTodo,
   onUpdateTodo,
@@ -48,6 +51,7 @@ export function TodayView({
 }: {
   vault: TeacherVault;
   selectedDate: string;
+  amountsVisible: boolean;
   onUpdateLesson: (lesson: Lesson) => void;
   onAddTodo: (todo: TodoItem) => void;
   onUpdateTodo: (todo: TodoItem) => void;
@@ -59,10 +63,11 @@ export function TodayView({
   const [editingTodoTitle, setEditingTodoTitle] = useState("");
   const [editingTodoDueDate, setEditingTodoDueDate] = useState("");
   const { confirm, dialog } = useConfirmDialog();
+  const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
   const waitingLessons = selectedDateLessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "draft");
   const cancelledLessons = selectedDateLessons.filter((lesson) => lesson.status === "cancelled");
-  const campusCounts = vault.campuses
+  const campusCounts = campusOptions
     .map((campus, index) => ({
       campus,
       count: selectedDateLessons.filter((lesson) => lesson.campusId === campus.id).length,
@@ -307,7 +312,7 @@ export function TodayView({
             selectedDateLessons.map((lesson, index) => {
               const homework = previousHomework(vault, lesson).trim();
               const previous = previousLesson(vault, lesson);
-              const campusTone = campusColorClass(vault.campuses.findIndex((campus) => campus.id === lesson.campusId));
+              const campusTone = campusColorClass(campusOptions.findIndex((campus) => campus.id === lesson.campusId));
               return (
                 <motion.article
                   key={lesson.id}
@@ -342,13 +347,22 @@ export function TodayView({
                     <div className="rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-4">
                       <div className="mb-2 text-sm font-extrabold text-[#25324a]">学生情况</div>
                       <div className="flex flex-wrap gap-2">
-                        {lesson.attendance.length > 0 ? lesson.attendance.map((entry) => (
+                        {lesson.attendance.length > 0 ? [...lesson.attendance]
+                          .sort((a, b) => {
+                            const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
+                            const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
+                            return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
+                          })
+                          .map((entry) => (
                           <span key={entry.studentId} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#475569] ring-1 ring-[#dbe4ef]">
                             {findStudent(vault, entry.studentId)?.name ?? "未知学生"} · {attendanceLabels[entry.status]}
                           </span>
-                        )) : lesson.expectedStudentIds.map((studentId) => (
+                        )) : [...lesson.expectedStudentIds]
+                          .map((studentId) => ({ studentId, name: findStudent(vault, studentId)?.name ?? "未知学生" }))
+                          .sort((a, b) => compareByName(a.name, b.name) || a.studentId.localeCompare(b.studentId))
+                          .map(({ studentId, name }) => (
                           <span key={studentId} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#475569] ring-1 ring-[#dbe4ef]">
-                            {findStudent(vault, studentId)?.name ?? "未知学生"}
+                            {name}
                           </span>
                         ))}
                       </div>
@@ -387,7 +401,7 @@ export function TodayView({
 
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm font-bold text-[#061226]">
-                      本节预计金额：{formatMoney(lesson.feeSnapshot.amount)}
+                      本节预计金额：{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:flex">
                       <Button size="sm" onClick={() => quickStatus(lesson, "completed")} className="bg-[#16a34a] shadow-none hover:bg-[#15803d]">

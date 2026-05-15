@@ -13,12 +13,15 @@ import { calculateFee, getCourse, presentCount, todayIso } from "@/frontend/lib/
 import {
   attendanceLabels,
   addDays,
+  compareByName,
   courseName,
   courseTypeOptionsForVault,
   createLessonFromCourse,
   findStudent,
-  formatMoney,
+  formatPrivateMoney,
   lessonStatusLabels,
+  sortCampusesForProfile,
+  sortCoursesByName,
   sortLessons
 } from "@/frontend/lib/helpers";
 
@@ -35,7 +38,7 @@ function LessonForm({
   vault: TeacherVault;
   onAddLesson: (lesson: Lesson) => void;
 }) {
-  const courseOptions = vault.courseGroups.filter((course) => course.status === "active");
+  const courseOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active"));
   const courseOptionIds = courseOptions.map((course) => course.id).join("|");
   const [date, setDate] = useState(todayIso());
   const [courseGroupId, setCourseGroupId] = useState(courseOptions[0]?.id ?? "");
@@ -156,11 +159,13 @@ function offsetDate(offset: number): string {
 
 export function LessonsView({
   vault,
+  amountsVisible = false,
   onAddLesson,
   onUpdateLesson,
   onDeleteLesson
 }: {
   vault: TeacherVault;
+  amountsVisible?: boolean;
   onAddLesson: (lesson: Lesson) => void;
   onUpdateLesson: (lesson: Lesson) => void;
   onDeleteLesson: (lessonId: string) => void;
@@ -170,6 +175,7 @@ export function LessonsView({
   const [studentFilter, setStudentFilter] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | CourseType>("all");
   const { confirm, dialog } = useConfirmDialog();
+  const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const normalizedStudentFilter = studentFilter.trim().toLowerCase();
   const lessons = vault.lessons
     .filter((lesson) => {
@@ -250,7 +256,7 @@ export function LessonsView({
                 <label className="text-sm font-medium">校区筛选</label>
                 <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
                   <option value="all">全部校区</option>
-                  {vault.campuses.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <option key={campus.id} value={campus.id}>{campus.name}</option>
                   ))}
                 </Select>
@@ -303,7 +309,7 @@ export function LessonsView({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-semibold text-sm">{formatMoney(lesson.feeSnapshot.amount)}</span>
+                    <span className="font-semibold text-sm">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</span>
                     <Badge variant={lesson.status === "completed" ? "sage" : lesson.status === "cancelled" ? "destructive" : "default"} className="text-[10px]">
                       {lessonStatusLabels[lesson.status]}
                     </Badge>
@@ -344,15 +350,21 @@ export function LessonsView({
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">金额</label>
-                    <Input
-                      type="number"
-                      value={selected.feeSnapshot.amount}
-                      onChange={(e) =>
-                        updateSelected({
-                          feeSnapshot: { ...selected.feeSnapshot, amount: Number(e.target.value) }
-                        })
-                      }
-                    />
+                    {amountsVisible ? (
+                      <Input
+                        type="number"
+                        value={selected.feeSnapshot.amount}
+                        onChange={(e) =>
+                          updateSelected({
+                            feeSnapshot: { ...selected.feeSnapshot, amount: Number(e.target.value) }
+                          })
+                        }
+                      />
+                    ) : (
+                      <div className="flex h-10 items-center rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 text-sm font-extrabold text-[#64748b]">
+                        ***
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -360,7 +372,11 @@ export function LessonsView({
                   <div className="flex items-center gap-2 text-[#ff8617] text-xs font-bold uppercase tracking-widest">
                     <UserCheck size={14} /> 到课情况
                   </div>
-                  {selected.attendance.map((entry) => (
+                  {[...selected.attendance].sort((a, b) => {
+                    const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
+                    const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
+                    return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
+                  }).map((entry) => (
                     <motion.div
                       key={entry.studentId}
                       initial={{ opacity: 0 }}

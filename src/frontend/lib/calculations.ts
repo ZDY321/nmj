@@ -78,6 +78,26 @@ export function hoursBetween(startTime: string, endTime: string): number {
   return Math.max((end - start) / 60, 0);
 }
 
+export function normalizedClassHoursBetween(startTime: string, endTime: string): number {
+  const hours = hoursBetween(startTime, endTime);
+  if (hours <= 0) return 0;
+  return Math.max(Math.round(hours * 2) / 2, 0.5);
+}
+
+export function billableHoursForLesson(lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
+  if (lesson.type === "class" || rule?.mode === "class_headcount") {
+    return normalizedClassHoursBetween(lesson.startTime, lesson.endTime);
+  }
+  return hoursBetween(lesson.startTime, lesson.endTime);
+}
+
+export function lessonBillableHours(lesson: Lesson): number {
+  if (lesson.type === "class") {
+    return billableHoursForLesson(lesson);
+  }
+  return Number.isFinite(lesson.feeSnapshot.hours) ? Math.max(lesson.feeSnapshot.hours ?? 0, 0) : billableHoursForLesson(lesson);
+}
+
 export function presentCount(lesson: Lesson): number {
   return lesson.attendance.filter((entry) => entry.status === "attended").length;
 }
@@ -147,7 +167,7 @@ export function calculateClassHeadcountFee(rule: FeeRule, studentCount: number):
 export function calculateFee(rule: FeeRule, lesson: Lesson): number {
   const extraFee = extraFeeTotal(lesson);
   if (rule.mode === "hourly") {
-    return Math.round((rule.hourlyRate ?? 0) * hoursBetween(lesson.startTime, lesson.endTime) + extraFee);
+    return Math.round((rule.hourlyRate ?? 0) * billableHoursForLesson(lesson, rule) + extraFee);
   }
 
   if (rule.mode === "fixed") {
@@ -191,7 +211,7 @@ function completedHours(lesson: Lesson): number {
   if (lesson.status !== "completed" && lesson.status !== "makeup_completed") {
     return 0;
   }
-  return lesson.feeSnapshot.hours ?? hoursBetween(lesson.startTime, lesson.endTime);
+  return lessonBillableHours(lesson);
 }
 
 export type ObligationSummary = {
