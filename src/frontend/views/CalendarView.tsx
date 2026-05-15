@@ -44,11 +44,12 @@ export function CalendarView({
   const [overviewPage, setOverviewPage] = useState<CalendarOverviewPage>("month");
   const weekStartPreference = weekStartsOn(vault);
   const days = calendarDates(month, weekStartPreference);
+  const visibleLessons = vault.lessons.filter((lesson) => !isFullyScheduledMakeupOriginal(vault, lesson));
 
-  const selectedLessons = vault.lessons.filter((l) => l.date === selectedDate).sort(sortLessons);
+  const selectedLessons = visibleLessons.filter((l) => l.date === selectedDate).sort(sortLessons);
   const weekDates = weekDatesFor(selectedDate, weekStartPreference);
-  const weekLessons = vault.lessons.filter((l) => weekDates.includes(l.date)).sort(sortLessons);
-  const monthLessons = vault.lessons.filter((l) => l.date.startsWith(month));
+  const weekLessons = visibleLessons.filter((l) => weekDates.includes(l.date)).sort(sortLessons);
+  const monthLessons = visibleLessons.filter((l) => l.date.startsWith(month));
   const selectedTotal = selectedLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const weekTotal = weekLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const monthTotal = monthLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
@@ -162,7 +163,7 @@ export function CalendarView({
                   <div key={d} className="text-center text-xs font-bold text-(--color-muted-foreground) py-2">{d}</div>
                 ))}
                 {days.map((date) => {
-                  const dayLessons = vault.lessons.filter((l) => l.date === date).sort(sortLessons);
+                  const dayLessons = visibleLessons.filter((l) => l.date === date).sort(sortLessons);
                   const amount = dayLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
                   const hasPending = dayLessons.some((l) => l.status === "scheduled" || l.status === "makeup_pending");
                   const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
@@ -399,4 +400,22 @@ export function CalendarView({
       </div>
     </div>
   );
+}
+
+function isFullyScheduledMakeupOriginal(vault: TeacherVault, lesson: Lesson): boolean {
+  if (lesson.status !== "makeup_pending" || lesson.linkedOriginalLessonId) return false;
+  const expectedStudentIds = Array.from(new Set([
+    ...lesson.expectedStudentIds,
+    ...lesson.attendance.map((entry) => entry.studentId)
+  ]));
+  if (expectedStudentIds.length === 0) return false;
+  const scheduledStudentIds = new Set(
+    vault.lessons
+      .filter((item) => item.linkedOriginalLessonId === lesson.id && item.status !== "cancelled")
+      .flatMap((item) => [
+        ...item.expectedStudentIds,
+        ...item.attendance.map((entry) => entry.studentId)
+      ])
+  );
+  return expectedStudentIds.every((studentId) => scheduledStudentIds.has(studentId));
 }

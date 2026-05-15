@@ -163,6 +163,9 @@ export function ScheduleView({
   const [temporaryStudentSearch, setTemporaryStudentSearch] = useState("");
   const [attendanceStudentFilter, setAttendanceStudentFilter] = useState("");
   const [makeupOriginalDateFilter, setMakeupOriginalDateFilter] = useState("");
+  const [makeupDate, setMakeupDate] = useState(todayIso());
+  const [makeupStartTime, setMakeupStartTime] = useState("19:00");
+  const [makeupEndTime, setMakeupEndTime] = useState("21:00");
   const [scheduleError, setScheduleError] = useState("");
   const { confirm, dialog } = useConfirmDialog();
   const syncSourceLessons = vault.lessons
@@ -189,6 +192,7 @@ export function ScheduleView({
   useEffect(() => {
     setSyncTargetDate(selectedCalendarDate);
     setSyncSourceDate(addDays(selectedCalendarDate, -7));
+    setMakeupDate(selectedCalendarDate);
   }, [selectedCalendarDate]);
 
   useEffect(() => {
@@ -348,28 +352,74 @@ export function ScheduleView({
         return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
       })
     : [];
+  const activeMakeupLessons = vault.lessons
+    .filter((lesson) => Boolean(lesson.linkedOriginalLessonId) && lesson.status !== "cancelled")
+    .sort(sortLessons);
+  const activeMakeupLessonsByOriginal = activeMakeupLessons.reduce<Record<string, Lesson[]>>((groups, lesson) => {
+    const originalId = lesson.linkedOriginalLessonId;
+    if (!originalId) return groups;
+    groups[originalId] = [...(groups[originalId] ?? []), lesson];
+    return groups;
+  }, {});
+
+  function activeMakeupStudentIdsForOriginal(originalLessonId: string): Set<string> {
+    return new Set((activeMakeupLessonsByOriginal[originalLessonId] ?? []).flatMap((lesson) => lessonStudentIds(lesson)));
+  }
+
+  function isFullyScheduledMakeupOriginal(lesson: Lesson): boolean {
+    if (lesson.linkedOriginalLessonId || lesson.status !== "makeup_pending") return false;
+    const neededStudentIds = lessonStudentIds(lesson);
+    if (neededStudentIds.length === 0) return false;
+    const scheduledStudentIds = activeMakeupStudentIdsForOriginal(lesson.id);
+    return neededStudentIds.every((studentId) => scheduledStudentIds.has(studentId));
+  }
+
   const makeupGroups = vault.lessons
-    .filter((lesson) => lesson.status !== "cancelled")
+    .filter((lesson) => lesson.status !== "cancelled" && !lesson.linkedOriginalLessonId)
     .map((lesson) => {
-      const entries = lesson.attendance
+      const scheduledStudentIds = activeMakeupStudentIdsForOriginal(lesson.id);
+      const rawEntries = lesson.attendance
         .filter((entry) => isMakeupAttendanceStatus(entry.status))
         .sort((a, b) => {
           const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
           const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
           return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
         });
-      const studentIds = lesson.status === "makeup_pending" ? lessonStudentIds(lesson) : entries.map((entry) => entry.studentId);
+      const rawStudentIds = lesson.status === "makeup_pending" ? lessonStudentIds(lesson) : rawEntries.map((entry) => entry.studentId);
+      const studentIds = rawStudentIds.filter((studentId) => !scheduledStudentIds.has(studentId));
+      const entriesByStudentId = new Map(rawEntries.map((entry) => [entry.studentId, entry]));
+      const entries = studentIds
+        .map((studentId) => entriesByStudentId.get(studentId) ?? { studentId, status: "makeup_pending" as AttendanceStatus, note: lesson.note })
+        .sort((a, b) => {
+          const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
+          const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
+          return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
+        });
       const totalStudentCount = lessonStudentIds(lesson).length;
+      const scheduledCount = rawStudentIds.length - studentIds.length;
       return {
         lesson,
         entries,
         studentIds,
-        wholeLesson: lesson.status === "makeup_pending" || (totalStudentCount > 0 && entries.length === totalStudentCount)
+        scheduledCount,
+        wholeLesson: lesson.status === "makeup_pending" && scheduledCount === 0 && studentIds.length > 0 && (totalStudentCount > 0 ? studentIds.length === totalStudentCount : true)
       };
     })
-    .filter((group) => group.entries.length > 0 || group.lesson.status === "makeup_pending")
+    .filter((group) => group.studentIds.length > 0)
     .sort((a, b) => sortLessons(a.lesson, b.lesson));
-  const makeupEntries = makeupGroups.filter(({ lesson }) => !makeupOriginalDateFilter || lesson.date === makeupOriginalDateFilter);
+  const makeupEntries = makeupGroups.filter(({ lesson }) => {
+    if (lesson.status === "makeup_pending" && isFullyScheduledMakeupOriginal(lesson)) return false;
+    return !makeupOriginalDateFilter || lesson.date === makeupOriginalDateFilter;
+  });
+  const scheduledMakeupEntries = activeMakeupLessons
+    .map((lesson) => ({
+      lesson,
+      original: vault.lessons.find((item) => item.id === lesson.linkedOriginalLessonId)
+    }))
+    .filter(({ lesson, original }) => {
+      if (!makeupOriginalDateFilter) return true;
+      return lesson.makeupOriginalDate === makeupOriginalDateFilter || original?.date === makeupOriginalDateFilter;
+    });
   const dateShortcuts = [
     { label: "今天", value: offsetDate(0) },
     { label: "昨天", value: offsetDate(-1) },
@@ -380,6 +430,7 @@ export function ScheduleView({
   const isBatchTimeValid = isOrderedTimeRange(ruleStartTime, ruleEndTime);
   const isBatchDateRangeValid = isOrderedDateRange(rangeStart, rangeEnd);
   const isCalendarTimeValid = isOrderedTimeRange(calendarStartTime, calendarEndTime);
+  const isMakeupTimeValid = isOrderedTimeRange(makeupStartTime, makeupEndTime);
 
   function addSingleLesson(status: "scheduled" | "completed") {
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
@@ -391,7 +442,7 @@ export function ScheduleView({
 
   function calendarLessonsForDate(date: string): Lesson[] {
     return vault.lessons
-      .filter((lesson) => lesson.date === date && matchesCalendarCourseFilter(lesson))
+      .filter((lesson) => lesson.date === date && matchesCalendarCourseFilter(lesson) && !isFullyScheduledMakeupOriginal(lesson))
       .sort(sortLessons);
   }
 
@@ -673,14 +724,36 @@ export function ScheduleView({
     });
   }
 
-  function createMakeupLesson(original: Lesson, studentIds: string[]) {
+  function createMakeupLesson(
+    original: Lesson,
+    studentIds: string[],
+    options: { date?: string; startTime?: string; endTime?: string; force?: boolean } = {}
+  ) {
     const course = getCourse(vault, original.courseGroupId);
     if (!course || studentIds.length === 0) return;
-    const scheduledDate = selectedCalendarDate;
+    const scheduledDate = options.date ?? makeupDate;
+    const scheduledStartTime = options.startTime ?? makeupStartTime;
+    const scheduledEndTime = options.endTime ?? makeupEndTime;
+    if (!scheduledDate) {
+      showScheduleError("请选择补课日期。");
+      return;
+    }
+    if (!validateTimeRange(scheduledStartTime, scheduledEndTime, "补课结束时间必须晚于开始时间。")) return;
+    const conflict = findTimeConflict(scheduledDate, scheduledStartTime, scheduledEndTime);
+    if (conflict && !options.force) {
+      confirm({
+        title: "补课时间已有课程",
+        description: `${scheduledDate} ${scheduledStartTime}-${scheduledEndTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要安排补课。`,
+        confirmLabel: "仍然安排",
+        tone: "danger",
+        onConfirm: () => createMakeupLesson(original, studentIds, { date: scheduledDate, startTime: scheduledStartTime, endTime: scheduledEndTime, force: true })
+      });
+      return;
+    }
     const makeup = createLessonFromCourse(vault, course, {
       date: scheduledDate,
-      startTime: original.startTime,
-      endTime: original.endTime,
+      startTime: scheduledStartTime,
+      endTime: scheduledEndTime,
       campusId: original.campusId ?? course.defaultCampusId,
       status: "scheduled"
     });
@@ -706,6 +779,104 @@ export function ScheduleView({
       )
     };
     onAddLessonAndUpdateLesson(nextMakeup, nextOriginal);
+    setSelectedId(nextMakeup.id);
+    setSelectedCalendarDate(scheduledDate);
+    setCalendarMonth(scheduledDate.slice(0, 7));
+  }
+
+  function updateSelectedDate(nextDate: string) {
+    if (!selected) return;
+    const nextLesson: Lesson = {
+      ...selected,
+      date: nextDate,
+      makeupScheduledDate: selected.linkedOriginalLessonId ? nextDate : selected.makeupScheduledDate
+    };
+    const conflict = findTimeConflict(nextDate, selected.startTime, selected.endTime, selected.id);
+    const applyChange = () => {
+      onUpdateLesson(nextLesson);
+      setSelectedCalendarDate(nextDate);
+      setCalendarMonth(nextDate.slice(0, 7));
+    };
+    if (conflict) {
+      confirm({
+        title: "这个时间段已有课程",
+        description: `${nextDate} ${selected.startTime}-${selected.endTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
+        confirmLabel: "仍然调整",
+        tone: "danger",
+        onConfirm: applyChange
+      });
+      return;
+    }
+    applyChange();
+  }
+
+  function updateSelectedStartTime(nextStart: string) {
+    if (!selected) return;
+    if (!validateTimeRange(nextStart, selected.endTime)) return;
+    const conflict = findTimeConflict(selected.date, nextStart, selected.endTime, selected.id);
+    const applyChange = () => updateSelected({ startTime: nextStart }, true);
+    if (conflict) {
+      confirm({
+        title: "这个时间段已有课程",
+        description: `${selected.date} ${nextStart}-${selected.endTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
+        confirmLabel: "仍然调整",
+        tone: "danger",
+        onConfirm: applyChange
+      });
+      return;
+    }
+    applyChange();
+  }
+
+  function updateSelectedEndTime(nextEnd: string) {
+    if (!selected) return;
+    if (!validateTimeRange(selected.startTime, nextEnd)) return;
+    const conflict = findTimeConflict(selected.date, selected.startTime, nextEnd, selected.id);
+    const applyChange = () => updateSelected({ endTime: nextEnd }, true);
+    if (conflict) {
+      confirm({
+        title: "这个时间段已有课程",
+        description: `${selected.date} ${selected.startTime}-${nextEnd} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
+        confirmLabel: "仍然调整",
+        tone: "danger",
+        onConfirm: applyChange
+      });
+      return;
+    }
+    applyChange();
+  }
+
+  function rescheduleMakeupLesson(lesson: Lesson, force = false) {
+    if (!makeupDate) {
+      showScheduleError("请选择补课日期。");
+      return;
+    }
+    if (!validateTimeRange(makeupStartTime, makeupEndTime, "补课结束时间必须晚于开始时间。")) return;
+    const conflict = findTimeConflict(makeupDate, makeupStartTime, makeupEndTime, lesson.id);
+    const nextLesson: Lesson = {
+      ...lesson,
+      date: makeupDate,
+      startTime: makeupStartTime,
+      endTime: makeupEndTime,
+      makeupScheduledDate: makeupDate
+    };
+    const applyChange = () => {
+      onUpdateLesson(recalculateLessonFee(nextLesson));
+      setSelectedId(lesson.id);
+      setSelectedCalendarDate(makeupDate);
+      setCalendarMonth(makeupDate.slice(0, 7));
+    };
+    if (conflict && !force) {
+      confirm({
+        title: "补课时间已有课程",
+        description: `${makeupDate} ${makeupStartTime}-${makeupEndTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整补课。`,
+        confirmLabel: "仍然调整",
+        tone: "danger",
+        onConfirm: () => rescheduleMakeupLesson(lesson, true)
+      });
+      return;
+    }
+    applyChange();
   }
 
   function askDeleteLesson(lesson: Lesson) {
@@ -718,9 +889,10 @@ export function ScheduleView({
     });
   }
 
-  function findTimeConflict(lessonDate: string, lessonStartTime: string, lessonEndTime: string): Lesson | undefined {
+  function findTimeConflict(lessonDate: string, lessonStartTime: string, lessonEndTime: string, ignoredLessonId?: string): Lesson | undefined {
     return vault.lessons.find(
       (lesson) =>
+        lesson.id !== ignoredLessonId &&
         lesson.date === lessonDate &&
         lesson.status !== "cancelled" &&
         timesOverlap(lesson.startTime, lesson.endTime, lessonStartTime, lessonEndTime)
@@ -1401,10 +1573,27 @@ export function ScheduleView({
                   全部
                 </Button>
               </div>
-              <div className="rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#25324a]">
-                补课安排日期：{selectedCalendarDate}
+              <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+                <div className="text-sm font-extrabold text-[#061226]">补课安排时间</div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#64748b]">日期</label>
+                    <Input type="date" value={makeupDate} onChange={(event) => setMakeupDate(event.target.value)} className="bg-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#64748b]">开始</label>
+                    <Input type="time" value={makeupStartTime} max={makeupEndTime} onChange={(event) => setMakeupStartTime(event.target.value)} className={!isMakeupTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : "bg-white"} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#64748b]">结束</label>
+                    <Input type="time" value={makeupEndTime} min={makeupStartTime} onChange={(event) => setMakeupEndTime(event.target.value)} className={!isMakeupTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : "bg-white"} />
+                  </div>
+                </div>
+                {!isMakeupTimeValid && (
+                  <div className="text-xs font-bold text-[#b91c1c]">补课结束时间必须晚于开始时间。</div>
+                )}
               </div>
-              {makeupEntries.map(({ lesson, entries, studentIds, wholeLesson }) => (
+              {makeupEntries.map(({ lesson, entries, studentIds, scheduledCount, wholeLesson }) => (
                 <div key={lesson.id} className="rounded-[14px] border border-[#facc15] bg-[#fefce8] p-3">
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1417,12 +1606,17 @@ export function ScheduleView({
                           <Badge variant="amber" className="px-2 py-0.5 text-[10px]">
                             {wholeLesson ? "整节待补" : `${entries.length} 人待补`}
                           </Badge>
+                          {scheduledCount > 0 && (
+                            <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">
+                              已安排 {scheduledCount} 人
+                            </Badge>
+                          )}
                           <Badge variant={lessonStatusVariant(lesson.status)} className="px-2 py-0.5 text-[10px]">
                             {lessonStatusLabels[lesson.status]}
                           </Badge>
                         </div>
                       </div>
-                      <Button type="button" size="sm" onClick={() => createMakeupLesson(lesson, studentIds)}>
+                      <Button type="button" size="sm" onClick={() => createMakeupLesson(lesson, studentIds)} disabled={!isMakeupTimeValid || !makeupDate}>
                         <Plus size={14} /> {wholeLesson ? "安排整节补课" : "统一安排补课"}
                       </Button>
                     </div>
@@ -1445,7 +1639,7 @@ export function ScheduleView({
                                 </div>
                                 {entry.note && <div className="mt-1 text-xs font-semibold text-[#9a3412]">备注：{entry.note}</div>}
                               </div>
-                              <Button type="button" size="sm" variant="outline" onClick={() => createMakeupLesson(lesson, [entry.studentId])}>
+                              <Button type="button" size="sm" variant="outline" onClick={() => createMakeupLesson(lesson, [entry.studentId])} disabled={!isMakeupTimeValid || !makeupDate}>
                                 <Plus size={14} /> 单独安排
                               </Button>
                             </div>
@@ -1459,6 +1653,58 @@ export function ScheduleView({
               {makeupEntries.length === 0 && (
                 <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
                   {makeupOriginalDateFilter ? "这个原课日期暂无待补课学生" : "暂无待补课学生"}
+                </div>
+              )}
+              {scheduledMakeupEntries.length > 0 && (
+                <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-extrabold text-[#061226]">已安排补课</div>
+                    <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">{scheduledMakeupEntries.length} 节</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {scheduledMakeupEntries.map(({ lesson, original }) => (
+                      <div key={lesson.id} className="rounded-[12px] border border-[#93c5fd] bg-white px-3 py-2">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-extrabold text-[#061226]">
+                              {courseName(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
+                            </div>
+                            <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                              原课：{original?.date ?? lesson.makeupOriginalDate ?? "未知"} · 补课：{lesson.makeupScheduledDate ?? lesson.date} · {lesson.startTime}-{lesson.endTime}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Badge variant={lessonStatusVariant(lesson.status)} className="px-2 py-0.5 text-[10px]">
+                                {lessonStatusLabels[lesson.status]}
+                              </Badge>
+                              <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">
+                                {campusName(vault, lesson.campusId)}
+                              </Badge>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedId(lesson.id);
+                              setSelectedCalendarDate(lesson.date);
+                              setCalendarMonth(lesson.date.slice(0, 7));
+                            }}
+                          >
+                            查看 / 修改
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => rescheduleMakeupLesson(lesson)}
+                            disabled={!isMakeupTimeValid || !makeupDate}
+                          >
+                            改到上方时间
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -1850,7 +2096,7 @@ export function ScheduleView({
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">日期</label>
-                    <Input type="date" value={selected.date} onChange={(event) => updateSelected({ date: event.target.value, makeupScheduledDate: selected.linkedOriginalLessonId ? event.target.value : selected.makeupScheduledDate })} />
+                    <Input type="date" value={selected.date} onChange={(event) => updateSelectedDate(event.target.value)} />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
@@ -1859,11 +2105,7 @@ export function ScheduleView({
                         type="time"
                         value={selected.startTime}
                         max={selected.endTime}
-                        onChange={(event) => {
-                          const nextStart = event.target.value;
-                          if (!validateTimeRange(nextStart, selected.endTime)) return;
-                          updateSelected({ startTime: nextStart }, true);
-                        }}
+                        onChange={(event) => updateSelectedStartTime(event.target.value)}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1872,11 +2114,7 @@ export function ScheduleView({
                         type="time"
                         value={selected.endTime}
                         min={selected.startTime}
-                        onChange={(event) => {
-                          const nextEnd = event.target.value;
-                          if (!validateTimeRange(selected.startTime, nextEnd)) return;
-                          updateSelected({ endTime: nextEnd }, true);
-                        }}
+                        onChange={(event) => updateSelectedEndTime(event.target.value)}
                       />
                     </div>
                   </div>
