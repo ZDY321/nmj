@@ -168,6 +168,7 @@ export function ScheduleView({
   const [makeupDate, setMakeupDate] = useState(todayIso());
   const [makeupStartTime, setMakeupStartTime] = useState("19:00");
   const [makeupEndTime, setMakeupEndTime] = useState("21:00");
+  const [detailMakeupStudentIds, setDetailMakeupStudentIds] = useState<string[]>([]);
   const [scheduleError, setScheduleError] = useState("");
   const { confirm, dialog } = useConfirmDialog();
   const syncSourceLessons = vault.lessons
@@ -225,6 +226,10 @@ export function ScheduleView({
       setSelectedId(calendarFocus.lessonId);
     }
   }, [calendarFocus?.nonce]);
+
+  useEffect(() => {
+    setDetailMakeupStudentIds([]);
+  }, [selectedId]);
 
   const weekStartPreference = weekStartsOn(vault);
   const visibleWeekdays = orderedWeekdays(weekStartPreference);
@@ -328,6 +333,22 @@ export function ScheduleView({
     ? vault.lessons.find((lesson) => lesson.id === selected.linkedOriginalLessonId)
     : undefined;
   const selectedLessonStudentCount = selected ? lessonStudentIds(selected).length : 0;
+  const selectedScheduledMakeupStudentIds = selected ? activeMakeupStudentIdsForOriginal(selected.id) : new Set<string>();
+  const selectedMakeupCandidateStudentIds = selected
+    ? selected.attendance
+        .filter((entry) => isMakeupAttendanceStatus(entry.status) && !selectedScheduledMakeupStudentIds.has(entry.studentId))
+        .map((entry) => entry.studentId)
+    : [];
+  const selectedWholeLessonPending =
+    selected?.status === "makeup_pending" &&
+    !selected.linkedOriginalLessonId &&
+    selectedLessonStudentCount > 0 &&
+    selectedMakeupCandidateStudentIds.length === selectedLessonStudentCount;
+  const selectedMakeupAssignableStudentIds = selectedWholeLessonPending
+    ? lessonStudentIds(selected)
+    : selectedMakeupCandidateStudentIds;
+  const selectedMakeupAssignableSet = new Set(selectedMakeupAssignableStudentIds);
+  const selectedDetailMakeupStudentIds = detailMakeupStudentIds.filter((studentId) => selectedMakeupAssignableSet.has(studentId));
   const normalizedTemporaryStudentSearch = temporaryStudentSearch.trim().toLowerCase();
   const normalizedAttendanceStudentFilter = attendanceStudentFilter.trim().toLowerCase();
   const temporaryStudentOptions = selected
@@ -679,6 +700,25 @@ export function ScheduleView({
         entry.studentId === studentId ? { ...entry, note } : entry
       )
     });
+  }
+
+  function toggleDetailMakeupStudent(studentId: string) {
+    setDetailMakeupStudentIds((current) =>
+      current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]
+    );
+  }
+
+  function openLessonInRecords(lesson: Lesson) {
+    setSelectedId(lesson.id);
+    setSelectedCalendarDate(lesson.date);
+    setCalendarMonth(lesson.date.slice(0, 7));
+    setSchedulePanel("records");
+  }
+
+  function createSelectedMakeupLesson(studentIds: string[]) {
+    if (!selected || studentIds.length === 0) return;
+    createMakeupLesson(selected, studentIds);
+    setDetailMakeupStudentIds([]);
   }
 
   function updateTemporaryFee(studentId: string, value: number) {
@@ -1653,7 +1693,7 @@ export function ScheduleView({
                 <RotateCcw size={14} /> 补课跟进
               </div>
               <CardTitle>需要补课的学生</CardTitle>
-              <CardDescription>按原课日期筛选缺课记录，补课会排到当前日历选中的日期。</CardDescription>
+              <CardDescription>按原课日期筛选待补课记录，点击课程到课程记录里安排补课。</CardDescription>
             </CardHeader>
             <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
@@ -1665,28 +1705,13 @@ export function ScheduleView({
                   全部
                 </Button>
               </div>
-              <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-                <div className="text-sm font-extrabold text-[#061226]">补课安排时间</div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-[#64748b]">日期</label>
-                    <Input type="date" value={makeupDate} onChange={(event) => setMakeupDate(event.target.value)} className="bg-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-[#64748b]">开始</label>
-                    <Input type="time" value={makeupStartTime} max={makeupEndTime} onChange={(event) => setMakeupStartTime(event.target.value)} className={!isMakeupTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : "bg-white"} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-[#64748b]">结束</label>
-                    <Input type="time" value={makeupEndTime} min={makeupStartTime} onChange={(event) => setMakeupEndTime(event.target.value)} className={!isMakeupTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : "bg-white"} />
-                  </div>
-                </div>
-                {!isMakeupTimeValid && (
-                  <div className="text-xs font-bold text-[#b91c1c]">补课结束时间必须晚于开始时间。</div>
-                )}
-              </div>
               {makeupEntries.map(({ lesson, entries, studentIds, scheduledCount, wholeLesson }) => (
-                <div key={lesson.id} className="rounded-[14px] border border-[#facc15] bg-[#fefce8] p-3">
+                <button
+                  key={lesson.id}
+                  type="button"
+                  onClick={() => openLessonInRecords(lesson)}
+                  className="w-full rounded-[14px] border border-[#facc15] bg-[#fefce8] p-3 text-left transition-all hover:border-[#eab308] hover:bg-[#fef3c7]"
+                >
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
@@ -1708,15 +1733,9 @@ export function ScheduleView({
                           </Badge>
                         </div>
                       </div>
-                      <Button type="button" size="sm" onClick={() => createMakeupLesson(lesson, studentIds)} disabled={!isMakeupTimeValid || !makeupDate}>
-                        <Plus size={14} /> {wholeLesson ? "安排整节补课" : "统一安排补课"}
-                      </Button>
+                      <Badge variant="secondary" className="w-fit shrink-0">查看详情</Badge>
                     </div>
-                    {wholeLesson ? (
-                      <div className="rounded-[12px] border border-[#fde68a] bg-white px-3 py-2 text-xs font-semibold text-[#854d0e]">
-                        这一节课按整节课显示，不再拆成单个学生。
-                      </div>
-                    ) : (
+                    {!wholeLesson && (
                       <div className="space-y-2">
                         {entries.map((entry) => {
                           const studentName = findStudent(vault, entry.studentId)?.name ?? "未知学生";
@@ -1731,16 +1750,14 @@ export function ScheduleView({
                                 </div>
                                 {entry.note && <div className="mt-1 text-xs font-semibold text-[#9a3412]">备注：{entry.note}</div>}
                               </div>
-                              <Button type="button" size="sm" variant="outline" onClick={() => createMakeupLesson(lesson, [entry.studentId])} disabled={!isMakeupTimeValid || !makeupDate}>
-                                <Plus size={14} /> 单独安排
-                              </Button>
+                              <Badge variant="amber" className="w-fit shrink-0">待安排</Badge>
                             </div>
                           );
                         })}
                       </div>
                     )}
                   </div>
-                </div>
+                </button>
               ))}
               {makeupEntries.length === 0 && (
                 <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
@@ -2290,6 +2307,88 @@ export function ScheduleView({
                           )}
                         </div>
                       </div>
+                    </div>
+                  )}
+                  {!selected.linkedOriginalLessonId && selectedMakeupAssignableStudentIds.length > 0 && (
+                    <div className="space-y-3 rounded-[14px] border border-[#facc15] bg-[#fefce8] p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="text-sm font-extrabold text-[#061226]">补课安排</div>
+                          <div className="mt-1 text-xs font-semibold text-[#854d0e]">
+                            {selectedWholeLessonPending ? "这节课整体待补课，直接安排补课即可。" : "勾选可一起补课的学生，分批安排不同时间。"}
+                          </div>
+                        </div>
+                        <Badge variant="amber" className="w-fit">
+                          {selectedWholeLessonPending ? "整节待补" : `${selectedMakeupCandidateStudentIds.length} 人待补`}
+                        </Badge>
+                      </div>
+                      {!selectedWholeLessonPending && selectedMakeupCandidateStudentIds.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => setDetailMakeupStudentIds(selectedMakeupCandidateStudentIds)}>
+                            全选待补学生
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setDetailMakeupStudentIds([])} disabled={selectedDetailMakeupStudentIds.length === 0}>
+                            清空
+                          </Button>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 gap-2">
+                        {selectedMakeupAssignableStudentIds.length > 0 ? (
+                          selectedMakeupAssignableStudentIds.map((studentId) => {
+                            const student = findStudent(vault, studentId);
+                            const checked = selectedDetailMakeupStudentIds.includes(studentId);
+                            return (
+                              <label
+                                key={studentId}
+                                className={`flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2 text-sm ${
+                                  checked ? "border-[#f59e0b] bg-white text-[#7c2d12]" : "border-[#fde68a] bg-white text-[#061226]"
+                                }`}
+                              >
+                                <span className="min-w-0 flex items-center gap-3">
+                                  {!selectedWholeLessonPending && (
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleDetailMakeupStudent(studentId)}
+                                      className="h-4 w-4 accent-[#ff8617]"
+                                    />
+                                  )}
+                                  <span className="truncate font-semibold">{student?.name ?? "未知学生"}</span>
+                                </span>
+                                <Badge variant={checked ? "default" : "secondary"} className="w-fit">
+                                  {checked ? "已选" : "待补"}
+                                </Badge>
+                              </label>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-[12px] border border-dashed border-[#fcd34d] bg-white p-4 text-center text-sm font-semibold text-[#854d0e]">
+                            没有待安排补课的学生
+                          </div>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-[#854d0e]">补课日期</label>
+                          <Input type="date" value={makeupDate} onChange={(event) => setMakeupDate(event.target.value)} className="bg-white" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-[#854d0e]">补课时间</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input type="time" value={makeupStartTime} max={makeupEndTime} onChange={(event) => setMakeupStartTime(event.target.value)} className={!isMakeupTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : "bg-white"} />
+                            <Input type="time" value={makeupEndTime} min={makeupStartTime} onChange={(event) => setMakeupEndTime(event.target.value)} className={!isMakeupTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : "bg-white"} />
+                          </div>
+                        </div>
+                      </div>
+                      {!isMakeupTimeValid && <div className="text-xs font-bold text-[#b91c1c]">补课结束时间必须晚于开始时间。</div>}
+                      <Button
+                        type="button"
+                        onClick={() => createSelectedMakeupLesson(selectedWholeLessonPending ? lessonStudentIds(selected) : selectedDetailMakeupStudentIds)}
+                        disabled={!isMakeupTimeValid || !makeupDate || selectedMakeupAssignableStudentIds.length === 0 || (!selectedWholeLessonPending && selectedDetailMakeupStudentIds.length === 0)}
+                        className="w-full sm:w-auto"
+                      >
+                        <Plus size={14} /> {selectedWholeLessonPending ? "安排补课" : "安排选中学生补课"}
+                      </Button>
                     </div>
                   )}
                   <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
