@@ -1219,15 +1219,15 @@ export function ScheduleView({
       )}
 
       {schedulePanel === "calendar" && (
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr] xl:items-stretch">
-        <Card className="h-full overflow-hidden">
+      <div className="space-y-6">
+        <Card className="overflow-hidden">
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                 <CalendarDays size={14} /> 日历排课 / 查看
               </div>
               <CardTitle>日历排课</CardTitle>
-              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课；课程筛选只影响已排课程展示。" : "查看模式：点击日期切换右侧明细，可按课程筛选。"}</CardDescription>
+              <CardDescription>{calendarMode === "schedule" ? "排课模式下，点击日期会添加待上课；下方可调整排课课程和时间。" : "查看模式：点击日期切换下方明细，可按课程筛选。"}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
@@ -1259,7 +1259,7 @@ export function ScheduleView({
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="flex flex-col gap-4">
             {calendarMode === "schedule" ? (
               <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -1430,7 +1430,7 @@ export function ScheduleView({
                 )}
               </AnimatePresence>
             </div>
-            <div className="grid grid-cols-7 gap-1 sm:gap-2">
+            <div className="order-first grid grid-cols-7 gap-1 sm:gap-2">
               {visibleWeekdayLabels.map((day) => (
                 <div key={day} className="py-2 text-center text-xs font-bold text-(--color-muted-foreground)">{day}</div>
               ))}
@@ -1455,7 +1455,7 @@ export function ScheduleView({
                       }
                     }}
                     disabled={calendarMode === "schedule" && !calendarCourseGroupId}
-                    className={`relative flex min-h-[66px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[100px] sm:rounded-[14px] sm:p-2.5 ${
+                    className={`relative flex min-h-[74px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[132px] sm:rounded-[14px] sm:p-2.5 xl:min-h-[150px] ${
                       selectedCalendarDate === calendarDate
                         ? isAllCompleted
                           ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
@@ -1483,13 +1483,13 @@ export function ScheduleView({
                       {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
                       {amount > 0 && <Badge variant="default" className="px-1.5 py-0 text-[10px]">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                     </div>
-                    {dayLessons.slice(0, 2).map((lesson) => (
-                      <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
+                    {dayLessons.slice(0, 4).map((lesson) => (
+                      <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-(--color-muted-foreground) sm:block">
                         {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)}
                       </span>
                     ))}
-                    {dayLessons.length > 2 && (
-                      <span className="hidden text-[10px] text-(--color-muted-foreground) sm:block">+{dayLessons.length - 2} 节</span>
+                    {dayLessons.length > 4 && (
+                      <span className="hidden text-[10px] font-bold text-[#1557c2] sm:block">+{dayLessons.length - 4} 节</span>
                     )}
                   </motion.button>
                 );
@@ -1498,7 +1498,7 @@ export function ScheduleView({
           </CardContent>
         </Card>
 
-        <div className="flex h-full min-h-0 flex-col gap-6">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.95fr_1.05fr] xl:items-start">
           <Card className="overflow-hidden">
             <CardHeader>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
