@@ -82,7 +82,7 @@ export function CalendarView({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr]">
+      <div className={overviewPage === "month" ? "grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr]" : "grid grid-cols-1 gap-6"}>
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
@@ -236,7 +236,8 @@ export function CalendarView({
                         时间
                       </div>
                       {weekDates.map((date, index) => {
-                        const dayLessons = vault.lessons.filter((lesson) => lesson.date === date);
+                        const dayLessons = weekLessons.filter((lesson) => lesson.date === date);
+                        const dayTotal = dayLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
                         const isSelected = date === selectedDate;
                         return (
                           <button
@@ -247,8 +248,13 @@ export function CalendarView({
                               isSelected ? "bg-[#fff7ed]" : "hover:bg-[#f3f7fb]"
                             }`}
                           >
-                            <span className={`block text-sm font-extrabold ${isSelected ? "text-[#ff8617]" : "text-[#061226]"}`}>
-                              {date.slice(5)}
+                            <span className="flex min-w-0 items-center justify-between gap-2">
+                              <span className={`truncate text-sm font-extrabold ${isSelected ? "text-[#ff8617]" : "text-[#061226]"}`}>
+                                {date.slice(5)}
+                              </span>
+                              <span className="shrink-0 text-[11px] font-extrabold text-[#1557c2]">
+                                {formatPrivateMoney(dayTotal, amountsVisible)}
+                              </span>
                             </span>
                             <span className="mt-0.5 block text-xs font-bold text-[#64748b]">
                               {weekdayLabels[index]} · {dayLessons.length} 节
@@ -328,6 +334,7 @@ export function CalendarView({
           </CardContent>
         </Card>
 
+        {overviewPage === "month" && (
         <Card className="h-fit overflow-hidden">
           <CardHeader>
             <CardTitle>{selectedDate} 明细</CardTitle>
@@ -388,6 +395,7 @@ export function CalendarView({
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   );
