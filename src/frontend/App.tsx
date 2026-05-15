@@ -92,7 +92,7 @@ export function App() {
   const [vault, setVault] = useState<TeacherVault | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [view, setView] = useState<ViewKey>("today");
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [noticeModalOpen, setNoticeModalOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);

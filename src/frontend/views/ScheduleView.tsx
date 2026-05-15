@@ -237,6 +237,15 @@ export function ScheduleView({
     calendarViewCourseSearch,
     calendarViewCourseFilter === "all" ? "" : calendarViewCourseFilter
   );
+  const activeMakeupLessons = vault.lessons
+    .filter((lesson) => Boolean(lesson.linkedOriginalLessonId) && lesson.status !== "cancelled")
+    .sort(sortLessons);
+  const activeMakeupLessonsByOriginal = activeMakeupLessons.reduce<Record<string, Lesson[]>>((groups, lesson) => {
+    const originalId = lesson.linkedOriginalLessonId;
+    if (!originalId) return groups;
+    groups[originalId] = [...(groups[originalId] ?? []), lesson];
+    return groups;
+  }, {});
   const selectedSyncLessons = syncSourceLessons.filter((lesson) => selectedSyncLessonIds.includes(lesson.id));
   const selectedCalendarLessons = calendarLessonsForDate(selectedCalendarDate);
   const selectedCalendarCompletedCount = selectedCalendarLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
@@ -352,16 +361,6 @@ export function ScheduleView({
         return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
       })
     : [];
-  const activeMakeupLessons = vault.lessons
-    .filter((lesson) => Boolean(lesson.linkedOriginalLessonId) && lesson.status !== "cancelled")
-    .sort(sortLessons);
-  const activeMakeupLessonsByOriginal = activeMakeupLessons.reduce<Record<string, Lesson[]>>((groups, lesson) => {
-    const originalId = lesson.linkedOriginalLessonId;
-    if (!originalId) return groups;
-    groups[originalId] = [...(groups[originalId] ?? []), lesson];
-    return groups;
-  }, {});
-
   function activeMakeupStudentIdsForOriginal(originalLessonId: string): Set<string> {
     return new Set((activeMakeupLessonsByOriginal[originalLessonId] ?? []).flatMap((lesson) => lessonStudentIds(lesson)));
   }
