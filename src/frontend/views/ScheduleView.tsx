@@ -1573,8 +1573,8 @@ export function ScheduleView({
                     className={`relative flex min-h-[74px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[132px] sm:rounded-[14px] sm:p-2.5 xl:min-h-[150px] ${
                       selectedCalendarDate === calendarDate
                         ? isAllCompleted
-                          ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
-                          : "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
+                          ? "border-2 border-[#22c55e] bg-[#f0fdf4] shadow-[0_0_0_3px_rgba(34,197,94,0.16),0_14px_28px_rgba(22,163,74,0.14)]"
+                          : "border-2 border-[#ff8617] bg-[#fff7ed] shadow-[0_0_0_3px_rgba(255,134,23,0.18),0_14px_30px_rgba(255,134,23,0.18)]"
                         : isCurrentMonth
                           ? hasCancelled
                             ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
