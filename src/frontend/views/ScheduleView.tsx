@@ -13,6 +13,7 @@ import {
   ChevronUp,
   Clock,
   Copy,
+  CornerUpLeft,
   GraduationCap,
   Link2,
   NotebookPen,
@@ -889,39 +890,6 @@ export function ScheduleView({
         confirmLabel: "仍然调整",
         tone: "danger",
         onConfirm: applyChange
-      });
-      return;
-    }
-    applyChange();
-  }
-
-  function rescheduleMakeupLesson(lesson: Lesson, force = false) {
-    if (!makeupDate) {
-      showScheduleError("请选择补课日期。");
-      return;
-    }
-    if (!validateTimeRange(makeupStartTime, makeupEndTime, "补课结束时间必须晚于开始时间。")) return;
-    const conflict = findTimeConflict(makeupDate, makeupStartTime, makeupEndTime, lesson.id);
-    const nextLesson: Lesson = {
-      ...lesson,
-      date: makeupDate,
-      startTime: makeupStartTime,
-      endTime: makeupEndTime,
-      makeupScheduledDate: makeupDate
-    };
-    const applyChange = () => {
-      onUpdateLesson(recalculateLessonFee(nextLesson));
-      setSelectedId(lesson.id);
-      setSelectedCalendarDate(makeupDate);
-      setCalendarMonth(makeupDate.slice(0, 7));
-    };
-    if (conflict && !force) {
-      confirm({
-        title: "补课时间已有课程",
-        description: `${makeupDate} ${makeupStartTime}-${makeupEndTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整补课。`,
-        confirmLabel: "仍然调整",
-        tone: "danger",
-        onConfirm: () => rescheduleMakeupLesson(lesson, true)
       });
       return;
     }
@@ -1815,10 +1783,11 @@ export function ScheduleView({
                           <Button
                             type="button"
                             size="sm"
-                            onClick={() => rescheduleMakeupLesson(lesson)}
-                            disabled={!isMakeupTimeValid || !makeupDate}
+                            variant="outline"
+                            onClick={() => openLessonInRecords(original ?? lesson)}
+                            title="返回原课程详情对应的补课跟进"
                           >
-                            改到上方时间
+                            <CornerUpLeft size={14} /> 返回原课跟进
                           </Button>
                         </div>
                       </div>
