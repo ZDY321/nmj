@@ -1621,6 +1621,27 @@ export function ScheduleView({
                 );
               })}
             </div>
+            <div className="flex flex-col gap-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm font-medium text-[#061226]">
+                {calendarMode === "schedule" ? "当前是排课模式：点击日期会直接新增待上课。" : "当前是查看模式：点击日期只查看课程明细，不会新增排课。"}
+              </div>
+              <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-1 sm:w-fit">
+                <button
+                  type="button"
+                  onClick={() => setCalendarMode("schedule")}
+                  className={`rounded-[9px] px-3 py-2 text-xs font-bold ${calendarMode === "schedule" ? "orange-gradient text-white" : "text-[#25324a]"}`}
+                >
+                  排课
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCalendarMode("view")}
+                  className={`rounded-[9px] px-3 py-2 text-xs font-bold ${calendarMode === "view" ? "bg-[#1557c2] text-white" : "text-[#25324a]"}`}
+                >
+                  查看
+                </button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
