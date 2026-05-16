@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
+import { TimeTextInput } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type { AttendanceStatus, CourseType, Lesson, TeacherVault } from "@/shared/types";
 import { calculateFee, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
@@ -119,11 +120,11 @@ function LessonForm({
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">开始时间</label>
-            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="h-12 text-base" />
+            <TimeTextInput value={startTime} onValueChange={setStartTime} className="h-12 text-base" />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">结束时间</label>
-            <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="h-12 text-base" />
+            <TimeTextInput value={endTime} onValueChange={setEndTime} className="h-12 text-base" />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <label className="text-sm font-medium">常用时段</label>
