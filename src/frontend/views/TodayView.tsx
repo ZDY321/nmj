@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   BookOpen,
+  BookText,
   CalendarDays,
   Clock3,
   MapPin,
@@ -33,7 +34,6 @@ import {
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
-  previousHomework,
   previousLesson,
   sortCampusesForProfile,
   sortLessons,
@@ -292,7 +292,7 @@ export function TodayView({
                 {isToday(selectedDate) ? "今天应该上的课程" : "选中日期课程"}
               </CardTitle>
               <CardDescription className="mt-2">
-                {selectedDateLabel}，按上课时间排列，并显示上节课留下的作业提醒。
+                {selectedDateLabel}，按上课时间排列，并显示上节课留下的内容、作业和下次课提醒。
               </CardDescription>
             </div>
             <Badge variant={selectedDateLessons.length ? "sky" : "secondary"} className="w-fit">
@@ -308,8 +308,9 @@ export function TodayView({
             </div>
           ) : (
             selectedDateLessons.map((lesson, index) => {
-              const homework = previousHomework(vault, lesson).trim();
               const previous = previousLesson(vault, lesson);
+              const previousHomeworkText = previous?.content.homework.trim() || "";
+              const previousReminderText = previous?.content.nextLessonReminder.trim() || "";
               const campusTone = campusColorClass(campusOptions.findIndex((campus) => campus.id === lesson.campusId));
               const course = getCourse(vault, lesson.courseGroupId);
               return (
@@ -345,7 +346,7 @@ export function TodayView({
                     </Badge>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                  <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
                     <div className="rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-4">
                       <div className="mb-2 text-sm font-extrabold text-[#25324a]">学生情况</div>
                       <div className="flex flex-wrap gap-2">
@@ -391,7 +392,16 @@ export function TodayView({
                         上节课作业
                       </div>
                       <p className="whitespace-pre-wrap text-sm leading-6 text-[#475569]">
-                        {homework || "上一节课没有记录作业。"}
+                        {previousHomeworkText || "上一节课没有记录作业。"}
+                      </p>
+                    </div>
+                    <div className="rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
+                        <BookText size={16} className="text-[#1557c2]" />
+                        上节课下次课提醒
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-[#475569]">
+                        {previousReminderText || "上一节课没有记录下次课提醒。"}
                       </p>
                     </div>
                   </div>
