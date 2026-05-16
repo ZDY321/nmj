@@ -15,6 +15,8 @@ import {
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
+  lessonStudentIds,
+  makeupNeededStudentIds,
   monthShift,
   orderedWeekdayLabels,
   shortWeekdayLabels,
@@ -407,18 +409,12 @@ export function CalendarView({
 
 function isFullyScheduledMakeupOriginal(vault: TeacherVault, lesson: Lesson): boolean {
   if (lesson.status !== "makeup_pending" || lesson.linkedOriginalLessonId) return false;
-  const expectedStudentIds = Array.from(new Set([
-    ...lesson.expectedStudentIds,
-    ...lesson.attendance.map((entry) => entry.studentId)
-  ]));
+  const expectedStudentIds = makeupNeededStudentIds(lesson);
   if (expectedStudentIds.length === 0) return false;
   const scheduledStudentIds = new Set(
     vault.lessons
       .filter((item) => item.linkedOriginalLessonId === lesson.id && item.status !== "cancelled")
-      .flatMap((item) => [
-        ...item.expectedStudentIds,
-        ...item.attendance.map((entry) => entry.studentId)
-      ])
+      .flatMap((item) => lessonStudentIds(item))
   );
   return expectedStudentIds.every((studentId) => scheduledStudentIds.has(studentId));
 }

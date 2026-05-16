@@ -48,9 +48,12 @@ import {
   findStudent,
   formatDateIso,
   formatPrivateMoney,
+  isMakeupAttendanceStatus,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
+  lessonStudentIds,
+  makeupNeededStudentIds,
   monthShift,
   orderedWeekdayLabels,
   orderedWeekdays,
@@ -336,9 +339,7 @@ export function ScheduleView({
   const selectedLessonStudentCount = selected ? lessonStudentIds(selected).length : 0;
   const selectedScheduledMakeupStudentIds = selected ? activeMakeupStudentIdsForOriginal(selected.id) : new Set<string>();
   const selectedMakeupCandidateStudentIds = selected
-    ? selected.attendance
-        .filter((entry) => isMakeupAttendanceStatus(entry.status) && !selectedScheduledMakeupStudentIds.has(entry.studentId))
-        .map((entry) => entry.studentId)
+    ? makeupNeededStudentIds(selected).filter((studentId) => !selectedScheduledMakeupStudentIds.has(studentId))
     : [];
   const selectedWholeLessonPending =
     selected?.status === "makeup_pending" &&
@@ -417,7 +418,7 @@ export function ScheduleView({
           const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
           return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
         });
-      const rawStudentIds = lesson.status === "makeup_pending" ? lessonStudentIds(lesson) : rawEntries.map((entry) => entry.studentId);
+      const rawStudentIds = makeupNeededStudentIds(lesson);
       const studentIds = rawStudentIds.filter((studentId) => !scheduledStudentIds.has(studentId));
       const entriesByStudentId = new Map(rawEntries.map((entry) => [entry.studentId, entry]));
       const entries = studentIds
@@ -2606,10 +2607,6 @@ function isPendingLessonStatus(status: string): boolean {
   return status === "draft" || status === "scheduled" || status === "makeup_pending";
 }
 
-function isMakeupAttendanceStatus(status: AttendanceStatus): boolean {
-  return status === "leave_requested" || status === "absent" || status === "makeup_pending";
-}
-
 function attendanceStatusForLessonStatus(status: Lesson["status"]): AttendanceStatus {
   if (status === "cancelled") return "cancelled";
   if (status === "makeup_pending") return "makeup_pending";
@@ -2635,13 +2632,6 @@ function isStudentStatsTimeRangeValid(startTime: string, endTime: string): boole
 function timeToMinutes(value: string): number {
   const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
-}
-
-function lessonStudentIds(lesson: Lesson): string[] {
-  return Array.from(new Set([
-    ...lesson.expectedStudentIds,
-    ...lesson.attendance.map((entry) => entry.studentId)
-  ]));
 }
 
 function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, CustomCourseTypeOption, FeeRule, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
-import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, feeRuleForCourseType, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
 import { builtInCourseTypeOptions, campusName, compareByName, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
@@ -323,13 +323,7 @@ export function StudentsView({
       });
       return;
     }
-    const feeRule = courseFeeRule.mode === "class_headcount"
-      ? {
-          ...courseFeeRule,
-          mode: "class_headcount" as const,
-          classFeeTiers: [{ ...(normalizedClassFeeTiers(courseFeeRule)[0] ?? defaultClassFeeTiers(courseFeeRule)[0]), maxStudents: undefined }]
-        }
-      : courseFeeRule;
+    const feeRule = normalizeCourseFeeRuleForType(courseType, courseFeeRule);
     onAddCourse({
       id: makeId("course"),
       name: resolvedName,
@@ -580,11 +574,30 @@ export function StudentsView({
     }
   }
 
+  function updateCourseTypeFixedRule(type: CourseType, fixedFee: number) {
+    const current = feeRuleForCourseType(vault, type);
+    const nextRule: FeeRule = {
+      ...current,
+      mode: "fixed",
+      fixedFee,
+      hourlyRate: undefined,
+      baseFee: undefined,
+      perPresentStudentFee: undefined,
+      classFeeTiers: undefined
+    };
+    onUpdateCourseTypeFeeRule(type, nextRule);
+    if (courseType === type) {
+      setCourseFeeRule(nextRule);
+    }
+  }
+
   function resetCourseTypeFeeRule(type: CourseType) {
     const current = feeRuleForCourseType(vault, type);
-    const nextRule = current.mode === "class_headcount"
-      ? defaultFeeRuleForCourseType("class")
-      : { mode: "hourly" as const, hourlyRate: 0 };
+    const nextRule = type === "trial"
+      ? defaultFeeRuleForCourseType("trial")
+      : current.mode === "class_headcount"
+        ? defaultFeeRuleForCourseType("class")
+        : { mode: "hourly" as const, hourlyRate: 0 };
     onUpdateCourseTypeFeeRule(type, nextRule);
     if (courseType === type) {
       setCourseFeeRule(nextRule);
@@ -597,6 +610,9 @@ export function StudentsView({
     }
     if (course.feeRule.mode === "fixed") {
       return `单节固定费用：${formatPrivateMoney(course.feeRule.fixedFee ?? 0, amountsVisible)}`;
+    }
+    if (course.type === "trial") {
+      return `试听单次费用：${formatPrivateMoney(fixedFeeForRule(course.feeRule), amountsVisible)}`;
     }
     const hourlyRate = course.feeRule.hourlyRate ?? 0;
     return `每小时：${formatPrivateMoney(hourlyRate, amountsVisible)}；2小时预估：${formatPrivateMoney(hourlyRate * 2, amountsVisible)}`;
@@ -629,6 +645,18 @@ export function StudentsView({
 
   function updateNewCourseFee(patch: Partial<FeeRule>) {
     setCourseFeeRule((current) => ({ ...current, ...patch }));
+  }
+
+  function updateNewTrialFixedFee(fixedFee: number) {
+    setCourseFeeRule((current) => ({
+      ...current,
+      mode: "fixed",
+      fixedFee,
+      hourlyRate: undefined,
+      baseFee: undefined,
+      perPresentStudentFee: undefined,
+      classFeeTiers: undefined
+    }));
   }
 
   function replaceNewClassFeeTiers(nextTiers: ClassFeeTier[]) {
@@ -686,6 +714,25 @@ export function StudentsView({
   function updateEditingCourseFee(patch: Partial<CourseGroup["feeRule"]>) {
     setEditingCourse((current) =>
       current ? { ...current, feeRule: { ...current.feeRule, ...patch } } : current
+    );
+  }
+
+  function updateEditingTrialFixedFee(fixedFee: number) {
+    setEditingCourse((current) =>
+      current
+        ? {
+            ...current,
+            feeRule: {
+              ...current.feeRule,
+              mode: "fixed",
+              fixedFee,
+              hourlyRate: undefined,
+              baseFee: undefined,
+              perPresentStudentFee: undefined,
+              classFeeTiers: undefined
+            }
+          }
+        : current
     );
   }
 
@@ -820,13 +867,7 @@ export function StudentsView({
   function saveCourseDraft() {
     if (!editingCourse?.name.trim()) return;
     const courseId = editingCourse.id;
-    const feeRule = editingCourse.feeRule.mode === "class_headcount"
-      ? {
-          ...editingCourse.feeRule,
-          mode: "class_headcount" as const,
-          classFeeTiers: [{ ...(normalizedClassFeeTiers(editingCourse.feeRule)[0] ?? defaultClassFeeTiers(editingCourse.feeRule)[0]), maxStudents: undefined }]
-        }
-      : editingCourse.feeRule;
+    const feeRule = normalizeCourseFeeRuleForType(editingCourse.type, editingCourse.feeRule);
     onUpdateCourse({
       ...editingCourse,
       name: editingCourse.name.trim(),
@@ -1516,6 +1557,22 @@ export function StudentsView({
                       </div>
                     </div>
                   </div>
+                  ) : type === "trial" ? (
+                  <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
+                    <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-sm font-extrabold text-[#061226]">默认单次费用</div>
+                      <div className="text-xs font-semibold text-[#64748b]">新建试听课程时自动带入，不按小时相乘。</div>
+                    </div>
+                    <SensitiveAmountField visible={amountsVisible} className="h-9">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={fixedFeeForRule(rule)}
+                        onChange={(event) => updateCourseTypeFixedRule(type, Math.max(Number(event.target.value), 0))}
+                        className="h-9 bg-white"
+                      />
+                    </SensitiveAmountField>
+                  </div>
                   ) : (
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -1848,18 +1905,33 @@ export function StudentsView({
                     </div>
                   ))}
                 </div>
+              ) : courseType === "trial" ? (
+                <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-end">
+                  <div>
+                    <div className="text-sm font-extrabold text-[#061226]">试听费用</div>
+                    <div className="mt-1 text-xs font-semibold text-[#64748b]">按单次试听计费，不按上课时长相乘。</div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#64748b]">试听单次费用</label>
+                    <SensitiveAmountField visible={amountsVisible} className="h-9">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={fixedFeeForRule(courseFeeRule)}
+                        onChange={(event) => updateNewTrialFixedFee(Math.max(Number(event.target.value), 0))}
+                        className="h-9 bg-white"
+                      />
+                    </SensitiveAmountField>
+                  </div>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-end">
                   <div>
-                    <div className="text-sm font-extrabold text-[#061226]">
-                      {courseType === "trial" ? "试听费用" : "课程费用"}
-                    </div>
+                    <div className="text-sm font-extrabold text-[#061226]">课程费用</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">按开始和结束时间自动折算课时费。</div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#64748b]">
-                      {courseType === "trial" ? "试听每小时费用" : "每小时费用"}
-                    </label>
+                    <label className="text-[11px] font-bold text-[#64748b]">每小时费用</label>
                     <SensitiveAmountField visible={amountsVisible} className="h-9">
                       <Input
                         type="number"
@@ -2330,17 +2402,29 @@ export function StudentsView({
                       </div>
                     ))}
                   </div>
+                ) : editingCourse.type === "trial" ? (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#64748b]">试听单次费用</label>
+                    <div className="text-xs font-semibold text-[#64748b]">按单次试听计费，不按上课时长相乘。</div>
+                    <SensitiveAmountField visible={amountsVisible}>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={fixedFeeForRule(editingCourse.feeRule)}
+                        onChange={(event) => updateEditingTrialFixedFee(Math.max(Number(event.target.value), 0))}
+                        placeholder="试听单次费用"
+                      />
+                    </SensitiveAmountField>
+                  </div>
                 ) : (
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-[#64748b]">
-                      {editingCourse.type === "trial" ? "试听每小时费用" : "每小时费用"}
-                    </label>
+                    <label className="text-xs font-bold text-[#64748b]">每小时费用</label>
                     <SensitiveAmountField visible={amountsVisible}>
                       <Input
                         type="number"
                         value={editingCourse.feeRule.hourlyRate ?? 0}
                         onChange={(event) => updateEditingCourseFee({ hourlyRate: Number(event.target.value) })}
-                        placeholder={editingCourse.type === "trial" ? "试听每小时费用" : "每小时费用"}
+                        placeholder="每小时费用"
                       />
                     </SensitiveAmountField>
                   </div>
@@ -2523,6 +2607,23 @@ function defaultFeeRuleForCustomTemplate(template: "class" | "hourly"): FeeRule 
     return { mode: "hourly", hourlyRate: 0 };
   }
   return defaultFeeRuleForCourseType("class");
+}
+
+function normalizeCourseFeeRuleForType(type: CourseType, feeRule: FeeRule): FeeRule {
+  if (type === "trial") {
+    return {
+      mode: "fixed",
+      fixedFee: fixedFeeForRule(feeRule)
+    };
+  }
+  if (feeRule.mode === "class_headcount") {
+    return {
+      ...feeRule,
+      mode: "class_headcount",
+      classFeeTiers: [{ ...(normalizedClassFeeTiers(feeRule)[0] ?? defaultClassFeeTiers(feeRule)[0]), maxStudents: undefined }]
+    };
+  }
+  return feeRule;
 }
 
 function matchesKeywordSearch(searchable: string, normalizedQuery: string): boolean {

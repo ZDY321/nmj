@@ -166,18 +166,24 @@ export function calculateClassHeadcountFee(rule: FeeRule, studentCount: number):
 
 export function calculateFee(rule: FeeRule, lesson: Lesson): number {
   const extraFee = extraFeeTotal(lesson);
+  if (lesson.type === "trial") {
+    return Math.round(fixedFeeForRule(rule) + extraFee);
+  }
   if (rule.mode === "hourly") {
     return Math.round((rule.hourlyRate ?? 0) * billableHoursForLesson(lesson, rule) + extraFee);
   }
 
   if (rule.mode === "fixed") {
-    return Math.round((rule.fixedFee ?? 0) + extraFee);
+    return Math.round(fixedFeeForRule(rule) + extraFee);
   }
 
   return Math.round(calculateClassHeadcountFee(rule, presentCount(lesson)) + extraFee);
 }
 
 export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
+  if (type === "trial") {
+    return { mode: "fixed", fixedFee: 0 };
+  }
   if (type === "class" || type === "one_on_two" || type.startsWith("custom_")) {
     const baseFee = 0;
     const perPresentStudentFee = 0;
@@ -190,6 +196,10 @@ export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
     };
   }
   return { mode: "hourly", hourlyRate: 0 };
+}
+
+export function fixedFeeForRule(rule: FeeRule): number {
+  return Math.max(rule.fixedFee ?? rule.hourlyRate ?? 0, 0);
 }
 
 export function feeRuleForCourseType(vault: TeacherVault, type: CourseType): FeeRule {

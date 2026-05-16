@@ -30,7 +30,7 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
-import { currentAppHour, defaultFeeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForLesson, calculateFee, classFeeTierForCount, currentAppHour, defaultFeeRuleForCourseType, extraFeeTotal, formatAppDateLabel, formatAppDateTime, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   cloneVault,
@@ -38,6 +38,8 @@ import {
   viewTitles,
   datesBetween,
   createLessonFromCourse,
+  lessonStudentIds,
+  makeupNeededStudentIds,
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
@@ -342,6 +344,7 @@ export function App() {
 
   function updateLesson(lesson: Lesson) {
     updateVault((draft) => {
+      cleanupResolvedMakeupLessons(draft, lesson);
       draft.lessons = draft.lessons.map((item) => (item.id === lesson.id ? lesson : item));
     });
   }
@@ -1499,6 +1502,89 @@ function greetingFor(date: Date): string {
   if (hour >= 11 && hour < 14) return "中午好";
   if (hour >= 14 && hour < 18) return "下午好";
   return "晚上好";
+}
+
+function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Lesson {
+  const course = getCourse(vault, lesson.courseGroupId);
+  if (!course) return lesson;
+  const presentStudentCount = presentCount(lesson);
+  const classFeeTier = course.feeRule.mode === "class_headcount"
+    ? classFeeTierForCount(course.feeRule, presentStudentCount)
+    : undefined;
+  return {
+    ...lesson,
+    feeSnapshot: {
+      ...lesson.feeSnapshot,
+      baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
+      hourlyRate: course.feeRule.hourlyRate,
+      fixedFee: course.feeRule.fixedFee,
+      perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
+      classFeeTierId: classFeeTier?.id,
+      presentStudentCount,
+      trialStudentCount: lesson.trialStudentCount ?? 0,
+      trialFee: lesson.trialFee ?? 0,
+      hours: billableHoursForLesson(lesson, course.feeRule),
+      manualAdjustment: extraFeeTotal(lesson),
+      amount: calculateFee(course.feeRule, lesson)
+    }
+  };
+}
+
+function cleanupResolvedMakeupLessons(vault: TeacherVault, updatedOriginal: Lesson) {
+  if (updatedOriginal.linkedOriginalLessonId) return;
+  const previousOriginal = vault.lessons.find((lesson) => lesson.id === updatedOriginal.id);
+  if (!previousOriginal) return;
+
+  const previousNeededStudentIds = new Set(makeupNeededStudentIds(previousOriginal));
+  if (previousNeededStudentIds.size === 0) return;
+  const nextNeededStudentIds = new Set(makeupNeededStudentIds(updatedOriginal));
+  const resolvedStudentIds = Array.from(previousNeededStudentIds).filter((studentId) => !nextNeededStudentIds.has(studentId));
+  if (resolvedStudentIds.length === 0) return;
+  const resolvedStudentSet = new Set(resolvedStudentIds);
+  if (updatedOriginal.status === "makeup_pending" && nextNeededStudentIds.size === 0) {
+    updatedOriginal.status = lessonStatusAfterResolvedMakeup(updatedOriginal);
+  }
+
+  vault.lessons = vault.lessons.flatMap((lesson) => {
+    if (lesson.linkedOriginalLessonId !== updatedOriginal.id || lesson.status === "cancelled") {
+      return [lesson];
+    }
+
+    const makeupStudentIds = lessonStudentIds(lesson);
+    const keptStudentIds = makeupStudentIds.filter((studentId) => !resolvedStudentSet.has(studentId));
+    if (keptStudentIds.length === makeupStudentIds.length) {
+      return [lesson];
+    }
+    if (keptStudentIds.length === 0) {
+      return [];
+    }
+
+    return [recalculateLessonFeeSnapshot(vault, {
+      ...lesson,
+      expectedStudentIds: lesson.expectedStudentIds.filter((studentId) => keptStudentIds.includes(studentId)),
+      attendance: lesson.attendance.filter((entry) => keptStudentIds.includes(entry.studentId)),
+      makeupStudentId: keptStudentIds.length === 1 ? keptStudentIds[0] : undefined,
+      note: removeResolvedMakeupNames(lesson.note, vault, resolvedStudentIds)
+    })];
+  });
+}
+
+function lessonStatusAfterResolvedMakeup(lesson: Lesson): Lesson["status"] {
+  if (lesson.attendance.length > 0 && lesson.attendance.every((entry) => entry.status === "cancelled")) {
+    return "cancelled";
+  }
+  if (lesson.attendance.length > 0 && lesson.attendance.every((entry) => entry.status === "makeup_completed")) {
+    return "makeup_completed";
+  }
+  return "completed";
+}
+
+function removeResolvedMakeupNames(note: string | undefined, vault: TeacherVault, studentIds: string[]): string | undefined {
+  if (!note) return note;
+  return studentIds.reduce((current, studentId) => {
+    const studentName = vault.students.find((student) => student.id === studentId)?.name;
+    return studentName ? current.replaceAll(studentName, "").replace(/、{2,}/g, "、").replace(/^、|、(?= 补 )/g, "").trim() : current;
+  }, note);
 }
 
 function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {

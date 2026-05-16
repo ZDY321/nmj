@@ -68,6 +68,27 @@ export const lessonStatusLabels: Record<LessonStatus, string> = {
   makeup_completed: "补课完成"
 };
 
+export function isMakeupAttendanceStatus(status: AttendanceStatus): boolean {
+  return status === "leave_requested" || status === "absent" || status === "makeup_pending";
+}
+
+export function lessonStudentIds(lesson: Pick<Lesson, "expectedStudentIds" | "attendance">): string[] {
+  return Array.from(new Set([
+    ...lesson.expectedStudentIds,
+    ...lesson.attendance.map((entry) => entry.studentId)
+  ]));
+}
+
+export function makeupNeededStudentIds(lesson: Pick<Lesson, "status" | "expectedStudentIds" | "attendance">): string[] {
+  const attendanceStudentIds = lesson.attendance
+    .filter((entry) => isMakeupAttendanceStatus(entry.status))
+    .map((entry) => entry.studentId);
+  if (attendanceStudentIds.length > 0 || lesson.attendance.length > 0) {
+    return Array.from(new Set(attendanceStudentIds));
+  }
+  return lesson.status === "makeup_pending" ? Array.from(new Set(lesson.expectedStudentIds)) : [];
+}
+
 export const courseTypeLabels: Record<BuiltInCourseType, string> = {
   one_on_one: "一对一",
   one_on_two: "一对二",
