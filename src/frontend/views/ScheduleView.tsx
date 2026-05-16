@@ -978,7 +978,7 @@ export function ScheduleView({
                     <CalendarDays size={14} /> 当日课程
                   </div>
                   <h2 className="text-2xl font-extrabold leading-tight text-[#061226]">{calendarDetailDate}</h2>
-                  <p className="mt-1 text-sm font-semibold text-[#64748b]">点击课程可同步选中到课程记录。</p>
+                  <p className="mt-1 text-sm font-semibold text-[#64748b]">点击课程可跳转到课程记录详情。</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => setCalendarDetailDate(null)} className="shrink-0 rounded-full">
                   <X size={18} />
@@ -1008,8 +1008,8 @@ export function ScheduleView({
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedId(lesson.id);
                             setCalendarDetailDate(null);
+                            openLessonInRecords(lesson);
                           }}
                           className="min-w-0 flex-1 text-left"
                         >
@@ -1628,7 +1628,7 @@ export function ScheduleView({
                 <Clock size={14} /> 每日课程详情
               </div>
               <CardTitle>{selectedCalendarDate} 课程</CardTitle>
-              <CardDescription>状态与课时记录同步，可从这里选择或删除课程。</CardDescription>
+              <CardDescription>状态与课时记录同步，点击课程可跳转到课程记录详情。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
@@ -1649,7 +1649,7 @@ export function ScheduleView({
                 {selectedCalendarLessons.map((lesson) => (
                   <div key={lesson.id} className={`rounded-[12px] border p-3 ${lessonStatusSurfaceClass(lesson.status)}`}>
                     <div className="flex items-start justify-between gap-3">
-                      <button type="button" onClick={() => setSelectedId(lesson.id)} className="min-w-0 flex-1 text-left">
+                      <button type="button" onClick={() => openLessonInRecords(lesson)} className="min-w-0 flex-1 text-left">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
                           <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
