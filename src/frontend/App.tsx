@@ -79,6 +79,7 @@ type UnlockedSession = {
 type ScheduleCalendarFocus = {
   date: string;
   lessonId?: string;
+  targetPanel?: "calendar" | "records";
   nonce: number;
 };
 
@@ -943,7 +944,16 @@ export function App() {
     setFeedbackModalOpen(false);
     setMobileNavOpen(false);
     setOnboardingVisible(false);
-    setScheduleCalendarFocus({ date: lesson.date, lessonId: lesson.id, nonce: Date.now() });
+    setScheduleCalendarFocus({ date: lesson.date, lessonId: lesson.id, targetPanel: "calendar", nonce: Date.now() });
+    setView("schedule");
+  }
+
+  function openLessonInScheduleRecords(lesson: Lesson) {
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setMobileNavOpen(false);
+    setOnboardingVisible(false);
+    setScheduleCalendarFocus({ date: lesson.date, lessonId: lesson.id, targetPanel: "records", nonce: Date.now() });
     setView("schedule");
   }
 
@@ -1375,10 +1385,11 @@ export function App() {
                 onAddTodo={addTodo}
                 onUpdateTodo={updateTodo}
                 onDeleteTodo={deleteTodo}
+                onOpenLessonInRecords={openLessonInScheduleRecords}
               />
             )}
             {!onboardingVisible && view === "calendar" && (
-              <CalendarView vault={vault} amountsVisible={amountsVisible} onWeekStartChange={updateWeekStart} onOpenLessonInCalendar={openLessonInCalendar} />
+              <CalendarView vault={vault} amountsVisible={amountsVisible} onWeekStartChange={updateWeekStart} onOpenLessonInRecords={openLessonInScheduleRecords} />
             )}
             {!onboardingVisible && view === "schedule" && (
               <ScheduleView

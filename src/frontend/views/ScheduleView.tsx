@@ -72,7 +72,7 @@ import {
 type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
 type SchedulePanel = "schedule" | "calendar" | "records" | "studentStats";
-type CalendarFocus = { date: string; lessonId?: string; nonce: number } | null;
+type CalendarFocus = { date: string; lessonId?: string; targetPanel?: SchedulePanel; nonce: number } | null;
 
 export function ScheduleView({
   vault,
@@ -220,13 +220,19 @@ export function ScheduleView({
 
   useEffect(() => {
     if (!calendarFocus?.date) return;
-    setSchedulePanel("calendar");
+    setSchedulePanel(calendarFocus.targetPanel ?? "calendar");
     setCalendarMode("view");
     setSelectedCalendarDate(calendarFocus.date);
     setCalendarMonth(calendarFocus.date.slice(0, 7));
     setLessonDay(calendarFocus.date);
     setLessonMonth(calendarFocus.date.slice(0, 7));
     setSyncRecordsWithCalendarDate(true);
+    if (calendarFocus.targetPanel === "records") {
+      setCampusFilter("all");
+      setCourseTypeFilter("all");
+      setStudentFilter("");
+      setShowOnlyMakeup(false);
+    }
     if (calendarFocus.lessonId) {
       setSelectedId(calendarFocus.lessonId);
     }

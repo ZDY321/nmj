@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import {
   BookOpen,
   CalendarDays,
-  CheckCircle2,
   Clock3,
   MapPin,
   NotebookPen,
@@ -48,7 +47,8 @@ export function TodayView({
   onUpdateLesson,
   onAddTodo,
   onUpdateTodo,
-  onDeleteTodo
+  onDeleteTodo,
+  onOpenLessonInRecords
 }: {
   vault: TeacherVault;
   selectedDate: string;
@@ -57,6 +57,7 @@ export function TodayView({
   onAddTodo: (todo: TodoItem) => void;
   onUpdateTodo: (todo: TodoItem) => void;
   onDeleteTodo: (todoId: string) => void;
+  onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
   const [todoTitle, setTodoTitle] = useState("");
   const [todoDueDate, setTodoDueDate] = useState(selectedDate);
@@ -85,10 +86,6 @@ export function TodayView({
     day: "numeric",
     weekday: "long"
   });
-
-  function quickStatus(lesson: Lesson, status: "completed" | "cancelled") {
-    onUpdateLesson({ ...lesson, status });
-  }
 
   function addTodo() {
     const title = todoTitle.trim();
@@ -315,8 +312,6 @@ export function TodayView({
               const previous = previousLesson(vault, lesson);
               const campusTone = campusColorClass(campusOptions.findIndex((campus) => campus.id === lesson.campusId));
               const course = getCourse(vault, lesson.courseGroupId);
-              const isCompleted = lesson.status === "completed" || lesson.status === "makeup_completed";
-              const isCancelled = lesson.status === "cancelled";
               return (
                 <motion.article
                   key={lesson.id}
@@ -417,21 +412,14 @@ export function TodayView({
                     <div className="text-sm font-bold text-[#061226]">
                       本节预计金额：{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}
                     </div>
-                    <div className="grid grid-cols-2 gap-2 sm:flex">
-                      <Button size="sm" onClick={() => quickStatus(lesson, "completed")} className={`${isCompleted ? "bg-[#16a34a] hover:bg-[#15803d]" : "bg-[#f59e0b] hover:bg-[#d97706]"} shadow-none`}>
-                        <CheckCircle2 size={15} /> 完成
-                      </Button>
+                    <div className="flex sm:shrink-0">
                       <Button
                         size="sm"
-                        variant={isCancelled ? "destructive" : "outline"}
-                        onClick={() => quickStatus(lesson, "cancelled")}
-                        className={
-                          isCancelled
-                            ? "border-[#dc2626] bg-[#dc2626] text-white hover:border-[#b91c1c] hover:bg-[#b91c1c] hover:text-white"
-                            : undefined
-                        }
+                        variant="outline"
+                        onClick={() => onOpenLessonInRecords?.(lesson)}
+                        className="border-[#93c5fd] bg-[#eff6ff] text-[#1557c2] hover:border-[#60a5fa] hover:bg-[#dbeafe] hover:text-[#0f4aa0]"
                       >
-                        <XCircle size={15} /> 取消
+                        <CalendarDays size={15} /> 查看详情
                       </Button>
                     </div>
                   </div>

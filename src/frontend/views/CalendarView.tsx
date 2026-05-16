@@ -34,12 +34,12 @@ export function CalendarView({
   vault,
   amountsVisible,
   onWeekStartChange,
-  onOpenLessonInCalendar
+  onOpenLessonInRecords
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
   onWeekStartChange: (weekStart: WeekStart) => void;
-  onOpenLessonInCalendar?: (lesson: Lesson) => void;
+  onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
   const [month, setMonth] = useState(() => todayIso().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => todayIso());
@@ -225,7 +225,7 @@ export function CalendarView({
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-sm font-extrabold text-[#061226]">周课表</div>
-                    <div className="text-xs font-semibold text-[#64748b]">点击某节课可跳转到「排课与课时-日历查看」页面</div>
+                    <div className="text-xs font-semibold text-[#64748b]">点击某节课可跳转到「排课与课时-课程记录」页面</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#64748b]">
                     <Badge variant="sage" className="text-[10px]">完成</Badge>
@@ -302,7 +302,7 @@ export function CalendarView({
                                         onClick={(event) => {
                                           event.stopPropagation();
                                           selectCalendarDate(date);
-                                          onOpenLessonInCalendar?.(lesson);
+                                          onOpenLessonInRecords?.(lesson);
                                         }}
                                         className={`block w-full rounded-[10px] border p-2 text-left text-xs transition-all hover:border-[#1557c2] ${lessonStatusSurfaceClass(lesson.status)}`}
                                       >
@@ -376,7 +376,7 @@ export function CalendarView({
                   type="button"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  onClick={() => onOpenLessonInCalendar?.(lesson)}
+                  onClick={() => onOpenLessonInRecords?.(lesson)}
                   className={`flex w-full flex-col gap-3 rounded-[12px] border p-3 text-left transition-all hover:border-[#1557c2] sm:flex-row sm:items-center sm:justify-between ${lessonStatusSurfaceClass(lesson.status)}`}
                 >
                   <div className="min-w-0">
