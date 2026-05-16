@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, Building2, CalendarDays, ChevronDown, ChevronRight, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
+import { Archive, BookOpen, Building2, CalendarDays, ChevronDown, ChevronRight, FileText, GraduationCap, MapPin, Pencil, Plus, RotateCcw, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -72,6 +72,8 @@ export function StudentsView({
   const courseTypeOptions = courseTypeOptionsForVault(vault);
   const subjectOptions = subjectOptionsForVault(vault);
   const studentOptions = sortStudentsByName(vault.students);
+  const activeStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status !== "paused"));
+  const archivedStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "paused"));
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
   const customCourseTypes = vault.preferences?.customCourseTypes ?? [];
   const disabledCourseTypes = new Set(vault.preferences?.disabledCourseTypes ?? []);
@@ -95,6 +97,7 @@ export function StudentsView({
   const [studentCampusInput, setStudentCampusInput] = useState(preferredCampusId);
   const [studentNoteInput, setStudentNoteInput] = useState("");
   const [courseNameInput, setCourseNameInput] = useState("");
+  const [courseNameEdited, setCourseNameEdited] = useState(false);
   const [courseType, setCourseType] = useState<CourseType>("one_on_one");
   const [courseSubjectInput, setCourseSubjectInput] = useState("");
   const [courseCampusInput, setCourseCampusInput] = useState(preferredCampusId);
@@ -118,6 +121,7 @@ export function StudentsView({
   const [archivePanel, setArchivePanel] = useState<ArchivePanel>("profile");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
+  const [studentStatusFilter, setStudentStatusFilter] = useState<"active" | "archived" | "all">("active");
   const [studentCourseTypeFilter, setStudentCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [studentSubjectFilter, setStudentSubjectFilter] = useState("all");
   const [courseSearch, setCourseSearch] = useState("");
@@ -132,7 +136,7 @@ export function StudentsView({
   const [courseStudentGradeFilter, setCourseStudentGradeFilter] = useState("all");
   const [courseStudentCampusFilter, setCourseStudentCampusFilter] = useState("all");
   const [transferPanelOpen, setTransferPanelOpen] = useState(false);
-  const [transferStudentId, setTransferStudentId] = useState(studentOptions[0]?.id ?? "");
+  const [transferStudentId, setTransferStudentId] = useState(activeStudentOptions[0]?.id ?? "");
   const [transferCourseType, setTransferCourseType] = useState<CourseType>("trial");
   const [transferTargetMode, setTransferTargetMode] = useState<"new" | "existing">("new");
   const [transferTargetCourseId, setTransferTargetCourseId] = useState("");
@@ -152,12 +156,15 @@ export function StudentsView({
   const hasUnsetGradeFilterOption = hasStudentsWithoutGrade || vault.courseGroups.some((course) => course.studentIds.length === 0);
   const subjectFilterOptions = subjectOptions;
   const suggestedCourseName = buildSuggestedCourseName(courseType, courseStudentIds);
-  const addCourseStudentOptions = studentOptions.filter((student) => {
+  const addCourseStudentOptions = activeStudentOptions.filter((student) => {
     const searchable = studentCourseSearchText(vault, student);
     return matchesKeywordSearch(searchable, normalizedNewCourseStudentSearch);
   });
   const visibleStudents = vault.students
     .filter((student) => {
+      const matchesStatus =
+        studentStatusFilter === "all" ||
+        (studentStatusFilter === "archived" ? student.status === "paused" : student.status !== "paused");
       const matchesGrade = matchesGradeFilter(student.grade, gradeFilter);
       const matchesCampus = studentCampusFilter === "all" || student.defaultCampusId === studentCampusFilter;
       const studentCourses = vault.courseGroups.filter((course) => course.studentIds.includes(student.id));
@@ -168,7 +175,7 @@ export function StudentsView({
         student.name.toLowerCase().includes(normalizedArchiveSearch) ||
         (student.school ?? "").toLowerCase().includes(normalizedArchiveSearch) ||
         (student.note ?? "").toLowerCase().includes(normalizedArchiveSearch);
-      return matchesGrade && matchesCampus && matchesType && matchesSubject && matchesSearch;
+      return matchesStatus && matchesGrade && matchesCampus && matchesType && matchesSubject && matchesSearch;
     })
     .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id));
   const visibleCourses = courseGroupOptions
@@ -197,7 +204,8 @@ export function StudentsView({
       return matchesType && matchesGrade && matchesSubject && matchesCampus && matchesSearch;
     })
     .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id));
-  const activeStudents = vault.students.filter((student) => student.status === "active").length;
+  const activeStudentCount = activeStudentOptions.length;
+  const archivedStudentCount = archivedStudentOptions.length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
   const obligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId ?? "";
   const obligationMode = vault.profile.obligationDeductionMode ?? "auto_gap";
@@ -219,7 +227,7 @@ export function StudentsView({
       )
     : [];
   const transferTargetCourseIds = transferTargetCourses.map((course) => course.id).join("|");
-  const studentOptionIds = studentOptions.map((student) => student.id).join("|");
+  const activeStudentOptionIds = activeStudentOptions.map((student) => student.id).join("|");
   const campusOptionIds = [vault.profile.homeCampusId ?? "", ...vault.campuses.map((campus) => campus.id)].join("|");
   const courseTypeOptionIds = courseTypeOptions.map((option) => option.value).join("|");
   const subjectOptionIds = subjectOptions.join("|");
@@ -229,6 +237,7 @@ export function StudentsView({
   const editingCourseStudentOptions = editingCourse
     ? studentOptions.filter((student) => {
         const isSelected = editingCourse.studentIds.includes(student.id);
+        if (!isSelected && student.status === "paused") return false;
         const matchesScope =
           courseStudentScope === "all" ||
           (courseStudentScope === "selected" ? isSelected : !isSelected);
@@ -252,9 +261,15 @@ export function StudentsView({
 
   useEffect(() => {
     setTransferStudentId((current) =>
-      studentOptions.some((student) => student.id === current) ? current : studentOptions[0]?.id ?? ""
+      activeStudentOptions.some((student) => student.id === current) ? current : activeStudentOptions[0]?.id ?? ""
     );
-  }, [studentOptionIds]);
+  }, [activeStudentOptionIds]);
+
+  useEffect(() => {
+    if (!courseNameEdited) {
+      setCourseNameInput(suggestedCourseName);
+    }
+  }, [courseNameEdited, suggestedCourseName]);
 
   useEffect(() => {
     setTransferCampusInput(transferStudent?.defaultCampusId || preferredCampusId);
@@ -299,15 +314,32 @@ export function StudentsView({
 
   function addStudent(e: FormEvent) {
     e.preventDefault();
+    submitStudent();
+  }
+
+  function submitStudent(forceDuplicate = false) {
     if (!studentNameInput.trim()) return;
     const resolvedGrade = studentGradeInput === "自定义" ? customGradeInput.trim() : studentGradeInput;
+    const resolvedCampusId = studentCampusInput || preferredCampusId;
+    const duplicateStudent = findDuplicateStudent(studentNameInput.trim(), resolvedGrade, resolvedCampusId);
+    if (duplicateStudent && !forceDuplicate) {
+      const duplicateStatus = duplicateStudent.status === "paused" ? "，当前已归档" : "";
+      confirm({
+        title: "可能重复添加学生",
+        description: `已有「${duplicateStudent.name}」使用相同姓名、年级和校区${duplicateStatus}。建议先确认是否需要恢复或编辑原档案。`,
+        confirmLabel: "仍然添加",
+        tone: "danger",
+        onConfirm: () => submitStudent(true)
+      });
+      return;
+    }
     onAddStudent({
       id: makeId("student"),
       name: studentNameInput.trim(),
       grade: resolvedGrade || undefined,
       school: studentSchoolInput.trim() || undefined,
       temporaryTrial: studentTemporaryTrialInput,
-      defaultCampusId: studentCampusInput || preferredCampusId,
+      defaultCampusId: resolvedCampusId,
       note: studentNoteInput.trim() || undefined,
       status: "active"
     });
@@ -327,7 +359,7 @@ export function StudentsView({
   function submitCourse(forceDuplicate = false) {
     const resolvedName = courseNameInput.trim() || suggestedCourseName;
     if (!resolvedName) return;
-    const normalizedStudentIds = normalizeCourseStudentIds(courseType, courseStudentIds);
+    const normalizedStudentIds = normalizeCourseStudentIds(courseType, activeCourseStudentIds(courseStudentIds));
     const resolvedCampusId = courseCampusInput || firstCourseStudentCampus(normalizedStudentIds) || preferredCampusId;
     const resolvedSubject = courseSubjectInput.trim() || subjectOptions[0] || "未设置";
     const duplicateCourse = findDuplicateCourse(courseType, resolvedCampusId, resolvedSubject, normalizedStudentIds);
@@ -360,6 +392,7 @@ export function StudentsView({
     setCourseStatusInput("active");
     setCourseFeeRule(courseTypeDefaultFeeRule(courseType));
     setNewCourseStudentSearch("");
+    setCourseNameEdited(false);
   }
 
   function applyStudentCourseTransfer(event: FormEvent) {
@@ -479,6 +512,18 @@ export function StudentsView({
     );
   }
 
+  function findDuplicateStudent(name: string, grade: string | undefined, campusId: string | undefined): Student | undefined {
+    const normalizedName = normalizeStudentDuplicateValue(name);
+    const normalizedGrade = normalizeStudentDuplicateValue(grade ?? "");
+    const normalizedCampusId = campusId ?? "";
+    return vault.students.find(
+      (student) =>
+        normalizeStudentDuplicateValue(student.name) === normalizedName &&
+        normalizeStudentDuplicateValue(student.grade ?? "") === normalizedGrade &&
+        (student.defaultCampusId ?? "") === normalizedCampusId
+    );
+  }
+
   function firstCourseStudentCampus(studentIds: string[]): string | undefined {
     return studentIds
       .map((studentId) => vault.students.find((student) => student.id === studentId)?.defaultCampusId)
@@ -509,8 +554,8 @@ export function StudentsView({
 
   function buildSuggestedCourseName(type: CourseType, studentIds: string[]): string {
     const primaryStudent = studentIds[0] ? vault.students.find((student) => student.id === studentIds[0]) : undefined;
-    if (primaryStudent && studentLimitForCourseType(type)) {
-      return `${primaryStudent.name}${courseTypeLabel(vault, type)}`;
+    if (primaryStudent) {
+      return primaryStudent.name;
     }
     if (type === "class") {
       const firstStudentGrade = firstCourseStudentGrade(studentIds);
@@ -522,7 +567,7 @@ export function StudentsView({
   }
 
   function changeNewCourseType(nextType: CourseType) {
-    const nextStudentIds = normalizeCourseStudentIds(nextType, courseStudentIds);
+    const nextStudentIds = normalizeCourseStudentIds(nextType, activeCourseStudentIds(courseStudentIds));
     setCourseType(nextType);
     setCourseStudentIds(nextStudentIds);
     setCourseFeeRule(courseTypeDefaultFeeRule(nextType));
@@ -736,14 +781,22 @@ export function StudentsView({
   }
 
   function setNewCourseStudents(nextStudentIds: string[]) {
-    const normalizedStudentIds = normalizeCourseStudentIds(courseType, nextStudentIds);
+    const normalizedStudentIds = normalizeCourseStudentIds(courseType, activeCourseStudentIds(nextStudentIds));
     setCourseStudentIds(normalizedStudentIds);
     syncNewCourseCampusFromStudents(normalizedStudentIds);
+  }
+
+  function activeCourseStudentIds(studentIds: string[]): string[] {
+    return studentIds.filter((studentId) => {
+      const student = vault.students.find((item) => item.id === studentId);
+      return student?.status !== "paused";
+    });
   }
 
   function toggleNewCourseStudent(studentId: string) {
     const isSelected = courseStudentIds.includes(studentId);
     const student = vault.students.find((item) => item.id === studentId);
+    if (!isSelected && student?.status === "paused") return;
     const limit = studentLimitForCourseType(courseType);
     if (limit) {
       if (isSelected) {
@@ -831,6 +884,25 @@ export function StudentsView({
     setEditingStudent(student);
   }
 
+  function requestArchiveStudent(student: Student) {
+    confirm({
+      title: `归档学生「${student.name}」？`,
+      description: "归档后不会出现在新建课程、添加关联学生和班型调整的学生搜索结果中，历史课程和课时记录会保留。",
+      confirmLabel: "归档",
+      tone: "danger",
+      onConfirm: () => {
+        setCourseStudentIds((current) => current.filter((studentId) => studentId !== student.id));
+        onUpdateStudent({ ...student, status: "paused" });
+        flashArchiveRow("students", student.id);
+      }
+    });
+  }
+
+  function restoreStudent(student: Student) {
+    onUpdateStudent({ ...student, status: "active" });
+    flashArchiveRow("students", student.id);
+  }
+
   function updateProfile(patch: Partial<TeacherProfile>) {
     onUpdateProfile({
       ...vault.profile,
@@ -866,6 +938,7 @@ export function StudentsView({
       if (!current) return current;
       const isSelected = current.studentIds.includes(studentId);
       const student = vault.students.find((item) => item.id === studentId);
+      if (!isSelected && student?.status === "paused") return current;
       const limit = studentLimitForCourseType(current.type);
       if (limit) {
         if (!isSelected && current.studentIds.length >= limit) {
@@ -900,11 +973,15 @@ export function StudentsView({
   function saveStudentDraft() {
     if (!editingStudent?.name.trim()) return;
     const studentId = editingStudent.id;
-    onUpdateStudent({
+    const nextStudent = {
       ...editingStudent,
       name: editingStudent.name.trim(),
       grade: editingStudent.grade === "__custom__" ? undefined : editingStudent.grade
-    });
+    };
+    if (nextStudent.status === "paused") {
+      setCourseStudentIds((current) => current.filter((id) => id !== studentId));
+    }
+    onUpdateStudent(nextStudent);
     setEditingStudent(null);
     flashArchiveRow("students", studentId);
   }
@@ -968,7 +1045,7 @@ export function StudentsView({
       {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
-          { label: "档案信息", value: `${vault.students.length} 人`, hint: `正常学生 ${activeStudents} 人`, icon: Users },
+          { label: "档案信息", value: `${vault.students.length} 人`, hint: `在读 ${activeStudentCount} 人 / 已归档 ${archivedStudentCount} 人`, icon: Users },
           { label: "校区", value: `${vault.campuses.length} 个`, hint: "教学地点", icon: Building2 },
           { label: "课程/班课", value: `${vault.courseGroups.length} 个`, hint: `启用 ${activeCourses} 个`, icon: GraduationCap }
         ].map((item) => {
@@ -1019,7 +1096,7 @@ export function StudentsView({
           </div>
         </div>
         <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
-          删除限制：已有学生、课程或历史课时引用的数据不能直接删除，建议将对应的引用数据全部删除或改为暂停状态。
+          删除限制：已有学生、课程或历史课时引用的数据不能直接删除，建议将对应的引用数据全部删除或改为归档状态。
         </div>
         {archivePanel === "profile" && (
           <Card className="overflow-hidden">
@@ -1211,7 +1288,7 @@ export function StudentsView({
                   <div className="space-y-2">
                     <label className="text-sm font-medium">学生</label>
                     <Select value={transferStudentId} onChange={(event) => setTransferStudentId(event.target.value)}>
-                      {studentOptions.map((student) => (
+                      {activeStudentOptions.map((student) => (
                         <option key={student.id} value={student.id}>{studentOptionLabel(student)}</option>
                       ))}
                     </Select>
@@ -1791,7 +1868,10 @@ export function StudentsView({
                 <Users size={18} className="text-[#ff8617]" />
                 <CardTitle className="text-lg">学生列表</CardTitle>
               </div>
-              <Badge variant="secondary">{visibleStudents.length} / {vault.students.length} 人</Badge>
+              <Badge variant="secondary">
+                {visibleStudents.length} / {vault.students.length} 人
+                {studentStatusFilter !== "all" ? ` · ${studentStatusFilter === "archived" ? "已归档" : "在读"}` : ""}
+              </Badge>
             </div>
             <form onSubmit={addStudent} className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
               <Input
@@ -1844,7 +1924,12 @@ export function StudentsView({
               <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
               <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名、学校或备注" />
             </label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              <Select value={studentStatusFilter} onChange={(event) => setStudentStatusFilter(event.target.value as "active" | "archived" | "all")} className="h-10">
+                <option value="active">在读学生</option>
+                <option value="archived">已归档学生</option>
+                <option value="all">全部学生</option>
+              </Select>
               <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} className="h-10">
                 <option value="all">全部年级</option>
                 {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
@@ -1875,6 +1960,7 @@ export function StudentsView({
           <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
             {visibleStudents.map((student) => {
               const used = studentInUse(student.id);
+              const archived = student.status === "paused";
               return (
                 <motion.div
                   key={student.id}
@@ -1908,9 +1994,40 @@ export function StudentsView({
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                        <Badge variant={student.status === "active" ? "sage" : "secondary"}>
-                          {student.status === "active" ? "正常" : "暂停"}
+                        <Badge variant={archived ? "secondary" : "sage"}>
+                          {archived ? "已归档" : "在读"}
                         </Badge>
+                        {archived ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-8 rounded-[9px] border-[#bbf7d0] bg-[#f0fdf4] p-0 text-[#166534] hover:bg-[#dcfce7] hover:text-[#14532d]"
+                            title="恢复学生"
+                            aria-label={`恢复学生 ${student.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              restoreStudent(student);
+                            }}
+                          >
+                            <RotateCcw size={13} />
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-8 rounded-[9px] border-[#fed7aa] bg-[#fff7ed] p-0 text-[#9a3412] hover:bg-[#ffedd5] hover:text-[#7c2d12]"
+                            title="归档学生"
+                            aria-label={`归档学生 ${student.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              requestArchiveStudent(student);
+                            }}
+                          >
+                            <Archive size={13} />
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           size="sm"
@@ -1937,7 +2054,7 @@ export function StudentsView({
                             event.stopPropagation();
                             confirm({
                               title: `删除学生「${student.name}」？`,
-                              description: "已有历史课时建议保留为暂停状态，确认删除后将从档案信息移除。",
+                              description: "已有历史课时建议保留为归档状态，确认删除后将从档案信息移除。",
                               confirmLabel: "删除",
                               tone: "danger",
                               onConfirm: () => onDeleteStudent(student.id)
@@ -1959,7 +2076,9 @@ export function StudentsView({
               );
             })}
             {visibleStudents.length === 0 && (
-              <p className="py-8 text-center text-sm text-(--color-muted-foreground)">还没有学生</p>
+              <p className="py-8 text-center text-sm text-(--color-muted-foreground)">
+                {studentStatusFilter === "archived" ? "还没有已归档学生" : "还没有符合条件的学生"}
+              </p>
             )}
           </CardContent>
         </Card>
@@ -1991,8 +2110,12 @@ export function StudentsView({
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
                 <Input
                   value={courseNameInput}
-                  onChange={(event) => setCourseNameInput(event.target.value)}
-                  placeholder={suggestedCourseName ? `默认：${suggestedCourseName}` : "课程名称，例如：初三数学班"}
+                  onChange={(event) => {
+                    const nextName = event.target.value;
+                    setCourseNameInput(nextName);
+                    setCourseNameEdited(nextName !== suggestedCourseName);
+                  }}
+                  placeholder="课程名称"
                 />
                 <Select value={courseSubjectInput || subjectOptions[0] || "未设置"} onChange={(event) => setCourseSubjectInput(event.target.value)}>
                   {subjectOptions.map((subject) => (
@@ -2109,7 +2232,7 @@ export function StudentsView({
               <div className="space-y-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm font-medium">
-                    关联学生（{courseStudentIds.length} / {vault.students.length}）
+                    关联学生（{courseStudentIds.length} / {activeStudentCount}）
                     {courseType === "class" && (
                       <span className="ml-2 text-xs font-bold text-[#64748b]">
                         班课需同年级{firstCourseStudentGrade(courseStudentIds) !== undefined ? `：${firstCourseStudentGrade(courseStudentIds) || "未设置年级"}` : ""}
@@ -2409,8 +2532,8 @@ export function StudentsView({
                   value={editingStudent.status}
                   onChange={(event) => setEditingStudent({ ...editingStudent, status: event.target.value as Student["status"] })}
                 >
-                  <option value="active">正常</option>
-                  <option value="paused">暂停</option>
+                  <option value="active">在读</option>
+                  <option value="paused">已归档</option>
                 </Select>
                 <label className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
                   <input
@@ -2594,7 +2717,7 @@ export function StudentsView({
                 <div className="space-y-2">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm font-medium">
-                      关联学生（{editingCourse.studentIds.length} / {vault.students.length}）
+                      关联学生（{editingCourse.studentIds.length} 人）
                       {editingCourse.type === "class" && (
                         <span className="ml-2 text-xs font-bold text-[#64748b]">
                           班课需同年级{firstCourseStudentGrade(editingCourse.studentIds) !== undefined ? `：${firstCourseStudentGrade(editingCourse.studentIds) || "未设置年级"}` : ""}
@@ -2698,7 +2821,7 @@ export function StudentsView({
                                       : "border-[#dbe4ef] bg-white text-[#25324a]"
                               }`}
                             >
-                              {student.name} · {student.grade || "未设置年级"}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                              {student.name} · {student.grade || "未设置年级"}{student.status === "paused" ? " · 已归档" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
                             </button>
                           );
                         })}
@@ -2730,6 +2853,7 @@ export function StudentsView({
 }
 
 function canJoinCourse(vault: TeacherVault, course: CourseGroup, student: Student): boolean {
+  if (student.status === "paused") return false;
   const limit = studentLimitForCourseType(course.type);
   if (limit && course.studentIds.length >= limit) return false;
   if (course.type !== "class" || course.studentIds.length === 0) return true;
@@ -2745,6 +2869,7 @@ function studentCourseSearchText(vault: TeacherVault, student: Student): string 
     student.school ?? "",
     student.note ?? "",
     campusName(vault, student.defaultCampusId),
+    student.status === "paused" ? "已归档 归档 暂停" : "在读 正常",
     student.temporaryTrial ? "试听 临时试听" : "",
     ...studentCourses.flatMap((course) => [
       course.name,
@@ -2761,6 +2886,10 @@ function normalizeCourseTypeLabel(value: string): string {
 
 function normalizedStudentIdKey(studentIds: string[]): string {
   return [...studentIds].sort().join("|");
+}
+
+function normalizeStudentDuplicateValue(value: string): string {
+  return value.trim().replace(/\s+/g, "").toLowerCase();
 }
 
 function defaultFeeRuleForCustomTemplate(template: "class" | "hourly"): FeeRule {
