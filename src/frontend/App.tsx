@@ -118,6 +118,9 @@ export function App() {
   const [greetingTime, setGreetingTime] = useState(() => new Date());
   const cloudVersionRef = useRef("");
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingSaveCountRef = useRef(0);
+  const cloudCheckSeqRef = useRef(0);
+  const skipCloudCheckUntilRef = useRef(0);
   const { confirm, dialog } = useConfirmDialog();
 
   function rememberUnlockedSession(next?: Partial<UnlockedSession>) {
@@ -200,33 +203,51 @@ export function App() {
       setSyncMessage("云端版本尚未确认。当前修改已保存在本机页面，请先同步云端数据后再继续保存，避免覆盖其他设备的数据。");
       return;
     }
+    pendingSaveCountRef.current += 1;
+    cloudCheckSeqRef.current += 1;
     setSaveState("saving");
     const saveJob = saveChainRef.current.then(async () => {
+      let savedSuccessfully = false;
+      let nextCloudVersion = cloudVersionRef.current;
       try {
         const result = await saveVault(username, password, nextVault, {
           token,
           expectedUpdatedAt: options.force ? undefined : cloudVersionRef.current || undefined,
           force: options.force
         });
-        const nextCloudVersion = result.updatedAt ?? cloudVersionRef.current;
+        nextCloudVersion = result.updatedAt ?? cloudVersionRef.current;
         if (nextCloudVersion) {
           cloudVersionRef.current = nextCloudVersion;
           setCloudVersion(nextCloudVersion);
         }
-        setRemoteCloudVersion("");
-        setSyncState("idle");
-        setSyncMessage("");
         rememberUnlockedSession({ vault: nextVault, cloudVersion: nextCloudVersion });
-        setSaveState("saved");
-        window.setTimeout(() => setSaveState("idle"), 900);
+        savedSuccessfully = true;
       } catch (error) {
         rememberUnlockedSession({ vault: nextVault });
-        setSaveState("error");
         if (error instanceof ApiError && error.status === 409) {
           const currentUpdatedAt = typeof error.body?.currentUpdatedAt === "string" ? error.body.currentUpdatedAt : "";
           setRemoteCloudVersion(currentUpdatedAt);
           setSyncState("conflict");
           setSyncMessage("云端已有其他设备更新。当前页面的修改只保存在本机，继续保存前请先同步云端，或明确覆盖云端。");
+        }
+        setSaveState("error");
+      } finally {
+        pendingSaveCountRef.current = Math.max(pendingSaveCountRef.current - 1, 0);
+        if (savedSuccessfully) {
+          skipCloudCheckUntilRef.current = Date.now() + 2500;
+          if (pendingSaveCountRef.current === 0) {
+            setRemoteCloudVersion("");
+            setSyncState("idle");
+            setSyncMessage("");
+            setSaveState("saved");
+            window.setTimeout(() => {
+              if (pendingSaveCountRef.current === 0) {
+                setSaveState("idle");
+              }
+            }, 900);
+          } else {
+            setSaveState("saving");
+          }
         }
       }
     });
@@ -243,11 +264,12 @@ export function App() {
 
   async function syncLatestCloudVault() {
     if (!username || !password || !token) return;
-    if (saveState === "saving") {
+    if (saveState === "saving" || pendingSaveCountRef.current > 0) {
       setSyncState("error");
       setSyncMessage("正在保存当前修改，请保存完成后再同步云端数据。");
       return;
     }
+    cloudCheckSeqRef.current += 1;
     setSyncState("syncing");
     setSyncMessage("正在同步云端最新数据...");
     try {
@@ -269,15 +291,20 @@ export function App() {
   }
 
   async function checkCloudVersion(silent = true) {
-    if (!token || !cloudVersion || document.hidden) return;
-    if (saveState === "saving") return;
+    const localCloudVersion = cloudVersionRef.current;
+    if (!token || !localCloudVersion || document.hidden) return;
+    if (saveState === "saving" || pendingSaveCountRef.current > 0 || Date.now() < skipCloudCheckUntilRef.current) return;
+    const checkSeq = ++cloudCheckSeqRef.current;
     if (!silent) {
       setSyncState("checking");
       setSyncMessage("正在检查云端版本...");
     }
     try {
       const meta = await getCloudVaultMeta(token);
-      if (meta.updatedAt && meta.updatedAt !== cloudVersion) {
+      if (checkSeq !== cloudCheckSeqRef.current) return;
+      if (pendingSaveCountRef.current > 0 || Date.now() < skipCloudCheckUntilRef.current) return;
+      const latestLocalCloudVersion = cloudVersionRef.current;
+      if (meta.updatedAt && meta.updatedAt !== latestLocalCloudVersion) {
         setRemoteCloudVersion(meta.updatedAt);
         setSyncState("outdated");
         setSyncMessage("云端已有其他设备保存的新版本，建议先同步后继续编辑。");
