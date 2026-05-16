@@ -425,7 +425,11 @@ export function TodayView({
                         size="sm"
                         variant={isCancelled ? "destructive" : "outline"}
                         onClick={() => quickStatus(lesson, "cancelled")}
-                        className={isCancelled ? "bg-[#dc2626] hover:bg-[#b91c1c]" : undefined}
+                        className={
+                          isCancelled
+                            ? "border-[#dc2626] bg-[#dc2626] text-white hover:border-[#b91c1c] hover:bg-[#b91c1c] hover:text-white"
+                            : undefined
+                        }
                       >
                         <XCircle size={15} /> 取消
                       </Button>
