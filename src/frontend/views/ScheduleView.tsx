@@ -42,6 +42,7 @@ import {
   campusName,
   compareByName,
   courseName,
+  courseSubject,
   courseTypeLabel,
   courseTypeOptionsForVault,
   createLessonFromCourse,
@@ -1015,11 +1016,12 @@ export function ScheduleView({
                         >
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
+                            <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                             <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
                             <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
                           </div>
                           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                            {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {studentNames(vault, lesson.expectedStudentIds)}
+                            {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
                           </div>
                         </button>
                         <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteLesson(lesson)}>
@@ -1397,7 +1399,7 @@ export function ScheduleView({
                     </label>
                     <Select value={calendarCourseGroupId} onChange={(event) => setCalendarCourseGroupId(event.target.value)}>
                       {calendarCourseOptions.map((course) => (
-                        <option key={course.id} value={course.id}>{course.name}</option>
+                        <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
                       ))}
                     </Select>
                   </div>
@@ -1534,7 +1536,7 @@ export function ScheduleView({
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate font-extrabold">{lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}</span>
                                 <span className="mt-1 block text-xs font-semibold">
-                                  {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期有冲突" : ""}
+                                  {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期有冲突" : ""}
                                 </span>
                               </span>
                             </label>
@@ -1608,7 +1610,7 @@ export function ScheduleView({
                     </div>
                     {dayLessons.slice(0, 4).map((lesson) => (
                       <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-(--color-muted-foreground) sm:block">
-                        {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)}
+                        {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)} · {courseSubject(vault, lesson.courseGroupId)}
                       </span>
                     ))}
                     {dayLessons.length > 4 && (
@@ -1652,11 +1654,12 @@ export function ScheduleView({
                       <button type="button" onClick={() => openLessonInRecords(lesson)} className="min-w-0 flex-1 text-left">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
+                          <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                           <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
                           <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
                         </div>
                         <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                          {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                          {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)}
                         </div>
                       </button>
                       <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteLesson(lesson)}>
@@ -1707,7 +1710,7 @@ export function ScheduleView({
                       <div className="min-w-0">
                         <div className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</div>
                         <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                          原课：{lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                          {courseSubject(vault, lesson.courseGroupId)} · 原课：{lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Badge variant="amber" className="px-2 py-0.5 text-[10px]">
@@ -1769,7 +1772,7 @@ export function ScheduleView({
                               {courseName(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
                             </div>
                             <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                              原课：{original?.date ?? lesson.makeupOriginalDate ?? "未知"} · 补课：{lesson.makeupScheduledDate ?? lesson.date} · {lesson.startTime}-{lesson.endTime}
+                              {courseSubject(vault, lesson.courseGroupId)} · 原课：{original?.date ?? lesson.makeupOriginalDate ?? "未知"} · 补课：{lesson.makeupScheduledDate ?? lesson.date} · {lesson.startTime}-{lesson.endTime}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <Badge variant={lessonStatusVariant(lesson.status)} className="px-2 py-0.5 text-[10px]">
@@ -1837,7 +1840,7 @@ export function ScheduleView({
                 <Select value={studentStatsCourseFilter} onChange={(event) => setStudentStatsCourseFilter(event.target.value)}>
                   <option value="all">全部课程</option>
                   {courseGroupOptions.map((course) => (
-                    <option key={course.id} value={course.id}>{course.name} · {courseTypeLabel(vault, course.type)}</option>
+                    <option key={course.id} value={course.id}>{course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}</option>
                   ))}
                 </Select>
                 <Select value={studentStatsCourseTypeFilter} onChange={(event) => setStudentStatsCourseTypeFilter(event.target.value as CourseTypeFilter)}>
@@ -1987,6 +1990,9 @@ export function ScheduleView({
                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
                               <span>{detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName}</span>
                               <Badge variant="secondary" className="text-[10px]">
+                                {detail.subject}
+                              </Badge>
+                              <Badge variant="secondary" className="text-[10px]">
                                 {detail.courseTypeLabel}
                               </Badge>
                               <Badge variant={lessonStatusVariant(detail.status)} className="text-[10px]">
@@ -2130,7 +2136,7 @@ export function ScheduleView({
                     <div className="min-w-0">
                       <span className="block truncate text-sm font-medium">{courseName(vault, lesson.courseGroupId)}</span>
                       <span className="text-xs text-(--color-muted-foreground)">
-                        {courseTypeLabel(vault, lesson.type)} · {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                        {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
                       </span>
                     </div>
                   </div>
@@ -2155,7 +2161,7 @@ export function ScheduleView({
               <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-[#e8eef6] bg-white">
                 <div>
                   <CardTitle>课程详情</CardTitle>
-                  <CardDescription>{courseTypeLabel(vault, selected.type)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
+                  <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
                 <Button variant="destructive" size="sm" onClick={() => askDeleteLesson(selected)}>
                   <Trash2 size={15} /> 删除
@@ -2177,6 +2183,7 @@ export function ScheduleView({
                       <div>补课日期：{selected.date}</div>
                       <div>学生：{selected.makeupStudentId ? studentNames(vault, [selected.makeupStudentId]) : studentNames(vault, selected.expectedStudentIds)}</div>
                       <div>原课程：{courseName(vault, selectedOriginalLesson.courseGroupId)}</div>
+                      <div>原课科目：{courseSubject(vault, selectedOriginalLesson.courseGroupId)}</div>
                     </div>
                   </div>
                 )}
@@ -2186,7 +2193,7 @@ export function ScheduleView({
                     <label className="text-sm font-medium">课程</label>
                     <Select value={selected.courseGroupId} onChange={(event) => updateSelectedCourse(event.target.value)}>
                       {courseGroupOptions.map((course) => (
-                        <option key={course.id} value={course.id}>{course.name}</option>
+                        <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
                       ))}
                     </Select>
                   </div>
@@ -2707,6 +2714,7 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
     details: Array<{
       lessonId: string;
       courseName: string;
+      subject: string;
       courseTypeLabel: string;
       campusName: string;
       date: string;
@@ -2758,6 +2766,7 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
       current.details.push({
         lessonId: lesson.id,
         courseName: name,
+        subject: courseSubject(vault, lesson.courseGroupId),
         courseTypeLabel: typeLabel,
         campusName: campusName(vault, lesson.campusId),
         date: lesson.date,

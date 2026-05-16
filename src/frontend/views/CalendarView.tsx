@@ -12,6 +12,7 @@ import {
   courseTypeLabel,
   campusName,
   formatPrivateMoney,
+  courseSubject,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
@@ -210,7 +211,7 @@ export function CalendarView({
                       </div>
                       {dayLessons.slice(0, 2).map((l) => (
                         <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
-                          {l.startTime} {courseTypeLabel(vault, l.type)} · {courseName(vault, l.courseGroupId)}
+                          {l.startTime} {courseTypeLabel(vault, l.type)} · {courseName(vault, l.courseGroupId)} · {courseSubject(vault, l.courseGroupId)}
                         </span>
                       ))}
                       {dayLessons.length > 2 && (
@@ -316,7 +317,7 @@ export function CalendarView({
                                           {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}
                                         </span>
                                         <span className="mt-0.5 block truncate text-[11px] font-semibold opacity-80">
-                                          {studentNames(vault, lesson.expectedStudentIds)}
+                                          {courseSubject(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
                                         </span>
                                       </button>
                                     ))}
@@ -388,11 +389,14 @@ export function CalendarView({
                         {lessonStatusLabels[lesson.status]}
                       </Badge>
                       <Badge variant="secondary" className="shrink-0 text-[10px]">
+                        {courseSubject(vault, lesson.courseGroupId)}
+                      </Badge>
+                      <Badge variant="secondary" className="shrink-0 text-[10px]">
                         {courseTypeLabel(vault, lesson.type)}
                       </Badge>
                     </div>
                     <span className="text-xs text-(--color-muted-foreground)">
-                      {campusName(vault, lesson.campusId)} · {studentNames(vault, lesson.expectedStudentIds)}
+                      {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
                     </span>
                   </div>
                   <span className="shrink-0 text-sm font-bold text-[#1557c2] sm:ml-3">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</span>

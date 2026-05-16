@@ -15,6 +15,7 @@ import {
   addDays,
   compareByName,
   courseName,
+  courseSubject,
   courseTypeOptionsForVault,
   createLessonFromCourse,
   findStudent,
@@ -112,7 +113,7 @@ function LessonForm({
               onChange={(e) => setCourseGroupId(e.target.value)}
             >
               {courseOptions.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>{c.name} · {c.subject}</option>
               ))}
             </Select>
           </div>
@@ -305,7 +306,7 @@ export function LessonsView({
                     </div>
                     <div className="min-w-0">
                       <span className="text-sm font-medium block truncate">{courseName(vault, lesson.courseGroupId)}</span>
-                      <span className="text-xs text-(--color-muted-foreground)">{lesson.date} · {lesson.startTime}-{lesson.endTime}</span>
+                      <span className="text-xs text-(--color-muted-foreground)">{courseSubject(vault, lesson.courseGroupId)} · {lesson.date} · {lesson.startTime}-{lesson.endTime}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -329,7 +330,7 @@ export function LessonsView({
               <CardHeader className="flex flex-row items-start justify-between">
                 <div>
                   <CardTitle>课程详情</CardTitle>
-                  <CardDescription>{selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
+                  <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
                 <Button variant="destructive" size="sm" onClick={() => askDeleteLesson(selected)}>
                   <Trash2 size={15} /> 删除

@@ -324,6 +324,10 @@ export function courseName(vault: TeacherVault, courseId: string): string {
   return getCourse(vault, courseId)?.name ?? "未命名课程";
 }
 
+export function courseSubject(vault: TeacherVault, courseId: string): string {
+  return getCourse(vault, courseId)?.subject ?? "未设置科目";
+}
+
 export function campusName(vault: TeacherVault, campusId?: string): string {
   return findCampus(vault, campusId)?.name ?? "未设置校区";
 }

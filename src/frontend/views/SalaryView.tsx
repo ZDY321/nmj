@@ -25,6 +25,7 @@ import {
   attendanceLabels,
   campusName,
   courseName,
+  courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
   lessonStatusLabels,
@@ -367,7 +368,7 @@ export function SalaryView({
               <Select value={detailCourseFilter} onChange={(event) => setDetailCourseFilter(event.target.value)}>
                 <option value="all">全部课程</option>
                 {courseOptions.map((course) => (
-                  <option key={course.id} value={course.id}>{course.name}</option>
+                  <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
                 ))}
               </Select>
             </div>
@@ -445,6 +446,7 @@ export function SalaryView({
                       <div className="mt-1 break-words text-base font-extrabold text-[#061226]">
                         {courseName(vault, lesson.courseGroupId)}
                       </div>
+                      <div className="mt-1 text-xs font-semibold text-[#64748b]">{courseSubject(vault, lesson.courseGroupId)}</div>
                       <div className="mt-1 text-xs font-semibold text-[#64748b]">
                         {studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}
                       </div>
@@ -513,6 +515,7 @@ export function SalaryView({
                       <div className="max-w-[220px] truncate font-semibold text-[#061226]">
                         {courseName(vault, lesson.courseGroupId)}
                       </div>
+                      <div className="mt-1 text-xs text-[#64748b]">{courseSubject(vault, lesson.courseGroupId)}</div>
                       <div className="mt-1 text-xs text-[#64748b]">
                         {lesson.startTime}-{lesson.endTime} · {courseTypeLabel(vault, lesson.type)}
                       </div>

@@ -11,6 +11,7 @@ import {
   campusName,
   compareByName,
   courseName,
+  courseSubject,
   courseTypeLabel,
   courseTypeOptionsForVault,
   formatPrivateMoney,
@@ -406,7 +407,7 @@ export function PayrollReviewView({
               <Select value={detailCourseFilter} onChange={(event) => setDetailCourseFilter(event.target.value)}>
                 <option value="all">全部课程</option>
                 {courseOptions.map((course) => (
-                  <option key={course.id} value={course.id}>{course.name}</option>
+                  <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
                 ))}
               </Select>
             </div>
@@ -451,6 +452,7 @@ export function PayrollReviewView({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <strong className="text-base text-[#061226]">{courseName(vault, lesson.courseGroupId)}</strong>
+                    <Badge variant="secondary">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                     <Badge variant={lessonStatusVariant(lesson.status)}>{lessonStatusLabels[lesson.status]}</Badge>
                     <Badge variant="secondary">{courseTypeLabel(vault, lesson.type)}</Badge>
                   </div>
