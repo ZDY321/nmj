@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Building2, CalendarDays, ChevronDown, ChevronRight, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
+import { BookOpen, Building2, CalendarDays, ChevronDown, ChevronRight, FileText, GraduationCap, MapPin, Pencil, Plus, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, C
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
 import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
-import { builtInCourseTypeOptions, campusName, compareByName, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames } from "@/frontend/lib/helpers";
+import { builtInCourseTypeOptions, campusName, compareByName, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
@@ -36,6 +36,9 @@ export function StudentsView({
   onDeleteCourseType,
   onRestoreCourseType,
   onUpdateCourseTypeFeeRule,
+  onAddSubject,
+  onUpdateSubject,
+  onDeleteSubject,
   onTransferStudentCourse,
   onOpenSchedule,
   amountsVisible
@@ -59,11 +62,15 @@ export function StudentsView({
   onDeleteCourseType: (courseType: CourseType) => void;
   onRestoreCourseType: (courseType: CourseType) => void;
   onUpdateCourseTypeFeeRule: (courseType: CourseType, feeRule: FeeRule) => void;
+  onAddSubject: (subject: string) => void;
+  onUpdateSubject: (previousSubject: string, nextSubject: string) => void;
+  onDeleteSubject: (subject: string) => void;
   onTransferStudentCourse: (transition: StudentCourseTransition) => void;
   onOpenSchedule: () => void;
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseTypeOptions = courseTypeOptionsForVault(vault);
+  const subjectOptions = subjectOptionsForVault(vault);
   const studentOptions = sortStudentsByName(vault.students);
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
   const customCourseTypes = vault.preferences?.customCourseTypes ?? [];
@@ -95,6 +102,10 @@ export function StudentsView({
   const [courseStatusInput, setCourseStatusInput] = useState<CourseGroup["status"]>("active");
   const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
   const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => feeRuleForCourseType(vault, "one_on_one"));
+  const [subjectInput, setSubjectInput] = useState("");
+  const [editingSubject, setEditingSubject] = useState("");
+  const [editingSubjectInput, setEditingSubjectInput] = useState("");
+  const [subjectMessage, setSubjectMessage] = useState("");
   const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
   const [customCourseTypeTemplate, setCustomCourseTypeTemplate] = useState<"class" | "hourly">("class");
   const [courseTypeMessage, setCourseTypeMessage] = useState("");
@@ -139,8 +150,7 @@ export function StudentsView({
     .sort(compareByName);
   const hasStudentsWithoutGrade = vault.students.some((student) => !student.grade);
   const hasUnsetGradeFilterOption = hasStudentsWithoutGrade || vault.courseGroups.some((course) => course.studentIds.length === 0);
-  const subjectFilterOptions = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter((subject): subject is string => Boolean(subject))))
-    .sort(compareByName);
+  const subjectFilterOptions = subjectOptions;
   const suggestedCourseName = buildSuggestedCourseName(courseType, courseStudentIds);
   const addCourseStudentOptions = studentOptions.filter((student) => {
     const searchable = studentCourseSearchText(vault, student);
@@ -198,7 +208,7 @@ export function StudentsView({
   const transferCurrentCourses = transferStudent
     ? courseGroupOptions.filter((course) => course.status === "active" && course.studentIds.includes(transferStudent.id))
     : [];
-  const transferSubject = transferSubjectInput.trim() || transferCurrentCourses[0]?.subject || "未设置";
+  const transferSubject = transferSubjectInput.trim() || transferCurrentCourses[0]?.subject || subjectOptions[0] || "未设置";
   const transferTargetCourses = transferStudent
     ? courseGroupOptions.filter(
         (course) =>
@@ -212,6 +222,7 @@ export function StudentsView({
   const studentOptionIds = studentOptions.map((student) => student.id).join("|");
   const campusOptionIds = [vault.profile.homeCampusId ?? "", ...vault.campuses.map((campus) => campus.id)].join("|");
   const courseTypeOptionIds = courseTypeOptions.map((option) => option.value).join("|");
+  const subjectOptionIds = subjectOptions.join("|");
   const editingCourseTypeOptions = editingCourse && !courseTypeOptions.some((type) => type.value === editingCourse.type)
     ? [{ value: editingCourse.type, label: courseTypeLabel(vault, editingCourse.type) }, ...courseTypeOptions]
     : courseTypeOptions;
@@ -254,6 +265,12 @@ export function StudentsView({
       transferTargetCourses.some((course) => course.id === current) ? current : transferTargetCourses[0]?.id ?? ""
     );
   }, [transferTargetCourseIds]);
+
+  useEffect(() => {
+    const fallbackSubject = subjectOptions[0] ?? "未设置";
+    setCourseSubjectInput((current) => (current && subjectOptions.includes(current) ? current : fallbackSubject));
+    setTransferSubjectInput((current) => (current && subjectOptions.includes(current) ? current : fallbackSubject));
+  }, [subjectOptionIds]);
 
   useEffect(() => {
     if (courseTypeOptions.length === 0) return;
@@ -312,7 +329,8 @@ export function StudentsView({
     if (!resolvedName) return;
     const normalizedStudentIds = normalizeCourseStudentIds(courseType, courseStudentIds);
     const resolvedCampusId = courseCampusInput || firstCourseStudentCampus(normalizedStudentIds) || preferredCampusId;
-    const duplicateCourse = findDuplicateCourse(courseType, resolvedCampusId, courseSubjectInput.trim() || "未设置", normalizedStudentIds);
+    const resolvedSubject = courseSubjectInput.trim() || subjectOptions[0] || "未设置";
+    const duplicateCourse = findDuplicateCourse(courseType, resolvedCampusId, resolvedSubject, normalizedStudentIds);
     if (duplicateCourse && !forceDuplicate) {
       confirm({
         title: "可能重复添加课程",
@@ -328,7 +346,7 @@ export function StudentsView({
       id: makeId("course"),
       name: resolvedName,
       type: courseType,
-      subject: courseSubjectInput.trim() || "未设置",
+      subject: resolvedSubject,
       defaultCampusId: resolvedCampusId,
       studentIds: normalizedStudentIds,
       feeRule,
@@ -408,6 +426,45 @@ export function StudentsView({
     return (
       vault.lessons.some((lesson) => lesson.courseGroupId === courseId)
     );
+  }
+
+  function subjectInUse(subject: string): boolean {
+    return vault.courseGroups.some((course) => course.subject === subject);
+  }
+
+  function addSubject() {
+    const subject = subjectInput.trim();
+    if (!subject) return;
+    if (subjectOptions.some((item) => item === subject)) {
+      setSubjectMessage(`已存在科目「${subject}」。`);
+      return;
+    }
+    onAddSubject(subject);
+    setSubjectInput("");
+    setSubjectMessage("");
+  }
+
+  function startEditSubject(subject: string) {
+    setEditingSubject(subject);
+    setEditingSubjectInput(subject);
+    setSubjectMessage("");
+  }
+
+  function cancelEditSubject() {
+    setEditingSubject("");
+    setEditingSubjectInput("");
+    setSubjectMessage("");
+  }
+
+  function saveSubject() {
+    const nextSubject = editingSubjectInput.trim();
+    if (!editingSubject || !nextSubject) return;
+    if (nextSubject !== editingSubject && subjectOptions.some((subject) => subject === nextSubject)) {
+      setSubjectMessage(`已存在科目「${nextSubject}」。`);
+      return;
+    }
+    onUpdateSubject(editingSubject, nextSubject);
+    cancelEditSubject();
   }
 
   function findDuplicateCourse(type: CourseType, campusId: string | undefined, subject: string, studentIds: string[]): CourseGroup | undefined {
@@ -1169,11 +1226,11 @@ export function StudentsView({
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">科目</label>
-                    <Input
-                      value={transferSubjectInput}
-                      onChange={(event) => setTransferSubjectInput(event.target.value)}
-                      placeholder={transferCurrentCourses[0]?.subject || "未设置"}
-                    />
+                    <Select value={transferSubjectInput || transferCurrentCourses[0]?.subject || subjectOptions[0] || "未设置"} onChange={(event) => setTransferSubjectInput(event.target.value)}>
+                      {subjectOptions.map((subject) => (
+                        <option key={subject} value={subject}>{subject}</option>
+                      ))}
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">处理方式</label>
@@ -1408,6 +1465,110 @@ export function StudentsView({
             {vault.campuses.length === 0 && (
               <p className="py-8 text-center text-sm text-(--color-muted-foreground)">还没有校区</p>
             )}
+          </CardContent>
+        </Card>
+        <Card className="h-fit overflow-hidden">
+          <CardHeader className="gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                  <BookOpen size={14} /> 科目管理
+                </div>
+                <CardTitle className="text-lg">科目列表</CardTitle>
+                <CardDescription>新增和编辑课程时统一从这里选择科目；修改科目名称会同步更新已有课程。</CardDescription>
+              </div>
+              <Badge variant="secondary" className="w-fit">{subjectOptions.length} 个</Badge>
+            </div>
+            <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <Input
+                value={subjectInput}
+                onChange={(event) => {
+                  setSubjectInput(event.target.value);
+                  if (subjectMessage) setSubjectMessage("");
+                }}
+                placeholder="新增科目，例如：英语、物理"
+                maxLength={24}
+                className="bg-white"
+              />
+              <Button type="button" onClick={addSubject} disabled={!subjectInput.trim()}>
+                <Plus size={14} /> 添加科目
+              </Button>
+            </div>
+            {subjectMessage && (
+              <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
+                {subjectMessage}
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="max-h-[360px] space-y-2 overflow-y-auto pr-2">
+            {subjectOptions.map((subject) => {
+              const isEditing = editingSubject === subject;
+              const used = subjectInUse(subject);
+              return (
+                <motion.div
+                  key={subject}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="rounded-[14px] border border-[#dbe4ef] bg-white p-3"
+                >
+                  {isEditing ? (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                      <Input
+                        value={editingSubjectInput}
+                        onChange={(event) => {
+                          setEditingSubjectInput(event.target.value);
+                          if (subjectMessage) setSubjectMessage("");
+                        }}
+                        maxLength={24}
+                        className="bg-white"
+                      />
+                      <Button type="button" size="sm" onClick={saveSubject} disabled={!editingSubjectInput.trim()}>
+                        <Save size={14} /> 保存
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={cancelEditSubject}>
+                        <X size={14} /> 取消
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
+                        <BookOpen size={16} className="text-[#1557c2]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-extrabold text-[#061226]">{subject}</span>
+                        <span className="mt-1 block text-xs font-semibold text-[#64748b]">
+                          {used ? "已有课程使用" : "暂无课程使用"}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button type="button" size="sm" variant="outline" className="h-8 w-8 rounded-[9px] p-0" onClick={() => startEditSubject(subject)} title="编辑科目">
+                          <Pencil size={13} />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="h-8 w-8 rounded-[9px] p-0"
+                          disabled={used}
+                          title={used ? "已有课程使用，不能直接删除" : "删除科目"}
+                          onClick={() =>
+                            confirm({
+                              title: `删除科目「${subject}」？`,
+                              description: "删除后不会再出现在科目管理列表中。",
+                              confirmLabel: "删除",
+                              tone: "danger",
+                              onConfirm: () => onDeleteSubject(subject)
+                            })
+                          }
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
           </CardContent>
         </Card>
         <Card className="h-fit overflow-hidden">
@@ -1833,11 +1994,11 @@ export function StudentsView({
                   onChange={(event) => setCourseNameInput(event.target.value)}
                   placeholder={suggestedCourseName ? `默认：${suggestedCourseName}` : "课程名称，例如：初三数学班"}
                 />
-                <Input
-                  value={courseSubjectInput}
-                  onChange={(event) => setCourseSubjectInput(event.target.value)}
-                  placeholder="科目，例如：数学"
-                />
+                <Select value={courseSubjectInput || subjectOptions[0] || "未设置"} onChange={(event) => setCourseSubjectInput(event.target.value)}>
+                  {subjectOptions.map((subject) => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
+                </Select>
                 <Select
                   value={courseType}
                   onChange={(event) => changeNewCourseType(event.target.value as CourseType)}
@@ -2314,11 +2475,11 @@ export function StudentsView({
                     onChange={(event) => updateEditingCourse({ name: event.target.value })}
                     placeholder="课程名称"
                   />
-                  <Input
-                    value={editingCourse.subject}
-                    onChange={(event) => updateEditingCourse({ subject: event.target.value })}
-                    placeholder="科目"
-                  />
+                  <Select value={editingCourse.subject || subjectOptions[0] || "未设置"} onChange={(event) => updateEditingCourse({ subject: event.target.value })}>
+                    {subjectOptions.map((subject) => (
+                      <option key={subject} value={subject}>{subject}</option>
+                    ))}
+                  </Select>
                   <Select
                     value={editingCourse.type}
                     onChange={(event) => {

@@ -25,6 +25,7 @@ export function createEmptyVault(displayName = ""): TeacherVault {
     preferences: {
       weekStartsOn: 0,
       customTimePresets: [],
+      subjects: ["语文"],
       customCourseTypes: [],
       courseTypeLabels: {},
       disabledCourseTypes: [],
@@ -62,6 +63,7 @@ export function createSampleVault(): TeacherVault {
     preferences: {
       weekStartsOn: 0,
       customTimePresets: [],
+      subjects: ["语文"],
       customCourseTypes: [],
       courseTypeLabels: {},
       disabledCourseTypes: [],

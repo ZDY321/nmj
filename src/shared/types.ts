@@ -226,6 +226,7 @@ export type CustomCourseTypeOption = {
 export type AppPreferences = {
   weekStartsOn: WeekStart;
   customTimePresets?: TimePreset[];
+  subjects?: string[];
   customCourseTypes?: CustomCourseTypeOption[];
   courseTypeLabels?: Partial<Record<CourseType, string>>;
   disabledCourseTypes?: CourseType[];

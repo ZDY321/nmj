@@ -135,6 +135,17 @@ export function courseTypeOptionsForVault(vault: TeacherVault): Array<{ value: C
   ]);
 }
 
+export function subjectOptionsForVault(vault: TeacherVault): string[] {
+  const subjects = [
+    ...(vault.preferences?.subjects ?? []),
+    ...vault.courseGroups.map((course) => course.subject)
+  ]
+    .map((subject) => subject.trim())
+    .filter(Boolean);
+  const uniqueSubjects = Array.from(new Set(subjects));
+  return (uniqueSubjects.length > 0 ? uniqueSubjects : ["语文"]).sort(compareByName);
+}
+
 export function studentLimitForCourseType(type: CourseType): number | undefined {
   if (type === "one_on_one") return 1;
   if (type === "one_on_two") return 2;

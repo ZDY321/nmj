@@ -540,6 +540,49 @@ export function App() {
     });
   }
 
+  function addSubject(subject: string) {
+    const normalizedSubject = subject.trim();
+    if (!normalizedSubject) return;
+    updateVault((draft) => {
+      const subjects = draft.preferences?.subjects ?? [];
+      if (subjects.some((item) => item.trim() === normalizedSubject)) return;
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        subjects: [...subjects, normalizedSubject]
+      };
+    });
+  }
+
+  function updateSubject(previousSubject: string, nextSubject: string) {
+    const normalizedPrevious = previousSubject.trim();
+    const normalizedNext = nextSubject.trim();
+    if (!normalizedPrevious || !normalizedNext) return;
+    updateVault((draft) => {
+      const subjects = draft.preferences?.subjects ?? [];
+      const nextSubjects = subjects
+        .map((item) => (item.trim() === normalizedPrevious ? normalizedNext : item.trim()))
+        .filter(Boolean);
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        subjects: Array.from(new Set(nextSubjects))
+      };
+      draft.courseGroups = draft.courseGroups.map((course) =>
+        course.subject.trim() === normalizedPrevious ? { ...course, subject: normalizedNext } : course
+      );
+    });
+  }
+
+  function deleteSubject(subject: string) {
+    const normalizedSubject = subject.trim();
+    if (!normalizedSubject) return;
+    updateVault((draft) => {
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        subjects: (draft.preferences?.subjects ?? []).filter((item) => item.trim() !== normalizedSubject)
+      };
+    });
+  }
+
   function deleteCustomCourseType(courseTypeId: CustomCourseType) {
     updateVault((draft) => {
       const inUse =
@@ -1386,6 +1429,9 @@ export function App() {
                 onDeleteCourseType={deleteCourseType}
                 onRestoreCourseType={restoreCourseType}
                 onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
+                onAddSubject={addSubject}
+                onUpdateSubject={updateSubject}
+                onDeleteSubject={deleteSubject}
                 onTransferStudentCourse={transferStudentCourse}
                 onOpenSchedule={() => changeView("schedule")}
               />

@@ -63,6 +63,7 @@ import {
   sortLessons,
   sortStudentsByName,
   studentNames,
+  subjectOptionsForVault,
   weekStartsOn,
   weekdayOfDateIso,
   weekdayLabels
@@ -270,7 +271,7 @@ export function ScheduleView({
   const calendarDetailCancelledCount = calendarDetailLessons.filter((lesson) => lesson.status === "cancelled").length;
   const normalizedStudentFilter = studentFilter.trim().toLowerCase();
   const normalizedStudentStatsNameFilter = studentStatsNameFilter.trim().toLowerCase();
-  const studentStatsSubjects = Array.from(new Set(vault.courseGroups.map((course) => course.subject).filter(Boolean))).sort(compareByName);
+  const studentStatsSubjects = subjectOptionsForVault(vault);
   const effectiveLessonScope = syncRecordsWithCalendarDate ? "day" : lessonScope;
   const effectiveLessonDay = syncRecordsWithCalendarDate ? selectedCalendarDate : lessonDay;
   const scopeDates = effectiveLessonScope === "week" ? datesForIsoWeekValue(lessonWeek) : [];

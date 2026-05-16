@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type { Lesson, TeacherVault, TodoItem } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
-import { formatAppDateLabel } from "@/frontend/lib/calculations";
+import { formatAppDateLabel, getCourse } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
   campusName,
@@ -32,6 +32,7 @@ import {
   formatPrivateMoney,
   isToday,
   lessonStatusLabels,
+  lessonStatusSurfaceClass,
   lessonStatusVariant,
   previousHomework,
   previousLesson,
@@ -313,13 +314,16 @@ export function TodayView({
               const homework = previousHomework(vault, lesson).trim();
               const previous = previousLesson(vault, lesson);
               const campusTone = campusColorClass(campusOptions.findIndex((campus) => campus.id === lesson.campusId));
+              const course = getCourse(vault, lesson.courseGroupId);
+              const isCompleted = lesson.status === "completed" || lesson.status === "makeup_completed";
+              const isCancelled = lesson.status === "cancelled";
               return (
                 <motion.article
                   key={lesson.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.04 }}
-                  className="rounded-[16px] border border-[#dbe4ef] bg-white p-4 shadow-[0_10px_26px_rgba(15,35,66,0.06)] sm:p-5"
+                  className={`rounded-[16px] border p-4 shadow-[0_10px_26px_rgba(15,35,66,0.06)] sm:p-5 ${lessonStatusSurfaceClass(lesson.status)}`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
@@ -332,6 +336,9 @@ export function TodayView({
                         </span>
                         <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 ${campusTone}`}>
                           <MapPin size={13} /> {campusName(vault, lesson.campusId)}
+                        </span>
+                        <span className="flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-[#dbe4ef]">
+                          <BookOpen size={13} /> {course?.subject || "未设置科目"}
                         </span>
                         <span className="flex items-center gap-1 rounded-full bg-[#f3f7fb] px-2.5 py-1">
                           <Users size={13} /> {studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}
@@ -411,10 +418,15 @@ export function TodayView({
                       本节预计金额：{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:flex">
-                      <Button size="sm" onClick={() => quickStatus(lesson, "completed")} className="bg-[#16a34a] shadow-none hover:bg-[#15803d]">
+                      <Button size="sm" onClick={() => quickStatus(lesson, "completed")} className={`${isCompleted ? "bg-[#16a34a] hover:bg-[#15803d]" : "bg-[#f59e0b] hover:bg-[#d97706]"} shadow-none`}>
                         <CheckCircle2 size={15} /> 完成
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => quickStatus(lesson, "cancelled")}>
+                      <Button
+                        size="sm"
+                        variant={isCancelled ? "destructive" : "outline"}
+                        onClick={() => quickStatus(lesson, "cancelled")}
+                        className={isCancelled ? "bg-[#dc2626] hover:bg-[#b91c1c]" : undefined}
+                      >
                         <XCircle size={15} /> 取消
                       </Button>
                     </div>
