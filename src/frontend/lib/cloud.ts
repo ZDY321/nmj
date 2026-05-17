@@ -1,4 +1,14 @@
-import type { AdminSummary, AdminUser, FeedbackStatus, Notice, UserFeedback } from "@/shared/types";
+import type {
+  AdminSummary,
+  AdminUser,
+  AiProviderConfig,
+  AiProviderInput,
+  AiScheduleDraftRequest,
+  AiScheduleDraftResponse,
+  FeedbackStatus,
+  Notice,
+  UserFeedback
+} from "@/shared/types";
 
 export type PublicSettings = {
   registrationEnabled: boolean;
@@ -73,7 +83,15 @@ function translateApiError(error: string): string {
     "Target password confirmation failed": "被删除账号密码验证失败。",
     "Database migration required": "云端 D1 表结构不是最新。请在 Cloudflare D1 按顺序执行 migrations 目录下尚未执行的 SQL，然后刷新页面。",
     "Feedback content required": "请先填写反馈内容。",
-    "Invalid feedback status": "反馈处理状态不正确。"
+    "Invalid feedback status": "反馈处理状态不正确。",
+    "Missing AI provider fields": "请填写 AI 配置名称、接口地址和模型名称。",
+    "Missing AI API key": "请填写 AI API Key。",
+    "AI provider test failed": "AI 接口测试失败。",
+    "AI instruction required": "请先填写要让 AI 处理的内容。",
+    "AI provider not configured": "请先在管理员后台配置 AI 接口。",
+    "AI provider disabled": "当前 AI 接口已停用。",
+    "AI daily limit reached": "当前 AI 接口今天调用次数已达上限。",
+    "AI schedule draft failed": "AI 生成建议失败。"
   };
   return messages[error] ?? error;
 }
@@ -173,5 +191,50 @@ export async function cancelOwnDeletion(token: string): Promise<AdminUser> {
   return apiRequest<AdminUser>("/api/me/delete-cancel", {
     method: "POST",
     token
+  });
+}
+
+export async function getAiProviders(token: string): Promise<AiProviderConfig[]> {
+  return apiRequest<AiProviderConfig[]>("/api/admin/ai/providers", { token });
+}
+
+export async function createAiProvider(token: string, input: AiProviderInput): Promise<AiProviderConfig> {
+  return apiRequest<AiProviderConfig>("/api/admin/ai/providers", {
+    method: "POST",
+    token,
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateAiProvider(token: string, providerId: string, input: AiProviderInput): Promise<AiProviderConfig> {
+  return apiRequest<AiProviderConfig>(`/api/admin/ai/providers/${encodeURIComponent(providerId)}`, {
+    method: "PUT",
+    token,
+    body: JSON.stringify(input)
+  });
+}
+
+export async function deleteAiProvider(token: string, providerId: string): Promise<{ ok: true }> {
+  return apiRequest<{ ok: true }>(`/api/admin/ai/providers/${encodeURIComponent(providerId)}`, {
+    method: "DELETE",
+    token
+  });
+}
+
+export async function testAiProvider(token: string, providerId: string): Promise<{ ok: true; provider: AiProviderConfig; response: unknown }> {
+  return apiRequest<{ ok: true; provider: AiProviderConfig; response: unknown }>(
+    `/api/admin/ai/providers/${encodeURIComponent(providerId)}/test`,
+    {
+      method: "POST",
+      token
+    }
+  );
+}
+
+export async function generateAiScheduleDraft(token: string, request: AiScheduleDraftRequest): Promise<AiScheduleDraftResponse> {
+  return apiRequest<AiScheduleDraftResponse>("/api/admin/ai/schedule-draft", {
+    method: "POST",
+    token,
+    body: JSON.stringify(request)
   });
 }

@@ -19,6 +19,7 @@ import {
   Link2,
   NotebookPen,
   Plus,
+  RefreshCw,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -37,8 +38,9 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import type { AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
+import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { generateAiScheduleDraft, getAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
@@ -93,6 +95,7 @@ export function ScheduleView({
   onGenerateDrafts,
   onWeekStartChange,
   role,
+  token,
   calendarFocus
 }: {
   vault: TeacherVault;
@@ -114,6 +117,7 @@ export function ScheduleView({
   ) => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
   role: UserRole;
+  token: string;
   calendarFocus?: CalendarFocus;
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
@@ -183,6 +187,13 @@ export function ScheduleView({
   const [makeupEndTime, setMakeupEndTime] = useState("21:00");
   const [detailMakeupStudentIds, setDetailMakeupStudentIds] = useState<string[]>([]);
   const [scheduleError, setScheduleError] = useState("");
+  const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
+  const [aiProviderId, setAiProviderId] = useState("");
+  const [aiTaskType, setAiTaskType] = useState<AiScheduleTaskType>("auto");
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiDraft, setAiDraft] = useState<AiScheduleDraftResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
   const { confirm, dialog } = useConfirmDialog();
   const isAdmin = role === "admin";
   const syncSourceLessons = vault.lessons
@@ -197,6 +208,28 @@ export function ScheduleView({
       setSchedulePanel("schedule");
     }
   }, [isAdmin, schedulePanel]);
+
+  useEffect(() => {
+    if (!isAdmin || !token) return;
+    let cancelled = false;
+    getAiProviders(token)
+      .then((providers) => {
+        if (cancelled) return;
+        setAiProviders(providers);
+        setAiProviderId((current) => {
+          if (current && providers.some((provider) => provider.id === current && provider.enabled)) return current;
+          return providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "";
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setAiProviders([]);
+        setAiMessage(error instanceof Error ? error.message : "AI 配置加载失败。");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, token]);
 
   useEffect(() => {
     const fallbackCourseId = courseSelectionOptions[0]?.id ?? "";
@@ -498,9 +531,97 @@ export function ScheduleView({
     campuses: vault.campuses.length,
     subjects: subjectOptionsForVault(vault)
   };
+  const enabledAiProviders = aiProviders.filter((provider) => provider.enabled);
+  const selectedAiProvider = aiProviders.find((provider) => provider.id === aiProviderId);
 
   function addSingleLesson(status: "scheduled" | "completed") {
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
+  }
+
+  function aiScheduleContext() {
+    const activeStudents = vault.students
+      .filter((student) => student.status === "active")
+      .map((student) => ({
+        id: student.id,
+        name: student.name,
+        grade: student.grade ?? "",
+        campus: campusName(vault, student.defaultCampusId),
+        note: student.note ?? ""
+      }));
+    const activeCourses = vault.courseGroups
+      .filter((course) => course.status === "active")
+      .map((course) => ({
+        id: course.id,
+        name: course.name,
+        subject: course.subject,
+        type: courseTypeLabel(vault, course.type),
+        campus: campusName(vault, course.defaultCampusId),
+        students: studentNames(vault, course.studentIds)
+      }));
+    const nearbyLessons = vault.lessons
+      .filter((lesson) => lesson.date >= addDays(todayIso(), -14) && lesson.date <= addDays(todayIso(), 45))
+      .sort(sortLessons)
+      .map((lesson) => ({
+        id: lesson.id,
+        date: lesson.date,
+        startTime: lesson.startTime,
+        endTime: lesson.endTime,
+        courseId: lesson.courseGroupId,
+        courseName: courseName(vault, lesson.courseGroupId),
+        subject: courseSubject(vault, lesson.courseGroupId),
+        campus: campusName(vault, lesson.campusId),
+        status: lessonStatusLabels[lesson.status],
+        students: studentNames(vault, lessonStudentIds(lesson))
+      }));
+
+    return {
+      today: todayIso(),
+      selectedCalendarDate,
+      selectedCalendarMonth: calendarMonth,
+      campuses: vault.campuses.map((campus) => ({ id: campus.id, name: campus.name })),
+      subjects: subjectOptionsForVault(vault),
+      activeStudents,
+      activeCourses,
+      nearbyLessons
+    };
+  }
+
+  async function refreshAiProviders() {
+    if (!token || !isAdmin) return;
+    setAiMessage("");
+    try {
+      const providers = await getAiProviders(token);
+      setAiProviders(providers);
+      setAiProviderId((current) => {
+        if (current && providers.some((provider) => provider.id === current && provider.enabled)) return current;
+        return providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "";
+      });
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : "AI 配置加载失败。");
+    }
+  }
+
+  async function submitAiDraft() {
+    if (!token || !aiProviderId || !aiInstruction.trim()) {
+      setAiMessage(!aiProviderId ? "请先选择可用的 AI 接口配置。" : "请先填写要让 AI 处理的内容。");
+      return;
+    }
+    setAiLoading(true);
+    setAiMessage("");
+    try {
+      const result = await generateAiScheduleDraft(token, {
+        providerId: aiProviderId,
+        taskType: aiTaskType,
+        instruction: aiInstruction.trim(),
+        context: aiScheduleContext()
+      });
+      setAiDraft(result);
+      setAiMessage("AI 建议已生成，请先人工核对。");
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : "AI 生成建议失败。");
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   function matchesCalendarCourseFilter(lesson: Lesson): boolean {
@@ -1113,13 +1234,15 @@ export function ScheduleView({
                   <Sparkles size={14} /> AI 排课助手
                 </div>
                 <CardTitle>自然语言转排课操作</CardTitle>
-                <CardDescription>仅管理员可见。当前先固定操作流程和校验边界，后端 AI 接口接入后再开放生成建议。</CardDescription>
+                <CardDescription>仅管理员可见。AI 会返回结构化建议，当前不直接写入课程数据。</CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="sky">
                   <ShieldCheck size={12} /> 管理员试用
                 </Badge>
-                <Badge variant="secondary">后端待接入</Badge>
+                <Badge variant={enabledAiProviders.length > 0 ? "sage" : "amber"}>
+                  {enabledAiProviders.length > 0 ? `${enabledAiProviders.length} 个可用接口` : "未配置接口"}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -1139,32 +1262,62 @@ export function ScheduleView({
 
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                 <div className="space-y-4 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">操作类型</label>
-                      <Select disabled value="draft">
-                        <option value="draft">智能识别</option>
+                      <label className="text-sm font-medium">AI 接口配置</label>
+                      <Select value={aiProviderId} onChange={(event) => setAiProviderId(event.target.value)} disabled={aiLoading || enabledAiProviders.length === 0}>
+                        <option value="">选择已保存配置</option>
+                        {enabledAiProviders.map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {provider.name} · {provider.model}{provider.isDefault ? " · 默认" : ""}
+                          </option>
+                        ))}
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">自然语言输入</label>
-                      <Textarea
-                        disabled
-                        rows={8}
-                        value=""
-                        placeholder="例如：新增学生张三，三年级，A校区，语文一对一；从下周一开始每周一三 19:00-20:30 排课。"
-                        className="min-h-[180px] bg-white"
-                      />
+                      <label className="text-sm font-medium">操作类型</label>
+                      <Select value={aiTaskType} onChange={(event) => setAiTaskType(event.target.value as AiScheduleTaskType)} disabled={aiLoading}>
+                        <option value="auto">智能识别</option>
+                        <option value="student_course">新增学生和课程</option>
+                        <option value="schedule_lessons">新增排课</option>
+                        <option value="sync_lessons">同步课程</option>
+                      </Select>
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">自然语言输入</label>
+                    <Textarea
+                      rows={8}
+                      value={aiInstruction}
+                      onChange={(event) => setAiInstruction(event.target.value)}
+                      placeholder="例如：新增学生张三，三年级，A校区，语文一对一；从下周一开始每周一三 19:00-20:30 排课。"
+                      className="min-h-[180px] bg-white"
+                      disabled={aiLoading}
+                    />
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-xs font-semibold leading-5 text-[#64748b]">
-                      后续点击生成后，AI 只返回结构化建议，系统会先检查学生、课程、日期、时间和冲突，再由管理员确认写入。
+                      会发送当前可用学生、课程、校区、科目和近 14 天到未来 45 天课程，用于识别重复和时间关系。
                     </div>
-                    <Button type="button" disabled className="shrink-0">
-                      <WandSparkles size={15} /> 生成建议
-                    </Button>
+                    <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                      <Button type="button" variant="outline" disabled={aiLoading} onClick={() => void refreshAiProviders()}>
+                        <RefreshCw size={15} /> 刷新配置
+                      </Button>
+                      <Button type="button" disabled={aiLoading || !aiProviderId || !aiInstruction.trim()} onClick={() => void submitAiDraft()}>
+                        <WandSparkles size={15} /> {aiLoading ? "生成中" : "生成建议"}
+                      </Button>
+                    </div>
                   </div>
+                  {selectedAiProvider && (
+                    <div className="rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2 text-xs font-bold leading-5 text-[#1557c2]">
+                      当前使用：{selectedAiProvider.name} · {selectedAiProvider.model} · {selectedAiProvider.maskedApiKey}
+                    </div>
+                  )}
+                  {aiMessage && (
+                    <div className="rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-bold text-[#25324a]">
+                      {aiMessage}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -1200,30 +1353,32 @@ export function ScheduleView({
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">建议结果预览</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                      接入后这里会显示新增学生、创建课程、排课、同步课程等具体变更，并标出冲突和需要人工确认的字段。
+                      这里显示 AI 返回的结构化建议。正式写入前仍需要后续增加系统校验和确认执行。
                     </div>
                   </div>
                   <Button type="button" variant="outline" disabled className="shrink-0">
-                    确认写入
+                    确认写入待接入
                   </Button>
                 </div>
                 <pre className="mt-4 max-h-[260px] overflow-auto rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-4 text-xs font-semibold leading-6 text-[#25324a]">
-{JSON.stringify({
-  status: "waiting_for_backend",
+{JSON.stringify(aiDraft?.draft ?? {
+  status: enabledAiProviders.length > 0 ? "ready" : "need_ai_provider_config",
   allowedRole: "admin",
-  provider: "DeepSeek / OpenAI / compatible API",
+  provider: selectedAiProvider ? `${selectedAiProvider.name} / ${selectedAiProvider.model}` : "not_selected",
   contextSummary: aiContextSummary,
-  nextBackendEndpoint: "/api/admin/ai/schedule-draft",
-  validation: [
-    "student_duplicate_check",
-    "archived_student_block",
-    "course_status_check",
-    "time_conflict_check",
-    "date_time_format_check",
-    "preview_before_write"
-  ]
+  usage: aiDraft?.usage ?? null,
+  note: "填写需求并点击生成建议后，这里会显示 AI 返回的 JSON。"
 }, null, 2)}
                 </pre>
+                {aiDraft && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="secondary">{aiDraft.model}</Badge>
+                    {aiDraft.usage?.totalTokens !== undefined && (
+                      <Badge variant="sky">tokens {aiDraft.usage.totalTokens}</Badge>
+                    )}
+                    <Badge variant="secondary">{aiDraft.createdAt}</Badge>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -1,4 +1,9 @@
 import type {
+  AiProviderConfig,
+  AiProviderInput,
+  AiProviderKind,
+  AiScheduleDraftRequest,
+  AiScheduleDraftResponse,
   AdminSummary,
   AdminUser,
   FeedbackStatus,
@@ -48,6 +53,44 @@ type FeedbackRequest = {
 type FeedbackUpdateRequest = {
   status?: unknown;
   adminNote?: unknown;
+};
+
+type AiProviderRow = {
+  id: string;
+  name: string;
+  provider: string;
+  base_url: string;
+  model: string;
+  api_key: string;
+  enabled: number;
+  is_default: number;
+  daily_limit: number;
+  max_output_tokens: number;
+  temperature: number;
+  created_at: string;
+  updated_at: string;
+  last_tested_at: string | null;
+  last_error: string | null;
+};
+
+type ChatCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | Array<{ type?: string; text?: string }>;
+    };
+    text?: string;
+  }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+  };
+  error?: {
+    message?: string;
+  };
 };
 
 type UserRow = {
@@ -144,6 +187,10 @@ function isFeedbackStatus(value: string): value is FeedbackStatus {
   return value === "unread" || value === "read" || value === "in_progress" || value === "completed";
 }
 
+function isAiProviderKind(value: string): value is AiProviderKind {
+  return value === "newapi" || value === "openai_compatible" || value === "deepseek" || value === "openai" || value === "gemini";
+}
+
 function daysFromNow(days: number): string {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() + days);
@@ -212,6 +259,33 @@ function feedbackFromRow(row: FeedbackRow): UserFeedback {
   };
 }
 
+function maskApiKey(apiKey: string): string {
+  const value = apiKey.trim();
+  if (!value) return "";
+  if (value.length <= 8) return `${value.slice(0, 2)}****${value.slice(-2)}`;
+  return `${value.slice(0, 4)}****${value.slice(-4)}`;
+}
+
+function aiProviderFromRow(row: AiProviderRow): AiProviderConfig {
+  return {
+    id: row.id,
+    name: row.name,
+    provider: isAiProviderKind(row.provider) ? row.provider : "openai_compatible",
+    baseUrl: row.base_url,
+    model: row.model,
+    enabled: Boolean(row.enabled),
+    isDefault: Boolean(row.is_default),
+    dailyLimit: row.daily_limit,
+    maxOutputTokens: row.max_output_tokens,
+    temperature: row.temperature,
+    maskedApiKey: maskApiKey(row.api_key),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lastTestedAt: row.last_tested_at,
+    lastError: row.last_error
+  };
+}
+
 async function readJson<T>(request: Request): Promise<T> {
   return (await request.json()) as T;
 }
@@ -228,7 +302,7 @@ function isMigrationError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return /no such table: user_sessions|no such table: user_deletion_events|no such table: user_feedback|no such column: .*delete_|no such column: deleted_at/i.test(
+  return /no such table: user_sessions|no such table: user_deletion_events|no such table: user_feedback|no such table: ai_provider_configs|no such table: ai_usage_logs|no such column: .*delete_|no such column: deleted_at/i.test(
     error.message
   );
 }
@@ -842,6 +916,471 @@ async function updateFeedback(request: Request, env: Env, actor: AuthContext, fe
   return updated ? json(feedbackFromRow(updated)) : notFound();
 }
 
+function normalizeAiBaseUrl(baseUrl: string): string {
+  return baseUrl.trim().replace(/\/+$/, "").replace(/\/v1\/chat\/completions$/i, "").replace(/\/chat\/completions$/i, "");
+}
+
+function chatCompletionsUrl(baseUrl: string): string {
+  const normalized = normalizeAiBaseUrl(baseUrl);
+  return /\/v1$/i.test(normalized) ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`;
+}
+
+function numberInRange(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+function sanitizeAiProviderInput(body: Partial<AiProviderInput>, existing?: AiProviderRow): AiProviderInput {
+  const provider = typeof body.provider === "string" && isAiProviderKind(body.provider)
+    ? body.provider
+    : existing && isAiProviderKind(existing.provider)
+      ? existing.provider
+      : "newapi";
+  const name = String(body.name ?? existing?.name ?? "").trim().slice(0, 80);
+  const baseUrl = normalizeAiBaseUrl(String(body.baseUrl ?? existing?.base_url ?? "").trim()).slice(0, 300);
+  const model = String(body.model ?? existing?.model ?? "").trim().slice(0, 120);
+  const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+
+  return {
+    name,
+    provider,
+    baseUrl,
+    model,
+    apiKey,
+    enabled: Boolean(body.enabled ?? existing?.enabled ?? true),
+    isDefault: Boolean(body.isDefault ?? existing?.is_default ?? false),
+    dailyLimit: Math.round(numberInRange(body.dailyLimit, existing?.daily_limit ?? 50, 1, 2000)),
+    maxOutputTokens: Math.round(numberInRange(body.maxOutputTokens, existing?.max_output_tokens ?? 1200, 256, 8000)),
+    temperature: Number(numberInRange(body.temperature, existing?.temperature ?? 0.2, 0, 2).toFixed(2))
+  };
+}
+
+async function getAiProviderRow(env: Env, providerId: string): Promise<AiProviderRow | null> {
+  return env.DB.prepare(
+    `SELECT
+      id,
+      name,
+      provider,
+      base_url,
+      model,
+      api_key,
+      enabled,
+      is_default,
+      daily_limit,
+      max_output_tokens,
+      temperature,
+      created_at,
+      updated_at,
+      last_tested_at,
+      last_error
+     FROM ai_provider_configs
+     WHERE id = ?`
+  )
+    .bind(providerId)
+    .first<AiProviderRow>();
+}
+
+async function listAiProviders(env: Env): Promise<Response> {
+  const result = await env.DB.prepare(
+    `SELECT
+      id,
+      name,
+      provider,
+      base_url,
+      model,
+      api_key,
+      enabled,
+      is_default,
+      daily_limit,
+      max_output_tokens,
+      temperature,
+      created_at,
+      updated_at,
+      last_tested_at,
+      last_error
+     FROM ai_provider_configs
+     ORDER BY is_default DESC, updated_at DESC`
+  ).all<AiProviderRow>();
+
+  return json((result.results ?? []).map(aiProviderFromRow));
+}
+
+async function saveAiProvider(request: Request, env: Env, providerId?: string): Promise<Response> {
+  const body = await readJson<Partial<AiProviderInput>>(request).catch((): Partial<AiProviderInput> => ({}));
+  const existing = providerId ? await getAiProviderRow(env, providerId) : null;
+  if (providerId && !existing) {
+    return notFound();
+  }
+
+  const input = sanitizeAiProviderInput(body, existing ?? undefined);
+  if (!input.name || !input.baseUrl || !input.model) {
+    return json({ error: "Missing AI provider fields" }, 400);
+  }
+
+  const apiKey = input.apiKey || existing?.api_key || "";
+  if (!apiKey) {
+    return json({ error: "Missing AI API key" }, 400);
+  }
+
+  const now = new Date().toISOString();
+  const id = providerId ?? crypto.randomUUID();
+  if (input.isDefault) {
+    await env.DB.prepare("UPDATE ai_provider_configs SET is_default = 0").run();
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO ai_provider_configs (
+      id,
+      name,
+      provider,
+      base_url,
+      model,
+      api_key,
+      enabled,
+      is_default,
+      daily_limit,
+      max_output_tokens,
+      temperature,
+      created_at,
+      updated_at,
+      last_tested_at,
+      last_error
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      provider = excluded.provider,
+      base_url = excluded.base_url,
+      model = excluded.model,
+      api_key = excluded.api_key,
+      enabled = excluded.enabled,
+      is_default = excluded.is_default,
+      daily_limit = excluded.daily_limit,
+      max_output_tokens = excluded.max_output_tokens,
+      temperature = excluded.temperature,
+      updated_at = excluded.updated_at`
+  )
+    .bind(
+      id,
+      input.name,
+      input.provider,
+      input.baseUrl,
+      input.model,
+      apiKey,
+      input.enabled ? 1 : 0,
+      input.isDefault ? 1 : 0,
+      input.dailyLimit,
+      input.maxOutputTokens,
+      input.temperature,
+      existing?.created_at ?? now,
+      now,
+      existing?.last_tested_at ?? null,
+      existing?.last_error ?? null
+    )
+    .run();
+
+  const saved = await getAiProviderRow(env, id);
+  return saved ? json(aiProviderFromRow(saved), providerId ? 200 : 201) : notFound();
+}
+
+async function deleteAiProvider(env: Env, providerId: string): Promise<Response> {
+  await env.DB.prepare("DELETE FROM ai_provider_configs WHERE id = ?").bind(providerId).run();
+  return json({ ok: true });
+}
+
+async function providerDailyUsage(env: Env, providerId: string): Promise<number> {
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS total
+     FROM ai_usage_logs
+     WHERE provider_id = ?
+       AND success = 1
+       AND created_at >= ?`
+  )
+    .bind(providerId, since.toISOString())
+    .first<{ total: number }>();
+  return row?.total ?? 0;
+}
+
+async function addAiUsageLog(
+  env: Env,
+  providerId: string,
+  actorUserId: string,
+  action: string,
+  success: boolean,
+  usage?: AiScheduleDraftResponse["usage"],
+  error?: string
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO ai_usage_logs (
+      id,
+      provider_id,
+      actor_user_id,
+      action,
+      prompt_tokens,
+      completion_tokens,
+      total_tokens,
+      success,
+      error,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      crypto.randomUUID(),
+      providerId,
+      actorUserId,
+      action,
+      usage?.promptTokens ?? null,
+      usage?.completionTokens ?? null,
+      usage?.totalTokens ?? null,
+      success ? 1 : 0,
+      error ? error.slice(0, 1000) : null,
+      new Date().toISOString()
+    )
+    .run();
+}
+
+function chatContentText(content: string | Array<{ type?: string; text?: string }> | undefined): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => typeof part.text === "string" ? part.text : "").join("").trim();
+  }
+  return "";
+}
+
+function extractJsonFromText(text: string): unknown {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(trimmed);
+    if (fenced?.[1]) {
+      try {
+        return JSON.parse(fenced[1].trim());
+      } catch {
+        // Fall through to object extraction.
+      }
+    }
+    const firstBrace = trimmed.indexOf("{");
+    const lastBrace = trimmed.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function scheduleAssistantSystemPrompt(): string {
+  return [
+    "你是一个中文教学排课系统的 AI 助手。",
+    "你只能把用户的自然语言整理成结构化 JSON 建议，不能声称已经修改系统数据。",
+    "不要输出 Markdown。只输出 JSON。",
+    "支持的动作类型：create_student、create_course、schedule_lessons、sync_lessons、ask_clarification。",
+    "必须保留用户没有明确说明的字段为 null 或放入 questions，不要自行编造。",
+    "时间使用 24 小时制 HH:mm，日期使用 YYYY-MM-DD。",
+    "如果发现信息不足，actions 可以为空，并在 questions 里列出需要确认的问题。",
+    "输出结构：{\"summary\":\"...\",\"actions\":[...],\"questions\":[...],\"warnings\":[...]}"
+  ].join("\n");
+}
+
+async function callOpenAiCompatibleChat(
+  provider: AiProviderRow,
+  messages: Array<{ role: "system" | "user"; content: string }>
+): Promise<{ text: string; draft: unknown; usage?: AiScheduleDraftResponse["usage"] }> {
+  const requestUrl = chatCompletionsUrl(provider.base_url);
+  const requestBody = (useJsonMode: boolean) => ({
+      model: provider.model,
+      messages,
+      temperature: provider.temperature,
+      max_tokens: provider.max_output_tokens,
+      ...(useJsonMode ? { response_format: { type: "json_object" } } : {})
+  });
+  const send = (useJsonMode: boolean) => fetch(requestUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${provider.api_key}`
+    },
+    body: JSON.stringify(requestBody(useJsonMode))
+  });
+
+  let response = await send(true);
+  let rawText = await response.text();
+  let payload: ChatCompletionResponse | null = null;
+  try {
+    payload = rawText ? JSON.parse(rawText) as ChatCompletionResponse : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.error?.message || rawText.slice(0, 500) || `AI request failed (${response.status})`;
+    if (/response_format|json_object|unsupported|not support|不支持/i.test(message)) {
+      response = await send(false);
+      rawText = await response.text();
+      try {
+        payload = rawText ? JSON.parse(rawText) as ChatCompletionResponse : null;
+      } catch {
+        payload = null;
+      }
+      if (response.ok) {
+        const firstChoice = payload?.choices?.[0];
+        const text = chatContentText(firstChoice?.message?.content) || firstChoice?.text || "";
+        if (!text.trim()) {
+          throw new Error("AI returned empty content");
+        }
+        const usage = payload?.usage
+          ? {
+              promptTokens: payload.usage.prompt_tokens ?? payload.usage.promptTokens,
+              completionTokens: payload.usage.completion_tokens ?? payload.usage.completionTokens,
+              totalTokens: payload.usage.total_tokens ?? payload.usage.totalTokens
+            }
+          : undefined;
+        return {
+          text,
+          draft: extractJsonFromText(text),
+          usage
+        };
+      }
+      const fallbackMessage = payload?.error?.message || rawText.slice(0, 500) || `AI request failed (${response.status})`;
+      throw new Error(fallbackMessage);
+    }
+    throw new Error(message);
+  }
+
+  const firstChoice = payload?.choices?.[0];
+  const text = chatContentText(firstChoice?.message?.content) || firstChoice?.text || "";
+  if (!text.trim()) {
+    throw new Error("AI returned empty content");
+  }
+
+  const usage = payload?.usage
+    ? {
+        promptTokens: payload.usage.prompt_tokens ?? payload.usage.promptTokens,
+        completionTokens: payload.usage.completion_tokens ?? payload.usage.completionTokens,
+        totalTokens: payload.usage.total_tokens ?? payload.usage.totalTokens
+      }
+    : undefined;
+
+  return {
+    text,
+    draft: extractJsonFromText(text),
+    usage
+  };
+}
+
+async function testAiProvider(request: Request, env: Env, actor: AuthContext, providerId: string): Promise<Response> {
+  const provider = await getAiProviderRow(env, providerId);
+  if (!provider) return notFound();
+
+  try {
+    const result = await callOpenAiCompatibleChat(provider, [
+      { role: "system", content: "只输出 JSON。" },
+      { role: "user", content: "请输出 {\"ok\":true,\"message\":\"connected\"}" }
+    ]);
+    const now = new Date().toISOString();
+    await env.DB.prepare("UPDATE ai_provider_configs SET last_tested_at = ?, last_error = NULL, updated_at = ? WHERE id = ?")
+      .bind(now, now, providerId)
+      .run();
+    await addAiUsageLog(env, providerId, actor.user.id, "test", true, result.usage);
+    return json({ ok: true, provider: aiProviderFromRow({ ...provider, last_tested_at: now, last_error: null }), response: result.draft ?? result.text });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "AI 测试连接失败。";
+    const now = new Date().toISOString();
+    await env.DB.prepare("UPDATE ai_provider_configs SET last_tested_at = ?, last_error = ?, updated_at = ? WHERE id = ?")
+      .bind(now, message.slice(0, 1000), now, providerId)
+      .run();
+    await addAiUsageLog(env, providerId, actor.user.id, "test", false, undefined, message);
+    return json({ error: "AI provider test failed", detail: message }, 502);
+  }
+}
+
+async function generateAiScheduleDraft(request: Request, env: Env, actor: AuthContext): Promise<Response> {
+  const body = await readJson<AiScheduleDraftRequest>(request).catch((): AiScheduleDraftRequest => ({
+    providerId: "",
+    taskType: "auto",
+    instruction: "",
+    context: null
+  }));
+  const instruction = String(body.instruction ?? "").trim().slice(0, 8000);
+  if (!instruction) {
+    return json({ error: "AI instruction required" }, 400);
+  }
+
+  const providerId = String(body.providerId ?? "").trim();
+  const provider = providerId
+    ? await getAiProviderRow(env, providerId)
+    : await env.DB.prepare(
+        `SELECT
+          id,
+          name,
+          provider,
+          base_url,
+          model,
+          api_key,
+          enabled,
+          is_default,
+          daily_limit,
+          max_output_tokens,
+          temperature,
+          created_at,
+          updated_at,
+          last_tested_at,
+          last_error
+         FROM ai_provider_configs
+         WHERE enabled = 1
+         ORDER BY is_default DESC, updated_at DESC
+         LIMIT 1`
+      ).first<AiProviderRow>();
+
+  if (!provider) {
+    return json({ error: "AI provider not configured" }, 400);
+  }
+  if (!provider.enabled) {
+    return json({ error: "AI provider disabled" }, 400);
+  }
+
+  const usedToday = await providerDailyUsage(env, provider.id);
+  if (usedToday >= provider.daily_limit) {
+    return json({ error: "AI daily limit reached" }, 429);
+  }
+
+  const userContext = JSON.stringify(body.context ?? null).slice(0, 30000);
+  try {
+    const result = await callOpenAiCompatibleChat(provider, [
+      { role: "system", content: scheduleAssistantSystemPrompt() },
+      {
+        role: "user",
+        content: JSON.stringify({
+          taskType: body.taskType || "auto",
+          instruction,
+          appContext: userContext
+        })
+      }
+    ]);
+    const createdAt = new Date().toISOString();
+    await addAiUsageLog(env, provider.id, actor.user.id, "schedule_draft", true, result.usage);
+    return json({
+      providerId: provider.id,
+      model: provider.model,
+      createdAt,
+      text: result.text,
+      draft: result.draft,
+      usage: result.usage
+    } satisfies AiScheduleDraftResponse);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "AI 生成建议失败。";
+    await addAiUsageLog(env, provider.id, actor.user.id, "schedule_draft", false, undefined, message);
+    return json({ error: "AI schedule draft failed", detail: message }, 502);
+  }
+}
+
 async function upsertEncryptedPayload(
   env: Env,
   userId: string,
@@ -1114,6 +1653,38 @@ async function handleAdminRequest(request: Request, env: Env): Promise<Response 
 
   if (request.method === "GET" && pathname === "/api/admin/feedback") {
     return listFeedback(env);
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/ai/providers") {
+    return listAiProviders(env);
+  }
+
+  if (request.method === "POST" && pathname === "/api/admin/ai/providers") {
+    return saveAiProvider(request, env);
+  }
+
+  if (request.method === "POST" && pathname === "/api/admin/ai/schedule-draft") {
+    return generateAiScheduleDraft(request, env, context);
+  }
+
+  const aiProviderMatch = /^\/api\/admin\/ai\/providers\/([^/]+)$/.exec(pathname);
+  if (aiProviderMatch) {
+    const providerId = decodeURIComponent(aiProviderMatch[1]);
+    if (request.method === "PUT") {
+      return saveAiProvider(request, env, providerId);
+    }
+    if (request.method === "DELETE") {
+      return deleteAiProvider(env, providerId);
+    }
+    return notFound();
+  }
+
+  const aiProviderTestMatch = /^\/api\/admin\/ai\/providers\/([^/]+)\/test$/.exec(pathname);
+  if (aiProviderTestMatch) {
+    if (request.method !== "POST") {
+      return notFound();
+    }
+    return testAiProvider(request, env, context, decodeURIComponent(aiProviderTestMatch[1]));
   }
 
   const feedbackMatch = /^\/api\/admin\/feedback\/([^/]+)$/.exec(pathname);

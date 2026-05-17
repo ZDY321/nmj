@@ -2,6 +2,61 @@ export type UserRole = "teacher" | "admin";
 
 export type FeedbackStatus = "unread" | "read" | "in_progress" | "completed";
 
+export type AiProviderKind = "newapi" | "openai_compatible" | "deepseek" | "openai" | "gemini";
+
+export type AiProviderConfig = {
+  id: string;
+  name: string;
+  provider: AiProviderKind;
+  baseUrl: string;
+  model: string;
+  enabled: boolean;
+  isDefault: boolean;
+  dailyLimit: number;
+  maxOutputTokens: number;
+  temperature: number;
+  maskedApiKey: string;
+  createdAt: string;
+  updatedAt: string;
+  lastTestedAt: string | null;
+  lastError: string | null;
+};
+
+export type AiProviderInput = {
+  name: string;
+  provider: AiProviderKind;
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+  enabled: boolean;
+  isDefault: boolean;
+  dailyLimit: number;
+  maxOutputTokens: number;
+  temperature: number;
+};
+
+export type AiScheduleTaskType = "auto" | "student_course" | "schedule_lessons" | "sync_lessons";
+
+export type AiScheduleDraftRequest = {
+  providerId: string;
+  taskType: AiScheduleTaskType;
+  instruction: string;
+  context: unknown;
+};
+
+export type AiScheduleDraftResponse = {
+  providerId: string;
+  model: string;
+  createdAt: string;
+  text: string;
+  draft: unknown;
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+  };
+};
+
 export type UserStatus =
   | "active"
   | "disabled"

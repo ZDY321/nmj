@@ -1432,6 +1432,7 @@ export function App() {
                 onGenerateDrafts={generateDrafts}
                 onWeekStartChange={updateWeekStart}
                 role={role}
+                token={token}
                 calendarFocus={scheduleCalendarFocus}
               />
             )}

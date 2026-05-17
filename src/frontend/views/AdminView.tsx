@@ -1,24 +1,29 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bell, Bot, Database, KeyRound, Lock, MessageSquare, RefreshCw, Save, ServerCog, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Bell, Bot, Database, KeyRound, Lock, MessageSquare, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { AdminSummary, AdminUser, FeedbackStatus, Notice, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
+import type { AdminSummary, AdminUser, AiProviderConfig, AiProviderInput, AiProviderKind, FeedbackStatus, Notice, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import {
   cancelUserDeletion,
   confirmUserDeletion,
+  createAiProvider,
+  deleteAiProvider,
   getAdminFeedback,
   getAdminSummary,
   getAdminUsers,
+  getAiProviders,
   lookupPasswordSalt,
   requestUserDeletion,
   runDueDeletions,
+  testAiProvider,
+  updateAiProvider,
   updateAdminFeedback,
   updateAdminNotice,
   updateRegistrationEnabled
@@ -39,6 +44,27 @@ const feedbackStatusLabels: Record<FeedbackStatus, string> = {
   read: "已读",
   in_progress: "处理中",
   completed: "已完成"
+};
+
+const aiProviderLabels: Record<AiProviderKind, string> = {
+  newapi: "New API 中转",
+  openai_compatible: "OpenAI 兼容",
+  deepseek: "DeepSeek",
+  openai: "OpenAI",
+  gemini: "Gemini"
+};
+
+const emptyAiForm: AiProviderInput = {
+  name: "",
+  provider: "newapi",
+  baseUrl: "",
+  model: "",
+  apiKey: "",
+  enabled: true,
+  isDefault: false,
+  dailyLimit: 50,
+  maxOutputTokens: 1200,
+  temperature: 0.2
 };
 
 function feedbackStatusVariant(status: FeedbackStatus): "sage" | "amber" | "secondary" | "sky" {
@@ -77,6 +103,10 @@ export function AdminView({
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [feedbackItems, setFeedbackItems] = useState<UserFeedback[]>([]);
+  const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
+  const [editingAiProviderId, setEditingAiProviderId] = useState<string | null>(null);
+  const [aiForm, setAiForm] = useState<AiProviderInput>(emptyAiForm);
+  const [aiBusy, setAiBusy] = useState(false);
   const [feedbackFilter, setFeedbackFilter] = useState<"all" | FeedbackStatus>("all");
   const [feedbackNotes, setFeedbackNotes] = useState<Record<string, string>>({});
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
@@ -111,6 +141,18 @@ export function AdminView({
       setSummary(nextSummary);
       setUsers(nextUsers);
       setRegistrationEnabled(nextSummary.registrationEnabled);
+      try {
+        const nextAiProviders = await getAiProviders(token);
+        setAiProviders(nextAiProviders);
+      } catch (aiError) {
+        setAiProviders([]);
+        const aiMessage = aiError instanceof Error ? aiError.message : "AI 配置加载失败。";
+        setMessage(
+          isMigrationMessage(aiMessage)
+            ? "AI 配置暂时不可用：云端 D1 还没执行最新迁移。请执行 migrations/0004_ai_provider_configs.sql 后刷新。其他管理员数据已正常加载。"
+            : aiMessage
+        );
+      }
       try {
         const nextFeedback = await getAdminFeedback(token);
         setFeedbackItems(nextFeedback);
@@ -228,6 +270,121 @@ export function AdminView({
       tone: "danger",
       onConfirm: onClearData
     });
+  }
+
+  function startCreateAiProvider() {
+    setEditingAiProviderId(null);
+    setAiForm({
+      ...emptyAiForm,
+      isDefault: aiProviders.length === 0
+    });
+  }
+
+  function startEditAiProvider(provider: AiProviderConfig) {
+    setEditingAiProviderId(provider.id);
+    setAiForm({
+      name: provider.name,
+      provider: provider.provider,
+      baseUrl: provider.baseUrl,
+      model: provider.model,
+      apiKey: "",
+      enabled: provider.enabled,
+      isDefault: provider.isDefault,
+      dailyLimit: provider.dailyLimit,
+      maxOutputTokens: provider.maxOutputTokens,
+      temperature: provider.temperature
+    });
+  }
+
+  async function saveAiProviderConfig() {
+    setAiBusy(true);
+    setMessage("");
+    try {
+      const saved = editingAiProviderId
+        ? await updateAiProvider(token, editingAiProviderId, aiForm)
+        : await createAiProvider(token, aiForm);
+      const nextProviders = editingAiProviderId
+        ? aiProviders.map((provider) => (provider.id === saved.id ? saved : provider))
+        : [saved, ...aiProviders];
+      const normalizedProviders = saved.isDefault
+        ? nextProviders.map((provider) => ({ ...provider, isDefault: provider.id === saved.id }))
+        : nextProviders;
+      setAiProviders(normalizedProviders);
+      setEditingAiProviderId(saved.id);
+      setAiForm({
+        name: saved.name,
+        provider: saved.provider,
+        baseUrl: saved.baseUrl,
+        model: saved.model,
+        apiKey: "",
+        enabled: saved.enabled,
+        isDefault: saved.isDefault,
+        dailyLimit: saved.dailyLimit,
+        maxOutputTokens: saved.maxOutputTokens,
+        temperature: saved.temperature
+      });
+      setMessage("AI 配置已保存。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "AI 配置保存失败。");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function runAiProviderTest(providerId: string) {
+    setAiBusy(true);
+    setMessage("");
+    try {
+      const result = await testAiProvider(token, providerId);
+      setAiProviders((current) => current.map((provider) => (provider.id === result.provider.id ? result.provider : provider)));
+      if (editingAiProviderId === result.provider.id) {
+        setAiForm((current) => ({
+          ...current,
+          name: result.provider.name,
+          provider: result.provider.provider,
+          baseUrl: result.provider.baseUrl,
+          model: result.provider.model,
+          enabled: result.provider.enabled,
+          isDefault: result.provider.isDefault,
+          dailyLimit: result.provider.dailyLimit,
+          maxOutputTokens: result.provider.maxOutputTokens,
+          temperature: result.provider.temperature
+        }));
+      }
+      setMessage("AI 接口测试通过。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "AI 接口测试失败。");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  function askDeleteAiProvider(provider: AiProviderConfig) {
+    confirm({
+      title: `删除 AI 配置「${provider.name}」？`,
+      description: "删除后排课助手不能再选择这套接口配置。API Key 也会从后端配置表中移除。",
+      confirmLabel: "删除配置",
+      tone: "danger",
+      onConfirm: () => void removeAiProvider(provider.id)
+    });
+  }
+
+  async function removeAiProvider(providerId: string) {
+    setAiBusy(true);
+    setMessage("");
+    try {
+      await deleteAiProvider(token, providerId);
+      setAiProviders((current) => current.filter((provider) => provider.id !== providerId));
+      if (editingAiProviderId === providerId) {
+        setEditingAiProviderId(null);
+        setAiForm(emptyAiForm);
+      }
+      setMessage("AI 配置已删除。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "AI 配置删除失败。");
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   async function submitVerifiedDeleteRequest(user: AdminUser) {
@@ -428,48 +585,189 @@ export function AdminView({
             <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
               <Bot size={14} /> AI 接口设置
             </div>
-            <CardTitle>AI 排课助手后端配置</CardTitle>
-            <CardDescription>这里先固定管理员配置项。API Key 后续应保存到 Cloudflare Worker Secret 或后端环境变量，不能保存到前端代码或老师加密档案里。</CardDescription>
+            <CardTitle>AI 排课助手接口配置</CardTitle>
+            <CardDescription>支持 New API 与 OpenAI 兼容中转接口。API Key 只保存在管理员后端配置表，前端列表只显示掩码。</CardDescription>
           </div>
-          <Badge variant="secondary" className="w-fit">后端待接入</Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="sky" className="w-fit">{aiProviders.length} 个配置</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={startCreateAiProvider}>
+              <Plus size={14} /> 新增配置
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">AI 功能开关</label>
-              <Select disabled value="admin_only">
-                <option value="admin_only">仅管理员试用</option>
-              </Select>
+              <label className="text-sm font-medium">配置名称</label>
+              <Input
+                value={aiForm.name}
+                onChange={(event) => setAiForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="例如：New API 主线路"
+              />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">服务商</label>
-              <Select disabled value="deepseek">
-                <option value="deepseek">DeepSeek 兼容接口</option>
+              <label className="text-sm font-medium">接口类型</label>
+              <Select
+                value={aiForm.provider}
+                onChange={(event) => setAiForm((current) => ({ ...current, provider: event.target.value as AiProviderKind }))}
+              >
+                {Object.entries(aiProviderLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">模型名称</label>
-              <Input disabled value="deepseek-v4-flash" />
+              <Input
+                value={aiForm.model}
+                onChange={(event) => setAiForm((current) => ({ ...current, model: event.target.value }))}
+                placeholder="deepseek-v4-flash / gpt-4o-mini / gemini-2.5-flash"
+              />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">每日调用上限</label>
-              <Input disabled value="50 次 / 天" />
+              <label className="text-sm font-medium">API Key</label>
+              <Input
+                type="password"
+                value={aiForm.apiKey ?? ""}
+                onChange={(event) => setAiForm((current) => ({ ...current, apiKey: event.target.value }))}
+                placeholder={editingAiProviderId ? "留空则沿用已保存 Key" : "输入中转站 API Key"}
+                autoComplete="new-password"
+              />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_140px_140px_120px]">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">接口地址</label>
+              <Input
+                value={aiForm.baseUrl}
+                onChange={(event) => setAiForm((current) => ({ ...current, baseUrl: event.target.value }))}
+                placeholder="例如：https://你的中转站域名/v1"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">每日上限</label>
+              <Input
+                type="number"
+                min={1}
+                value={aiForm.dailyLimit}
+                onChange={(event) => setAiForm((current) => ({ ...current, dailyLimit: Number(event.target.value) }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">输出上限</label>
+              <Input
+                type="number"
+                min={256}
+                value={aiForm.maxOutputTokens}
+                onChange={(event) => setAiForm((current) => ({ ...current, maxOutputTokens: Number(event.target.value) }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">温度</label>
+              <Input
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={aiForm.temperature}
+                onChange={(event) => setAiForm((current) => ({ ...current, temperature: Number(event.target.value) }))}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-4">
+              <label className="inline-flex items-center gap-2 text-sm font-bold text-[#25324a]">
+                <input
+                  type="checkbox"
+                  checked={aiForm.enabled}
+                  onChange={(event) => setAiForm((current) => ({ ...current, enabled: event.target.checked }))}
+                  className="h-4 w-4 accent-[#ff8617]"
+                />
+                启用这套配置
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-bold text-[#25324a]">
+                <input
+                  type="checkbox"
+                  checked={aiForm.isDefault}
+                  onChange={(event) => setAiForm((current) => ({ ...current, isDefault: event.target.checked }))}
+                  className="h-4 w-4 accent-[#ff8617]"
+                />
+                设为默认
+              </label>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {editingAiProviderId && (
+                <Button type="button" variant="outline" disabled={aiBusy} onClick={() => void runAiProviderTest(editingAiProviderId)}>
+                  测试连接
+                </Button>
+              )}
+              <Button type="button" disabled={aiBusy} onClick={() => void saveAiProviderConfig()}>
+                <Save size={15} /> {editingAiProviderId ? "保存配置" : "新增配置"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+            <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="text-sm font-extrabold text-[#061226]">已保存配置</div>
+                <Badge variant="secondary">{aiProviders.length} 个</Badge>
+              </div>
+              <div className="space-y-2">
+                {aiProviders.map((provider) => (
+                  <div key={provider.id} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <button type="button" className="min-w-0 text-left" onClick={() => startEditAiProvider(provider)}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-extrabold text-[#061226]">{provider.name}</span>
+                          <Badge variant={provider.enabled ? "sage" : "secondary"}>{provider.enabled ? "启用" : "停用"}</Badge>
+                          {provider.isDefault && <Badge variant="sky">默认</Badge>}
+                        </div>
+                        <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                          {aiProviderLabels[provider.provider]} · {provider.model} · {provider.maskedApiKey || "未保存 Key"}
+                        </div>
+                        <div className="mt-1 truncate text-xs font-semibold text-[#64748b]">{provider.baseUrl}</div>
+                        {provider.lastTestedAt && (
+                          <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                            测试：{formatAppDateTime(provider.lastTestedAt)}{provider.lastError ? ` · ${provider.lastError}` : ""}
+                          </div>
+                        )}
+                      </button>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="outline" disabled={aiBusy} onClick={() => startEditAiProvider(provider)}>
+                          编辑
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" disabled={aiBusy} onClick={() => void runAiProviderTest(provider.id)}>
+                          测试
+                        </Button>
+                        <Button type="button" size="sm" variant="destructive" disabled={aiBusy} onClick={() => askDeleteAiProvider(provider)}>
+                          删除
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {aiProviders.length === 0 && (
+                  <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
+                    暂无 AI 接口配置。新增一套 New API 或 OpenAI 兼容配置后，排课助手就能选择使用。
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
                 <ServerCog size={16} className="text-[#1557c2]" /> 后端需要保存的信息
               </div>
               <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#25324a]">
                 {[
-                  "AI_PROVIDER：deepseek 或兼容服务商",
-                  "AI_API_BASE_URL：后端代理访问的接口地址",
-                  "AI_MODEL：实际模型名称",
-                  "AI_API_KEY：只放 Worker Secret / 环境变量",
-                  "AI_DAILY_LIMIT：管理员每日调用上限",
-                  "AI_MAX_OUTPUT_TOKENS：限制单次输出长度"
+                  "New API 通常填写你的中转站 /v1 地址",
+                  "模型名按中转站实际支持填写，可随时切换",
+                  "保存后下次登录会直接从后端读取配置",
+                  "编辑时 API Key 留空会沿用旧 Key",
+                  "默认配置会优先出现在排课助手里"
                 ].map((text) => (
                   <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
                     {text}
@@ -494,18 +792,6 @@ export function AdminView({
                 ))}
               </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-white p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-            <div>
-              <div className="text-sm font-extrabold text-[#061226]">连接状态</div>
-              <div className="mt-1 text-sm font-semibold leading-6 text-[#64748b]">
-                当前还没有接入后端 AI 配置接口。后续接入 Cloudflare Worker 后，这里可以增加保存配置、测试连接和查看调用量。
-              </div>
-            </div>
-            <Button type="button" variant="outline" disabled>
-              测试连接
-            </Button>
           </div>
         </CardContent>
       </Card>
