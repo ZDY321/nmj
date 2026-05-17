@@ -200,6 +200,8 @@ export function ScheduleView({
   const aiFollowupAnswer = aiSession?.followupAnswer ?? "";
   const aiDraft = aiSession?.draft ?? null;
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiApplying, setAiApplying] = useState(false);
+  const [aiApplyResult, setAiApplyResult] = useState<{ ok: boolean; message: string } | null>(null);
   const aiMessage = aiSession?.message ?? "";
   const { confirm, dialog } = useConfirmDialog();
   const isAdmin = role === "admin";
@@ -552,6 +554,9 @@ export function ScheduleView({
   const aiDraftCanApply = aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
 
   function patchAiSession(patch: Partial<AiScheduleSession>) {
+    if ("draft" in patch) {
+      setAiApplyResult(null);
+    }
     onAiSessionChange({
       providerId: aiProviderId,
       taskType: aiTaskType,
@@ -685,6 +690,10 @@ export function ScheduleView({
   }
 
   function applyAiDraft() {
+    if (aiApplying) return;
+    setAiApplying(true);
+    setAiApplyResult(null);
+    patchAiSession({ message: "正在写入 AI 建议..." });
     const result = onApplyAiDraft({
       providerId: aiProviderId,
       taskType: aiTaskType,
@@ -693,7 +702,9 @@ export function ScheduleView({
       draft: aiDraft,
       message: aiMessage
     });
+    setAiApplyResult(result);
     patchAiSession({ message: result.message });
+    window.setTimeout(() => setAiApplying(false), 250);
   }
 
   function matchesCalendarCourseFilter(lesson: Lesson): boolean {
@@ -1458,12 +1469,22 @@ export function ScheduleView({
                       这里会把 AI 返回内容整理成可核对的摘要、操作建议和提醒。正式写入前仍需要系统校验和人工确认。
                     </div>
                   </div>
-                  <Button type="button" variant={aiDraftCanApply ? "default" : "outline"} disabled={!aiDraftCanApply} onClick={applyAiDraft} className="shrink-0">
-                    确认写入
+                  <Button type="button" variant={aiDraftCanApply ? "default" : "outline"} disabled={!aiDraftCanApply || aiApplying} onClick={applyAiDraft} className="shrink-0">
+                    {aiApplying ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                    {aiApplying ? "写入中" : "确认写入"}
                   </Button>
                 </div>
                 {aiDraft ? (
                   <div className="mt-4 space-y-4">
+                    {aiApplyResult && (
+                      <div className={`rounded-[12px] border px-4 py-3 text-sm font-extrabold leading-6 ${
+                        aiApplyResult.ok
+                          ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]"
+                          : "border-[#fecaca] bg-[#fff1f2] text-[#b91c1c]"
+                      }`}>
+                        {aiApplyResult.message}
+                      </div>
+                    )}
                     <div className="rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] p-4">
                       <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#1557c2]">
                         <Sparkles size={16} /> 摘要
