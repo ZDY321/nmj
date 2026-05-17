@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bell, Bot, Database, KeyRound, Lock, MessageSquare, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Trash2, Users } from "lucide-react";
+import { AlertTriangle, Bell, Bot, CheckCircle2, Database, KeyRound, Lock, MessageSquare, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -140,6 +140,7 @@ export function AdminView({
   const [editingAiProviderId, setEditingAiProviderId] = useState<string | null>(null);
   const [aiForm, setAiForm] = useState<AiProviderInput>(emptyAiForm);
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{ tone: "info" | "success" | "error"; message: string } | null>(null);
   const [feedbackFilter, setFeedbackFilter] = useState<"all" | FeedbackStatus>("all");
   const [feedbackNotes, setFeedbackNotes] = useState<Record<string, string>>({});
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
@@ -311,6 +312,10 @@ export function AdminView({
       ...emptyAiForm,
       isDefault: aiProviders.length === 0
     });
+    setAiStatus({
+      tone: "info",
+      message: "已切换到新增配置模式。填写接口地址、模型和 API Key 后，点击“保存新配置”才会写入已保存配置列表。"
+    });
   }
 
   function startEditAiProvider(provider: AiProviderConfig) {
@@ -326,6 +331,10 @@ export function AdminView({
       dailyLimit: provider.dailyLimit,
       maxOutputTokens: provider.maxOutputTokens,
       temperature: provider.temperature
+    });
+    setAiStatus({
+      tone: "info",
+      message: `正在编辑配置「${provider.name}」。如果不需要更换 API Key，API Key 输入框留空即可。`
     });
   }
 
@@ -351,9 +360,13 @@ export function AdminView({
         maxOutputTokens: saved.maxOutputTokens,
         temperature: saved.temperature
       });
-      setMessage(editingAiProviderId ? "AI 配置已保存。" : "AI 配置已新增并保存。");
+      const saveMessage = editingAiProviderId ? "AI 配置已保存。" : "AI 配置已新增并保存，已经出现在下方列表。";
+      setAiStatus({ tone: "success", message: saveMessage });
+      setMessage(saveMessage);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "AI 配置保存失败。");
+      const errorMessage = error instanceof Error ? error.message : "AI 配置保存失败。";
+      setAiStatus({ tone: "error", message: errorMessage });
+      setMessage(errorMessage);
     } finally {
       setAiBusy(false);
     }
@@ -379,9 +392,13 @@ export function AdminView({
           temperature: result.provider.temperature
         }));
       }
-      setMessage("AI 接口测试通过。");
+      const successMessage = `AI 接口测试成功：${result.provider.name} / ${result.provider.model}`;
+      setAiStatus({ tone: "success", message: successMessage });
+      setMessage(successMessage);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "AI 接口测试失败。");
+      const errorMessage = error instanceof Error ? error.message : "AI 接口测试失败。";
+      setAiStatus({ tone: "error", message: `AI 接口测试失败：${errorMessage}` });
+      setMessage(errorMessage);
     } finally {
       setAiBusy(false);
     }
@@ -407,9 +424,12 @@ export function AdminView({
         setEditingAiProviderId(null);
         setAiForm(emptyAiForm);
       }
+      setAiStatus({ tone: "success", message: "AI 配置已删除。" });
       setMessage("AI 配置已删除。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "AI 配置删除失败。");
+      const errorMessage = error instanceof Error ? error.message : "AI 配置删除失败。";
+      setAiStatus({ tone: "error", message: errorMessage });
+      setMessage(errorMessage);
     } finally {
       setAiBusy(false);
     }
@@ -511,6 +531,12 @@ export function AdminView({
   const filteredFeedback = feedbackItems.filter((item) => feedbackFilter === "all" || item.status === feedbackFilter);
   const unreadFeedback = feedbackItems.filter((item) => item.status === "unread").length;
   const selectedAiProviderDescription = aiProviderDescriptions[aiForm.provider];
+  const editingAiProvider = editingAiProviderId ? aiProviders.find((provider) => provider.id === editingAiProviderId) : null;
+  const aiStatusClass = aiStatus?.tone === "success"
+    ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]"
+    : aiStatus?.tone === "error"
+      ? "border-[#fecaca] bg-[#fff1f2] text-[#b91c1c]"
+      : "border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2]";
 
   return (
     <div className="space-y-6">
@@ -619,12 +645,30 @@ export function AdminView({
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="sky" className="w-fit">{aiProviders.length} 个配置</Badge>
-            <Button type="button" size="sm" variant="outline" onClick={startCreateAiProvider}>
+            <Button
+              type="button"
+              size="sm"
+              variant={editingAiProviderId ? "outline" : "default"}
+              onClick={startCreateAiProvider}
+            >
               <Plus size={14} /> 填写新配置
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className={`rounded-[14px] border px-4 py-3 text-sm font-bold leading-6 ${
+            editingAiProviderId ? "border-[#dbe4ef] bg-[#f8fbff] text-[#25324a]" : "border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2]"
+          }`}>
+            {editingAiProviderId
+              ? `当前正在编辑：${editingAiProvider?.name ?? "已保存配置"}。点击“填写新配置”会清空表单并切换到新增模式。`
+              : "当前是新增配置模式。填写完成后必须点击“保存新配置”，才会加入下方已保存配置列表。"}
+          </div>
+          {aiStatus && (
+            <div className={`flex items-start gap-2 rounded-[14px] border px-4 py-3 text-sm font-bold leading-6 ${aiStatusClass}`}>
+              {aiStatus.tone === "success" ? <CheckCircle2 size={17} className="mt-0.5 shrink-0" /> : aiStatus.tone === "error" ? <AlertTriangle size={17} className="mt-0.5 shrink-0" /> : <Bot size={17} className="mt-0.5 shrink-0" />}
+              <span>{aiStatus.message}</span>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">配置名称</label>
@@ -773,8 +817,16 @@ export function AdminView({
                         </div>
                         <div className="mt-1 truncate text-xs font-semibold text-[#64748b]">{provider.baseUrl}</div>
                         {provider.lastTestedAt && (
-                          <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                            测试：{formatAppDateTime(provider.lastTestedAt)}{provider.lastError ? ` · ${provider.lastError}` : ""}
+                          <div className={`mt-2 flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold ${
+                            provider.lastError ? "bg-[#fff1f2] text-[#b91c1c]" : "bg-[#f0fdf4] text-[#166534]"
+                          }`}>
+                            {provider.lastError ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
+                            {provider.lastError ? "测试失败" : "测试成功"} · {formatAppDateTime(provider.lastTestedAt)}
+                          </div>
+                        )}
+                        {provider.lastError && (
+                          <div className="mt-1 rounded-[10px] border border-[#fecaca] bg-[#fff1f2] px-2.5 py-1.5 text-xs font-semibold leading-5 text-[#b91c1c]">
+                            {provider.lastError}
                           </div>
                         )}
                       </button>
