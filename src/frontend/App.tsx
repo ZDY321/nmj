@@ -616,6 +616,21 @@ export function App() {
       return nextVault.courseGroups.find((course) => course.id.toLowerCase() === normalized || course.name.trim().toLowerCase() === normalized);
     };
 
+    const courseMatchesData = (course: CourseGroup, data: Record<string, unknown>): boolean => {
+      const requestedSubject = stringValue(data.subject);
+      const requestedType = data.type === undefined || data.type === null || data.type === "" ? "" : normalizeAiCourseType(data.type, nextVault);
+      const requestedCampus = data.campus === undefined ? undefined : campusByName(data.campus);
+      const requestedStudentIds = studentIdsFromAiData(data);
+      if (requestedSubject && course.subject.trim().toLowerCase() !== requestedSubject.toLowerCase()) return false;
+      if (requestedType && course.type !== requestedType) return false;
+      if (requestedCampus && course.defaultCampusId !== requestedCampus.id) return false;
+      if (requestedStudentIds.length > 0) {
+        const currentIds = new Set(course.studentIds);
+        if (!requestedStudentIds.every((studentId) => currentIds.has(studentId))) return false;
+      }
+      return true;
+    };
+
     const ensureStudent = (data: Record<string, unknown>): Student | null => {
       const name = stringValue(data.name ?? data.studentName);
       if (!name) return null;
@@ -643,27 +658,46 @@ export function App() {
     };
 
     const studentIdsFromNames = (values: unknown): string[] => {
-      return arrayValueLocal(values)
+      const rawValues = Array.isArray(values) ? values : values === undefined || values === null || values === "" ? [] : [values];
+      return rawValues
         .map((value) => {
-          const student = studentByName(value);
+          if (isPlainRecordLocal(value)) {
+            const directId = stringValue(value.id ?? value.studentId);
+            const student = nextVault.students.find((item) => item.id === directId) ?? studentByName(value.name ?? value.studentName);
+            return student?.id ?? "";
+          }
+          const directId = stringValue(value);
+          const student = nextVault.students.find((item) => item.id === directId) ?? studentByName(value);
           return student?.id ?? "";
         })
         .filter(Boolean);
     };
 
     const studentIdsFromAiData = (data: Record<string, unknown>): string[] => {
-      return studentIdsFromNames(data.studentIds ?? data.studentNames ?? data.students ?? data.studentsToAdd);
+      const directStudentId = stringValue(data.studentId);
+      const directStudent = directStudentId ? nextVault.students.find((student) => student.id === directStudentId) : undefined;
+      return Array.from(new Set([
+        directStudent?.id ?? "",
+        ...studentIdsFromNames(data.studentIds ?? data.studentNames ?? data.students ?? data.studentsToAdd),
+        ...studentIdsFromNames(data.studentName ?? data.student)
+      ].filter(Boolean)));
     };
 
     const ensureCourse = (data: Record<string, unknown>): CourseGroup | null => {
-      const existing = courseByIdOrName(data.courseId ?? data.id ?? data.name ?? data.courseName);
-      if (existing) return existing;
+      const requestedId = stringValue(data.courseId ?? data.id);
+      const existingById = requestedId ? nextVault.courseGroups.find((course) => course.id === requestedId) : undefined;
+      if (existingById) return existingById;
       const name = stringValue(data.name ?? data.courseName);
       if (!name) return null;
-      const type = normalizeAiCourseType(data.type);
+      const normalizedName = name.toLowerCase();
+      const existingByName = nextVault.courseGroups.find((course) =>
+        course.name.trim().toLowerCase() === normalizedName && courseMatchesData(course, data)
+      );
+      if (existingByName) return existingByName;
+      const type = normalizeAiCourseType(data.type, nextVault);
       const subject = stringValue(data.subject) || "语文";
       const campus = campusByName(data.campus);
-      const studentIds = studentIdsFromNames(data.studentNames ?? data.students);
+      const studentIds = studentIdsFromAiData(data);
       const course: CourseGroup = {
         id: makeId("course"),
         name,

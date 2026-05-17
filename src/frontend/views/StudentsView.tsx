@@ -726,7 +726,7 @@ export function StudentsView({
       title: `删除班型「${courseTypeOption.label}」？`,
       description: isCustom
         ? "自定义班型会从班型列表中直接删除；已被课程或历史课时使用的自定义班型不能直接删除。"
-        : "内置班型会从主列表、新增课程和筛选下拉中移除，已有课程和历史课时仍会保留显示，可在已删除内置班型中恢复。",
+        : "内置班型会从主列表、添加课程档案和筛选下拉中移除，已有课程和历史课时仍会保留显示，可在已删除内置班型中恢复。",
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => {
@@ -887,7 +887,7 @@ export function StudentsView({
   function requestArchiveStudent(student: Student) {
     confirm({
       title: `归档学生「${student.name}」？`,
-      description: "归档后不会出现在新建课程、添加关联学生和班型调整的学生搜索结果中，历史课程和课时记录会保留。",
+      description: "归档后不会出现在添加课程档案、添加关联学生和班型调整的学生搜索结果中，历史课程和课时记录会保留。",
       confirmLabel: "归档",
       tone: "danger",
       onConfirm: () => {
@@ -1047,7 +1047,7 @@ export function StudentsView({
         {[
           { label: "档案信息", value: `${vault.students.length} 人`, hint: `在读 ${activeStudentCount} 人 / 已归档 ${archivedStudentCount} 人`, icon: Users },
           { label: "校区", value: `${vault.campuses.length} 个`, hint: "教学地点", icon: Building2 },
-          { label: "课程/班课", value: `${vault.courseGroups.length} 个`, hint: `启用 ${activeCourses} 个`, icon: GraduationCap }
+          { label: "添加课程档案", value: `${vault.courseGroups.length} 个`, hint: `启用 ${activeCourses} 个`, icon: GraduationCap }
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -1074,7 +1074,7 @@ export function StudentsView({
             { key: "profile" as ArchivePanel, label: "老师个人信息" },
             { key: "campuses" as ArchivePanel, label: "校区与班型" },
             { key: "students" as ArchivePanel, label: "学生列表" },
-            { key: "courses" as ArchivePanel, label: "课程与班课" }
+            { key: "courses" as ArchivePanel, label: "添加课程档案" }
           ].map((item, index, items) => (
             <Fragment key={item.key}>
             <button
@@ -1313,7 +1313,7 @@ export function StudentsView({
                     <label className="text-sm font-medium">处理方式</label>
                     <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
                       {[
-                        { key: "new" as const, label: "新建课程" },
+                        { key: "new" as const, label: "新建档案" },
                         { key: "existing" as const, label: "加入已有" }
                       ].map((item) => (
                         <button
@@ -1363,7 +1363,7 @@ export function StudentsView({
                     </Select>
                     {transferTargetCourses.length === 0 && (
                       <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
-                        当前没有可加入的同班型课程，可以切换为新建课程。
+                        当前没有可加入的同班型课程，可以切换为新建档案。
                       </div>
                     )}
                   </div>
@@ -1742,7 +1742,7 @@ export function StudentsView({
                           variant="destructive"
                           disabled={isCustom && used}
                           onClick={() => requestDeleteCourseType({ id: type, label: typeOption.label })}
-                          title={isCustom && used ? "这个自定义班型已有课程或历史课时使用，不能直接删除" : isCustom ? "直接删除自定义班型" : "内置班型会从主列表和新增课程中移除"}
+                          title={isCustom && used ? "这个自定义班型已有课程或历史课时使用，不能直接删除" : isCustom ? "直接删除自定义班型" : "内置班型会从主列表和添加课程档案中移除"}
                         >
                           <Trash2 size={14} /> 删除
                         </Button>
@@ -1756,7 +1756,7 @@ export function StudentsView({
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm font-extrabold text-[#061226]">默认人数计费</div>
-                      <div className="text-xs font-semibold text-[#64748b]">按单节课计费，不按小时相乘；新建课程后可单独微调。</div>
+                      <div className="text-xs font-semibold text-[#64748b]">按单节课计费，不按小时相乘；添加课程档案后可单独微调。</div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <div className="space-y-1">
@@ -2091,7 +2091,7 @@ export function StudentsView({
             <div className="flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
                 <GraduationCap size={18} className="text-[#ff8617]" />
-                <CardTitle className="text-lg">添加课程</CardTitle>
+                <CardTitle className="text-lg">添加课程档案</CardTitle>
               </div>
               <Button
                 type="button"
@@ -2332,7 +2332,7 @@ export function StudentsView({
                 <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
                   <GraduationCap size={14} /> 已添加课程
                 </div>
-                <CardTitle className="text-lg">课程与班课列表</CardTitle>
+                <CardTitle className="text-lg">课程档案列表</CardTitle>
                 <CardDescription>筛选和数量只作用于下方已添加课程。</CardDescription>
               </div>
               <Badge variant="secondary" className="w-fit">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
