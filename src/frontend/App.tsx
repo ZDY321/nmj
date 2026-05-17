@@ -38,6 +38,7 @@ import {
   viewTitles,
   datesBetween,
   createLessonFromCourse,
+  courseTypeLabel,
   lessonStudentIds,
   makeupNeededStudentIds,
   weekdayOfDateIso
@@ -420,7 +421,11 @@ export function App() {
 
   function updateCourse(course: CourseGroup) {
     updateVault((draft) => {
+      const previousCourse = draft.courseGroups.find((item) => item.id === course.id);
       draft.courseGroups = draft.courseGroups.map((item) => (item.id === course.id ? course : item));
+      if (previousCourse && courseUpdateAffectsLessonDefaults(previousCourse, course)) {
+        syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
+      }
     });
   }
 
@@ -646,6 +651,10 @@ export function App() {
         .filter(Boolean);
     };
 
+    const studentIdsFromAiData = (data: Record<string, unknown>): string[] => {
+      return studentIdsFromNames(data.studentIds ?? data.studentNames ?? data.students ?? data.studentsToAdd);
+    };
+
     const ensureCourse = (data: Record<string, unknown>): CourseGroup | null => {
       const existing = courseByIdOrName(data.courseId ?? data.id ?? data.name ?? data.courseName);
       if (existing) return existing;
@@ -669,6 +678,110 @@ export function App() {
       nextVault.courseGroups.push(course);
       messages.push(`新增课程「${course.name}」`);
       return course;
+    };
+
+    const updateCourseFromAi = (data: Record<string, unknown>): CourseGroup | null => {
+      const course = courseByIdOrName(data.courseId ?? data.id ?? data.name ?? data.courseName);
+      if (!course) return null;
+      const previousType = course.type;
+      const nextType = data.type === undefined || data.type === null || data.type === "" ? course.type : normalizeAiCourseType(data.type, nextVault);
+      const nextStudentIds = studentIdsFromAiData(data);
+      const campus = data.campus === undefined ? undefined : campusByName(data.campus);
+      const nextCourse: CourseGroup = {
+        ...course,
+        name: stringValue(data.newName ?? data.name ?? data.courseName) || course.name,
+        subject: stringValue(data.subject) || course.subject,
+        type: nextType,
+        defaultCampusId: data.campus === undefined ? course.defaultCampusId : campus?.id,
+        studentIds: nextStudentIds.length > 0 ? nextStudentIds : course.studentIds,
+        feeRule: nextType !== previousType ? defaultFeeRuleForCourseType(nextType) : course.feeRule,
+        note: data.note === undefined ? course.note : stringValue(data.note) || undefined,
+        status: data.status === "paused" ? "paused" : data.status === "active" ? "active" : course.status
+      };
+      nextVault.courseGroups = nextVault.courseGroups.map((item) => (item.id === course.id ? nextCourse : item));
+      if (courseUpdateAffectsLessonDefaults(course, nextCourse)) {
+        const scope = normalizeCourseLessonSyncScope(data.lessonUpdateScope ?? data.applyToLessons ?? data.updateLessons);
+        const syncedCount = syncLessonsWithCourseDefaults(nextVault, nextCourse, scope);
+        if (syncedCount > 0) {
+          messages.push(`已按新课程规则同步 ${syncedCount} 节未完成排课`);
+        }
+      }
+      messages.push(`已更新课程「${nextCourse.name}」`);
+      return nextCourse;
+    };
+
+    const deleteOrPauseCourseFromAi = (data: Record<string, unknown>) => {
+      const course = courseByIdOrName(data.courseId ?? data.id ?? data.name ?? data.courseName);
+      if (!course) return;
+      const inUse = nextVault.lessons.some((lesson) => lesson.courseGroupId === course.id);
+      const mode = stringValue(data.mode ?? data.deleteMode ?? data.action).toLowerCase();
+      const force = Boolean(data.forceDelete ?? data.force);
+      if (mode === "pause" || mode === "paused" || mode === "archive" || mode === "归档" || mode === "暂停") {
+        nextVault.courseGroups = nextVault.courseGroups.map((item) =>
+          item.id === course.id ? { ...item, status: "paused" } : item
+        );
+        messages.push(`已暂停课程「${course.name}」`);
+        return;
+      }
+      if (inUse && mode !== "force_delete" && !force) {
+        nextVault.courseGroups = nextVault.courseGroups.map((item) =>
+          item.id === course.id ? { ...item, status: "paused" } : item
+        );
+        messages.push(`课程「${course.name}」已有课时引用，已改为暂停`);
+        return;
+      }
+      nextVault.courseGroups = nextVault.courseGroups.filter((item) => item.id !== course.id);
+      nextVault.lessons = nextVault.lessons.filter((lesson) => lesson.courseGroupId !== course.id);
+      messages.push(`已删除课程「${course.name}」${inUse ? "及其课时" : ""}`);
+    };
+
+    const migrateCourseFromAi = (data: Record<string, unknown>) => {
+      const source = courseByIdOrName(data.sourceCourseId ?? data.fromCourseId ?? data.courseId ?? data.id ?? data.sourceCourseName ?? data.courseName);
+      if (!source) return;
+      const target = courseByIdOrName(data.targetCourseId ?? data.toCourseId ?? data.targetCourseName)
+        ?? ensureCourse({
+          ...data,
+          courseId: undefined,
+          id: undefined,
+          name: data.targetCourseName ?? data.newCourseName ?? data.newName ?? data.name ?? source.name,
+          courseName: data.targetCourseName ?? data.newCourseName ?? data.newName ?? data.name ?? source.name,
+          type: data.targetType ?? data.type ?? source.type,
+          subject: data.subject ?? source.subject,
+          campus: data.campus,
+          students: data.students ?? data.studentNames ?? source.studentIds.map((studentId) => nextVault.students.find((student) => student.id === studentId)?.name).filter(Boolean)
+        });
+      if (!target) return;
+      const migrateLessons = data.migrateLessons !== false && data.moveLessons !== false;
+      const effectiveFrom = stringValue(data.effectiveFrom ?? data.fromDate);
+      const effectiveTo = stringValue(data.effectiveTo ?? data.toDate);
+      const studentIds = studentIdsFromAiData(data);
+      const nextTargetStudentIds = Array.from(new Set([...target.studentIds, ...(studentIds.length > 0 ? studentIds : source.studentIds)]));
+      Object.assign(target, {
+        status: "active",
+        studentIds: nextTargetStudentIds
+      });
+      if (migrateLessons) {
+        let migratedCount = 0;
+        nextVault.lessons = nextVault.lessons.map((lesson) => {
+          if (lesson.courseGroupId !== source.id) return lesson;
+          if (effectiveFrom && lesson.date < effectiveFrom) return lesson;
+          if (effectiveTo && lesson.date > effectiveTo) return lesson;
+          migratedCount += 1;
+          return recalculateLessonFeeSnapshot(nextVault, {
+            ...lesson,
+            courseGroupId: target.id,
+            type: target.type,
+            campusId: target.defaultCampusId ?? lesson.campusId,
+            expectedStudentIds: lesson.expectedStudentIds.length > 0 ? lesson.expectedStudentIds : nextTargetStudentIds
+          });
+        });
+        messages.push(`已迁移 ${migratedCount} 节课到课程「${target.name}」`);
+      }
+      if (data.pauseSource !== false) {
+        nextVault.courseGroups = nextVault.courseGroups.map((course) =>
+          course.id === source.id ? { ...course, status: "paused" } : course
+        );
+      }
     };
 
     const addStudentsToCourse = (course: CourseGroup, studentIds: string[]) => {
@@ -745,6 +858,18 @@ export function App() {
         ensureCourse(data);
         return;
       }
+      if (type === "update_course" || type === "modify_course") {
+        updateCourseFromAi(data);
+        return;
+      }
+      if (type === "delete_course" || type === "pause_course") {
+        deleteOrPauseCourseFromAi(type === "pause_course" ? { ...data, mode: "pause" } : data);
+        return;
+      }
+      if (type === "migrate_course" || type === "move_course_lessons") {
+        migrateCourseFromAi(data);
+        return;
+      }
       if (type === "schedule_lessons") {
         const course = ensureCourse(data);
         if (course) createLessonsForCourse(course, data);
@@ -752,7 +877,7 @@ export function App() {
       }
       if (type === "sync_lessons") {
         const lessonIds = arrayValueLocal(data.lessonIds).map(stringValue).filter(Boolean);
-        const studentIds = studentIdsFromNames(data.studentsToAdd ?? data.studentNames ?? data.students);
+        const studentIds = studentIdsFromAiData(data);
         addStudentsToLessons(lessonIds, studentIds);
         const affectedCourseIds = Array.from(new Set(
           nextVault.lessons.filter((lesson) => lessonIds.includes(lesson.id)).map((lesson) => lesson.courseGroupId)
@@ -1823,6 +1948,50 @@ function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Less
   };
 }
 
+type CourseLessonSyncScope = "future_scheduled" | "all_unfinished" | "all" | "none";
+
+function courseUpdateAffectsLessonDefaults(previousCourse: CourseGroup, nextCourse: CourseGroup): boolean {
+  return (
+    previousCourse.type !== nextCourse.type ||
+    previousCourse.defaultCampusId !== nextCourse.defaultCampusId ||
+    JSON.stringify(previousCourse.feeRule) !== JSON.stringify(nextCourse.feeRule)
+  );
+}
+
+function normalizeCourseLessonSyncScope(value: unknown): CourseLessonSyncScope {
+  const normalized = stringValue(value).toLowerCase();
+  if (!normalized || normalized === "default" || normalized === "future" || normalized === "future_scheduled" || normalized === "未来" || normalized === "未来待上课") {
+    return "future_scheduled";
+  }
+  if (normalized === "none" || normalized === "false" || normalized === "不更新" || normalized === "不同步") return "none";
+  if (normalized === "all" || normalized === "全部" || normalized === "所有课节") return "all";
+  if (normalized === "unfinished" || normalized === "all_unfinished" || normalized === "未完成" || normalized === "未完成课节") return "all_unfinished";
+  return "future_scheduled";
+}
+
+function shouldSyncLessonWithCourseDefaults(lesson: Lesson, scope: CourseLessonSyncScope): boolean {
+  if (scope === "none") return false;
+  if (scope === "all") return true;
+  if (lesson.linkedOriginalLessonId) return false;
+  if (lesson.status !== "scheduled" && lesson.status !== "draft") return false;
+  if (scope === "all_unfinished") return true;
+  return lesson.date >= todayIso();
+}
+
+function syncLessonsWithCourseDefaults(vault: TeacherVault, course: CourseGroup, scope: CourseLessonSyncScope): number {
+  let changedCount = 0;
+  vault.lessons = vault.lessons.map((lesson) => {
+    if (lesson.courseGroupId !== course.id || !shouldSyncLessonWithCourseDefaults(lesson, scope)) return lesson;
+    changedCount += 1;
+    return recalculateLessonFeeSnapshot(vault, {
+      ...lesson,
+      type: course.type,
+      campusId: course.defaultCampusId ?? lesson.campusId
+    });
+  });
+  return changedCount;
+}
+
 function cleanupResolvedMakeupLessons(vault: TeacherVault, updatedOriginal: Lesson) {
   if (updatedOriginal.linkedOriginalLessonId) return;
   const previousOriginal = vault.lessons.find((lesson) => lesson.id === updatedOriginal.id);
@@ -1944,11 +2113,21 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
 }
 
-function normalizeAiCourseType(value: unknown): CourseType {
+function normalizeAiCourseType(value: unknown, vault: TeacherVault | null = null): CourseType {
   const normalized = stringValue(value).toLowerCase();
   if (normalized === "one_on_one" || normalized === "一对一") return "one_on_one";
   if (normalized === "one_on_two" || normalized === "一对二") return "one_on_two";
+  if (normalized === "class" || normalized === "班课" || normalized === "多人班课") return "class";
   if (normalized === "trial" || normalized === "试听") return "trial";
-  if (normalized === "full_time" || normalized === "全职") return "full_time";
+  if (normalized === "full_time" || normalized === "全职" || normalized === "全日制") return "full_time";
+  const matchedCustomType = vault?.preferences?.customCourseTypes?.find((item) =>
+    item.id.toLowerCase() === normalized || item.label.trim().toLowerCase() === normalized
+  );
+  if (matchedCustomType) return matchedCustomType.id;
+  const matchedKnownType = vault
+    ? Array.from(new Set([...vault.courseGroups.map((course) => course.type), ...vault.lessons.map((lesson) => lesson.type)]))
+        .find((type) => type.toLowerCase() === normalized || courseTypeLabel(vault, type).trim().toLowerCase() === normalized)
+    : undefined;
+  if (matchedKnownType) return matchedKnownType;
   return "class";
 }
