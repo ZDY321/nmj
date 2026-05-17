@@ -191,6 +191,7 @@ export function ScheduleView({
   const [aiProviderId, setAiProviderId] = useState("");
   const [aiTaskType, setAiTaskType] = useState<AiScheduleTaskType>("auto");
   const [aiInstruction, setAiInstruction] = useState("");
+  const [aiFollowupAnswer, setAiFollowupAnswer] = useState("");
   const [aiDraft, setAiDraft] = useState<AiScheduleDraftResponse | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
@@ -533,6 +534,7 @@ export function ScheduleView({
   };
   const enabledAiProviders = aiProviders.filter((provider) => provider.enabled);
   const selectedAiProvider = aiProviders.find((provider) => provider.id === aiProviderId);
+  const canShowAiProviderEndpoint = isAdmin;
   const selectedAiEndpoint = selectedAiProvider ? aiChatEndpoint(selectedAiProvider.baseUrl) : "";
   const aiDraftRecord = isPlainRecord(aiDraft?.draft) ? aiDraft.draft : null;
   const aiDraftActions = arrayValue(aiDraftRecord?.actions).filter(isPlainRecord);
@@ -623,6 +625,41 @@ export function ScheduleView({
       });
       setAiDraft(result);
       setAiMessage("AI 建议已生成，请先人工核对。");
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : "AI 生成建议失败。");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function submitAiFollowup() {
+    if (!aiFollowupAnswer.trim()) {
+      setAiMessage("请先填写补充信息。");
+      return;
+    }
+    const questionsText = aiDraftQuestions.map((question, index) => `${index + 1}. ${formatAiValue(question)}`).join("\n");
+    const nextInstruction = [
+      aiInstruction.trim(),
+      "",
+      "以下是 AI 上一次提出的需要确认的问题：",
+      questionsText || "无",
+      "",
+      "我补充确认的信息如下，请结合原始需求重新生成完整、可执行的结构化建议：",
+      aiFollowupAnswer.trim()
+    ].join("\n");
+    setAiInstruction(nextInstruction);
+    setAiFollowupAnswer("");
+    setAiLoading(true);
+    setAiMessage("");
+    try {
+      const result = await generateAiScheduleDraft(token, {
+        providerId: aiProviderId,
+        taskType: aiTaskType,
+        instruction: nextInstruction,
+        context: aiScheduleContext()
+      });
+      setAiDraft(result);
+      setAiMessage("已带着补充信息重新生成建议，请继续核对。");
     } catch (error) {
       setAiMessage(error instanceof Error ? error.message : "AI 生成建议失败。");
     } finally {
@@ -1317,8 +1354,12 @@ export function ScheduleView({
                   {selectedAiProvider && (
                     <div className="space-y-1 rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2 text-xs font-bold leading-5 text-[#1557c2]">
                       <div>当前使用：{selectedAiProvider.name} · {selectedAiProvider.model} · {selectedAiProvider.maskedApiKey}</div>
-                      <div className="break-all">接口地址：{selectedAiProvider.baseUrl}</div>
-                      <div className="break-all">实际调用：{selectedAiEndpoint}</div>
+                      {canShowAiProviderEndpoint && (
+                        <>
+                          <div className="break-all">接口地址：{selectedAiProvider.baseUrl}</div>
+                          <div className="break-all">实际调用：{selectedAiEndpoint}</div>
+                        </>
+                      )}
                     </div>
                   )}
                   {aiMessage && (
@@ -1430,6 +1471,30 @@ export function ScheduleView({
                                   {formatAiValue(question)}
                                 </div>
                               ))}
+                            </div>
+                            <div className="mt-4 space-y-2 rounded-[12px] border border-[#fed7aa] bg-white/80 p-3">
+                              <label className="text-sm font-extrabold text-[#9a3412]">补充信息后继续生成</label>
+                              <Textarea
+                                rows={4}
+                                value={aiFollowupAnswer}
+                                onChange={(event) => setAiFollowupAnswer(event.target.value)}
+                                placeholder="例如：校区选延安；李雨泽初三、顾延泽初二；课程名用“李雨泽、顾延泽化学”。"
+                                className="bg-white"
+                                disabled={aiLoading}
+                              />
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="text-xs font-semibold leading-5 text-[#9a3412]">
+                                  会把原始需求、上方问题和你的补充答案一起发给 AI，重新生成完整建议。
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={aiLoading || !aiFollowupAnswer.trim()}
+                                  onClick={() => void submitAiFollowup()}
+                                >
+                                  <WandSparkles size={14} /> 继续生成
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         )}
