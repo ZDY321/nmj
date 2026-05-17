@@ -7,6 +7,7 @@ import type {
   AiScheduleDraftResponse,
   FeedbackStatus,
   Notice,
+  NoticeRecord,
   UserFeedback
 } from "@/shared/types";
 
@@ -91,7 +92,8 @@ function translateApiError(error: string): string {
     "AI provider not configured": "请先在管理员后台配置 AI 接口。",
     "AI provider disabled": "当前 AI 接口已停用。",
     "AI daily limit reached": "当前 AI 接口今天调用次数已达上限。",
-    "AI schedule draft failed": "AI 生成建议失败。"
+    "AI schedule draft failed": "AI 生成建议失败。",
+    "Notice content required": "请填写公告内容。"
   };
   return messages[error] ?? error;
 }
@@ -119,6 +121,26 @@ export async function getAdminUsers(token: string): Promise<AdminUser[]> {
 export async function updateAdminNotice(token: string, notice: Notice): Promise<Notice> {
   return apiRequest<Notice>("/api/admin/login-notice", {
     method: "PUT",
+    token,
+    body: JSON.stringify(notice)
+  });
+}
+
+export async function getAdminNotices(token: string): Promise<NoticeRecord[]> {
+  return apiRequest<NoticeRecord[]>("/api/admin/login-notices", { token });
+}
+
+export async function createAdminNotice(token: string, notice: Pick<Notice, "enabled" | "title" | "content">): Promise<NoticeRecord> {
+  return apiRequest<NoticeRecord>("/api/admin/login-notices", {
+    method: "POST",
+    token,
+    body: JSON.stringify(notice)
+  });
+}
+
+export async function updateAdminNoticeRecord(token: string, noticeId: string, notice: Pick<Notice, "enabled" | "title" | "content">): Promise<NoticeRecord> {
+  return apiRequest<NoticeRecord>(`/api/admin/login-notices/${encodeURIComponent(noticeId)}`, {
+    method: "PATCH",
     token,
     body: JSON.stringify(notice)
   });

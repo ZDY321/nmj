@@ -8,6 +8,7 @@ import type {
   AdminUser,
   FeedbackStatus,
   Notice,
+  NoticeRecord,
   SessionUser,
   UserFeedback,
   UserDeletionState,
@@ -143,6 +144,12 @@ const defaultNotice: Notice = {
   title: "系统提示",
   content: "请及时核对课时、请假、补课和工资明细。敏感数据会加密保存。",
   updatedAt: "2026-05-10T00:00:00.000Z"
+};
+
+const defaultNoticeRecord: NoticeRecord = {
+  ...defaultNotice,
+  id: "default_notice",
+  createdAt: defaultNotice.updatedAt
 };
 
 const vaultDocType = "vault";
@@ -459,19 +466,68 @@ function isAuthorizedLegacyAdminRequest(request: Request, env: Env): boolean {
 }
 
 async function getLoginNotice(env: Env): Promise<Response> {
-  const row = await env.DB.prepare("SELECT value FROM app_settings WHERE key = ?")
-    .bind("login_notice")
+  const notices = await readNoticeList(env);
+  return json(activeNoticeFromList(notices));
+}
+
+function normalizeNoticeRecord(value: unknown, fallbackId: string): NoticeRecord | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<NoticeRecord>;
+  const title = String(item.title ?? "").trim().slice(0, 80);
+  const content = String(item.content ?? "").trim().slice(0, 2000);
+  const updatedAt = String(item.updatedAt ?? item.createdAt ?? new Date().toISOString());
+  if (!title || !content) return null;
+  return {
+    id: String(item.id ?? fallbackId),
+    enabled: Boolean(item.enabled),
+    title,
+    content,
+    updatedAt,
+    createdAt: String(item.createdAt ?? updatedAt)
+  };
+}
+
+async function readNoticeList(env: Env): Promise<NoticeRecord[]> {
+  const listRow = await env.DB.prepare("SELECT value FROM app_settings WHERE key = ?")
+    .bind("login_notices")
     .first<{ value: string }>();
 
-  if (!row) {
-    return json(defaultNotice);
+  if (listRow) {
+    try {
+      const parsed = JSON.parse(listRow.value) as unknown;
+      if (Array.isArray(parsed)) {
+        const notices = parsed
+          .map((item, index) => normalizeNoticeRecord(item, `notice_${index}`))
+          .filter((item): item is NoticeRecord => Boolean(item))
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        if (notices.length > 0) return notices;
+      }
+    } catch {
+      // Fall back to the legacy single-notice setting.
+    }
   }
 
+  const legacyRow = await env.DB.prepare("SELECT value FROM app_settings WHERE key = ?")
+    .bind("login_notice")
+    .first<{ value: string }>();
+  if (!legacyRow) return [defaultNoticeRecord];
+
   try {
-    return json(JSON.parse(row.value) as Notice);
+    const legacy = normalizeNoticeRecord(JSON.parse(legacyRow.value) as Notice, "legacy_notice");
+    return legacy ? [legacy] : [defaultNoticeRecord];
   } catch {
-    return json(defaultNotice);
+    return [defaultNoticeRecord];
   }
+}
+
+function activeNoticeFromList(notices: NoticeRecord[]): Notice {
+  const active = notices.find((notice) => notice.enabled) ?? notices[0] ?? defaultNoticeRecord;
+  return {
+    enabled: active.enabled,
+    title: active.title,
+    content: active.content,
+    updatedAt: active.updatedAt
+  };
 }
 
 async function getSetting(env: Env, key: string): Promise<string | undefined> {
@@ -515,6 +571,52 @@ async function updateLoginNotice(request: Request, env: Env): Promise<Response> 
 
   await upsertSetting(env, "login_notice", JSON.stringify(nextNotice));
   return json(nextNotice);
+}
+
+async function listLoginNotices(env: Env): Promise<Response> {
+  return json(await readNoticeList(env));
+}
+
+async function createLoginNotice(request: Request, env: Env): Promise<Response> {
+  const body = await readJson<Partial<Notice>>(request).catch((): Partial<Notice> => ({}));
+  const now = new Date().toISOString();
+  const nextNotice: NoticeRecord = {
+    id: crypto.randomUUID(),
+    enabled: Boolean(body.enabled ?? true),
+    title: String(body.title || "系统公告").trim().slice(0, 80),
+    content: String(body.content || "").trim().slice(0, 2000),
+    createdAt: now,
+    updatedAt: now
+  };
+
+  if (!nextNotice.content) {
+    return json({ error: "Notice content required" }, 400);
+  }
+
+  const notices = await readNoticeList(env);
+  const nextNotices = [nextNotice, ...notices];
+  await upsertSetting(env, "login_notices", JSON.stringify(nextNotices));
+  await upsertSetting(env, "login_notice", JSON.stringify(activeNoticeFromList(nextNotices)));
+  return json(nextNotice, 201);
+}
+
+async function updateLoginNoticeRecord(request: Request, env: Env, noticeId: string): Promise<Response> {
+  const body = await readJson<Partial<Notice>>(request).catch((): Partial<Notice> => ({}));
+  const notices = await readNoticeList(env);
+  const existing = notices.find((notice) => notice.id === noticeId);
+  if (!existing) return notFound();
+
+  const updated: NoticeRecord = {
+    ...existing,
+    enabled: Boolean(body.enabled ?? existing.enabled),
+    title: String(body.title ?? existing.title).trim().slice(0, 80) || existing.title,
+    content: String(body.content ?? existing.content).trim().slice(0, 2000) || existing.content,
+    updatedAt: new Date().toISOString()
+  };
+  const nextNotices = notices.map((notice) => (notice.id === noticeId ? updated : notice));
+  await upsertSetting(env, "login_notices", JSON.stringify(nextNotices));
+  await upsertSetting(env, "login_notice", JSON.stringify(activeNoticeFromList(nextNotices)));
+  return json(updated);
 }
 
 async function adminSummary(env: Env): Promise<Response> {
@@ -1641,6 +1743,20 @@ async function handleAdminRequest(request: Request, env: Env): Promise<Response 
 
   if (request.method === "PUT" && pathname === "/api/admin/login-notice") {
     return updateLoginNotice(request, env);
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/login-notices") {
+    return listLoginNotices(env);
+  }
+
+  if (request.method === "POST" && pathname === "/api/admin/login-notices") {
+    return createLoginNotice(request, env);
+  }
+
+  const noticeMatch = /^\/api\/admin\/login-notices\/([^/]+)$/.exec(pathname);
+  if (noticeMatch) {
+    if (request.method !== "PATCH") return notFound();
+    return updateLoginNoticeRecord(request, env, decodeURIComponent(noticeMatch[1]));
   }
 
   if (request.method === "PUT" && pathname === "/api/admin/registration") {

@@ -105,6 +105,11 @@ export type Notice = {
   updatedAt: string;
 };
 
+export type NoticeRecord = Notice & {
+  id: string;
+  createdAt: string;
+};
+
 export type Campus = {
   id: string;
   name: string;

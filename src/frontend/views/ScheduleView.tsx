@@ -533,6 +533,12 @@ export function ScheduleView({
   };
   const enabledAiProviders = aiProviders.filter((provider) => provider.enabled);
   const selectedAiProvider = aiProviders.find((provider) => provider.id === aiProviderId);
+  const selectedAiEndpoint = selectedAiProvider ? aiChatEndpoint(selectedAiProvider.baseUrl) : "";
+  const aiDraftRecord = isPlainRecord(aiDraft?.draft) ? aiDraft.draft : null;
+  const aiDraftActions = arrayValue(aiDraftRecord?.actions).filter(isPlainRecord);
+  const aiDraftQuestions = arrayValue(aiDraftRecord?.questions);
+  const aiDraftWarnings = arrayValue(aiDraftRecord?.warnings);
+  const aiDraftSummary = textValue(aiDraftRecord?.summary, aiDraft ? "AI 已生成建议，请按下方内容核对。" : "");
 
   function addSingleLesson(status: "scheduled" | "completed") {
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
@@ -1309,8 +1315,10 @@ export function ScheduleView({
                     </div>
                   </div>
                   {selectedAiProvider && (
-                    <div className="rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2 text-xs font-bold leading-5 text-[#1557c2]">
-                      当前使用：{selectedAiProvider.name} · {selectedAiProvider.model} · {selectedAiProvider.maskedApiKey}
+                    <div className="space-y-1 rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2 text-xs font-bold leading-5 text-[#1557c2]">
+                      <div>当前使用：{selectedAiProvider.name} · {selectedAiProvider.model} · {selectedAiProvider.maskedApiKey}</div>
+                      <div className="break-all">接口地址：{selectedAiProvider.baseUrl}</div>
+                      <div className="break-all">实际调用：{selectedAiEndpoint}</div>
                     </div>
                   )}
                   {aiMessage && (
@@ -1353,23 +1361,131 @@ export function ScheduleView({
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">建议结果预览</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                      这里显示 AI 返回的结构化建议。正式写入前仍需要后续增加系统校验和确认执行。
+                      这里会把 AI 返回内容整理成可核对的摘要、操作建议和提醒。正式写入前仍需要系统校验和人工确认。
                     </div>
                   </div>
                   <Button type="button" variant="outline" disabled className="shrink-0">
                     确认写入待接入
                   </Button>
                 </div>
-                <pre className="mt-4 max-h-[260px] overflow-auto rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-4 text-xs font-semibold leading-6 text-[#25324a]">
-{JSON.stringify(aiDraft?.draft ?? {
-  status: enabledAiProviders.length > 0 ? "ready" : "need_ai_provider_config",
-  allowedRole: "admin",
-  provider: selectedAiProvider ? `${selectedAiProvider.name} / ${selectedAiProvider.model}` : "not_selected",
-  contextSummary: aiContextSummary,
-  usage: aiDraft?.usage ?? null,
-  note: "填写需求并点击生成建议后，这里会显示 AI 返回的 JSON。"
-}, null, 2)}
-                </pre>
+                {aiDraft ? (
+                  <div className="mt-4 space-y-4">
+                    <div className="rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#1557c2]">
+                        <Sparkles size={16} /> 摘要
+                      </div>
+                      <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#25324a]">
+                        {aiDraftSummary || "AI 没有返回摘要，请查看下方操作建议或原始内容。"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-extrabold text-[#061226]">操作建议</div>
+                        <Badge variant={aiDraftActions.length > 0 ? "sky" : "secondary"}>{aiDraftActions.length} 项</Badge>
+                      </div>
+                      {aiDraftActions.map((action, index) => {
+                        const actionType = textValue(action.type, "unknown");
+                        const fields = Object.entries(action).filter(([key]) => key !== "type");
+                        return (
+                          <div key={`${actionType}-${index}`} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="sky">{aiActionLabel(actionType)}</Badge>
+                              <span className="text-sm font-extrabold text-[#061226]">建议 {index + 1}</span>
+                            </div>
+                            {fields.length > 0 ? (
+                              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                {fields.map(([key, value]) => (
+                                  <div key={key} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                                    <div className="text-xs font-bold uppercase text-[#64748b]">{aiFieldLabel(key)}</div>
+                                    <div className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#25324a]">
+                                      {formatAiValue(value)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-3 rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2 text-sm font-semibold text-[#64748b]">
+                                这条建议没有附加字段。
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {aiDraftActions.length === 0 && (
+                        <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+                          暂无可直接执行的操作建议，可能需要先补充信息。
+                        </div>
+                      )}
+                    </div>
+
+                    {(aiDraftQuestions.length > 0 || aiDraftWarnings.length > 0) && (
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                        {aiDraftQuestions.length > 0 && (
+                          <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] p-4">
+                            <div className="mb-2 text-sm font-extrabold text-[#9a3412]">需要确认的问题</div>
+                            <div className="space-y-2">
+                              {aiDraftQuestions.map((question, index) => (
+                                <div key={index} className="rounded-[10px] border border-[#fed7aa] bg-white/80 px-3 py-2 text-sm font-semibold leading-6 text-[#9a3412]">
+                                  {formatAiValue(question)}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {aiDraftWarnings.length > 0 && (
+                          <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] p-4">
+                            <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#b91c1c]">
+                              <AlertTriangle size={15} /> 风险提醒
+                            </div>
+                            <div className="space-y-2">
+                              {aiDraftWarnings.map((warning, index) => (
+                                <div key={index} className="rounded-[10px] border border-[#fecaca] bg-white/80 px-3 py-2 text-sm font-semibold leading-6 text-[#b91c1c]">
+                                  {formatAiValue(warning)}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {!aiDraftRecord && (
+                      <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-4 py-3 text-sm font-bold leading-6 text-[#9a3412]">
+                        AI 没有返回标准结构，下面保留原始内容用于人工查看。
+                      </div>
+                    )}
+
+                    <details className="rounded-[12px] border border-[#e8eef6] bg-white">
+                      <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold text-[#25324a]">
+                        查看原始返回内容
+                      </summary>
+                      <pre className="max-h-[260px] overflow-auto border-t border-[#e8eef6] bg-[#f8fbff] p-4 text-xs font-semibold leading-6 text-[#25324a]">
+{JSON.stringify(aiDraft.draft ?? aiDraft.text, null, 2)}
+                      </pre>
+                    </details>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5">
+                    <div className="text-sm font-extrabold text-[#061226]">
+                      {enabledAiProviders.length > 0 ? "等待生成建议" : "需要先配置 AI 接口"}
+                    </div>
+                    <div className="mt-2 grid grid-cols-1 gap-2 text-sm font-semibold text-[#64748b] sm:grid-cols-2">
+                      <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                        当前角色：admin
+                      </div>
+                      <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                        当前接口：{selectedAiProvider ? `${selectedAiProvider.name} / ${selectedAiProvider.model}` : "未选择"}
+                      </div>
+                      <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                        可用学生：{aiContextSummary.activeStudents} 人
+                      </div>
+                      <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                        可用课程：{aiContextSummary.activeCourses} 个
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {aiDraft && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Badge variant="secondary">{aiDraft.model}</Badge>
@@ -2950,6 +3066,86 @@ function lessonStatusForAttendanceStatus(status: AttendanceStatus): Lesson["stat
   if (status === "makeup_completed") return "makeup_completed";
   if (isMakeupAttendanceStatus(status)) return "makeup_pending";
   return "completed";
+}
+
+function aiChatEndpoint(baseUrl: string): string {
+  const normalized = baseUrl
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/v1\/chat\/completions$/i, "")
+    .replace(/\/chat\/completions$/i, "");
+  if (!normalized) return "";
+  return /\/v1$/i.test(normalized) ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function textValue(value: unknown, fallback = "未填写"): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
+}
+
+function formatAiValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "未填写";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "无";
+    return value.map((item) => formatAiValue(item)).join("、");
+  }
+  if (isPlainRecord(value)) {
+    return Object.entries(value)
+      .map(([key, item]) => `${aiFieldLabel(key)}：${formatAiValue(item)}`)
+      .join("\n");
+  }
+  return String(value);
+}
+
+function aiActionLabel(type: string): string {
+  const labels: Record<string, string> = {
+    create_student: "新增学生",
+    create_course: "新建课程",
+    schedule_lessons: "新增排课",
+    sync_lessons: "同步课程",
+    ask_clarification: "需要补充信息"
+  };
+  return labels[type] ?? type;
+}
+
+function aiFieldLabel(key: string): string {
+  const labels: Record<string, string> = {
+    studentName: "学生姓名",
+    studentNames: "学生",
+    name: "名称",
+    courseName: "课程名",
+    courseId: "课程",
+    subject: "科目",
+    campus: "校区",
+    grade: "年级",
+    date: "日期",
+    dates: "日期",
+    weekday: "星期",
+    weekdays: "星期",
+    startTime: "开始时间",
+    endTime: "结束时间",
+    sourceDate: "来源日期",
+    targetDate: "目标日期",
+    sourceDates: "来源日期",
+    targetDates: "目标日期",
+    note: "备注",
+    reason: "原因",
+    confidence: "置信度"
+  };
+  return labels[key] ?? key;
 }
 
 function isStudentStatsDateRangeValid(startDate: string, endDate: string): boolean {

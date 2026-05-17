@@ -7,15 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { AdminSummary, AdminUser, AiProviderConfig, AiProviderInput, AiProviderKind, FeedbackStatus, Notice, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
+import type { AdminSummary, AdminUser, AiProviderConfig, AiProviderInput, AiProviderKind, FeedbackStatus, Notice, NoticeRecord, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import {
   cancelUserDeletion,
   confirmUserDeletion,
+  createAdminNotice,
   createAiProvider,
   deleteAiProvider,
   getAdminFeedback,
+  getAdminNotices,
   getAdminSummary,
   getAdminUsers,
   getAiProviders,
@@ -25,7 +27,7 @@ import {
   testAiProvider,
   updateAiProvider,
   updateAdminFeedback,
-  updateAdminNotice,
+  updateAdminNoticeRecord,
   updateRegistrationEnabled
 } from "@/frontend/lib/cloud";
 import { derivePasswordVerifier } from "@/frontend/lib/crypto";
@@ -133,6 +135,9 @@ export function AdminView({
 }) {
   const [title, setTitle] = useState(vault.notice.title);
   const [content, setContent] = useState(vault.notice.content);
+  const [noticeEnabled, setNoticeEnabled] = useState(vault.notice.enabled);
+  const [noticeItems, setNoticeItems] = useState<NoticeRecord[]>([]);
+  const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [feedbackItems, setFeedbackItems] = useState<UserFeedback[]>([]);
@@ -157,7 +162,8 @@ export function AdminView({
   useEffect(() => {
     setTitle(vault.notice.title);
     setContent(vault.notice.content);
-  }, [vault.notice.title, vault.notice.content]);
+    setNoticeEnabled(vault.notice.enabled);
+  }, [vault.notice.title, vault.notice.content, vault.notice.enabled]);
 
   useEffect(() => {
     void refresh();
@@ -175,6 +181,13 @@ export function AdminView({
       setSummary(nextSummary);
       setUsers(nextUsers);
       setRegistrationEnabled(nextSummary.registrationEnabled);
+      try {
+        const nextNotices = await getAdminNotices(token);
+        setNoticeItems(nextNotices);
+      } catch (noticeError) {
+        setNoticeItems([]);
+        setMessage(noticeError instanceof Error ? noticeError.message : "公告列表加载失败。");
+      }
       try {
         const nextAiProviders = await getAiProviders(token);
         setAiProviders(nextAiProviders);
@@ -214,19 +227,41 @@ export function AdminView({
     setBusy(true);
     setMessage("");
     try {
-      const updated = await updateAdminNotice(token, {
-        enabled: true,
-        title,
-        content,
-        updatedAt: new Date().toISOString()
+      const noticePayload = { enabled: noticeEnabled, title, content };
+      const wasEditing = Boolean(editingNoticeId);
+      const saved = editingNoticeId
+        ? await updateAdminNoticeRecord(token, editingNoticeId, noticePayload)
+        : await createAdminNotice(token, noticePayload);
+      const nextNotices = await getAdminNotices(token);
+      setNoticeItems(nextNotices);
+      setEditingNoticeId(saved.id);
+      const activeNotice = nextNotices.find((notice) => notice.enabled) ?? saved;
+      onNoticeChange({
+        enabled: activeNotice.enabled,
+        title: activeNotice.title,
+        content: activeNotice.content,
+        updatedAt: activeNotice.updatedAt
       });
-      onNoticeChange(updated);
-      setMessage("系统公告已更新。");
+      setMessage(wasEditing ? "系统公告已更新。" : "系统公告已新增。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "公告保存失败。");
     } finally {
       setBusy(false);
     }
+  }
+
+  function startCreateNotice() {
+    setEditingNoticeId(null);
+    setTitle("");
+    setContent("");
+    setNoticeEnabled(true);
+  }
+
+  function startEditNotice(notice: NoticeRecord) {
+    setEditingNoticeId(notice.id);
+    setTitle(notice.title);
+    setContent(notice.content);
+    setNoticeEnabled(notice.enabled);
   }
 
   async function toggleRegistration() {
@@ -561,24 +596,94 @@ export function AdminView({
                 <Bell size={14} /> 公告设置
               </div>
               <CardTitle>系统公告</CardTitle>
-              <CardDescription>公告从 D1 统一读取，所有用户登录后都会看到</CardDescription>
+              <CardDescription>可以保留多条公告记录；当前启用的公告会在用户登录后显示</CardDescription>
             </div>
-            <Button size="sm" disabled={busy} onClick={saveNotice}>
-              <Save size={15} /> 保存
+            <Button size="sm" variant="outline" disabled={busy} onClick={startCreateNotice}>
+              <Plus size={15} /> 新建公告
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] px-4 py-3">
+              <div>
+                <div className="text-sm font-extrabold text-[#061226]">
+                  {editingNoticeId ? "正在编辑公告" : "新建公告"}
+                </div>
+                <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                  已保存 {noticeItems.length} 条公告，列表会保留历史记录。
+                </div>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm font-bold text-[#25324a]">
+                <input
+                  type="checkbox"
+                  checked={noticeEnabled}
+                  onChange={(event) => setNoticeEnabled(event.target.checked)}
+                  className="h-4 w-4 accent-[#ff8617]"
+                />
+                登录后显示
+              </label>
+            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">标题</label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：本周课时核对提醒" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">内容</label>
               <Textarea
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(event) => setContent(event.target.value)}
                 rows={5}
+                placeholder="填写需要所有用户看到的公告内容"
               />
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs font-semibold leading-5 text-[#64748b]">
+                新建公告不会覆盖旧公告；编辑历史公告会保留在下方列表中。
+              </div>
+              <Button size="sm" disabled={busy} onClick={saveNotice}>
+                <Save size={15} /> {editingNoticeId ? "保存修改" : "保存公告"}
+              </Button>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-extrabold text-[#061226]">已发送公告</div>
+                <Badge variant="secondary">{noticeItems.length} 条</Badge>
+              </div>
+              <div className="max-h-[360px] space-y-2 overflow-auto pr-1">
+                {noticeItems.map((notice) => (
+                  <div
+                    key={notice.id}
+                    className={`rounded-[12px] border p-3 ${
+                      editingNoticeId === notice.id
+                        ? "border-[#bfdbfe] bg-[#eaf2ff]"
+                        : "border-[#e8eef6] bg-white"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <button type="button" className="min-w-0 text-left" onClick={() => startEditNotice(notice)}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="break-words font-extrabold text-[#061226]">{notice.title}</span>
+                          <Badge variant={notice.enabled ? "sage" : "secondary"}>{notice.enabled ? "显示中" : "已停用"}</Badge>
+                        </div>
+                        <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                          创建：{formatAppDateTime(notice.createdAt)} · 更新：{formatAppDateTime(notice.updatedAt)}
+                        </div>
+                        <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm font-semibold leading-6 text-[#25324a]">
+                          {notice.content}
+                        </div>
+                      </button>
+                      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => startEditNotice(notice)}>
+                        编辑
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {noticeItems.length === 0 && (
+                  <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+                    暂无已保存公告。
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -796,7 +901,7 @@ export function AdminView({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+          <div className="space-y-4">
             <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="text-sm font-extrabold text-[#061226]">已保存配置</div>
@@ -852,39 +957,41 @@ export function AdminView({
               </div>
             </div>
 
-            <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
-                <ServerCog size={16} className="text-[#1557c2]" /> 后端需要保存的信息
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+                  <ServerCog size={16} className="text-[#1557c2]" /> 后端需要保存的信息
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#25324a]">
+                  {[
+                    "New API 通常填写你的中转站 /v1 地址",
+                    "模型名按中转站实际支持填写，可随时切换",
+                    "保存后下次登录会直接从后端读取配置",
+                    "编辑时 API Key 留空会沿用旧 Key",
+                    "默认配置会优先出现在排课助手里"
+                  ].map((text) => (
+                    <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                      {text}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#25324a]">
-                {[
-                  "New API 通常填写你的中转站 /v1 地址",
-                  "模型名按中转站实际支持填写，可随时切换",
-                  "保存后下次登录会直接从后端读取配置",
-                  "编辑时 API Key 留空会沿用旧 Key",
-                  "默认配置会优先出现在排课助手里"
-                ].map((text) => (
-                  <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
-                    {text}
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
-              <div className="mb-3 text-sm font-extrabold text-[#9a3412]">安全和费用控制</div>
-              <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#9a3412]">
-                {[
-                  "只有管理员账号能调用 AI 排课接口",
-                  "前端只提交当前任务相关数据，不发送全量历史记录",
-                  "AI 只生成建议 JSON，不直接写数据库",
-                  "系统本地校验时间冲突、归档学生、暂停课程和格式错误",
-                  "管理员确认预览后才真正写入课程数据"
-                ].map((text) => (
-                  <div key={text} className="rounded-[10px] border border-[#fed7aa] bg-white/70 px-3 py-2">
-                    {text}
-                  </div>
-                ))}
+              <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
+                <div className="mb-3 text-sm font-extrabold text-[#9a3412]">安全和费用控制</div>
+                <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#9a3412]">
+                  {[
+                    "只有管理员账号能调用 AI 排课接口",
+                    "前端只提交当前任务相关数据，不发送全量历史记录",
+                    "AI 只生成建议 JSON，不直接写数据库",
+                    "系统本地校验时间冲突、归档学生、暂停课程和格式错误",
+                    "管理员确认预览后才真正写入课程数据"
+                  ].map((text) => (
+                    <div key={text} className="rounded-[10px] border border-[#fed7aa] bg-white/70 px-3 py-2">
+                      {text}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
