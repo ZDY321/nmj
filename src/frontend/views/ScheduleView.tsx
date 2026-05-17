@@ -551,7 +551,7 @@ export function ScheduleView({
   const aiDraftQuestions = arrayValue(aiDraftRecord?.questions);
   const aiDraftWarnings = arrayValue(aiDraftRecord?.warnings);
   const aiDraftSummary = textValue(aiDraftRecord?.summary, aiDraft ? "AI 已生成建议，请按下方内容核对。" : "");
-  const aiDraftCanApply = aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
+  const aiDraftCanApply = !aiLoading && !aiApplying && aiApplyResult?.ok !== true && aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
 
   function patchAiSession(patch: Partial<AiScheduleSession>) {
     if ("draft" in patch) {
@@ -641,7 +641,7 @@ export function ScheduleView({
       return;
     }
     setAiLoading(true);
-    patchAiSession({ message: "" });
+    patchAiSession({ draft: null, followupAnswer: "", message: "正在生成新的 AI 建议..." });
     try {
       const result = await generateAiScheduleDraft(token, {
         providerId: aiProviderId,
@@ -651,7 +651,7 @@ export function ScheduleView({
       });
       patchAiSession({ draft: result, message: "AI 建议已生成，请先人工核对。" });
     } catch (error) {
-      patchAiSession({ message: error instanceof Error ? error.message : "AI 生成建议失败。" });
+      patchAiSession({ draft: null, message: error instanceof Error ? error.message : "AI 生成建议失败。" });
     } finally {
       setAiLoading(false);
     }
@@ -672,8 +672,8 @@ export function ScheduleView({
       "我补充确认的信息如下，请结合原始需求重新生成完整、可执行的结构化建议：",
       aiFollowupAnswer.trim()
     ].join("\n");
-    patchAiSession({ instruction: nextInstruction, followupAnswer: "", message: "" });
     setAiLoading(true);
+    patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: null, message: "正在根据补充信息重新生成建议..." });
     try {
       const result = await generateAiScheduleDraft(token, {
         providerId: aiProviderId,
@@ -683,7 +683,7 @@ export function ScheduleView({
       });
       patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: result, message: "已带着补充信息重新生成建议，请继续核对。" });
     } catch (error) {
-      patchAiSession({ message: error instanceof Error ? error.message : "AI 生成建议失败。" });
+      patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: null, message: error instanceof Error ? error.message : "AI 生成建议失败。" });
     } finally {
       setAiLoading(false);
     }
@@ -1368,7 +1368,7 @@ export function ScheduleView({
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">AI 接口配置</label>
-                      <Select value={aiProviderId} onChange={(event) => patchAiSession({ providerId: event.target.value })} disabled={aiLoading || enabledAiProviders.length === 0}>
+                      <Select value={aiProviderId} onChange={(event) => patchAiSession({ providerId: event.target.value, draft: null, message: "" })} disabled={aiLoading || enabledAiProviders.length === 0}>
                         <option value="">选择已保存配置</option>
                         {enabledAiProviders.map((provider) => (
                           <option key={provider.id} value={provider.id}>
@@ -1379,7 +1379,7 @@ export function ScheduleView({
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">操作类型</label>
-                      <Select value={aiTaskType} onChange={(event) => patchAiSession({ taskType: event.target.value as AiScheduleTaskType })} disabled={aiLoading}>
+                      <Select value={aiTaskType} onChange={(event) => patchAiSession({ taskType: event.target.value as AiScheduleTaskType, draft: null, message: "" })} disabled={aiLoading}>
                         <option value="auto">智能识别</option>
                         <option value="student_course">新增学生和课程</option>
                         <option value="schedule_lessons">新增排课</option>
@@ -1392,7 +1392,7 @@ export function ScheduleView({
                     <Textarea
                       rows={8}
                       value={aiInstruction}
-                      onChange={(event) => patchAiSession({ instruction: event.target.value })}
+                      onChange={(event) => patchAiSession({ instruction: event.target.value, draft: null, followupAnswer: "", message: "" })}
                       placeholder="例如：新增学生张三，三年级，A校区，语文一对一；从下周一开始每周一三 19:00-20:30 排课。"
                       className="min-h-[180px] bg-white"
                       disabled={aiLoading}
@@ -1469,7 +1469,13 @@ export function ScheduleView({
                       这里会把 AI 返回内容整理成可核对的摘要、操作建议和提醒。正式写入前仍需要系统校验和人工确认。
                     </div>
                   </div>
-                  <Button type="button" variant={aiDraftCanApply ? "default" : "outline"} disabled={!aiDraftCanApply || aiApplying} onClick={applyAiDraft} className="shrink-0">
+                  <Button
+                    type="button"
+                    variant={aiDraftCanApply ? "default" : "outline"}
+                    disabled={!aiDraftCanApply || aiLoading || aiApplying}
+                    onClick={applyAiDraft}
+                    className="shrink-0 disabled:border-[#e5e7eb] disabled:bg-[#f3f4f6] disabled:text-[#9ca3af] disabled:shadow-none"
+                  >
                     {aiApplying ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
                     {aiApplying ? "写入中" : "确认写入"}
                   </Button>
@@ -1552,7 +1558,7 @@ export function ScheduleView({
                                 rows={4}
                                 value={aiFollowupAnswer}
                                 onChange={(event) => patchAiSession({ followupAnswer: event.target.value })}
-                                placeholder="例如：校区选延安；李雨泽初三、顾延泽初二；课程名用“李雨泽、顾延泽化学”。"
+                                placeholder="例如：校区选延安；李雨泽初三、顾延泽初二；课程档案名称用“李雨泽、顾延泽化学”。"
                                 className="bg-white"
                                 disabled={aiLoading}
                               />
@@ -1607,7 +1613,7 @@ export function ScheduleView({
                 ) : (
                   <div className="mt-4 rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5">
                     <div className="text-sm font-extrabold text-[#061226]">
-                      {enabledAiProviders.length > 0 ? "等待生成建议" : "需要先配置 AI 接口"}
+                      {aiLoading ? "正在生成新的建议..." : enabledAiProviders.length > 0 ? "等待生成建议" : "需要先配置 AI 接口"}
                     </div>
                     <div className="mt-2 grid grid-cols-1 gap-2 text-sm font-semibold text-[#64748b] sm:grid-cols-2">
                       <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
@@ -3285,13 +3291,13 @@ function aiFieldLabel(key: string): string {
     studentNames: "学生",
     name: "名称",
     newName: "新名称",
-    courseName: "课程名",
+    courseName: "课程档案名称",
     courseId: "课程",
     sourceCourseId: "原课程",
     sourceCourseName: "原课程",
     targetCourseId: "目标课程",
     targetCourseName: "目标课程",
-    newCourseName: "新课程名",
+    newCourseName: "新课程档案名称",
     type: "班型",
     targetType: "目标班型",
     subject: "科目",

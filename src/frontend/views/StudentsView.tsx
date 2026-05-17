@@ -1334,11 +1334,11 @@ export function StudentsView({
                 {transferTargetMode === "new" ? (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">课程名称</label>
+                      <label className="text-sm font-medium">课程档案名称</label>
                       <Input
                         value={transferCourseNameInput}
                         onChange={(event) => setTransferCourseNameInput(event.target.value)}
-                        placeholder={transferStudent ? `${transferStudent.name}${courseTypeLabel(vault, transferCourseType)}` : "新课程名称"}
+                        placeholder={transferStudent ? `${transferStudent.name}${courseTypeLabel(vault, transferCourseType)}` : "新课程档案名称"}
                       />
                     </div>
                     <div className="space-y-2">
@@ -2115,7 +2115,7 @@ export function StudentsView({
                     setCourseNameInput(nextName);
                     setCourseNameEdited(nextName !== suggestedCourseName);
                   }}
-                  placeholder="课程名称"
+                  placeholder="课程档案名称"
                 />
                 <Select value={courseSubjectInput || subjectOptions[0] || "未设置"} onChange={(event) => setCourseSubjectInput(event.target.value)}>
                   {subjectOptions.map((subject) => (
@@ -2345,7 +2345,7 @@ export function StudentsView({
                 className="h-10 pl-9"
                 value={courseSearch}
                 onChange={(event) => setCourseSearch(event.target.value)}
-                placeholder="搜索课程名称、学科、校区、学生或班型"
+                placeholder="搜索课程档案名称、学科、校区、学生或班型"
               />
             </label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -2596,7 +2596,7 @@ export function StudentsView({
                   <Input
                     value={editingCourse.name}
                     onChange={(event) => updateEditingCourse({ name: event.target.value })}
-                    placeholder="课程名称"
+                    placeholder="课程档案名称"
                   />
                   <Select value={editingCourse.subject || subjectOptions[0] || "未设置"} onChange={(event) => updateEditingCourse({ subject: event.target.value })}>
                     {subjectOptions.map((subject) => (
