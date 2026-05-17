@@ -822,21 +822,30 @@ export function App() {
       const endTime = stringValue(data.endTime) || "21:00";
       const dates = arrayValueLocal(data.dates).map(stringValue).filter(Boolean);
       if (data.date) dates.push(stringValue(data.date));
-      const uniqueDates = Array.from(new Set(dates));
-      if (uniqueDates.length === 0) return;
+      const lessonItems = arrayValueLocal(data.lessons).filter(isPlainRecordLocal);
+      const lessonRequests = lessonItems.length > 0
+        ? lessonItems
+            .map((item) => ({
+              date: stringValue(item.date),
+              startTime: stringValue(item.startTime) || startTime,
+              endTime: stringValue(item.endTime) || endTime
+            }))
+            .filter((item) => item.date)
+        : Array.from(new Set(dates)).map((date) => ({ date, startTime, endTime }));
+      if (lessonRequests.length === 0) return;
       let createdCount = 0;
-      uniqueDates.forEach((date) => {
+      lessonRequests.forEach((request) => {
         const exists = nextVault.lessons.some((lesson) =>
           lesson.courseGroupId === course.id &&
-          lesson.date === date &&
-          lesson.startTime === startTime &&
-          lesson.endTime === endTime
+          lesson.date === request.date &&
+          lesson.startTime === request.startTime &&
+          lesson.endTime === request.endTime
         );
         if (exists) return;
         nextVault.lessons.push(createLessonFromCourse(nextVault, course, {
-          date,
-          startTime,
-          endTime,
+          date: request.date,
+          startTime: request.startTime,
+          endTime: request.endTime,
           campusId: course.defaultCampusId,
           status: "scheduled"
         }));
@@ -848,7 +857,7 @@ export function App() {
     };
 
     actions.forEach((action) => {
-      const type = stringValue(action.type);
+      const type = stringValue(action.type ?? action.action);
       const data = isPlainRecordLocal(action.data) ? action.data : action;
       if (type === "create_student") {
         ensureStudent(data);
