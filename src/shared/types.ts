@@ -57,6 +57,15 @@ export type AiScheduleDraftResponse = {
   };
 };
 
+export type AiScheduleSession = {
+  providerId: string;
+  taskType: AiScheduleTaskType;
+  instruction: string;
+  followupAnswer: string;
+  draft: AiScheduleDraftResponse | null;
+  message: string;
+};
+
 export type UserStatus =
   | "active"
   | "disabled"

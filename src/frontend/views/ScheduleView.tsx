@@ -38,7 +38,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
+import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
@@ -96,7 +96,10 @@ export function ScheduleView({
   onWeekStartChange,
   role,
   token,
-  calendarFocus
+  calendarFocus,
+  aiSession,
+  onAiSessionChange,
+  onApplyAiDraft
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
@@ -119,6 +122,9 @@ export function ScheduleView({
   role: UserRole;
   token: string;
   calendarFocus?: CalendarFocus;
+  aiSession: AiScheduleSession | null;
+  onAiSessionChange: (session: AiScheduleSession | null) => void;
+  onApplyAiDraft: (session: AiScheduleSession | null) => { ok: boolean; message: string };
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
@@ -188,13 +194,13 @@ export function ScheduleView({
   const [detailMakeupStudentIds, setDetailMakeupStudentIds] = useState<string[]>([]);
   const [scheduleError, setScheduleError] = useState("");
   const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
-  const [aiProviderId, setAiProviderId] = useState("");
-  const [aiTaskType, setAiTaskType] = useState<AiScheduleTaskType>("auto");
-  const [aiInstruction, setAiInstruction] = useState("");
-  const [aiFollowupAnswer, setAiFollowupAnswer] = useState("");
-  const [aiDraft, setAiDraft] = useState<AiScheduleDraftResponse | null>(null);
+  const aiProviderId = aiSession?.providerId ?? "";
+  const aiTaskType = aiSession?.taskType ?? "auto";
+  const aiInstruction = aiSession?.instruction ?? "";
+  const aiFollowupAnswer = aiSession?.followupAnswer ?? "";
+  const aiDraft = aiSession?.draft ?? null;
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiMessage, setAiMessage] = useState("");
+  const aiMessage = aiSession?.message ?? "";
   const { confirm, dialog } = useConfirmDialog();
   const isAdmin = role === "admin";
   const syncSourceLessons = vault.lessons
@@ -217,15 +223,17 @@ export function ScheduleView({
       .then((providers) => {
         if (cancelled) return;
         setAiProviders(providers);
-        setAiProviderId((current) => {
-          if (current && providers.some((provider) => provider.id === current && provider.enabled)) return current;
-          return providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "";
-        });
+        const nextProviderId = aiProviderId && providers.some((provider) => provider.id === aiProviderId && provider.enabled)
+          ? aiProviderId
+          : providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "";
+        if (nextProviderId !== aiProviderId) {
+          patchAiSession({ providerId: nextProviderId });
+        }
       })
       .catch((error) => {
         if (cancelled) return;
         setAiProviders([]);
-        setAiMessage(error instanceof Error ? error.message : "AI 配置加载失败。");
+        patchAiSession({ message: error instanceof Error ? error.message : "AI 配置加载失败。" });
       });
     return () => {
       cancelled = true;
@@ -541,6 +549,19 @@ export function ScheduleView({
   const aiDraftQuestions = arrayValue(aiDraftRecord?.questions);
   const aiDraftWarnings = arrayValue(aiDraftRecord?.warnings);
   const aiDraftSummary = textValue(aiDraftRecord?.summary, aiDraft ? "AI 已生成建议，请按下方内容核对。" : "");
+  const aiDraftCanApply = aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
+
+  function patchAiSession(patch: Partial<AiScheduleSession>) {
+    onAiSessionChange({
+      providerId: aiProviderId,
+      taskType: aiTaskType,
+      instruction: aiInstruction,
+      followupAnswer: aiFollowupAnswer,
+      draft: aiDraft,
+      message: aiMessage,
+      ...patch
+    });
+  }
 
   function addSingleLesson(status: "scheduled" | "completed") {
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
@@ -596,26 +617,26 @@ export function ScheduleView({
 
   async function refreshAiProviders() {
     if (!token || !isAdmin) return;
-    setAiMessage("");
+    patchAiSession({ message: "" });
     try {
       const providers = await getAiProviders(token);
       setAiProviders(providers);
-      setAiProviderId((current) => {
-        if (current && providers.some((provider) => provider.id === current && provider.enabled)) return current;
-        return providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "";
-      });
+      const nextProviderId = aiProviderId && providers.some((provider) => provider.id === aiProviderId && provider.enabled)
+        ? aiProviderId
+        : providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "";
+      patchAiSession({ providerId: nextProviderId });
     } catch (error) {
-      setAiMessage(error instanceof Error ? error.message : "AI 配置加载失败。");
+      patchAiSession({ message: error instanceof Error ? error.message : "AI 配置加载失败。" });
     }
   }
 
   async function submitAiDraft() {
     if (!token || !aiProviderId || !aiInstruction.trim()) {
-      setAiMessage(!aiProviderId ? "请先选择可用的 AI 接口配置。" : "请先填写要让 AI 处理的内容。");
+      patchAiSession({ message: !aiProviderId ? "请先选择可用的 AI 接口配置。" : "请先填写要让 AI 处理的内容。" });
       return;
     }
     setAiLoading(true);
-    setAiMessage("");
+    patchAiSession({ message: "" });
     try {
       const result = await generateAiScheduleDraft(token, {
         providerId: aiProviderId,
@@ -623,10 +644,9 @@ export function ScheduleView({
         instruction: aiInstruction.trim(),
         context: aiScheduleContext()
       });
-      setAiDraft(result);
-      setAiMessage("AI 建议已生成，请先人工核对。");
+      patchAiSession({ draft: result, message: "AI 建议已生成，请先人工核对。" });
     } catch (error) {
-      setAiMessage(error instanceof Error ? error.message : "AI 生成建议失败。");
+      patchAiSession({ message: error instanceof Error ? error.message : "AI 生成建议失败。" });
     } finally {
       setAiLoading(false);
     }
@@ -634,7 +654,7 @@ export function ScheduleView({
 
   async function submitAiFollowup() {
     if (!aiFollowupAnswer.trim()) {
-      setAiMessage("请先填写补充信息。");
+      patchAiSession({ message: "请先填写补充信息。" });
       return;
     }
     const questionsText = aiDraftQuestions.map((question, index) => `${index + 1}. ${formatAiValue(question)}`).join("\n");
@@ -647,10 +667,8 @@ export function ScheduleView({
       "我补充确认的信息如下，请结合原始需求重新生成完整、可执行的结构化建议：",
       aiFollowupAnswer.trim()
     ].join("\n");
-    setAiInstruction(nextInstruction);
-    setAiFollowupAnswer("");
+    patchAiSession({ instruction: nextInstruction, followupAnswer: "", message: "" });
     setAiLoading(true);
-    setAiMessage("");
     try {
       const result = await generateAiScheduleDraft(token, {
         providerId: aiProviderId,
@@ -658,13 +676,24 @@ export function ScheduleView({
         instruction: nextInstruction,
         context: aiScheduleContext()
       });
-      setAiDraft(result);
-      setAiMessage("已带着补充信息重新生成建议，请继续核对。");
+      patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: result, message: "已带着补充信息重新生成建议，请继续核对。" });
     } catch (error) {
-      setAiMessage(error instanceof Error ? error.message : "AI 生成建议失败。");
+      patchAiSession({ message: error instanceof Error ? error.message : "AI 生成建议失败。" });
     } finally {
       setAiLoading(false);
     }
+  }
+
+  function applyAiDraft() {
+    const result = onApplyAiDraft({
+      providerId: aiProviderId,
+      taskType: aiTaskType,
+      instruction: aiInstruction,
+      followupAnswer: aiFollowupAnswer,
+      draft: aiDraft,
+      message: aiMessage
+    });
+    patchAiSession({ message: result.message });
   }
 
   function matchesCalendarCourseFilter(lesson: Lesson): boolean {
@@ -1308,7 +1337,7 @@ export function ScheduleView({
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">AI 接口配置</label>
-                      <Select value={aiProviderId} onChange={(event) => setAiProviderId(event.target.value)} disabled={aiLoading || enabledAiProviders.length === 0}>
+                      <Select value={aiProviderId} onChange={(event) => patchAiSession({ providerId: event.target.value })} disabled={aiLoading || enabledAiProviders.length === 0}>
                         <option value="">选择已保存配置</option>
                         {enabledAiProviders.map((provider) => (
                           <option key={provider.id} value={provider.id}>
@@ -1319,7 +1348,7 @@ export function ScheduleView({
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">操作类型</label>
-                      <Select value={aiTaskType} onChange={(event) => setAiTaskType(event.target.value as AiScheduleTaskType)} disabled={aiLoading}>
+                      <Select value={aiTaskType} onChange={(event) => patchAiSession({ taskType: event.target.value as AiScheduleTaskType })} disabled={aiLoading}>
                         <option value="auto">智能识别</option>
                         <option value="student_course">新增学生和课程</option>
                         <option value="schedule_lessons">新增排课</option>
@@ -1332,7 +1361,7 @@ export function ScheduleView({
                     <Textarea
                       rows={8}
                       value={aiInstruction}
-                      onChange={(event) => setAiInstruction(event.target.value)}
+                      onChange={(event) => patchAiSession({ instruction: event.target.value })}
                       placeholder="例如：新增学生张三，三年级，A校区，语文一对一；从下周一开始每周一三 19:00-20:30 排课。"
                       className="min-h-[180px] bg-white"
                       disabled={aiLoading}
@@ -1408,8 +1437,8 @@ export function ScheduleView({
                       这里会把 AI 返回内容整理成可核对的摘要、操作建议和提醒。正式写入前仍需要系统校验和人工确认。
                     </div>
                   </div>
-                  <Button type="button" variant="outline" disabled className="shrink-0">
-                    确认写入待接入
+                  <Button type="button" variant={aiDraftCanApply ? "default" : "outline"} disabled={!aiDraftCanApply} onClick={applyAiDraft} className="shrink-0">
+                    确认写入
                   </Button>
                 </div>
                 {aiDraft ? (
@@ -1480,7 +1509,7 @@ export function ScheduleView({
                               <Textarea
                                 rows={4}
                                 value={aiFollowupAnswer}
-                                onChange={(event) => setAiFollowupAnswer(event.target.value)}
+                                onChange={(event) => patchAiSession({ followupAnswer: event.target.value })}
                                 placeholder="例如：校区选延安；李雨泽初三、顾延泽初二；课程名用“李雨泽、顾延泽化学”。"
                                 className="bg-white"
                                 disabled={aiLoading}

@@ -44,8 +44,10 @@ import {
 } from "@/frontend/lib/helpers";
 import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
+import { makeId } from "@/frontend/lib/crypto";
 import type {
   Campus,
+  AiScheduleSession,
   CourseGroup,
   CourseType,
   CustomCourseType,
@@ -115,6 +117,7 @@ export function App() {
   const [syncCountdownSeconds, setSyncCountdownSeconds] = useState(syncCheckIntervalSeconds);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
+  const [aiScheduleSession, setAiScheduleSession] = useState<AiScheduleSession | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
   const cloudVersionRef = useRef("");
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
@@ -566,6 +569,205 @@ export function App() {
         }
       };
     });
+  }
+
+  function updateAiScheduleSession(session: AiScheduleSession | null) {
+    setAiScheduleSession(session);
+  }
+
+  function applyAiScheduleDraft(session: AiScheduleSession | null): { ok: boolean; message: string } {
+    if (!vault || !session?.draft) {
+      return { ok: false, message: "没有可执行的 AI 建议。请先生成建议。" };
+    }
+    const parsedDraft = session.draft.draft;
+    if (!isPlainRecordLocal(parsedDraft)) {
+      return { ok: false, message: "AI 建议不是标准结构，无法确认写入。" };
+    }
+    const actions = arrayValueLocal(parsedDraft.actions).filter(isPlainRecordLocal);
+    if (actions.length === 0) {
+      return { ok: false, message: "AI 建议里没有可执行动作。请先补充信息后重新生成。" };
+    }
+
+    const nextVault = cloneVault(vault);
+    const messages: string[] = [];
+
+    const campusByName = (name: unknown): Campus | undefined => {
+      const normalized = stringValue(name).toLowerCase();
+      if (!normalized) return undefined;
+      return nextVault.campuses.find((campus) => campus.name.trim().toLowerCase() === normalized);
+    };
+
+    const studentByName = (name: unknown): Student | undefined => {
+      const normalized = stringValue(name).toLowerCase();
+      if (!normalized) return undefined;
+      return nextVault.students.find((student) => student.name.trim().toLowerCase() === normalized);
+    };
+
+    const courseByIdOrName = (value: unknown): CourseGroup | undefined => {
+      const normalized = stringValue(value).toLowerCase();
+      if (!normalized) return undefined;
+      return nextVault.courseGroups.find((course) => course.id.toLowerCase() === normalized || course.name.trim().toLowerCase() === normalized);
+    };
+
+    const ensureStudent = (data: Record<string, unknown>): Student | null => {
+      const name = stringValue(data.name ?? data.studentName);
+      if (!name) return null;
+      const grade = stringValue(data.grade);
+      const campus = campusByName(data.campus);
+      const existing = nextVault.students.find((student) =>
+        student.name.trim().toLowerCase() === name.toLowerCase() &&
+        (!grade || (student.grade ?? "").trim().toLowerCase() === grade.toLowerCase()) &&
+        (!campus || student.defaultCampusId === campus.id)
+      );
+      if (existing) return existing;
+
+      const student: Student = {
+        id: makeId("student"),
+        name,
+        grade: grade || undefined,
+        defaultCampusId: campus?.id,
+        note: stringValue(data.note) || undefined,
+        temporaryTrial: Boolean(data.temporaryTrial),
+        status: "active"
+      };
+      nextVault.students.push(student);
+      messages.push(`新增学生「${student.name}」`);
+      return student;
+    };
+
+    const studentIdsFromNames = (values: unknown): string[] => {
+      return arrayValueLocal(values)
+        .map((value) => {
+          const student = studentByName(value);
+          return student?.id ?? "";
+        })
+        .filter(Boolean);
+    };
+
+    const ensureCourse = (data: Record<string, unknown>): CourseGroup | null => {
+      const existing = courseByIdOrName(data.courseId ?? data.id ?? data.name ?? data.courseName);
+      if (existing) return existing;
+      const name = stringValue(data.name ?? data.courseName);
+      if (!name) return null;
+      const type = normalizeAiCourseType(data.type);
+      const subject = stringValue(data.subject) || "语文";
+      const campus = campusByName(data.campus);
+      const studentIds = studentIdsFromNames(data.studentNames ?? data.students);
+      const course: CourseGroup = {
+        id: makeId("course"),
+        name,
+        type,
+        subject,
+        defaultCampusId: campus?.id,
+        studentIds,
+        feeRule: defaultFeeRuleForCourseType(type),
+        note: stringValue(data.note) || undefined,
+        status: "active"
+      };
+      nextVault.courseGroups.push(course);
+      messages.push(`新增课程「${course.name}」`);
+      return course;
+    };
+
+    const addStudentsToCourse = (course: CourseGroup, studentIds: string[]) => {
+      if (studentIds.length === 0) return;
+      const nextIds = Array.from(new Set([...course.studentIds, ...studentIds]));
+      if (nextIds.length === course.studentIds.length) return;
+      course.studentIds = nextIds;
+      messages.push(`已将学生加入课程「${course.name}」`);
+    };
+
+    const addStudentsToLessons = (lessonIds: string[], studentIds: string[]) => {
+      if (lessonIds.length === 0 || studentIds.length === 0) return;
+      let changedCount = 0;
+      nextVault.lessons = nextVault.lessons.map((lesson) => {
+        if (!lessonIds.includes(lesson.id)) return lesson;
+        const expectedStudentIds = Array.from(new Set([...lesson.expectedStudentIds, ...studentIds]));
+        const attendanceStudentIds = new Set(lesson.attendance.map((entry) => entry.studentId));
+        const attendance = [
+          ...lesson.attendance,
+          ...studentIds
+            .filter((studentId) => !attendanceStudentIds.has(studentId))
+            .map((studentId) => ({ studentId, status: "attended" as const }))
+        ];
+        changedCount += 1;
+        return recalculateLessonFeeSnapshot(nextVault, {
+          ...lesson,
+          expectedStudentIds,
+          attendance
+        });
+      });
+      if (changedCount > 0) {
+        messages.push(`已更新 ${changedCount} 节课的关联学生`);
+      }
+    };
+
+    const createLessonsForCourse = (course: CourseGroup, data: Record<string, unknown>) => {
+      const startTime = stringValue(data.startTime) || "19:00";
+      const endTime = stringValue(data.endTime) || "21:00";
+      const dates = arrayValueLocal(data.dates).map(stringValue).filter(Boolean);
+      if (data.date) dates.push(stringValue(data.date));
+      const uniqueDates = Array.from(new Set(dates));
+      if (uniqueDates.length === 0) return;
+      let createdCount = 0;
+      uniqueDates.forEach((date) => {
+        const exists = nextVault.lessons.some((lesson) =>
+          lesson.courseGroupId === course.id &&
+          lesson.date === date &&
+          lesson.startTime === startTime &&
+          lesson.endTime === endTime
+        );
+        if (exists) return;
+        nextVault.lessons.push(createLessonFromCourse(nextVault, course, {
+          date,
+          startTime,
+          endTime,
+          campusId: course.defaultCampusId,
+          status: "scheduled"
+        }));
+        createdCount += 1;
+      });
+      if (createdCount > 0) {
+        messages.push(`已为课程「${course.name}」新增 ${createdCount} 节课`);
+      }
+    };
+
+    actions.forEach((action) => {
+      const type = stringValue(action.type);
+      const data = isPlainRecordLocal(action.data) ? action.data : action;
+      if (type === "create_student") {
+        ensureStudent(data);
+        return;
+      }
+      if (type === "create_course") {
+        ensureCourse(data);
+        return;
+      }
+      if (type === "schedule_lessons") {
+        const course = ensureCourse(data);
+        if (course) createLessonsForCourse(course, data);
+        return;
+      }
+      if (type === "sync_lessons") {
+        const lessonIds = arrayValueLocal(data.lessonIds).map(stringValue).filter(Boolean);
+        const studentIds = studentIdsFromNames(data.studentsToAdd ?? data.studentNames ?? data.students);
+        addStudentsToLessons(lessonIds, studentIds);
+        const affectedCourseIds = Array.from(new Set(
+          nextVault.lessons.filter((lesson) => lessonIds.includes(lesson.id)).map((lesson) => lesson.courseGroupId)
+        ));
+        affectedCourseIds.forEach((courseId) => {
+          const course = nextVault.courseGroups.find((item) => item.id === courseId);
+          if (course) addStudentsToCourse(course, studentIds);
+        });
+      }
+    });
+
+    if (messages.length === 0) {
+      return { ok: false, message: "AI 建议没有被识别为可写入内容，请补充信息后重新生成。" };
+    }
+
+    void persist(nextVault);
+    return { ok: true, message: `AI 建议已写入：${messages.join("；")}` };
   }
 
   function addSubject(subject: string) {
@@ -1434,6 +1636,9 @@ export function App() {
                 role={role}
                 token={token}
                 calendarFocus={scheduleCalendarFocus}
+                aiSession={aiScheduleSession}
+                onAiSessionChange={updateAiScheduleSession}
+                onApplyAiDraft={applyAiScheduleDraft}
               />
             )}
             {!onboardingVisible && view === "students" && (
@@ -1680,4 +1885,25 @@ function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string
 function timeToMinutes(value: string): number {
   const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
+}
+
+function isPlainRecordLocal(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function arrayValueLocal(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
+}
+
+function normalizeAiCourseType(value: unknown): CourseType {
+  const normalized = stringValue(value).toLowerCase();
+  if (normalized === "one_on_one" || normalized === "一对一") return "one_on_one";
+  if (normalized === "one_on_two" || normalized === "一对二") return "one_on_two";
+  if (normalized === "trial" || normalized === "试听") return "trial";
+  if (normalized === "full_time" || normalized === "全职") return "full_time";
+  return "class";
 }
