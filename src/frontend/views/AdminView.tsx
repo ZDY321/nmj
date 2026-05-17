@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bell, Database, KeyRound, Lock, MessageSquare, RefreshCw, Save, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Bell, Bot, Database, KeyRound, Lock, MessageSquare, RefreshCw, Save, ServerCog, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -421,6 +421,94 @@ export function AdminView({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="overflow-hidden border-2 border-[#bfdbfe]">
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+              <Bot size={14} /> AI 接口设置
+            </div>
+            <CardTitle>AI 排课助手后端配置</CardTitle>
+            <CardDescription>这里先固定管理员配置项。API Key 后续应保存到 Cloudflare Worker Secret 或后端环境变量，不能保存到前端代码或老师加密档案里。</CardDescription>
+          </div>
+          <Badge variant="secondary" className="w-fit">后端待接入</Badge>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">AI 功能开关</label>
+              <Select disabled value="admin_only">
+                <option value="admin_only">仅管理员试用</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">服务商</label>
+              <Select disabled value="deepseek">
+                <option value="deepseek">DeepSeek 兼容接口</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">模型名称</label>
+              <Input disabled value="deepseek-v4-flash" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">每日调用上限</label>
+              <Input disabled value="50 次 / 天" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+                <ServerCog size={16} className="text-[#1557c2]" /> 后端需要保存的信息
+              </div>
+              <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#25324a]">
+                {[
+                  "AI_PROVIDER：deepseek 或兼容服务商",
+                  "AI_API_BASE_URL：后端代理访问的接口地址",
+                  "AI_MODEL：实际模型名称",
+                  "AI_API_KEY：只放 Worker Secret / 环境变量",
+                  "AI_DAILY_LIMIT：管理员每日调用上限",
+                  "AI_MAX_OUTPUT_TOKENS：限制单次输出长度"
+                ].map((text) => (
+                  <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                    {text}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
+              <div className="mb-3 text-sm font-extrabold text-[#9a3412]">安全和费用控制</div>
+              <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#9a3412]">
+                {[
+                  "只有管理员账号能调用 AI 排课接口",
+                  "前端只提交当前任务相关数据，不发送全量历史记录",
+                  "AI 只生成建议 JSON，不直接写数据库",
+                  "系统本地校验时间冲突、归档学生、暂停课程和格式错误",
+                  "管理员确认预览后才真正写入课程数据"
+                ].map((text) => (
+                  <div key={text} className="rounded-[10px] border border-[#fed7aa] bg-white/70 px-3 py-2">
+                    {text}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-white p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+            <div>
+              <div className="text-sm font-extrabold text-[#061226]">连接状态</div>
+              <div className="mt-1 text-sm font-semibold leading-6 text-[#64748b]">
+                当前还没有接入后端 AI 配置接口。后续接入 Cloudflare Worker 后，这里可以增加保存配置、测试连接和查看调用量。
+              </div>
+            </div>
+            <Button type="button" variant="outline" disabled>
+              测试连接
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden">
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

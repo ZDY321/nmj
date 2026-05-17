@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BookOpen,
   BookText,
+  Bot,
   CalendarCheck,
   CalendarDays,
   CheckCircle2,
@@ -20,9 +21,12 @@ import {
   Plus,
   RotateCcw,
   Search,
+  ShieldCheck,
+  Sparkles,
   Trash2,
   UserCheck,
   UserPlus,
+  WandSparkles,
   X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +37,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import type { AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, WeekStart, Weekday } from "@/shared/types";
+import type { AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -73,7 +77,7 @@ import {
 
 type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
-type SchedulePanel = "schedule" | "calendar" | "records" | "studentStats";
+type SchedulePanel = "ai" | "schedule" | "calendar" | "records" | "studentStats";
 type CalendarFocus = { date: string; lessonId?: string; targetPanel?: SchedulePanel; nonce: number } | null;
 
 export function ScheduleView({
@@ -88,6 +92,7 @@ export function ScheduleView({
   onDeleteCustomTimePreset,
   onGenerateDrafts,
   onWeekStartChange,
+  role,
   calendarFocus
 }: {
   vault: TeacherVault;
@@ -108,6 +113,7 @@ export function ScheduleView({
     endTime: string
   ) => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
+  role: UserRole;
   calendarFocus?: CalendarFocus;
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
@@ -178,12 +184,19 @@ export function ScheduleView({
   const [detailMakeupStudentIds, setDetailMakeupStudentIds] = useState<string[]>([]);
   const [scheduleError, setScheduleError] = useState("");
   const { confirm, dialog } = useConfirmDialog();
+  const isAdmin = role === "admin";
   const syncSourceLessons = vault.lessons
     .filter((lesson) => lesson.date === syncSourceDate && lesson.status !== "cancelled")
     .sort(sortLessons);
   const syncSourceLessonIds = syncSourceLessons.map((lesson) => lesson.id).join("|");
   const selectableSyncLessons = syncSourceLessons.filter((lesson) => getCourse(vault, lesson.courseGroupId)?.status === "active");
   const selectableSyncLessonIds = selectableSyncLessons.map((lesson) => lesson.id).join("|");
+
+  useEffect(() => {
+    if (!isAdmin && schedulePanel === "ai") {
+      setSchedulePanel("schedule");
+    }
+  }, [isAdmin, schedulePanel]);
 
   useEffect(() => {
     const fallbackCourseId = courseSelectionOptions[0]?.id ?? "";
@@ -473,6 +486,18 @@ export function ScheduleView({
   const isBatchDateRangeValid = isOrderedDateRange(rangeStart, rangeEnd);
   const isCalendarTimeValid = isOrderedTimeRange(calendarStartTime, calendarEndTime);
   const isMakeupTimeValid = isOrderedTimeRange(makeupStartTime, makeupEndTime);
+  const aiActiveStudentCount = vault.students.filter((student) => student.status === "active").length;
+  const aiActiveCourseCount = vault.courseGroups.filter((course) => course.status === "active").length;
+  const aiPendingLessonCount = vault.lessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "makeup_pending").length;
+  const aiTodayLessonCount = vault.lessons.filter((lesson) => lesson.date === todayIso()).length;
+  const aiContextSummary = {
+    activeStudents: aiActiveStudentCount,
+    activeCourses: aiActiveCourseCount,
+    pendingLessons: aiPendingLessonCount,
+    todayLessons: aiTodayLessonCount,
+    campuses: vault.campuses.length,
+    subjects: subjectOptionsForVault(vault)
+  };
 
   function addSingleLesson(status: "scheduled" | "completed") {
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
@@ -1048,6 +1073,7 @@ export function ScheduleView({
       <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
         <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
         {[
+          ...(isAdmin ? [{ key: "ai" as SchedulePanel, label: "AI 排课助手" }] : []),
           { key: "schedule" as SchedulePanel, label: "排课" },
           { key: "calendar" as SchedulePanel, label: "日历查看" },
           { key: "records" as SchedulePanel, label: "课程记录" },
@@ -1075,6 +1101,132 @@ export function ScheduleView({
       {scheduleError && (
         <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-4 py-3 text-sm font-extrabold text-[#b91c1c]">
           {scheduleError}
+        </div>
+      )}
+
+      {isAdmin && schedulePanel === "ai" && (
+        <div className="space-y-6">
+          <Card className="overflow-hidden border-2 border-[#bfdbfe]">
+            <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                  <Sparkles size={14} /> AI 排课助手
+                </div>
+                <CardTitle>自然语言转排课操作</CardTitle>
+                <CardDescription>仅管理员可见。当前先固定操作流程和校验边界，后端 AI 接口接入后再开放生成建议。</CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="sky">
+                  <ShieldCheck size={12} /> 管理员试用
+                </Badge>
+                <Badge variant="secondary">后端待接入</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: "可用学生", value: `${aiActiveStudentCount} 人` },
+                  { label: "可用课程", value: `${aiActiveCourseCount} 个` },
+                  { label: "待处理课时", value: `${aiPendingLessonCount} 节` },
+                  { label: "今日课程", value: `${aiTodayLessonCount} 节` }
+                ].map((item) => (
+                  <div key={item.label} className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-4 py-3">
+                    <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
+                    <div className="mt-1 text-lg font-extrabold text-[#061226]">{item.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                <div className="space-y-4 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">操作类型</label>
+                      <Select disabled value="draft">
+                        <option value="draft">智能识别</option>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">自然语言输入</label>
+                      <Textarea
+                        disabled
+                        rows={8}
+                        value=""
+                        placeholder="例如：新增学生张三，三年级，A校区，语文一对一；从下周一开始每周一三 19:00-20:30 排课。"
+                        className="min-h-[180px] bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-xs font-semibold leading-5 text-[#64748b]">
+                      后续点击生成后，AI 只返回结构化建议，系统会先检查学生、课程、日期、时间和冲突，再由管理员确认写入。
+                    </div>
+                    <Button type="button" disabled className="shrink-0">
+                      <WandSparkles size={15} /> 生成建议
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+                    <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+                      <Bot size={16} className="text-[#1557c2]" /> 当前设计范围
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#25324a]">
+                      {[
+                        "录入新学生和课程 / 班课信息",
+                        "按指定日期或星期批量新增排课",
+                        "同步某一天或某几天的课程",
+                        "生成结果必须预览并确认后写入"
+                      ].map((text) => (
+                        <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
+                          {text}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
+                    <div className="mb-2 text-sm font-extrabold text-[#9a3412]">不让 AI 直接处理的内容</div>
+                    <div className="text-sm font-semibold leading-6 text-[#9a3412]">
+                      今日提醒、课时费计算、补课状态、课程记录详情和冲突判断继续由系统代码处理，AI 只负责把自然语言整理成待校验的操作建议。
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-sm font-extrabold text-[#061226]">建议结果预览</div>
+                    <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                      接入后这里会显示新增学生、创建课程、排课、同步课程等具体变更，并标出冲突和需要人工确认的字段。
+                    </div>
+                  </div>
+                  <Button type="button" variant="outline" disabled className="shrink-0">
+                    确认写入
+                  </Button>
+                </div>
+                <pre className="mt-4 max-h-[260px] overflow-auto rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-4 text-xs font-semibold leading-6 text-[#25324a]">
+{JSON.stringify({
+  status: "waiting_for_backend",
+  allowedRole: "admin",
+  provider: "DeepSeek / OpenAI / compatible API",
+  contextSummary: aiContextSummary,
+  nextBackendEndpoint: "/api/admin/ai/schedule-draft",
+  validation: [
+    "student_duplicate_check",
+    "archived_student_block",
+    "course_status_check",
+    "time_conflict_check",
+    "date_time_format_check",
+    "preview_before_write"
+  ]
+}, null, 2)}
+                </pre>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 

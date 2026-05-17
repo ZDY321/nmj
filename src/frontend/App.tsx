@@ -1431,6 +1431,7 @@ export function App() {
                 onDeleteCustomTimePreset={deleteCustomTimePreset}
                 onGenerateDrafts={generateDrafts}
                 onWeekStartChange={updateWeekStart}
+                role={role}
                 calendarFocus={scheduleCalendarFocus}
               />
             )}
