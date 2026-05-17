@@ -54,6 +54,39 @@ const aiProviderLabels: Record<AiProviderKind, string> = {
   gemini: "Gemini"
 };
 
+const aiProviderDescriptions: Record<AiProviderKind, { summary: string; baseUrl: string; model: string; note: string }> = {
+  newapi: {
+    summary: "适合大多数 New API / One API 中转站，按 OpenAI 兼容格式调用。",
+    baseUrl: "接口地址通常填你的中转站 /v1，例如 https://api.example.com/v1。",
+    model: "模型名称按中转站渠道填写，例如 deepseek-v4-flash、gpt-4o-mini、gemini-2.5-flash。",
+    note: "这是推荐类型，后续切换不同模型时通常只需要改模型名。"
+  },
+  openai_compatible: {
+    summary: "适合任何兼容 OpenAI Chat Completions 的自建或第三方接口。",
+    baseUrl: "接口地址填兼容服务的 /v1 地址。",
+    model: "模型名称必须与服务端实际暴露的模型一致。",
+    note: "如果不是 New API，但接口格式一样，可以选这个。"
+  },
+  deepseek: {
+    summary: "适合直接连接 DeepSeek 官方或 DeepSeek 兼容渠道。",
+    baseUrl: "如果直连官方，一般填 https://api.deepseek.com/v1；中转则填中转站 /v1。",
+    model: "按实际可用模型填写，例如 deepseek-chat 或中转站里的 DeepSeek 模型名。",
+    note: "模型不可用时，可以新增或切换到 GPT/Gemini 配置。"
+  },
+  openai: {
+    summary: "适合 OpenAI 官方或 OpenAI 官方兼容中转。",
+    baseUrl: "官方一般填 https://api.openai.com/v1；中转则填中转站 /v1。",
+    model: "例如 gpt-4o-mini、gpt-4.1-mini，按账号或中转站可用模型填写。",
+    note: "如果走 New API 中转，也可以直接选择 New API 中转类型。"
+  },
+  gemini: {
+    summary: "适合 Gemini 的 OpenAI 兼容接口或通过中转站调用 Gemini。",
+    baseUrl: "使用中转站时填中转站 /v1；如果不是 OpenAI 兼容地址，需要先由中转站适配。",
+    model: "例如 gemini-2.5-flash，按中转站显示的模型名填写。",
+    note: "这里按 OpenAI 兼容格式调用，不直接调用 Gemini 原生接口。"
+  }
+};
+
 const emptyAiForm: AiProviderInput = {
   name: "",
   provider: "newapi",
@@ -303,13 +336,8 @@ export function AdminView({
       const saved = editingAiProviderId
         ? await updateAiProvider(token, editingAiProviderId, aiForm)
         : await createAiProvider(token, aiForm);
-      const nextProviders = editingAiProviderId
-        ? aiProviders.map((provider) => (provider.id === saved.id ? saved : provider))
-        : [saved, ...aiProviders];
-      const normalizedProviders = saved.isDefault
-        ? nextProviders.map((provider) => ({ ...provider, isDefault: provider.id === saved.id }))
-        : nextProviders;
-      setAiProviders(normalizedProviders);
+      const latestProviders = await getAiProviders(token);
+      setAiProviders(latestProviders);
       setEditingAiProviderId(saved.id);
       setAiForm({
         name: saved.name,
@@ -323,7 +351,7 @@ export function AdminView({
         maxOutputTokens: saved.maxOutputTokens,
         temperature: saved.temperature
       });
-      setMessage("AI 配置已保存。");
+      setMessage(editingAiProviderId ? "AI 配置已保存。" : "AI 配置已新增并保存。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "AI 配置保存失败。");
     } finally {
@@ -482,6 +510,7 @@ export function AdminView({
   const encryptedDocuments = summary?.encryptedDocuments ?? 0;
   const filteredFeedback = feedbackItems.filter((item) => feedbackFilter === "all" || item.status === feedbackFilter);
   const unreadFeedback = feedbackItems.filter((item) => item.status === "unread").length;
+  const selectedAiProviderDescription = aiProviderDescriptions[aiForm.provider];
 
   return (
     <div className="space-y-6">
@@ -591,7 +620,7 @@ export function AdminView({
           <div className="flex flex-wrap gap-2">
             <Badge variant="sky" className="w-fit">{aiProviders.length} 个配置</Badge>
             <Button type="button" size="sm" variant="outline" onClick={startCreateAiProvider}>
-              <Plus size={14} /> 新增配置
+              <Plus size={14} /> 填写新配置
             </Button>
           </div>
         </CardHeader>
@@ -612,9 +641,17 @@ export function AdminView({
                 onChange={(event) => setAiForm((current) => ({ ...current, provider: event.target.value as AiProviderKind }))}
               >
                 {Object.entries(aiProviderLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                  <option key={value} value={value}>
+                    {label} - {aiProviderDescriptions[value as AiProviderKind].summary}
+                  </option>
                 ))}
               </Select>
+              <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                <div className="font-extrabold text-[#25324a]">{aiProviderLabels[aiForm.provider]}</div>
+                <div>{selectedAiProviderDescription.summary}</div>
+                <div>{selectedAiProviderDescription.baseUrl}</div>
+                <div>{selectedAiProviderDescription.model}</div>
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">模型名称</label>
@@ -704,10 +741,16 @@ export function AdminView({
                 </Button>
               )}
               <Button type="button" disabled={aiBusy} onClick={() => void saveAiProviderConfig()}>
-                <Save size={15} /> {editingAiProviderId ? "保存配置" : "新增配置"}
+                <Save size={15} /> {editingAiProviderId ? "保存配置" : "保存新配置"}
               </Button>
             </div>
           </div>
+
+          {!editingAiProviderId && (
+            <div className="rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-4 py-3 text-sm font-bold leading-6 text-[#1557c2]">
+              现在处于新增模式：填写上方内容后，需要点击“保存新配置”，保存成功后才会出现在下方“已保存配置”列表里。
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
             <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
