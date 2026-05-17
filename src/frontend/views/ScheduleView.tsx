@@ -3269,6 +3269,9 @@ function aiActionLabel(type: string): string {
     pause_course: "暂停课程",
     migrate_course: "迁移课程",
     move_course_lessons: "迁移课节",
+    delete_lesson: "删除课节",
+    remove_lesson: "删除课节",
+    cancel_lesson: "删除课节",
     schedule_lessons: "新增排课",
     sync_lessons: "同步课程",
     ask_clarification: "需要补充信息"
@@ -3316,6 +3319,8 @@ function aiFieldLabel(key: string): string {
     targetDate: "目标日期",
     sourceDates: "来源日期",
     targetDates: "目标日期",
+    lessonId: "课节",
+    lessonIds: "课节",
     note: "备注",
     reason: "原因",
     confidence: "置信度"

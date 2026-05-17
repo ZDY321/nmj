@@ -818,6 +818,32 @@ export function App() {
       }
     };
 
+    const deleteLessonFromAi = (data: Record<string, unknown>) => {
+      const lessonId = stringValue(data.lessonId ?? data.id);
+      const lessonDate = stringValue(data.date);
+      const startTime = stringValue(data.startTime);
+      const endTime = stringValue(data.endTime);
+      const courseName = stringValue(data.courseName ?? data.name);
+      const subject = stringValue(data.subject);
+      const courseId = stringValue(data.courseId);
+      const matchedLesson = nextVault.lessons.find((lesson) => {
+        if (lessonId && lesson.id === lessonId) return true;
+        if (courseId && lesson.courseGroupId !== courseId) return false;
+        if (lessonDate && lesson.date !== lessonDate) return false;
+        if (startTime && lesson.startTime !== startTime) return false;
+        if (endTime && lesson.endTime !== endTime) return false;
+        if (!courseName && !subject) return true;
+        const course = nextVault.courseGroups.find((item) => item.id === lesson.courseGroupId);
+        if (!course) return false;
+        if (courseName && course.name.trim().toLowerCase() !== courseName.toLowerCase()) return false;
+        if (subject && course.subject.trim().toLowerCase() !== subject.toLowerCase()) return false;
+        return true;
+      });
+      if (!matchedLesson) return;
+      nextVault.lessons = nextVault.lessons.filter((lesson) => lesson.id !== matchedLesson.id);
+      messages.push(`已删除课节「${matchedLesson.date} ${matchedLesson.startTime}-${matchedLesson.endTime} · ${nextVault.courseGroups.find((course) => course.id === matchedLesson.courseGroupId)?.name ?? "未知课程"}」`);
+    };
+
     const addStudentsToCourse = (course: CourseGroup, studentIds: string[]) => {
       if (studentIds.length === 0) return;
       const nextIds = Array.from(new Set([...course.studentIds, ...studentIds]));
@@ -911,6 +937,10 @@ export function App() {
       }
       if (type === "migrate_course" || type === "move_course_lessons") {
         migrateCourseFromAi(data);
+        return;
+      }
+      if (type === "delete_lesson" || type === "remove_lesson" || type === "cancel_lesson") {
+        deleteLessonFromAi(data);
         return;
       }
       if (type === "schedule_lessons") {
