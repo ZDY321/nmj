@@ -697,12 +697,16 @@ export function ScheduleView({
   }
 
   function matchesCalendarCourseFilter(lesson: Lesson): boolean {
-    return calendarViewCourseFilter === "all" || lesson.courseGroupId === calendarViewCourseFilter;
+    if (calendarViewCourseFilter !== "all" && lesson.courseGroupId !== calendarViewCourseFilter) return false;
+    const searchTerms = calendarViewCourseSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (searchTerms.length === 0) return true;
+    const searchText = lessonSearchText(vault, lesson);
+    return searchTerms.every((term) => searchText.includes(term));
   }
 
   function calendarLessonsForDate(date: string): Lesson[] {
     return vault.lessons
-      .filter((lesson) => lesson.date === date && matchesCalendarCourseFilter(lesson) && !isFullyScheduledMakeupOriginal(lesson))
+      .filter((lesson) => lesson.date === date && matchesCalendarCourseFilter(lesson))
       .sort(sortLessons);
   }
 
@@ -948,7 +952,22 @@ export function ScheduleView({
     setLessonDay(lesson.date);
     setLessonMonth(lesson.date.slice(0, 7));
     setSyncRecordsWithCalendarDate(true);
+    setCalendarDetailDate(null);
     setSchedulePanel("records");
+  }
+
+  function makeupMarkerForLesson(lesson: Lesson): string | null {
+    if (lesson.linkedOriginalLessonId) return "补课";
+    const linkedMakeupLessons = activeMakeupLessonsByOriginal[lesson.id] ?? [];
+    const completedMakeupCount = linkedMakeupLessons.filter((item) => isCompletedLessonStatus(item.status)).length;
+    if (completedMakeupCount > 0 && lesson.attendance.some((entry) => entry.status === "makeup_completed")) {
+      return completedMakeupCount === linkedMakeupLessons.length ? "已补课" : "部分已补";
+    }
+    if (linkedMakeupLessons.length > 0) return "已安排补课";
+    if (lesson.status === "makeup_pending" || lesson.attendance.some((entry) => isMakeupAttendanceStatus(entry.status))) {
+      return "待补课";
+    }
+    return null;
   }
 
   function createSelectedMakeupLesson(studentIds: string[]) {
@@ -1238,6 +1257,7 @@ export function ScheduleView({
                             <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                             <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
                             <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
+                            {makeupMarkerForLesson(lesson) && <Badge variant="yellow" className="text-[10px]">{makeupMarkerForLesson(lesson)}</Badge>}
                           </div>
                           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
                             {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
@@ -2102,6 +2122,7 @@ export function ScheduleView({
                 const hasCompleted = dayLessons.some((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
                 const hasPending = dayLessons.some((lesson) => lesson.status === "scheduled" || lesson.status === "makeup_pending");
                 const isAllCompleted = dayLessons.length > 0 && dayLessons.every((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
+                const hasMakeup = dayLessons.some((lesson) => makeupMarkerForLesson(lesson));
                 return (
                   <motion.button
                     key={calendarDate}
@@ -2143,11 +2164,13 @@ export function ScheduleView({
                       {hasCompleted && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
                       {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                       {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
+                      {hasMakeup && <Badge variant="yellow" className="text-[10px] px-1.5 py-0">补课</Badge>}
                       {amount > 0 && <Badge variant="default" className="px-1.5 py-0 text-[10px]">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                     </div>
                     {dayLessons.slice(0, 4).map((lesson) => (
                       <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-(--color-muted-foreground) sm:block">
                         {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)} · {courseSubject(vault, lesson.courseGroupId)}
+                        {makeupMarkerForLesson(lesson) ? ` · ${makeupMarkerForLesson(lesson)}` : ""}
                       </span>
                     ))}
                     {dayLessons.length > 4 && (
@@ -2194,6 +2217,7 @@ export function ScheduleView({
                           <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                           <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
                           <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
+                          {makeupMarkerForLesson(lesson) && <Badge variant="yellow" className="text-[10px]">{makeupMarkerForLesson(lesson)}</Badge>}
                         </div>
                         <div className="mt-1 text-xs font-semibold text-[#64748b]">
                           {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)}
@@ -2513,32 +2537,38 @@ export function ScheduleView({
                       <Badge variant="secondary">{row.details.length} 节</Badge>
                     </div>
                     <div className="max-h-[220px] space-y-2 overflow-y-auto pr-1">
-                      {row.details.map((detail) => (
-                        <div
-                          key={`${row.studentId}-${detail.lessonId}`}
-                          className="grid grid-cols-1 gap-2 rounded-[10px] border border-[#eef2f7] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate font-extrabold text-[#061226]">{detail.courseName}</div>
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              <span>{detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName}</span>
-                              <Badge variant="secondary" className="text-[10px]">
-                                {detail.subject}
-                              </Badge>
-                              <Badge variant="secondary" className="text-[10px]">
-                                {detail.courseTypeLabel}
-                              </Badge>
-                              <Badge variant={lessonStatusVariant(detail.status)} className="text-[10px]">
-                                {lessonStatusLabels[detail.status]}
-                              </Badge>
+                      {row.details.map((detail) => {
+                        const lesson = vault.lessons.find((item) => item.id === detail.lessonId);
+                        if (!lesson) return null;
+                        return (
+                          <button
+                            key={`${row.studentId}-${detail.lessonId}`}
+                            type="button"
+                            onClick={() => openLessonInRecords(lesson)}
+                            className="grid w-full grid-cols-1 gap-2 rounded-[10px] border border-[#eef2f7] bg-[#f8fbff] px-3 py-2 text-left text-xs font-semibold text-[#64748b] transition-colors hover:border-[#1557c2] hover:bg-[#eef5ff] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate font-extrabold text-[#061226]">{detail.courseName}</div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span>{detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName}</span>
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {detail.subject}
+                                </Badge>
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {detail.courseTypeLabel}
+                                </Badge>
+                                <Badge variant={lessonStatusVariant(detail.status)} className="text-[10px]">
+                                  {lessonStatusLabels[detail.status]}
+                                </Badge>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2 md:justify-end">
-                            <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{detail.hours.toFixed(1)} 小时</span>
-                            <span className="rounded-full bg-[#eaf2ff] px-2.5 py-1 font-extrabold text-[#1557c2]">{formatPrivateMoney(detail.amount, amountsVisible)}</span>
-                          </div>
-                        </div>
-                      ))}
+                            <div className="flex flex-wrap gap-2 md:justify-end">
+                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{detail.hours.toFixed(1)} 小时</span>
+                              <span className="rounded-full bg-[#eaf2ff] px-2.5 py-1 font-extrabold text-[#1557c2]">{formatPrivateMoney(detail.amount, amountsVisible)}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </motion.div>

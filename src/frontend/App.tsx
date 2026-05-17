@@ -48,6 +48,7 @@ import { makeId } from "@/frontend/lib/crypto";
 import type {
   Campus,
   AiScheduleSession,
+  AttendanceStatus,
   CourseGroup,
   CourseType,
   CustomCourseType,
@@ -376,7 +377,8 @@ export function App() {
   function updateLesson(lesson: Lesson) {
     updateVault((draft) => {
       cleanupResolvedMakeupLessons(draft, lesson);
-      draft.lessons = draft.lessons.map((item) => (item.id === lesson.id ? lesson : item));
+      const nextLesson = syncOriginalLessonFromMakeupCompletion(draft, lesson);
+      draft.lessons = draft.lessons.map((item) => (item.id === nextLesson.id ? nextLesson : item));
     });
   }
 
@@ -1858,6 +1860,49 @@ function cleanupResolvedMakeupLessons(vault: TeacherVault, updatedOriginal: Less
       note: removeResolvedMakeupNames(lesson.note, vault, resolvedStudentIds)
     })];
   });
+}
+
+function syncOriginalLessonFromMakeupCompletion(vault: TeacherVault, updatedMakeupLesson: Lesson): Lesson {
+  const originalId = updatedMakeupLesson.linkedOriginalLessonId;
+  if (!originalId) return updatedMakeupLesson;
+  const isCompletedMakeupStatus = updatedMakeupLesson.status === "completed" || updatedMakeupLesson.status === "makeup_completed";
+  if (!isCompletedMakeupStatus) return updatedMakeupLesson;
+  const original = vault.lessons.find((lesson) => lesson.id === originalId);
+  if (!original) return updatedMakeupLesson;
+
+  const completedStudentIds = new Set(lessonStudentIds(updatedMakeupLesson));
+  if (completedStudentIds.size === 0) return updatedMakeupLesson;
+  const nextOriginal: Lesson = {
+    ...original,
+    attendance: original.attendance.map((entry) =>
+      completedStudentIds.has(entry.studentId)
+        ? { ...entry, status: "makeup_completed" as AttendanceStatus, note: entry.note || `${updatedMakeupLesson.date} 已补课完成` }
+        : entry
+    )
+  };
+  const remainingMakeupStudentIds = new Set(makeupNeededStudentIds(nextOriginal));
+  if ((nextOriginal.status === "makeup_pending" || original.status === "makeup_pending") && remainingMakeupStudentIds.size === 0) {
+    nextOriginal.status = lessonStatusAfterResolvedMakeup(nextOriginal);
+  }
+
+  const normalizedMakeupLesson = updatedMakeupLesson.status === "completed"
+    ? {
+        ...updatedMakeupLesson,
+        status: "makeup_completed" as const,
+        attendance: updatedMakeupLesson.attendance.map((entry) => (
+          entry.status === "attended" ? { ...entry, status: "makeup_completed" as AttendanceStatus } : entry
+        ))
+      }
+    : updatedMakeupLesson;
+
+  const recalculatedOriginal = recalculateLessonFeeSnapshot(vault, nextOriginal);
+  const recalculatedMakeup = recalculateLessonFeeSnapshot(vault, normalizedMakeupLesson);
+  vault.lessons = vault.lessons.map((lesson) => {
+    if (lesson.id === original.id) return recalculatedOriginal;
+    if (lesson.id === updatedMakeupLesson.id) return recalculatedMakeup;
+    return lesson;
+  });
+  return recalculatedMakeup;
 }
 
 function lessonStatusAfterResolvedMakeup(lesson: Lesson): Lesson["status"] {

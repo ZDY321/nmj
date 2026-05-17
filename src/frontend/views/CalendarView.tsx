@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, ChevronLeft, ChevronRight, Table2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Search, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import {
@@ -13,6 +14,7 @@ import {
   campusName,
   formatPrivateMoney,
   courseSubject,
+  findStudent,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
@@ -22,7 +24,9 @@ import {
   orderedWeekdayLabels,
   shortWeekdayLabels,
   sortLessons,
+  sortCampusesForProfile,
   studentNames,
+  subjectOptionsForVault,
   weekDatesFor,
   weekStartsOn
 } from "@/frontend/lib/helpers";
@@ -45,13 +49,26 @@ export function CalendarView({
   const [month, setMonth] = useState(() => todayIso().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => todayIso());
   const [overviewPage, setOverviewPage] = useState<CalendarOverviewPage>("month");
+  const [weekCampusFilter, setWeekCampusFilter] = useState("all");
+  const [weekGradeFilter, setWeekGradeFilter] = useState("all");
+  const [weekSubjectFilter, setWeekSubjectFilter] = useState("all");
+  const [weekStudentFilter, setWeekStudentFilter] = useState("");
   const weekStartPreference = weekStartsOn(vault);
+  const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
+  const gradeOptions = Array.from(
+    new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))
+  ).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  const subjectOptions = subjectOptionsForVault(vault);
   const days = calendarDates(month, weekStartPreference);
-  const visibleLessons = vault.lessons.filter((lesson) => !isFullyScheduledMakeupOriginal(vault, lesson));
+  const visibleLessons = vault.lessons;
 
   const selectedLessons = visibleLessons.filter((l) => l.date === selectedDate).sort(sortLessons);
   const weekDates = weekDatesFor(selectedDate, weekStartPreference);
-  const weekLessons = visibleLessons.filter((l) => weekDates.includes(l.date)).sort(sortLessons);
+  const normalizedWeekStudentFilter = weekStudentFilter.trim().toLowerCase();
+  const weekLessonsBase = visibleLessons.filter((l) => weekDates.includes(l.date)).sort(sortLessons);
+  const weekLessons = overviewPage === "week"
+    ? weekLessonsBase.filter((lesson) => matchesWeekLessonFilter(lesson))
+    : weekLessonsBase;
   const monthLessons = visibleLessons.filter((l) => l.date.startsWith(month));
   const selectedTotal = selectedLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const weekTotal = weekLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
@@ -60,6 +77,14 @@ export function CalendarView({
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
   const weekRangeLabel = `${weekDates[0].slice(5)} - ${weekDates[6].slice(5)}`;
   const weekTimeSlots = Array.from(new Set(weekLessons.map((lesson) => `${lesson.startTime}-${lesson.endTime}`))).sort();
+  const activeMakeupLessonsByOriginal = visibleLessons
+    .filter((lesson) => Boolean(lesson.linkedOriginalLessonId) && lesson.status !== "cancelled")
+    .reduce<Record<string, Lesson[]>>((groups, lesson) => {
+      const originalId = lesson.linkedOriginalLessonId;
+      if (!originalId) return groups;
+      groups[originalId] = [...(groups[originalId] ?? []), lesson];
+      return groups;
+    }, {});
 
   function selectCalendarDate(date: string) {
     setSelectedDate(date);
@@ -68,6 +93,49 @@ export function CalendarView({
 
   function shiftSelectedWeek(days: number) {
     selectCalendarDate(addDays(selectedDate, days));
+  }
+
+  function lessonCampusId(lesson: Lesson): string | undefined {
+    return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
+  }
+
+  function matchesWeekLessonFilter(lesson: Lesson): boolean {
+    const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
+    const campusId = lessonCampusId(lesson);
+    const studentIds = lessonStudentIds(lesson);
+    const searchable = [
+      courseName(vault, lesson.courseGroupId),
+      courseSubject(vault, lesson.courseGroupId),
+      campusName(vault, campusId),
+      studentNames(vault, studentIds),
+      ...studentIds.map((studentId) => {
+        const student = findStudent(vault, studentId);
+        return [student?.name ?? "", student?.grade ?? "", student?.note ?? ""].join(" ");
+      })
+    ]
+      .join(" ")
+      .toLowerCase();
+    const matchesCampus = weekCampusFilter === "all" || campusId === weekCampusFilter;
+    const matchesSubject = weekSubjectFilter === "all" || course?.subject === weekSubjectFilter;
+    const matchesGrade =
+      weekGradeFilter === "all" ||
+      studentIds.some((studentId) => findStudent(vault, studentId)?.grade?.trim() === weekGradeFilter);
+    const matchesStudent =
+      !normalizedWeekStudentFilter || normalizedWeekStudentFilter.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
+    return matchesCampus && matchesSubject && matchesGrade && matchesStudent;
+  }
+
+  function makeupMarkerForLesson(lesson: Lesson): string | null {
+    if (lesson.linkedOriginalLessonId) return "补课";
+    const linkedMakeupLessons = activeMakeupLessonsByOriginal[lesson.id] ?? [];
+    const completedMakeupCount = linkedMakeupLessons.filter((item) => item.status === "completed" || item.status === "makeup_completed").length;
+    if (completedMakeupCount > 0 && lesson.attendance.some((entry) => entry.status === "makeup_completed")) {
+      return completedMakeupCount === linkedMakeupLessons.length ? "已补课" : "部分已补";
+    }
+    if (linkedMakeupLessons.length > 0) return "已安排补课";
+    if (lesson.status === "makeup_completed" || lesson.attendance.some((entry) => entry.status === "makeup_completed")) return "已补课";
+    if (lesson.status === "makeup_pending" || makeupNeededStudentIds(lesson).length > 0) return "待补课";
+    return null;
   }
 
   return (
@@ -171,6 +239,7 @@ export function CalendarView({
                   const hasPending = dayLessons.some((l) => l.status === "scheduled" || l.status === "makeup_pending");
                   const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
                   const hasCancelled = dayLessons.some((l) => l.status === "cancelled");
+                  const hasMakeup = dayLessons.some((l) => makeupMarkerForLesson(l));
                   const isAllCompleted = dayLessons.length > 0 && dayLessons.every((l) => l.status === "completed" || l.status === "makeup_completed");
                   const isCurrentMonth = date.startsWith(month);
                   const isSelected = date === selectedDate;
@@ -207,11 +276,13 @@ export function CalendarView({
                         {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
                         {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                         {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
+                        {hasMakeup && <Badge variant="yellow" className="text-[10px] px-1.5 py-0">补课</Badge>}
                         {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                       </div>
                       {dayLessons.slice(0, 2).map((l) => (
                         <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
                           {l.startTime} {courseTypeLabel(vault, l.type)} · {courseName(vault, l.courseGroupId)} · {courseSubject(vault, l.courseGroupId)}
+                          {makeupMarkerForLesson(l) ? ` · ${makeupMarkerForLesson(l)}` : ""}
                         </span>
                       ))}
                       {dayLessons.length > 2 && (
@@ -234,6 +305,61 @@ export function CalendarView({
                     <Badge variant="yellow" className="text-[10px]">待补课</Badge>
                     <Badge variant="destructive" className="text-[10px]">取消</Badge>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-[minmax(130px,0.75fr)_minmax(130px,0.75fr)_minmax(130px,0.75fr)_minmax(220px,1.4fr)_auto] xl:items-end">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">校区</label>
+                    <Select value={weekCampusFilter} onChange={(event) => setWeekCampusFilter(event.target.value)} className="h-10 bg-white">
+                      <option value="all">全部校区</option>
+                      {campusOptions.map((campus) => (
+                        <option key={campus.id} value={campus.id}>{campus.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">年级</label>
+                    <Select value={weekGradeFilter} onChange={(event) => setWeekGradeFilter(event.target.value)} className="h-10 bg-white">
+                      <option value="all">全部年级</option>
+                      {gradeOptions.map((grade) => (
+                        <option key={grade} value={grade}>{grade}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">科目</label>
+                    <Select value={weekSubjectFilter} onChange={(event) => setWeekSubjectFilter(event.target.value)} className="h-10 bg-white">
+                      <option value="all">全部科目</option>
+                      {subjectOptions.map((subject) => (
+                        <option key={subject} value={subject}>{subject}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">学生姓名</label>
+                    <label className="relative block">
+                      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                      <Input
+                        value={weekStudentFilter}
+                        onChange={(event) => setWeekStudentFilter(event.target.value)}
+                        placeholder="搜索学生、课程、校区或备注"
+                        className="h-10 bg-white pl-9"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWeekCampusFilter("all");
+                      setWeekGradeFilter("all");
+                      setWeekSubjectFilter("all");
+                      setWeekStudentFilter("");
+                    }}
+                    disabled={weekCampusFilter === "all" && weekGradeFilter === "all" && weekSubjectFilter === "all" && !weekStudentFilter}
+                    className="h-10 rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a] transition-colors hover:bg-[#eef4fb] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    清除
+                  </button>
                 </div>
 
                 <div className="overflow-x-auto rounded-[14px] border border-[#dbe4ef] bg-white">
@@ -309,9 +435,16 @@ export function CalendarView({
                                       >
                                         <span className="flex min-w-0 items-center justify-between gap-2">
                                           <strong className="truncate">{courseName(vault, lesson.courseGroupId)}</strong>
-                                          <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
-                                            {lessonStatusLabels[lesson.status]}
-                                          </Badge>
+                                          <span className="flex shrink-0 gap-1">
+                                            {makeupMarkerForLesson(lesson) && (
+                                              <Badge variant="yellow" className="text-[10px]">
+                                                {makeupMarkerForLesson(lesson)}
+                                              </Badge>
+                                            )}
+                                            <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">
+                                              {lessonStatusLabels[lesson.status]}
+                                            </Badge>
+                                          </span>
                                         </span>
                                         <span className="mt-1 block truncate font-semibold">
                                           {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}
@@ -388,6 +521,11 @@ export function CalendarView({
                       <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
                         {lessonStatusLabels[lesson.status]}
                       </Badge>
+                      {makeupMarkerForLesson(lesson) && (
+                        <Badge variant="yellow" className="shrink-0 text-[10px]">
+                          {makeupMarkerForLesson(lesson)}
+                        </Badge>
+                      )}
                       <Badge variant="secondary" className="shrink-0 text-[10px]">
                         {courseSubject(vault, lesson.courseGroupId)}
                       </Badge>
@@ -409,16 +547,4 @@ export function CalendarView({
       </div>
     </div>
   );
-}
-
-function isFullyScheduledMakeupOriginal(vault: TeacherVault, lesson: Lesson): boolean {
-  if (lesson.status !== "makeup_pending" || lesson.linkedOriginalLessonId) return false;
-  const expectedStudentIds = makeupNeededStudentIds(lesson);
-  if (expectedStudentIds.length === 0) return false;
-  const scheduledStudentIds = new Set(
-    vault.lessons
-      .filter((item) => item.linkedOriginalLessonId === lesson.id && item.status !== "cancelled")
-      .flatMap((item) => lessonStudentIds(item))
-  );
-  return expectedStudentIds.every((studentId) => scheduledStudentIds.has(studentId));
 }
