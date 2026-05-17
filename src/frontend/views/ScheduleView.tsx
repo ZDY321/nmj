@@ -1353,7 +1353,10 @@ export function ScheduleView({
                   </div>
                   {selectedAiProvider && (
                     <div className="space-y-1 rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2 text-xs font-bold leading-5 text-[#1557c2]">
-                      <div>当前使用：{selectedAiProvider.name} · {selectedAiProvider.model} · {selectedAiProvider.maskedApiKey}</div>
+                      <div>
+                        当前使用：{selectedAiProvider.name} · {selectedAiProvider.model}
+                        {canShowAiProviderEndpoint && selectedAiProvider.maskedApiKey ? ` · ${selectedAiProvider.maskedApiKey}` : ""}
+                      </div>
                       {canShowAiProviderEndpoint && (
                         <>
                           <div className="break-all">接口地址：{selectedAiProvider.baseUrl}</div>
