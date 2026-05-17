@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
-import { completedAmount, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { completedAmount, estimatedMonthlyIncome, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import {
   campusName,
   compareByName,
@@ -98,6 +98,7 @@ export function PayrollReviewView({
     .sort(sortLessons);
 
   const breakdown = salaryBreakdown(vault, selectedMonth);
+  const estimatedIncome = estimatedMonthlyIncome(vault, selectedMonth);
   const currentCampusObligation = campusFilter === "all" ? obligationSummary(vault, selectedMonth) : obligationSummary(vault, selectedMonth, campusFilter);
   const campusLessonFee = filteredLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
   const campusHours = filteredLessons.reduce((sum, lesson) => {
@@ -242,7 +243,7 @@ export function PayrollReviewView({
         </CardHeader>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {[
           { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `已完成 ${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatPrivateMoney(campusLessonFee, amountsVisible), hint: "仅统计已完成/补课完成", icon: Banknote },
@@ -255,6 +256,7 @@ export function PayrollReviewView({
             icon: SlidersHorizontal,
             danger: true
           },
+          { label: "本月预估收入", value: formatPrivateMoney(estimatedIncome, amountsVisible), hint: "含待上课课节预估", icon: BookOpen },
           { label: "当前校区扣后", value: formatPrivateMoney(campusNet, amountsVisible), hint: campusFilter === "all" ? "全部校区扣后课时费" : campusName(vault, campusFilter), icon: FileCheck2 }
         ].map((item) => {
           const Icon = item.icon;

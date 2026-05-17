@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { Lesson, SalaryAdjustment, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
-import { attendanceSummary, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
+import { attendanceSummary, estimatedMonthlyIncome, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
   campusName,
@@ -69,6 +69,7 @@ export function SalaryView({
   const courseOptions = sortCoursesByName(vault.courseGroups);
   const year = selectedMonth.slice(0, 4);
   const breakdown = salaryBreakdown(vault, selectedMonth);
+  const estimatedIncome = estimatedMonthlyIncome(vault, selectedMonth);
   const summary = attendanceSummary(vault, selectedMonth);
   const currentMonth = todayIso().slice(0, 7);
   const currentYear = currentMonth.slice(0, 4);
@@ -143,6 +144,7 @@ export function SalaryView({
         <MetricCard label="班课" value={formatPrivateMoney(breakdown.classLessons, amountsVisible)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
         <MetricCard label="全日制" value={formatPrivateMoney(breakdown.fullTime, amountsVisible)} hint="已完成课程" variant={4} index={3} showSparkline={false} />
         <MetricCard label="合计" value={formatPrivateMoney(breakdown.total, amountsVisible)} hint="含补贴/扣款" variant={1} index={4} showSparkline={false} />
+        <MetricCard label="预估本月收入" value={formatPrivateMoney(estimatedIncome, amountsVisible)} hint="含本月待上课课节预估" variant={2} index={5} showSparkline={false} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -331,9 +333,10 @@ export function SalaryView({
           <CardDescription>点击上方年度趋势中的月份，可切换这里的核对月份；到课情况已合并在同一组数据卡片中。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-9">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-10">
             {[
               { label: "总收入", value: formatPrivateMoney(breakdown.total, amountsVisible) },
+              { label: "预估本月收入", value: formatPrivateMoney(estimatedIncome, amountsVisible) },
               { label: "课时", value: `${(totalHours || completedThisMonth.length * 2).toFixed(1)} 小时` },
               { label: "课程", value: `${monthLessons.length} 节` },
               ...Object.entries(summary).map(([key, value]) => ({

@@ -412,6 +412,20 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
   };
 }
 
+export function estimatedMonthlyIncome(vault: TeacherVault, month: string): number {
+  const monthLessons = vault.lessons.filter((lesson) => monthOf(lesson.date) === month);
+  const completedIncome = monthLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
+  const pendingIncome = monthLessons.reduce((sum, lesson) => {
+    if (lesson.status !== "scheduled" && lesson.status !== "makeup_pending") return sum;
+    return sum + lesson.feeSnapshot.amount;
+  }, 0);
+  const adjustments = vault.salaryAdjustments
+    .filter((item) => item.month === month)
+    .reduce((sum, item) => sum + item.amount, 0);
+  const obligationDeduction = obligationSummary(vault, month).amount;
+  return completedIncome + pendingIncome + vault.profile.baseSalary + adjustments - obligationDeduction;
+}
+
 export function attendanceSummary(vault: TeacherVault, month: string): Record<AttendanceStatus, number> {
   const initial: Record<AttendanceStatus, number> = {
     attended: 0,
