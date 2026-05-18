@@ -73,6 +73,7 @@ type AiProviderRow = {
   updated_at: string;
   last_tested_at: string | null;
   last_error: string | null;
+  last_latency_ms?: number | null;
 };
 
 type ChatCompletionResponse = {
@@ -307,7 +308,8 @@ function aiProviderFromRow(row: AiProviderRow): AiProviderConfig {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastTestedAt: row.last_tested_at,
-    lastError: row.last_error
+    lastError: row.last_error,
+    lastLatencyMs: row.last_latency_ms ?? null
   };
 }
 
@@ -339,7 +341,7 @@ function isMigrationError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return /no such table: user_sessions|no such table: user_deletion_events|no such table: user_feedback|no such table: ai_provider_configs|no such table: ai_usage_logs|no such column: .*delete_|no such column: deleted_at/i.test(
+  return /no such table: user_sessions|no such table: user_deletion_events|no such table: user_feedback|no such table: ai_provider_configs|no such table: ai_usage_logs|no such column: .*delete_|no such column: deleted_at|no such column: last_latency_ms/i.test(
     error.message
   );
 }
@@ -1121,7 +1123,8 @@ async function getAiProviderRow(env: Env, providerId: string): Promise<AiProvide
       created_at,
       updated_at,
       last_tested_at,
-      last_error
+      last_error,
+      last_latency_ms
      FROM ai_provider_configs
      WHERE id = ?`
   )
@@ -1146,7 +1149,8 @@ async function listAiProviders(env: Env, actorUserId: string): Promise<Response>
       created_at,
       updated_at,
       last_tested_at,
-      last_error
+      last_error,
+      last_latency_ms
      FROM ai_provider_configs
      ORDER BY is_default DESC, updated_at DESC`
   ).all<AiProviderRow>();
@@ -1172,7 +1176,8 @@ async function listUsableAiProviders(env: Env, includeSensitive: boolean, actorU
       created_at,
       updated_at,
       last_tested_at,
-      last_error
+      last_error,
+      last_latency_ms
      FROM ai_provider_configs
      WHERE enabled = 1
      ORDER BY is_default DESC, updated_at DESC`
@@ -1547,7 +1552,8 @@ function shouldRetryAiRequest(message: string): boolean {
 function scheduleAssistantSystemPrompt(): string {
   return [
     "你是一个中文教学排课系统的 AI 助手。",
-    "你只能把用户的自然语言整理成结构化 JSON 建议，不能声称已经修改系统数据。",
+    "你可以做两类事：1）把新增/修改/删除/排课请求整理成结构化 JSON 建议；2）根据 appContext 里的课程、课节、统计摘要回答数据查询问题。",
+    "你不能声称已经修改系统数据；涉及写入的数据只生成建议，等待用户确认。",
     "不要输出 Markdown。只输出 JSON。",
     "支持的动作类型：create_student、create_course、create_course_type、update_course、delete_course、migrate_course、delete_lesson、schedule_lessons、sync_lessons、ask_clarification。",
     "create_course、update_course、migrate_course 涉及课程命名时，对用户展示和追问必须使用“课程档案名称”，不要只说“课程名称”或“课程名”；JSON 字段仍使用 courseName/newCourseName/targetCourseName。",
@@ -1560,6 +1566,9 @@ function scheduleAssistantSystemPrompt(): string {
     "delete_course 用于删除或暂停课程；已有课时引用时除非用户明确 forceDelete，否则系统会暂停课程以保留历史课时。",
     "delete_lesson 用于删除单节课；data 可包含 lessonId、courseId、courseName、subject、date、startTime、endTime。",
     "migrate_course 用于把已有课程迁移到新课程或目标课程；data 可包含 sourceCourseId/sourceCourseName、targetCourseId/targetCourseName、type/targetType、migrateLessons、effectiveFrom、effectiveTo、pauseSource。",
+    "如果用户只是询问统计、排课数量、某时间段有几节课、预计课时费、哪些日期有课等，不要输出写入动作；actions 必须为空，并用 answer 字段给出清晰回答。可引用 appContext.lessonAnalytics、appContext.analyticsLessons、appContext.timeWindowSummaries 里的数据。",
+    "计算课时费时只能使用 appContext 中提供的 feeAmount、amount、totalAmount 等字段；如果对应课程缺少有效计费单价或金额为未知，必须明确说明“当前数据中缺少各课程的计费单价，无法计算课时费总额”，不要编造金额。",
+    "数据问答输出结构：{\"summary\":\"...\",\"answer\":\"...\",\"actions\":[],\"questions\":[],\"warnings\":[]}。",
     "必须保留用户没有明确说明的字段为 null 或放入 questions，不要自行编造。",
     "时间使用 24 小时制 HH:mm，日期使用 YYYY-MM-DD。",
     "如果发现信息不足，actions 可以为空，并在 questions 里列出需要确认的问题。",
@@ -1743,25 +1752,28 @@ async function testAiProvider(request: Request, env: Env, actor: AuthContext, pr
   const provider = await getAiProviderRow(env, providerId);
   if (!provider) return notFound();
 
+  const startedAt = Date.now();
   try {
     const result = await callAiProvider(provider, [
       { role: "system", content: "只输出 JSON。" },
       { role: "user", content: "请输出 {\"ok\":true,\"message\":\"connected\"}" }
     ]);
+    const latencyMs = Math.max(Date.now() - startedAt, 0);
     const now = new Date().toISOString();
-    await env.DB.prepare("UPDATE ai_provider_configs SET last_tested_at = ?, last_error = NULL, updated_at = ? WHERE id = ?")
-      .bind(now, now, providerId)
+    await env.DB.prepare("UPDATE ai_provider_configs SET last_tested_at = ?, last_error = NULL, last_latency_ms = ?, updated_at = ? WHERE id = ?")
+      .bind(now, latencyMs, now, providerId)
       .run();
     await addAiUsageLog(env, providerId, actor.user.id, "test", true, result.usage);
-    return json({ ok: true, provider: aiProviderFromRow({ ...provider, last_tested_at: now, last_error: null }), response: result.draft ?? result.text });
+    return json({ ok: true, provider: aiProviderFromRow({ ...provider, last_tested_at: now, last_error: null, last_latency_ms: latencyMs }), response: result.draft ?? result.text, latencyMs });
   } catch (error) {
+    const latencyMs = Math.max(Date.now() - startedAt, 0);
     const message = error instanceof Error ? error.message : "AI 测试连接失败。";
     const now = new Date().toISOString();
-    await env.DB.prepare("UPDATE ai_provider_configs SET last_tested_at = ?, last_error = ?, updated_at = ? WHERE id = ?")
-      .bind(now, message.slice(0, 1000), now, providerId)
+    await env.DB.prepare("UPDATE ai_provider_configs SET last_tested_at = ?, last_error = ?, last_latency_ms = ?, updated_at = ? WHERE id = ?")
+      .bind(now, message.slice(0, 1000), latencyMs, now, providerId)
       .run();
     await addAiUsageLog(env, providerId, actor.user.id, "test", false, undefined, message);
-    return json({ error: "AI provider test failed", detail: message }, 502);
+    return json({ error: "AI provider test failed", detail: message, latencyMs }, 502);
   }
 }
 

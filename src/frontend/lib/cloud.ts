@@ -247,8 +247,8 @@ export async function deleteAiProvider(token: string, providerId: string): Promi
   });
 }
 
-export async function testAiProvider(token: string, providerId: string): Promise<{ ok: true; provider: AiProviderConfig; response: unknown }> {
-  return apiRequest<{ ok: true; provider: AiProviderConfig; response: unknown }>(
+export async function testAiProvider(token: string, providerId: string): Promise<{ ok: true; provider: AiProviderConfig; response: unknown; latencyMs?: number }> {
+  return apiRequest<{ ok: true; provider: AiProviderConfig; response: unknown; latencyMs?: number }>(
     `/api/admin/ai/providers/${encodeURIComponent(providerId)}/test`,
     {
       method: "POST",

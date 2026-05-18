@@ -103,6 +103,12 @@ const aiProviderDescriptions: Record<AiProviderKind, { summary: string; baseUrl:
   }
 };
 
+function formatLatency(latencyMs: number): string {
+  if (!Number.isFinite(latencyMs)) return "未知";
+  if (latencyMs < 1000) return `${Math.round(latencyMs)}ms`;
+  return `${(latencyMs / 1000).toFixed(2)}s`;
+}
+
 const emptyAiForm: AiProviderInput = {
   name: "",
   provider: "openai",
@@ -441,7 +447,8 @@ export function AdminView({
           temperature: result.provider.temperature
         }));
       }
-      const successMessage = `AI 接口测试成功：${result.provider.name} / ${result.provider.model}`;
+      const latencyText = typeof result.latencyMs === "number" ? ` · 延迟 ${formatLatency(result.latencyMs)}` : "";
+      const successMessage = `AI 接口测试成功：${result.provider.name} / ${result.provider.model}${latencyText}`;
       setAiStatus({ tone: "success", message: successMessage });
       setMessage(successMessage);
     } catch (error) {
@@ -941,6 +948,7 @@ export function AdminView({
                           }`}>
                             {provider.lastError ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
                             {provider.lastError ? "测试失败" : "测试成功"} · {formatAppDateTime(provider.lastTestedAt)}
+                            {typeof provider.lastLatencyMs === "number" ? ` · ${formatLatency(provider.lastLatencyMs)}` : ""}
                           </div>
                         )}
                         {provider.lastError && (

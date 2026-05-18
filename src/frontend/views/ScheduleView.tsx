@@ -546,6 +546,7 @@ export function ScheduleView({
   const aiDraftQuestions = arrayValue(aiDraftRecord?.questions);
   const aiDraftWarnings = arrayValue(aiDraftRecord?.warnings);
   const aiDraftSummary = textValue(aiDraftRecord?.summary, aiDraft ? "AI 已生成建议，请按下方内容核对。" : "");
+  const aiDraftAnswer = textValue(aiDraftRecord?.answer ?? aiDraftRecord?.result ?? aiDraftRecord?.analysis, "");
   const aiDraftCanApply = !aiLoading && !aiApplying && aiApplyResult?.ok !== true && aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
   const selectedAiUsage = selectedAiProvider
     ? {
@@ -594,6 +595,10 @@ export function ScheduleView({
   }
 
   function aiScheduleContext() {
+    const today = todayIso();
+    const currentMonth = today.slice(0, 7);
+    const analyticsStart = addDays(today, -90);
+    const analyticsEnd = addDays(today, 120);
     const activeStudents = vault.students
       .filter((student) => student.status === "active")
       .map((student) => ({
@@ -628,16 +633,75 @@ export function ScheduleView({
         status: lessonStatusLabels[lesson.status],
         students: studentNames(vault, lessonStudentIds(lesson))
       }));
+    const analyticsLessons = vault.lessons
+      .filter((lesson) => lesson.date >= analyticsStart && lesson.date <= analyticsEnd)
+      .sort(sortLessons)
+      .map((lesson) => {
+        const course = getCourse(vault, lesson.courseGroupId);
+        const amount = lesson.feeSnapshot.amount;
+        const hasKnownFee = Number.isFinite(amount);
+        return {
+          id: lesson.id,
+          date: lesson.date,
+          weekday: weekdayLabels[weekdayOfDateIso(lesson.date)],
+          startTime: lesson.startTime,
+          endTime: lesson.endTime,
+          courseId: lesson.courseGroupId,
+          courseName: courseName(vault, lesson.courseGroupId),
+          subject: courseSubject(vault, lesson.courseGroupId),
+          courseType: courseTypeLabel(vault, lesson.type),
+          campus: campusName(vault, lesson.campusId ?? course?.defaultCampusId),
+          status: lesson.status,
+          statusLabel: lessonStatusLabels[lesson.status],
+          students: studentNames(vault, lessonStudentIds(lesson)),
+          hours: lessonBillableHours(lesson),
+          feeAmount: hasKnownFee ? amount : null,
+          feeKnown: hasKnownFee
+        };
+      });
+    const summariseLessons = (lessons: typeof analyticsLessons) => ({
+      count: lessons.length,
+      totalHours: Number(lessons.reduce((sum, lesson) => sum + lesson.hours, 0).toFixed(2)),
+      knownFeeCount: lessons.filter((lesson) => lesson.feeKnown).length,
+      totalKnownFee: lessons.reduce((sum, lesson) => sum + (lesson.feeAmount ?? 0), 0),
+      hasUnknownFee: lessons.some((lesson) => !lesson.feeKnown),
+      byDate: Object.values(lessons.reduce<Record<string, { date: string; count: number; totalHours: number; totalKnownFee: number }>>((map, lesson) => {
+        const item = map[lesson.date] ?? { date: lesson.date, count: 0, totalHours: 0, totalKnownFee: 0 };
+        item.count += 1;
+        item.totalHours = Number((item.totalHours + lesson.hours).toFixed(2));
+        item.totalKnownFee += lesson.feeAmount ?? 0;
+        map[lesson.date] = item;
+        return map;
+      }, {}))
+    });
+    const currentWeekStart = addDays(today, -((weekdayOfDateIso(today) - weekStartPreference + 7) % 7));
+    const currentWeekEnd = addDays(currentWeekStart, 6);
+    const currentWeekLessons = analyticsLessons.filter((lesson) => lesson.date >= currentWeekStart && lesson.date <= currentWeekEnd);
+    const currentMonthLessons = analyticsLessons.filter((lesson) => lesson.date.startsWith(currentMonth));
+    const morningEightToTenLessons = analyticsLessons.filter((lesson) => lesson.startTime < "10:00" && lesson.endTime > "08:00");
 
     return {
-      today: todayIso(),
+      today,
       selectedCalendarDate,
       selectedCalendarMonth: calendarMonth,
       campuses: vault.campuses.map((campus) => ({ id: campus.id, name: campus.name })),
       subjects: subjectOptionsForVault(vault),
       activeStudents,
       activeCourses,
-      nearbyLessons
+      nearbyLessons,
+      analyticsRange: { start: analyticsStart, end: analyticsEnd },
+      analyticsLessons,
+      lessonAnalytics: {
+        currentWeek: { start: currentWeekStart, end: currentWeekEnd, ...summariseLessons(currentWeekLessons) },
+        currentMonth: { month: currentMonth, ...summariseLessons(currentMonthLessons) }
+      },
+      timeWindowSummaries: {
+        morningEightToTen: {
+          startTime: "08:00",
+          endTime: "10:00",
+          ...summariseLessons(morningEightToTenLessons)
+        }
+      }
     };
   }
 
@@ -1408,6 +1472,7 @@ export function ScheduleView({
                       <label className="text-sm font-medium">操作类型</label>
                       <Select value={aiTaskType} onChange={(event) => patchAiSession({ taskType: event.target.value as AiScheduleTaskType, draft: null, message: "" })} disabled={aiLoading}>
                         <option value="auto">智能识别</option>
+                        <option value="data_query">数据问答</option>
                         <option value="student_course">新增学生和课程</option>
                         <option value="schedule_lessons">新增排课</option>
                         <option value="sync_lessons">同步课程</option>
@@ -1420,13 +1485,15 @@ export function ScheduleView({
                       rows={8}
                       value={aiInstruction}
                       onChange={(event) => patchAiSession({ instruction: event.target.value, draft: null, followupAnswer: "", message: "" })}
-                      placeholder="例如：新增学生张三，三年级，A校区，语文一对一；从下周一开始每周一三 19:00-20:30 排课。"
+                      placeholder="例如：本周一共有几节课？本月 08:00-10:00 有哪些课？或：新增学生张三，三年级，A校区，语文一对一。"
                       className="min-h-[180px] bg-white"
                       disabled={aiLoading}
                     />
                     <div className="grid grid-cols-1 gap-2 text-xs font-semibold leading-5 text-[#64748b] md:grid-cols-2">
                       {[
                         "描述尽量准确详细，写清学生姓名、校区、年级、科目、课程档案名称、日期和时间。",
+                        "可以直接询问统计问题，例如本周/本月课节数量、某时间段哪几天有课、预计课时费。",
+                        "涉及课时费时，AI 只能根据系统已有金额回答；缺少单价时会提示无法计算总额。",
                         "可以按日常说法输入，例如“本周日上午9点、下午2点”；如果跨周或容易混淆，再补充完整日期或24小时制时间。",
                         "创建班课或多人课时，请写清最少人数、基础费用、每增加1人费用；最少人数不是当前关联学生人数。",
                         "涉及修改或删除时，请写清原课程日期、时间、科目和学生，避免 AI 匹配到相近课程。",
@@ -1476,11 +1543,14 @@ export function ScheduleView({
                 <div className="space-y-4">
                   <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
                     <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
-                      <Bot size={16} className="text-[#1557c2]" /> 当前设计范围
+                      <Bot size={16} className="text-[#1557c2]" /> 当前能力范围
                     </div>
                     <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#25324a]">
                       {[
+                        "回答本周、本月、某时间段课节数量和日期分布",
+                        "按当前课节金额汇总已知课时费，缺少单价时明确提示无法计算",
                         "录入新学生和课程 / 班课信息",
+                        "新增自定义班型并设置默认计费",
                         "修改课程班型、校区、关联学生，或迁移到新课程",
                         "按指定日期或星期批量新增排课",
                         "同步某一天或某几天的课程",
@@ -1496,7 +1566,7 @@ export function ScheduleView({
                   <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
                     <div className="mb-2 text-sm font-extrabold text-[#9a3412]">不让 AI 直接处理的内容</div>
                     <div className="text-sm font-semibold leading-6 text-[#9a3412]">
-                      今日提醒、课时费计算、补课状态、课程记录详情和冲突判断继续由系统代码处理，AI 只负责把自然语言整理成待校验的操作建议。
+                      今日提醒、补课状态、课程记录详情和冲突判断继续由系统代码处理；涉及写入的数据必须先生成建议并由人工确认。
                     </div>
                   </div>
 
@@ -1547,6 +1617,17 @@ export function ScheduleView({
                         {aiDraftSummary || "AI 没有返回摘要，请查看下方操作建议或原始内容。"}
                       </div>
                     </div>
+
+                    {aiDraftAnswer && (
+                      <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] p-4">
+                        <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#15803d]">
+                          <Bot size={16} /> AI 回答
+                        </div>
+                        <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#166534]">
+                          {aiDraftAnswer}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">

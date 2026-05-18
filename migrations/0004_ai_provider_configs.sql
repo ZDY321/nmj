@@ -36,4 +36,3 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_provider_date
   ON ai_usage_logs(provider_id, created_at DESC);
-

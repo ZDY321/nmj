@@ -27,6 +27,7 @@ export type AiProviderConfig = {
   updatedAt: string;
   lastTestedAt: string | null;
   lastError: string | null;
+  lastLatencyMs?: number | null;
   usedToday?: number;
   remainingToday?: number;
 };
@@ -50,7 +51,7 @@ export type AiProviderInput = {
   temperature: number;
 };
 
-export type AiScheduleTaskType = "auto" | "student_course" | "schedule_lessons" | "sync_lessons";
+export type AiScheduleTaskType = "auto" | "data_query" | "student_course" | "schedule_lessons" | "sync_lessons";
 
 export type AiScheduleDraftRequest = {
   providerId: string;
