@@ -2,7 +2,14 @@ export type UserRole = "teacher" | "admin";
 
 export type FeedbackStatus = "unread" | "read" | "in_progress" | "completed";
 
-export type AiProviderKind = "newapi" | "openai_compatible" | "deepseek" | "openai" | "gemini";
+export type AiProviderKind =
+  | "openai"
+  | "openai_response"
+  | "anthropic"
+  | "newapi"
+  | "openai_compatible"
+  | "deepseek"
+  | "gemini";
 
 export type AiProviderConfig = {
   id: string;

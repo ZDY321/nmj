@@ -50,6 +50,7 @@ import type {
   Campus,
   AiScheduleSession,
   AttendanceStatus,
+  ClassFeeTier,
   CourseGroup,
   CourseType,
   CustomCourseType,
@@ -698,6 +699,7 @@ export function App() {
       const subject = stringValue(data.subject) || "语文";
       const campus = campusByName(data.campus);
       const studentIds = studentIdsFromAiData(data);
+      const feeRule = feeRuleFromAiData(data, nextVault, type);
       const course: CourseGroup = {
         id: makeId("course"),
         name,
@@ -705,7 +707,7 @@ export function App() {
         subject,
         defaultCampusId: campus?.id,
         studentIds,
-        feeRule: feeRuleForCourseType(nextVault, type),
+        feeRule,
         note: stringValue(data.note) || undefined,
         status: "active"
       };
@@ -721,6 +723,7 @@ export function App() {
       const nextType = data.type === undefined || data.type === null || data.type === "" ? course.type : normalizeAiCourseType(data.type, nextVault);
       const nextStudentIds = studentIdsFromAiData(data);
       const campus = data.campus === undefined ? undefined : campusByName(data.campus);
+      const nextFeeRule = feeRuleFromAiData(data, nextVault, nextType, nextType !== previousType ? undefined : course.feeRule);
       const nextCourse: CourseGroup = {
         ...course,
         name: stringValue(data.newName ?? data.name ?? data.courseName) || course.name,
@@ -728,7 +731,7 @@ export function App() {
         type: nextType,
         defaultCampusId: data.campus === undefined ? course.defaultCampusId : campus?.id,
         studentIds: nextStudentIds.length > 0 ? nextStudentIds : course.studentIds,
-        feeRule: nextType !== previousType ? feeRuleForCourseType(nextVault, nextType) : course.feeRule,
+        feeRule: nextFeeRule,
         note: data.note === undefined ? course.note : stringValue(data.note) || undefined,
         status: data.status === "paused" ? "paused" : data.status === "active" ? "active" : course.status
       };
@@ -2184,6 +2187,81 @@ function arrayValueLocal(value: unknown): unknown[] {
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
+}
+
+function numberValue(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value.trim()) : NaN;
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function feeRuleFromAiData(data: Record<string, unknown>, vault: TeacherVault, type: CourseType, fallback?: FeeRule): FeeRule {
+  const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
+  const templateRule = fallback ?? feeRuleForCourseType(vault, type);
+  const baseFee = numberValue(source.baseFee ?? source.classBaseFee ?? source.minimumFee);
+  const perStudentFee = numberValue(source.perPresentStudentFee ?? source.perStudentFee ?? source.extraStudentFee ?? source.headcountFee);
+  const minStudents = numberValue(source.minStudents ?? source.minimumStudents ?? source.includedStudents);
+  const hourlyRate = numberValue(source.hourlyRate ?? source.rate);
+  const fixedFee = numberValue(source.fixedFee);
+  const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
+
+  if (
+    templateRule.mode === "class_headcount" ||
+    mode === "class_headcount" ||
+    mode === "class" ||
+    baseFee !== undefined ||
+    perStudentFee !== undefined ||
+    minStudents !== undefined
+  ) {
+    const tier = normalizedSingleClassFeeTier(templateRule);
+    const nextTier = {
+      id: tier.id,
+      minStudents: Math.max(Math.round(minStudents ?? tier.minStudents ?? 1), 0),
+      baseFee: Math.max(baseFee ?? tier.baseFee ?? 0, 0),
+      perStudentFee: Math.max(perStudentFee ?? tier.perStudentFee ?? 0, 0)
+    };
+    return {
+      ...templateRule,
+      mode: "class_headcount",
+      baseFee: nextTier.baseFee,
+      perPresentStudentFee: nextTier.perStudentFee,
+      classFeeTiers: [nextTier],
+      makeupFeeMode: templateRule.makeupFeeMode ?? "perStudentFee"
+    };
+  }
+
+  if (mode === "fixed" || fixedFee !== undefined) {
+    return {
+      mode: "fixed",
+      fixedFee: Math.max(fixedFee ?? templateRule.fixedFee ?? templateRule.hourlyRate ?? 0, 0)
+    };
+  }
+
+  if (mode === "hourly" || hourlyRate !== undefined) {
+    return {
+      mode: "hourly",
+      hourlyRate: Math.max(hourlyRate ?? templateRule.hourlyRate ?? 0, 0)
+    };
+  }
+
+  return templateRule;
+}
+
+function normalizedSingleClassFeeTier(rule: FeeRule): ClassFeeTier {
+  const explicit = (rule.classFeeTiers ?? []).filter((tier) => Number.isFinite(tier.minStudents));
+  const tier = explicit.length > 0
+    ? [...explicit].sort((a, b) => a.minStudents - b.minStudents)[0]
+    : {
+        id: "tier_1_plus",
+        minStudents: 1,
+        baseFee: rule.baseFee ?? 0,
+        perStudentFee: rule.perPresentStudentFee ?? 0
+      };
+  return {
+    id: tier.id || "tier_1_plus",
+    minStudents: tier.minStudents,
+    baseFee: tier.baseFee,
+    perStudentFee: tier.perStudentFee
+  };
 }
 
 function normalizeAiCourseType(value: unknown, vault: TeacherVault | null = null): CourseType {

@@ -95,6 +95,12 @@ type ChatCompletionResponse = {
   };
 };
 
+type AiCallResult = {
+  text: string;
+  draft: unknown;
+  usage?: AiScheduleDraftResponse["usage"];
+};
+
 type UserRow = {
   id: string;
   username: string;
@@ -196,7 +202,15 @@ function isFeedbackStatus(value: string): value is FeedbackStatus {
 }
 
 function isAiProviderKind(value: string): value is AiProviderKind {
-  return value === "newapi" || value === "openai_compatible" || value === "deepseek" || value === "openai" || value === "gemini";
+  return (
+    value === "openai" ||
+    value === "openai_response" ||
+    value === "anthropic" ||
+    value === "newapi" ||
+    value === "openai_compatible" ||
+    value === "deepseek" ||
+    value === "gemini"
+  );
 }
 
 function daysFromNow(days: number): string {
@@ -1032,12 +1046,26 @@ async function updateFeedback(request: Request, env: Env, actor: AuthContext, fe
 }
 
 function normalizeAiBaseUrl(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, "").replace(/\/v1\/chat\/completions$/i, "").replace(/\/chat\/completions$/i, "");
+  return baseUrl
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/v1\/chat\/completions$/i, "")
+    .replace(/\/chat\/completions$/i, "")
+    .replace(/\/v1\/responses$/i, "")
+    .replace(/\/responses$/i, "")
+    .replace(/\/v1\/messages$/i, "")
+    .replace(/\/messages$/i, "");
 }
 
-function chatCompletionsUrl(baseUrl: string): string {
+function endpointUrl(baseUrl: string, path: "chat/completions" | "responses" | "messages"): string {
   const normalized = normalizeAiBaseUrl(baseUrl);
-  return /\/v1$/i.test(normalized) ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`;
+  return /\/v1$/i.test(normalized) ? `${normalized}/${path}` : `${normalized}/v1/${path}`;
+}
+
+function aiProviderProtocol(provider: AiProviderRow | { provider: string }): "openai" | "openai_response" | "anthropic" {
+  if (provider.provider === "openai_response") return "openai_response";
+  if (provider.provider === "anthropic") return "anthropic";
+  return "openai";
 }
 
 function numberInRange(value: unknown, fallback: number, min: number, max: number): number {
@@ -1316,6 +1344,32 @@ function chatContentText(content: string | Array<{ type?: string; text?: string 
   return "";
 }
 
+function responseOutputText(payload: Record<string, unknown> | null): string {
+  if (!payload) return "";
+  if (typeof payload.output_text === "string") return payload.output_text;
+  const output = Array.isArray(payload.output) ? payload.output : [];
+  return output.map((item) => {
+    if (!item || typeof item !== "object") return "";
+    const content = (item as Record<string, unknown>).content;
+    if (!Array.isArray(content)) return "";
+    return content.map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const record = part as Record<string, unknown>;
+      return typeof record.text === "string" ? record.text : "";
+    }).join("");
+  }).join("").trim();
+}
+
+function anthropicContentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((part) => {
+    if (!part || typeof part !== "object") return "";
+    const record = part as Record<string, unknown>;
+    return typeof record.text === "string" ? record.text : "";
+  }).join("").trim();
+}
+
 function extractJsonFromText(text: string): unknown {
   const trimmed = text.trim();
   if (!trimmed) return null;
@@ -1343,6 +1397,24 @@ function extractJsonFromText(text: string): unknown {
   }
 }
 
+function usageFromPayload(payload: Record<string, unknown> | null | undefined): AiScheduleDraftResponse["usage"] | undefined {
+  const usage = payload?.usage;
+  if (!usage || typeof usage !== "object") return undefined;
+  const record = usage as Record<string, unknown>;
+  const promptTokens = Number(record.prompt_tokens ?? record.input_tokens ?? record.promptTokens ?? record.inputTokens);
+  const completionTokens = Number(record.completion_tokens ?? record.output_tokens ?? record.completionTokens ?? record.outputTokens);
+  const totalTokens = Number(record.total_tokens ?? record.totalTokens);
+  return {
+    promptTokens: Number.isFinite(promptTokens) ? promptTokens : undefined,
+    completionTokens: Number.isFinite(completionTokens) ? completionTokens : undefined,
+    totalTokens: Number.isFinite(totalTokens)
+      ? totalTokens
+      : Number.isFinite(promptTokens) && Number.isFinite(completionTokens)
+        ? promptTokens + completionTokens
+        : undefined
+  };
+}
+
 function scheduleAssistantSystemPrompt(): string {
   return [
     "你是一个中文教学排课系统的 AI 助手。",
@@ -1350,6 +1422,7 @@ function scheduleAssistantSystemPrompt(): string {
     "不要输出 Markdown。只输出 JSON。",
     "支持的动作类型：create_student、create_course、update_course、delete_course、migrate_course、delete_lesson、schedule_lessons、sync_lessons、ask_clarification。",
     "create_course、update_course、migrate_course 涉及课程命名时，对用户展示和追问必须使用“课程档案名称”，不要只说“课程名称”或“课程名”；JSON 字段仍使用 courseName/newCourseName/targetCourseName。",
+    "create_course 或 update_course 如果是班课、多人课、小组课、一对二或任意按人数计费班型，并且用户没有明确说沿用现有班型默认计费，需要确认最少人数、基础费用、每增加1人费用；JSON 可在 data.feeRule 写 {\"mode\":\"class_headcount\",\"minStudents\":1,\"baseFee\":0,\"perStudentFee\":0}，也可平铺 baseFee/perStudentFee/minStudents。",
     "update_course 用于修改已有课程档案名称、科目、班型、校区、关联学生或启用/暂停状态；data 里应包含 courseId 或 courseName。",
     "update_course 修改课程班型或计费规则时，默认只影响未来待上课/草稿课节；历史课、已完成课、补课课节默认保留原课型和原费用。若用户明确要求，可用 lessonUpdateScope：future_scheduled、all_unfinished、all、none。",
     "delete_course 用于删除或暂停课程；已有课时引用时除非用户明确 forceDelete，否则系统会暂停课程以保留历史课时。",
@@ -1362,11 +1435,11 @@ function scheduleAssistantSystemPrompt(): string {
   ].join("\n");
 }
 
-async function callOpenAiCompatibleChat(
+async function callOpenAiChatCompletions(
   provider: AiProviderRow,
   messages: Array<{ role: "system" | "user"; content: string }>
-): Promise<{ text: string; draft: unknown; usage?: AiScheduleDraftResponse["usage"] }> {
-  const requestUrl = chatCompletionsUrl(provider.base_url);
+): Promise<AiCallResult> {
+  const requestUrl = endpointUrl(provider.base_url, "chat/completions");
   const requestBody = (useJsonMode: boolean) => ({
       model: provider.model,
       messages,
@@ -1408,17 +1481,10 @@ async function callOpenAiCompatibleChat(
         if (!text.trim()) {
           throw new Error("AI returned empty content");
         }
-        const usage = payload?.usage
-          ? {
-              promptTokens: payload.usage.prompt_tokens ?? payload.usage.promptTokens,
-              completionTokens: payload.usage.completion_tokens ?? payload.usage.completionTokens,
-              totalTokens: payload.usage.total_tokens ?? payload.usage.totalTokens
-            }
-          : undefined;
         return {
           text,
           draft: extractJsonFromText(text),
-          usage
+          usage: usageFromPayload(payload as Record<string, unknown> | null)
         };
       }
       const fallbackMessage = payload?.error?.message || rawText.slice(0, 500) || `AI request failed (${response.status})`;
@@ -1433,19 +1499,123 @@ async function callOpenAiCompatibleChat(
     throw new Error("AI returned empty content");
   }
 
-  const usage = payload?.usage
-    ? {
-        promptTokens: payload.usage.prompt_tokens ?? payload.usage.promptTokens,
-        completionTokens: payload.usage.completion_tokens ?? payload.usage.completionTokens,
-        totalTokens: payload.usage.total_tokens ?? payload.usage.totalTokens
-      }
-    : undefined;
-
   return {
     text,
     draft: extractJsonFromText(text),
-    usage
+    usage: usageFromPayload(payload as Record<string, unknown> | null)
   };
+}
+
+async function callOpenAiResponses(
+  provider: AiProviderRow,
+  messages: Array<{ role: "system" | "user"; content: string }>
+): Promise<AiCallResult> {
+  const requestUrl = endpointUrl(provider.base_url, "responses");
+  const systemMessage = messages.find((message) => message.role === "system")?.content ?? "";
+  const input = messages.filter((message) => message.role !== "system");
+  const requestBody = (useJsonMode: boolean) => ({
+    model: provider.model,
+    instructions: systemMessage,
+    input,
+    temperature: provider.temperature,
+    max_output_tokens: provider.max_output_tokens,
+    ...(useJsonMode ? { text: { format: { type: "json_object" } } } : {})
+  });
+  const send = (useJsonMode: boolean) => fetch(requestUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${provider.api_key}`
+    },
+    body: JSON.stringify(requestBody(useJsonMode))
+  });
+  let response = await send(true);
+  let rawText = await response.text();
+  let payload = rawText ? JSON.parse(rawText) as Record<string, unknown> : null;
+  if (!response.ok) {
+    const error = payload?.error;
+    const message = typeof error === "object" && error && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : rawText.slice(0, 500);
+    if (/response_format|json_object|text\.format|unsupported|not support|不支持/i.test(message)) {
+      response = await send(false);
+      rawText = await response.text();
+      payload = rawText ? JSON.parse(rawText) as Record<string, unknown> : null;
+      if (response.ok) {
+        const text = responseOutputText(payload);
+        if (!text.trim()) {
+          throw new Error("AI returned empty content");
+        }
+        return {
+          text,
+          draft: extractJsonFromText(text),
+          usage: usageFromPayload(payload)
+        };
+      }
+    }
+    throw new Error(message || `AI request failed (${response.status})`);
+  }
+  const text = responseOutputText(payload);
+  if (!text.trim()) {
+    throw new Error("AI returned empty content");
+  }
+  return {
+    text,
+    draft: extractJsonFromText(text),
+    usage: usageFromPayload(payload)
+  };
+}
+
+async function callAnthropicMessages(
+  provider: AiProviderRow,
+  messages: Array<{ role: "system" | "user"; content: string }>
+): Promise<AiCallResult> {
+  const requestUrl = endpointUrl(provider.base_url, "messages");
+  const systemMessage = messages.find((message) => message.role === "system")?.content ?? "";
+  const anthropicMessages = messages.filter((message) => message.role !== "system");
+  const response = await fetch(requestUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": provider.api_key,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: provider.model,
+      system: systemMessage,
+      messages: anthropicMessages,
+      temperature: provider.temperature,
+      max_tokens: provider.max_output_tokens
+    })
+  });
+  const rawText = await response.text();
+  const payload = rawText ? JSON.parse(rawText) as Record<string, unknown> : null;
+  if (!response.ok) {
+    const error = payload?.error;
+    const message = typeof error === "object" && error && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : rawText.slice(0, 500);
+    throw new Error(message || `AI request failed (${response.status})`);
+  }
+  const text = anthropicContentText(payload?.content);
+  if (!text.trim()) {
+    throw new Error("AI returned empty content");
+  }
+  return {
+    text,
+    draft: extractJsonFromText(text),
+    usage: usageFromPayload(payload)
+  };
+}
+
+async function callAiProvider(
+  provider: AiProviderRow,
+  messages: Array<{ role: "system" | "user"; content: string }>
+): Promise<AiCallResult> {
+  const protocol = aiProviderProtocol(provider);
+  if (protocol === "openai_response") return callOpenAiResponses(provider, messages);
+  if (protocol === "anthropic") return callAnthropicMessages(provider, messages);
+  return callOpenAiChatCompletions(provider, messages);
 }
 
 async function testAiProvider(request: Request, env: Env, actor: AuthContext, providerId: string): Promise<Response> {
@@ -1453,7 +1623,7 @@ async function testAiProvider(request: Request, env: Env, actor: AuthContext, pr
   if (!provider) return notFound();
 
   try {
-    const result = await callOpenAiCompatibleChat(provider, [
+    const result = await callAiProvider(provider, [
       { role: "system", content: "只输出 JSON。" },
       { role: "user", content: "请输出 {\"ok\":true,\"message\":\"connected\"}" }
     ]);
@@ -1531,7 +1701,7 @@ async function generateAiScheduleDraft(request: Request, env: Env, actor: AuthCo
 
   const userContext = JSON.stringify(body.context ?? null).slice(0, 30000);
   try {
-    const result = await callOpenAiCompatibleChat(provider, [
+    const result = await callAiProvider(provider, [
       { role: "system", content: scheduleAssistantSystemPrompt() },
       {
         role: "user",

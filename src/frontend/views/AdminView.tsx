@@ -49,14 +49,34 @@ const feedbackStatusLabels: Record<FeedbackStatus, string> = {
 };
 
 const aiProviderLabels: Record<AiProviderKind, string> = {
+  openai: "openai",
+  openai_response: "openai-response",
+  anthropic: "anthropic",
   newapi: "New API 中转",
   openai_compatible: "OpenAI 兼容",
   deepseek: "DeepSeek",
-  openai: "OpenAI",
   gemini: "Gemini"
 };
 
 const aiProviderDescriptions: Record<AiProviderKind, { summary: string; baseUrl: string; model: string; note: string }> = {
+  openai: {
+    summary: "OpenAI Chat Completions 协议，实际调用 /v1/chat/completions。",
+    baseUrl: "接口地址填服务根地址或 /v1 地址，例如 https://api.openai.com/v1。",
+    model: "填写支持 Chat Completions 的模型或中转站模型 ID。",
+    note: "旧的 New API / OpenAI 兼容配置也会按这个协议调用。"
+  },
+  openai_response: {
+    summary: "OpenAI Responses 协议，实际调用 /v1/responses。",
+    baseUrl: "接口地址填服务根地址或 /v1 地址，例如 https://api.openai.com/v1。",
+    model: "填写支持 Responses API 的模型或中转站模型 ID。",
+    note: "适合明确支持 OpenAI Responses 格式的官方或中转接口。"
+  },
+  anthropic: {
+    summary: "Anthropic Messages 协议，实际调用 /v1/messages。",
+    baseUrl: "接口地址填服务根地址或 /v1 地址；如果走中转站，以中转站说明为准。",
+    model: "填写 Claude/Anthropic Messages 兼容模型 ID。",
+    note: "会使用 x-api-key 与 anthropic-version 请求头。"
+  },
   newapi: {
     summary: "适合大多数 New API / One API 中转站，按 OpenAI 兼容格式调用。",
     baseUrl: "接口地址通常填你的中转站 /v1，例如 https://api.example.com/v1。",
@@ -75,12 +95,6 @@ const aiProviderDescriptions: Record<AiProviderKind, { summary: string; baseUrl:
     model: "按实际可用模型填写，例如 deepseek-chat 或中转站里的 DeepSeek 模型名。",
     note: "模型不可用时，可以新增或切换到 GPT/Gemini 配置。"
   },
-  openai: {
-    summary: "适合 OpenAI 官方或 OpenAI 官方兼容中转。",
-    baseUrl: "官方一般填 https://api.openai.com/v1；中转则填中转站 /v1。",
-    model: "例如 gpt-4o-mini、gpt-4.1-mini，按账号或中转站可用模型填写。",
-    note: "如果走 New API 中转，也可以直接选择 New API 中转类型。"
-  },
   gemini: {
     summary: "适合 Gemini 的 OpenAI 兼容接口或通过中转站调用 Gemini。",
     baseUrl: "使用中转站时填中转站 /v1；如果不是 OpenAI 兼容地址，需要先由中转站适配。",
@@ -91,7 +105,7 @@ const aiProviderDescriptions: Record<AiProviderKind, { summary: string; baseUrl:
 
 const emptyAiForm: AiProviderInput = {
   name: "",
-  provider: "newapi",
+  provider: "openai",
   baseUrl: "",
   model: "",
   apiKey: "",
@@ -807,7 +821,7 @@ export function AdminView({
               <Input
                 value={aiForm.model}
                 onChange={(event) => setAiForm((current) => ({ ...current, model: event.target.value }))}
-                placeholder="deepseek-v4-flash / gpt-4o-mini / gemini-2.5-flash"
+                placeholder="gpt-4o-mini / claude-sonnet-4-5 / 中转站模型 ID"
               />
             </div>
             <div className="space-y-2">
@@ -816,7 +830,7 @@ export function AdminView({
                 type="password"
                 value={aiForm.apiKey ?? ""}
                 onChange={(event) => setAiForm((current) => ({ ...current, apiKey: event.target.value }))}
-                placeholder={editingAiProviderId ? "留空则沿用已保存 Key" : "输入中转站 API Key"}
+                placeholder={editingAiProviderId ? "留空则沿用已保存 Key" : "输入 API Key"}
                 autoComplete="new-password"
               />
             </div>
@@ -828,7 +842,7 @@ export function AdminView({
               <Input
                 value={aiForm.baseUrl}
                 onChange={(event) => setAiForm((current) => ({ ...current, baseUrl: event.target.value }))}
-                placeholder="例如：https://你的中转站域名/v1"
+                placeholder="例如：https://api.example.com/v1"
               />
             </div>
             <div className="space-y-2">

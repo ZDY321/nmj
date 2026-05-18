@@ -111,6 +111,10 @@ export function StudentsView({
   const [subjectMessage, setSubjectMessage] = useState("");
   const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
   const [customCourseTypeTemplate, setCustomCourseTypeTemplate] = useState<"class" | "hourly">("class");
+  const [customCourseTypeMinStudents, setCustomCourseTypeMinStudents] = useState(1);
+  const [customCourseTypeBaseFee, setCustomCourseTypeBaseFee] = useState(0);
+  const [customCourseTypePerStudentFee, setCustomCourseTypePerStudentFee] = useState(0);
+  const [customCourseTypeHourlyRate, setCustomCourseTypeHourlyRate] = useState(0);
   const [courseTypeMessage, setCourseTypeMessage] = useState("");
   const [editingCustomCourseTypeId, setEditingCustomCourseTypeId] = useState<CourseType | "">("");
   const [editingCustomCourseTypeLabel, setEditingCustomCourseTypeLabel] = useState("");
@@ -589,9 +593,22 @@ export function StudentsView({
       id: `custom_${makeId("ctype")}` as CustomCourseType,
       label
     };
-    onAddCustomCourseType(option, defaultFeeRuleForCustomTemplate(customCourseTypeTemplate));
+    onAddCustomCourseType(
+      option,
+      defaultFeeRuleForCustomTemplate(
+        customCourseTypeTemplate,
+        customCourseTypeMinStudents,
+        customCourseTypeBaseFee,
+        customCourseTypePerStudentFee,
+        customCourseTypeHourlyRate
+      )
+    );
     setCustomCourseTypeInput("");
     setCustomCourseTypeTemplate("class");
+    setCustomCourseTypeMinStudents(1);
+    setCustomCourseTypeBaseFee(0);
+    setCustomCourseTypePerStudentFee(0);
+    setCustomCourseTypeHourlyRate(0);
     setCourseTypeMessage("");
   }
 
@@ -1663,29 +1680,82 @@ export function StudentsView({
               </div>
               <Badge variant="secondary" className="w-fit">{managedCourseTypes.length} 个可配置</Badge>
             </div>
-            <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-center">
-              <Input
-                value={customCourseTypeInput}
-                onChange={(event) => {
-                  setCustomCourseTypeInput(event.target.value);
-                  if (courseTypeMessage) setCourseTypeMessage("");
-                }}
-                placeholder="自定义班型，例如：小组课、冲刺课"
-                maxLength={24}
-                className={`h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20 ${courseTypeMessage ? "border-[#fca5a5] bg-[#fff1f2]" : ""}`}
-              />
-              <Select
-                value={customCourseTypeTemplate}
-                onChange={(event) => setCustomCourseTypeTemplate(event.target.value as "class" | "hourly")}
-                className="h-10 border-[#fdba74] bg-white text-[#7c2d12]"
-                aria-label="选择自定义班型计费模板"
-              >
-                <option value="class">班课人数计费模板</option>
-                <option value="hourly">一对一按小时模板</option>
-              </Select>
-              <Button type="button" variant="outline" className="h-10 border-[#fdba74] bg-white text-[#9a3412] hover:bg-[#ffedd5]" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
-                <Plus size={14} /> 添加班型
-              </Button>
+            <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3">
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-center">
+                <Input
+                  value={customCourseTypeInput}
+                  onChange={(event) => {
+                    setCustomCourseTypeInput(event.target.value);
+                    if (courseTypeMessage) setCourseTypeMessage("");
+                  }}
+                  placeholder="自定义班型，例如：小组课、冲刺课"
+                  maxLength={24}
+                  className={`h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20 ${courseTypeMessage ? "border-[#fca5a5] bg-[#fff1f2]" : ""}`}
+                />
+                <Select
+                  value={customCourseTypeTemplate}
+                  onChange={(event) => setCustomCourseTypeTemplate(event.target.value as "class" | "hourly")}
+                  className="h-10 border-[#fdba74] bg-white text-[#7c2d12]"
+                  aria-label="选择自定义班型计费模板"
+                >
+                  <option value="class">班课人数计费模板</option>
+                  <option value="hourly">一对一按小时模板</option>
+                </Select>
+                <Button type="button" variant="outline" className="h-10 border-[#fdba74] bg-white text-[#9a3412] hover:bg-[#ffedd5]" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
+                  <Plus size={14} /> 添加班型
+                </Button>
+              </div>
+              {customCourseTypeTemplate === "class" ? (
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#9a3412]">最少人数</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={customCourseTypeMinStudents}
+                      onChange={(event) => setCustomCourseTypeMinStudents(Math.max(Number(event.target.value), 0))}
+                      className="h-9 border-[#fdba74] bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#9a3412]">基础费用</label>
+                    <SensitiveAmountField visible={amountsVisible} className="h-9">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={customCourseTypeBaseFee}
+                        onChange={(event) => setCustomCourseTypeBaseFee(Math.max(Number(event.target.value), 0))}
+                        className="h-9 border-[#fdba74] bg-white"
+                      />
+                    </SensitiveAmountField>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-[#9a3412]">每增加 1 人费用</label>
+                    <SensitiveAmountField visible={amountsVisible} className="h-9">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={customCourseTypePerStudentFee}
+                        onChange={(event) => setCustomCourseTypePerStudentFee(Math.max(Number(event.target.value), 0))}
+                        className="h-9 border-[#fdba74] bg-white"
+                      />
+                    </SensitiveAmountField>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 max-w-[220px] space-y-1">
+                  <label className="text-[11px] font-bold text-[#9a3412]">每小时费用</label>
+                  <SensitiveAmountField visible={amountsVisible} className="h-9">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={customCourseTypeHourlyRate}
+                      onChange={(event) => setCustomCourseTypeHourlyRate(Math.max(Number(event.target.value), 0))}
+                      className="h-9 border-[#fdba74] bg-white"
+                    />
+                  </SensitiveAmountField>
+                </div>
+              )}
             </div>
             {courseTypeMessage && (
               <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
@@ -2892,11 +2962,29 @@ function normalizeStudentDuplicateValue(value: string): string {
   return value.trim().replace(/\s+/g, "").toLowerCase();
 }
 
-function defaultFeeRuleForCustomTemplate(template: "class" | "hourly"): FeeRule {
+function defaultFeeRuleForCustomTemplate(
+  template: "class" | "hourly",
+  minStudents = 1,
+  baseFee = 0,
+  perStudentFee = 0,
+  hourlyRate = 0
+): FeeRule {
   if (template === "hourly") {
-    return { mode: "hourly", hourlyRate: 0 };
+    return { mode: "hourly", hourlyRate: Math.max(hourlyRate, 0) };
   }
-  return defaultFeeRuleForCourseType("class");
+  const tier = {
+    id: "tier_1_plus",
+    minStudents: Math.max(Math.round(minStudents), 0),
+    baseFee: Math.max(baseFee, 0),
+    perStudentFee: Math.max(perStudentFee, 0)
+  };
+  return {
+    mode: "class_headcount",
+    baseFee: tier.baseFee,
+    perPresentStudentFee: tier.perStudentFee,
+    classFeeTiers: [tier],
+    makeupFeeMode: "perStudentFee"
+  };
 }
 
 function normalizeCourseFeeRuleForType(type: CourseType, feeRule: FeeRule): FeeRule {

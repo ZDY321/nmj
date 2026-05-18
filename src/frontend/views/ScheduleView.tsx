@@ -540,7 +540,7 @@ export function ScheduleView({
   const enabledAiProviders = aiProviders.filter((provider) => provider.enabled);
   const selectedAiProvider = aiProviders.find((provider) => provider.id === aiProviderId);
   const canShowAiProviderEndpoint = isAdmin;
-  const selectedAiEndpoint = selectedAiProvider ? aiChatEndpoint(selectedAiProvider.baseUrl) : "";
+  const selectedAiEndpoint = selectedAiProvider ? aiChatEndpoint(selectedAiProvider.baseUrl, selectedAiProvider) : "";
   const aiDraftRecord = isPlainRecord(aiDraft?.draft) ? aiDraft.draft : null;
   const aiDraftActions = arrayValue(aiDraftRecord?.actions).filter(isPlainRecord);
   const aiDraftQuestions = arrayValue(aiDraftRecord?.questions);
@@ -3270,14 +3270,23 @@ function lessonStatusForAttendanceStatus(status: AttendanceStatus): Lesson["stat
   return "completed";
 }
 
-function aiChatEndpoint(baseUrl: string): string {
+function aiChatEndpoint(baseUrl: string, provider?: AiProviderConfig): string {
   const normalized = baseUrl
     .trim()
     .replace(/\/+$/, "")
     .replace(/\/v1\/chat\/completions$/i, "")
-    .replace(/\/chat\/completions$/i, "");
+    .replace(/\/chat\/completions$/i, "")
+    .replace(/\/v1\/responses$/i, "")
+    .replace(/\/responses$/i, "")
+    .replace(/\/v1\/messages$/i, "")
+    .replace(/\/messages$/i, "");
   if (!normalized) return "";
-  return /\/v1$/i.test(normalized) ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`;
+  const path = provider?.provider === "openai_response"
+    ? "responses"
+    : provider?.provider === "anthropic"
+      ? "messages"
+      : "chat/completions";
+  return /\/v1$/i.test(normalized) ? `${normalized}/${path}` : `${normalized}/v1/${path}`;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
