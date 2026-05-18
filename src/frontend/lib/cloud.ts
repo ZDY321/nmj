@@ -220,6 +220,10 @@ export async function getAiProviders(token: string): Promise<AiProviderConfig[]>
   return apiRequest<AiProviderConfig[]>("/api/admin/ai/providers", { token });
 }
 
+export async function getUsableAiProviders(token: string): Promise<AiProviderConfig[]> {
+  return apiRequest<AiProviderConfig[]>("/api/ai/providers", { token });
+}
+
 export async function createAiProvider(token: string, input: AiProviderInput): Promise<AiProviderConfig> {
   return apiRequest<AiProviderConfig>("/api/admin/ai/providers", {
     method: "POST",
@@ -254,7 +258,7 @@ export async function testAiProvider(token: string, providerId: string): Promise
 }
 
 export async function generateAiScheduleDraft(token: string, request: AiScheduleDraftRequest): Promise<AiScheduleDraftResponse> {
-  return apiRequest<AiScheduleDraftResponse>("/api/admin/ai/schedule-draft", {
+  return apiRequest<AiScheduleDraftResponse>("/api/ai/schedule-draft", {
     method: "POST",
     token,
     body: JSON.stringify(request)

@@ -40,7 +40,7 @@ import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-inpu
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, presentCount, todayIso } from "@/frontend/lib/calculations";
-import { generateAiScheduleDraft, getAiProviders } from "@/frontend/lib/cloud";
+import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
@@ -213,15 +213,10 @@ export function ScheduleView({
   const selectableSyncLessonIds = selectableSyncLessons.map((lesson) => lesson.id).join("|");
 
   useEffect(() => {
-    if (!isAdmin && schedulePanel === "ai") {
-      setSchedulePanel("schedule");
-    }
-  }, [isAdmin, schedulePanel]);
-
-  useEffect(() => {
-    if (!isAdmin || !token) return;
+    if (!token) return;
     let cancelled = false;
-    getAiProviders(token)
+    const loadProviders = isAdmin ? getAiProviders : getUsableAiProviders;
+    loadProviders(token)
       .then((providers) => {
         if (cancelled) return;
         setAiProviders(providers);
@@ -552,6 +547,16 @@ export function ScheduleView({
   const aiDraftWarnings = arrayValue(aiDraftRecord?.warnings);
   const aiDraftSummary = textValue(aiDraftRecord?.summary, aiDraft ? "AI 已生成建议，请按下方内容核对。" : "");
   const aiDraftCanApply = !aiLoading && !aiApplying && aiApplyResult?.ok !== true && aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
+  const selectedAiUsage = selectedAiProvider
+    ? {
+        dailyLimit: selectedAiProvider.dailyLimit,
+        usedToday: selectedAiProvider.usedToday ?? 0,
+        remainingToday: selectedAiProvider.remainingToday ?? Math.max(selectedAiProvider.dailyLimit - (selectedAiProvider.usedToday ?? 0), 0)
+      }
+    : null;
+  const aiUsageText = selectedAiUsage
+    ? `今日已用 ${selectedAiUsage.usedToday} 次 / 剩余 ${selectedAiUsage.remainingToday} 次 / 上限 ${selectedAiUsage.dailyLimit} 次`
+    : "未选择接口，暂无法显示今日次数";
 
   function patchAiSession(patch: Partial<AiScheduleSession>) {
     if ("draft" in patch) {
@@ -566,6 +571,22 @@ export function ScheduleView({
       message: aiMessage,
       ...patch
     });
+  }
+
+  function patchSelectedAiProviderUsage(result: AiScheduleDraftResponse) {
+    if (!result.providerUsage) return;
+    setAiProviders((current) =>
+      current.map((provider) =>
+        provider.id === result.providerId
+          ? {
+              ...provider,
+              dailyLimit: result.providerUsage?.dailyLimit ?? provider.dailyLimit,
+              usedToday: result.providerUsage?.usedToday,
+              remainingToday: result.providerUsage?.remainingToday
+            }
+          : provider
+      )
+    );
   }
 
   function addSingleLesson(status: "scheduled" | "completed") {
@@ -621,10 +642,10 @@ export function ScheduleView({
   }
 
   async function refreshAiProviders() {
-    if (!token || !isAdmin) return;
+    if (!token) return;
     patchAiSession({ message: "" });
     try {
-      const providers = await getAiProviders(token);
+      const providers = await (isAdmin ? getAiProviders(token) : getUsableAiProviders(token));
       setAiProviders(providers);
       const nextProviderId = aiProviderId && providers.some((provider) => provider.id === aiProviderId && provider.enabled)
         ? aiProviderId
@@ -649,6 +670,7 @@ export function ScheduleView({
         instruction: aiInstruction.trim(),
         context: aiScheduleContext()
       });
+      patchSelectedAiProviderUsage(result);
       patchAiSession({ draft: result, message: "AI 建议已生成，请先人工核对。" });
     } catch (error) {
       patchAiSession({ draft: null, message: error instanceof Error ? error.message : "AI 生成建议失败。" });
@@ -681,6 +703,7 @@ export function ScheduleView({
         instruction: nextInstruction,
         context: aiScheduleContext()
       });
+      patchSelectedAiProviderUsage(result);
       patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: result, message: "已带着补充信息重新生成建议，请继续核对。" });
     } catch (error) {
       patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: null, message: error instanceof Error ? error.message : "AI 生成建议失败。" });
@@ -1297,7 +1320,7 @@ export function ScheduleView({
       <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
         <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
         {[
-          ...(isAdmin ? [{ key: "ai" as SchedulePanel, label: "AI 排课助手" }] : []),
+          { key: "ai" as SchedulePanel, label: "AI 排课助手" },
           { key: "schedule" as SchedulePanel, label: "排课" },
           { key: "calendar" as SchedulePanel, label: "日历查看" },
           { key: "records" as SchedulePanel, label: "课程记录" },
@@ -1328,7 +1351,7 @@ export function ScheduleView({
         </div>
       )}
 
-      {isAdmin && schedulePanel === "ai" && (
+      {schedulePanel === "ai" && (
         <div className="space-y-6">
           <Card className="overflow-hidden border-2 border-[#bfdbfe]">
             <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1337,24 +1360,28 @@ export function ScheduleView({
                   <Sparkles size={14} /> AI 排课助手
                 </div>
                 <CardTitle>自然语言转排课操作</CardTitle>
-                <CardDescription>仅管理员可见。AI 会返回结构化建议，当前不直接写入课程数据。</CardDescription>
+                <CardDescription>AI 会返回结构化建议，确认写入前需要人工核对，原有手动排课功能不受影响。</CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="sky">
-                  <ShieldCheck size={12} /> 管理员试用
+                  <ShieldCheck size={12} /> {isAdmin ? "管理员" : "普通用户"}
                 </Badge>
                 <Badge variant={enabledAiProviders.length > 0 ? "sage" : "amber"}>
                   {enabledAiProviders.length > 0 ? `${enabledAiProviders.length} 个可用接口` : "未配置接口"}
                 </Badge>
+                <Badge variant={selectedAiUsage && selectedAiUsage.remainingToday > 0 ? "sage" : "amber"}>
+                  {selectedAiUsage ? `剩余 ${selectedAiUsage.remainingToday} 次` : "次数待加载"}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
                 {[
                   { label: "可用学生", value: `${aiActiveStudentCount} 人` },
                   { label: "可用课程", value: `${aiActiveCourseCount} 个` },
                   { label: "待处理课时", value: `${aiPendingLessonCount} 节` },
-                  { label: "今日课程", value: `${aiTodayLessonCount} 节` }
+                  { label: "今日课程", value: `${aiTodayLessonCount} 节` },
+                  { label: "AI 今日次数", value: selectedAiUsage ? `${selectedAiUsage.usedToday}/${selectedAiUsage.dailyLimit}` : "未选择" }
                 ].map((item) => (
                   <div key={item.label} className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-4 py-3">
                     <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
@@ -1397,6 +1424,18 @@ export function ScheduleView({
                       className="min-h-[180px] bg-white"
                       disabled={aiLoading}
                     />
+                    <div className="grid grid-cols-1 gap-2 text-xs font-semibold leading-5 text-[#64748b] md:grid-cols-2">
+                      {[
+                        "描述尽量准确详细，写清学生姓名、校区、年级、科目、课程档案名称、日期和时间。",
+                        "日期建议写成 2026-05-20 这种完整格式，时间使用 24 小时制，例如 20:00-22:00。",
+                        "涉及修改或删除时，请写清原课程日期、时间、科目和学生，避免 AI 匹配到相近课程。",
+                        "AI 只生成建议，点击确认写入前请核对摘要、操作建议和风险提醒。"
+                      ].map((text) => (
+                        <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                          {text}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-xs font-semibold leading-5 text-[#64748b]">
@@ -1417,6 +1456,7 @@ export function ScheduleView({
                         当前使用：{selectedAiProvider.name} · {selectedAiProvider.model}
                         {canShowAiProviderEndpoint && selectedAiProvider.maskedApiKey ? ` · ${selectedAiProvider.maskedApiKey}` : ""}
                       </div>
+                      <div>{aiUsageText}</div>
                       {canShowAiProviderEndpoint && (
                         <>
                           <div className="break-all">接口地址：{selectedAiProvider.baseUrl}</div>
@@ -1456,6 +1496,13 @@ export function ScheduleView({
                     <div className="mb-2 text-sm font-extrabold text-[#9a3412]">不让 AI 直接处理的内容</div>
                     <div className="text-sm font-semibold leading-6 text-[#9a3412]">
                       今日提醒、课时费计算、补课状态、课程记录详情和冲突判断继续由系统代码处理，AI 只负责把自然语言整理成待校验的操作建议。
+                    </div>
+                  </div>
+
+                  <div className="rounded-[14px] border border-[#bbf7d0] bg-[#f0fdf4] p-4">
+                    <div className="mb-2 text-sm font-extrabold text-[#15803d]">使用次数说明</div>
+                    <div className="text-sm font-semibold leading-6 text-[#166534]">
+                      每日上限按当前 AI 接口配置统计，管理员和普通用户共用同一个接口额度；只有成功生成建议才会计入次数，生成失败不会扣次数。
                     </div>
                   </div>
                 </div>
@@ -1617,7 +1664,7 @@ export function ScheduleView({
                     </div>
                     <div className="mt-2 grid grid-cols-1 gap-2 text-sm font-semibold text-[#64748b] sm:grid-cols-2">
                       <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
-                        当前角色：admin
+                        当前角色：{isAdmin ? "管理员" : "普通用户"}
                       </div>
                       <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
                         当前接口：{selectedAiProvider ? `${selectedAiProvider.name} / ${selectedAiProvider.model}` : "未选择"}

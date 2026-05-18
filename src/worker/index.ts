@@ -2,6 +2,7 @@ import type {
   AiProviderConfig,
   AiProviderInput,
   AiProviderKind,
+  AiProviderUsage,
   AiScheduleDraftRequest,
   AiScheduleDraftResponse,
   AdminSummary,
@@ -290,6 +291,18 @@ function aiProviderFromRow(row: AiProviderRow): AiProviderConfig {
     updatedAt: row.updated_at,
     lastTestedAt: row.last_tested_at,
     lastError: row.last_error
+  };
+}
+
+async function aiProviderConfigWithUsage(env: Env, row: AiProviderRow, includeSensitive: boolean): Promise<AiProviderConfig> {
+  const usedToday = await providerDailyUsage(env, row.id);
+  const dailyLimit = Math.max(row.daily_limit, 0);
+  return {
+    ...aiProviderFromRow(row),
+    baseUrl: includeSensitive ? row.base_url : "",
+    maskedApiKey: includeSensitive ? maskApiKey(row.api_key) : "",
+    usedToday,
+    remainingToday: Math.max(dailyLimit - usedToday, 0)
   };
 }
 
@@ -1105,7 +1118,35 @@ async function listAiProviders(env: Env): Promise<Response> {
      ORDER BY is_default DESC, updated_at DESC`
   ).all<AiProviderRow>();
 
-  return json((result.results ?? []).map(aiProviderFromRow));
+  const providers = await Promise.all((result.results ?? []).map((row) => aiProviderConfigWithUsage(env, row, true)));
+  return json(providers);
+}
+
+async function listUsableAiProviders(env: Env, includeSensitive: boolean): Promise<Response> {
+  const result = await env.DB.prepare(
+    `SELECT
+      id,
+      name,
+      provider,
+      base_url,
+      model,
+      api_key,
+      enabled,
+      is_default,
+      daily_limit,
+      max_output_tokens,
+      temperature,
+      created_at,
+      updated_at,
+      last_tested_at,
+      last_error
+     FROM ai_provider_configs
+     WHERE enabled = 1
+     ORDER BY is_default DESC, updated_at DESC`
+  ).all<AiProviderRow>();
+
+  const providers = await Promise.all((result.results ?? []).map((row) => aiProviderConfigWithUsage(env, row, includeSensitive)));
+  return json(providers);
 }
 
 async function saveAiProvider(request: Request, env: Env, providerId?: string): Promise<Response> {
@@ -1191,8 +1232,9 @@ async function deleteAiProvider(env: Env, providerId: string): Promise<Response>
 }
 
 async function providerDailyUsage(env: Env, providerId: string): Promise<number> {
-  const since = new Date();
-  since.setUTCHours(0, 0, 0, 0);
+  const now = new Date();
+  const todayBeijingMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 16, 0, 0, 0);
+  const since = new Date(now.getTime() < todayBeijingMidnight ? todayBeijingMidnight - 24 * 60 * 60 * 1000 : todayBeijingMidnight);
   const row = await env.DB.prepare(
     `SELECT COUNT(*) AS total
      FROM ai_usage_logs
@@ -1458,6 +1500,11 @@ async function generateAiScheduleDraft(request: Request, env: Env, actor: AuthCo
   if (usedToday >= provider.daily_limit) {
     return json({ error: "AI daily limit reached" }, 429);
   }
+  const usageBeforeCall: AiProviderUsage = {
+    dailyLimit: provider.daily_limit,
+    usedToday,
+    remainingToday: Math.max(provider.daily_limit - usedToday, 0)
+  };
 
   const userContext = JSON.stringify(body.context ?? null).slice(0, 30000);
   try {
@@ -1474,12 +1521,18 @@ async function generateAiScheduleDraft(request: Request, env: Env, actor: AuthCo
     ]);
     const createdAt = new Date().toISOString();
     await addAiUsageLog(env, provider.id, actor.user.id, "schedule_draft", true, result.usage);
+    const usageAfterCall: AiProviderUsage = {
+      dailyLimit: provider.daily_limit,
+      usedToday: usageBeforeCall.usedToday + 1,
+      remainingToday: Math.max(provider.daily_limit - usageBeforeCall.usedToday - 1, 0)
+    };
     return json({
       providerId: provider.id,
       model: provider.model,
       createdAt,
       text: result.text,
       draft: result.draft,
+      providerUsage: usageAfterCall,
       usage: result.usage
     } satisfies AiScheduleDraftResponse);
   } catch (error) {
@@ -1879,6 +1932,20 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
 
   if (request.method === "POST" && pathname === "/api/feedback") {
     return submitFeedback(request, env);
+  }
+
+  if (pathname.startsWith("/api/ai/")) {
+    const context = await requireAuth(request, env);
+    if (context instanceof Response) {
+      return context;
+    }
+    if (request.method === "GET" && pathname === "/api/ai/providers") {
+      return listUsableAiProviders(env, false);
+    }
+    if (request.method === "POST" && pathname === "/api/ai/schedule-draft") {
+      return generateAiScheduleDraft(request, env, context);
+    }
+    return notFound();
   }
 
   if (request.method === "GET" && pathname === "/api/me/vault") {

@@ -20,6 +20,14 @@ export type AiProviderConfig = {
   updatedAt: string;
   lastTestedAt: string | null;
   lastError: string | null;
+  usedToday?: number;
+  remainingToday?: number;
+};
+
+export type AiProviderUsage = {
+  dailyLimit: number;
+  usedToday: number;
+  remainingToday: number;
 };
 
 export type AiProviderInput = {
@@ -50,6 +58,7 @@ export type AiScheduleDraftResponse = {
   createdAt: string;
   text: string;
   draft: unknown;
+  providerUsage?: AiProviderUsage;
   usage?: {
     promptTokens?: number;
     completionTokens?: number;
