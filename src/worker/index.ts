@@ -1048,13 +1048,15 @@ async function updateFeedback(request: Request, env: Env, actor: AuthContext, fe
 function normalizeAiBaseUrl(baseUrl: string): string {
   return baseUrl
     .trim()
+    .replace(/\s+/g, "")
     .replace(/\/+$/, "")
     .replace(/\/v1\/chat\/completions$/i, "")
     .replace(/\/chat\/completions$/i, "")
     .replace(/\/v1\/responses$/i, "")
     .replace(/\/responses$/i, "")
     .replace(/\/v1\/messages$/i, "")
-    .replace(/\/messages$/i, "");
+    .replace(/\/messages$/i, "")
+    .replace(/\/+$/, "");
 }
 
 function endpointUrl(baseUrl: string, path: "chat/completions" | "responses" | "messages"): string {
@@ -1415,6 +1417,23 @@ function usageFromPayload(payload: Record<string, unknown> | null | undefined): 
   };
 }
 
+function aiErrorMessage(payload: unknown, rawText: string, status: number): string {
+  if (payload && typeof payload === "object") {
+    const error = (payload as Record<string, unknown>).error;
+    if (error && typeof error === "object") {
+      const message = (error as Record<string, unknown>).message;
+      if (typeof message === "string" && message.trim()) return message.trim();
+    }
+    const message = (payload as Record<string, unknown>).message;
+    if (typeof message === "string" && message.trim()) return message.trim();
+  }
+  return rawText.slice(0, 500) || `AI request failed (${status})`;
+}
+
+function shouldRetryAiRequest(message: string): boolean {
+  return /response_format|json_object|max_tokens|max_completion_tokens|max_output_tokens|temperature|unsupported|not support|不支持|unknown parameter|unsupported parameter|invalid parameter/i.test(message);
+}
+
 function scheduleAssistantSystemPrompt(): string {
   return [
     "你是一个中文教学排课系统的 AI 助手。",
@@ -1440,70 +1459,56 @@ async function callOpenAiChatCompletions(
   messages: Array<{ role: "system" | "user"; content: string }>
 ): Promise<AiCallResult> {
   const requestUrl = endpointUrl(provider.base_url, "chat/completions");
-  const requestBody = (useJsonMode: boolean) => ({
-      model: provider.model,
-      messages,
-      temperature: provider.temperature,
-      max_tokens: provider.max_output_tokens,
-      ...(useJsonMode ? { response_format: { type: "json_object" } } : {})
+  const requestBody = (options: { jsonMode: boolean; maxTokenField: "max_tokens" | "max_completion_tokens" | null; includeTemperature: boolean }) => ({
+    model: provider.model,
+    messages,
+    ...(options.includeTemperature ? { temperature: provider.temperature } : {}),
+    ...(options.maxTokenField ? { [options.maxTokenField]: provider.max_output_tokens } : {}),
+    ...(options.jsonMode ? { response_format: { type: "json_object" } } : {})
   });
-  const send = (useJsonMode: boolean) => fetch(requestUrl, {
+  const send = (options: { jsonMode: boolean; maxTokenField: "max_tokens" | "max_completion_tokens" | null; includeTemperature: boolean }) => fetch(requestUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${provider.api_key}`
     },
-    body: JSON.stringify(requestBody(useJsonMode))
+    body: JSON.stringify(requestBody(options))
   });
+  const attempts = [
+    { jsonMode: true, maxTokenField: "max_tokens" as const, includeTemperature: true },
+    { jsonMode: false, maxTokenField: "max_tokens" as const, includeTemperature: true },
+    { jsonMode: false, maxTokenField: "max_completion_tokens" as const, includeTemperature: true },
+    { jsonMode: false, maxTokenField: "max_completion_tokens" as const, includeTemperature: false },
+    { jsonMode: false, maxTokenField: null, includeTemperature: false }
+  ];
 
-  let response = await send(true);
-  let rawText = await response.text();
-  let payload: ChatCompletionResponse | null = null;
-  try {
-    payload = rawText ? JSON.parse(rawText) as ChatCompletionResponse : null;
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const message = payload?.error?.message || rawText.slice(0, 500) || `AI request failed (${response.status})`;
-    if (/response_format|json_object|unsupported|not support|不支持/i.test(message)) {
-      response = await send(false);
-      rawText = await response.text();
-      try {
-        payload = rawText ? JSON.parse(rawText) as ChatCompletionResponse : null;
-      } catch {
-        payload = null;
-      }
-      if (response.ok) {
-        const firstChoice = payload?.choices?.[0];
-        const text = chatContentText(firstChoice?.message?.content) || firstChoice?.text || "";
-        if (!text.trim()) {
-          throw new Error("AI returned empty content");
-        }
-        return {
-          text,
-          draft: extractJsonFromText(text),
-          usage: usageFromPayload(payload as Record<string, unknown> | null)
-        };
-      }
-      const fallbackMessage = payload?.error?.message || rawText.slice(0, 500) || `AI request failed (${response.status})`;
-      throw new Error(fallbackMessage);
+  let lastMessage = "";
+  for (const attempt of attempts) {
+    const response = await send(attempt);
+    const rawText = await response.text();
+    let payload: ChatCompletionResponse | null = null;
+    try {
+      payload = rawText ? JSON.parse(rawText) as ChatCompletionResponse : null;
+    } catch {
+      payload = null;
     }
-    throw new Error(message);
+    if (!response.ok) {
+      lastMessage = aiErrorMessage(payload, rawText, response.status);
+      if (shouldRetryAiRequest(lastMessage)) continue;
+      throw new Error(lastMessage);
+    }
+    const firstChoice = payload?.choices?.[0];
+    const text = chatContentText(firstChoice?.message?.content) || firstChoice?.text || "";
+    if (!text.trim()) {
+      throw new Error("AI returned empty content");
+    }
+    return {
+      text,
+      draft: extractJsonFromText(text),
+      usage: usageFromPayload(payload as Record<string, unknown> | null)
+    };
   }
-
-  const firstChoice = payload?.choices?.[0];
-  const text = chatContentText(firstChoice?.message?.content) || firstChoice?.text || "";
-  if (!text.trim()) {
-    throw new Error("AI returned empty content");
-  }
-
-  return {
-    text,
-    draft: extractJsonFromText(text),
-    usage: usageFromPayload(payload as Record<string, unknown> | null)
-  };
+  throw new Error(lastMessage || "AI request failed");
 }
 
 async function callOpenAiResponses(

@@ -3273,6 +3273,7 @@ function lessonStatusForAttendanceStatus(status: AttendanceStatus): Lesson["stat
 function aiChatEndpoint(baseUrl: string, provider?: AiProviderConfig): string {
   const normalized = baseUrl
     .trim()
+    .replace(/\s+/g, "")
     .replace(/\/+$/, "")
     .replace(/\/v1\/chat\/completions$/i, "")
     .replace(/\/chat\/completions$/i, "")
