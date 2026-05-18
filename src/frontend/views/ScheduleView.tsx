@@ -3327,6 +3327,8 @@ function aiActionLabel(type: string): string {
   const labels: Record<string, string> = {
     create_student: "新增学生",
     create_course: "添加课程档案",
+    create_course_type: "新增班型",
+    create_custom_course_type: "新增班型",
     update_course: "修改课程",
     modify_course: "修改课程",
     delete_course: "删除/暂停课程",

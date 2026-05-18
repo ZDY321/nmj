@@ -685,6 +685,34 @@ export function App() {
       ].filter(Boolean)));
     };
 
+    const createCourseTypeFromAi = (data: Record<string, unknown>) => {
+      const label = stringValue(data.label ?? data.name ?? data.courseTypeName);
+      if (!label) return;
+      const normalizedLabel = label.trim();
+      const requestedId = stringValue(data.id ?? data.courseTypeId);
+      const id = requestedId.startsWith("custom_") ? requestedId : `custom_${makeId("ctype")}`;
+      const current = nextVault.preferences?.customCourseTypes ?? [];
+      const existingType = current.find((item) => item.id === id || item.label.trim().toLowerCase() === normalizedLabel.toLowerCase());
+      if (existingType) return;
+      const templateMode = stringValue(data.templateMode ?? data.template ?? data.mode).toLowerCase();
+      const feeRule = defaultFeeRuleForCustomTemplate(
+        templateMode === "hourly" ? "hourly" : "class",
+        numberValue(data.minStudents) ?? numberValue(data.minimumStudents) ?? numberValue(data.includedStudents) ?? 1,
+        numberValue(data.baseFee) ?? numberValue(data.classBaseFee) ?? numberValue(data.minimumFee) ?? 0,
+        numberValue(data.perStudentFee ?? data.perPresentStudentFee ?? data.extraStudentFee ?? data.headcountFee) ?? 0,
+        numberValue(data.hourlyRate ?? data.rate) ?? 0
+      );
+      nextVault.preferences = {
+        ...(nextVault.preferences ?? { weekStartsOn: 0 }),
+        customCourseTypes: [...current, { id: id as CustomCourseType, label: normalizedLabel }],
+        courseTypeFeeRules: {
+          ...(nextVault.preferences?.courseTypeFeeRules ?? {}),
+          [id]: feeRule
+        }
+      };
+      messages.push(`新增班型「${normalizedLabel}」`);
+    };
+
     const aiDataFeeMode = (data: Record<string, unknown>): FeeRule["mode"] | null => {
       const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
       const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
@@ -1054,6 +1082,10 @@ export function App() {
       const data = isPlainRecordLocal(action.data) ? action.data : action;
       if (type === "create_student") {
         ensureStudent(data);
+        return;
+      }
+      if (type === "create_course_type" || type === "create_custom_course_type") {
+        createCourseTypeFromAi(data);
         return;
       }
       if (type === "create_course") {
@@ -1465,6 +1497,10 @@ export function App() {
   const showSyncAlert = Boolean(syncMessage) && (syncState === "outdated" || syncState === "conflict" || syncState === "error");
   const greeting = greetingFor(greetingTime);
   const guideNeedsAttention = !isOnboardingSetupComplete(vault, onboardingVisitedSteps);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [view]);
 
   function dismissOnboarding() {
     if (username) {
@@ -2332,6 +2368,31 @@ function feeModeLabel(mode: FeeRule["mode"]): string {
   if (mode === "class_headcount") return "按人数班课计费";
   if (mode === "fixed") return "按单节固定计费";
   return "按小时计费";
+}
+
+function defaultFeeRuleForCustomTemplate(
+  template: "class" | "hourly",
+  minStudents = 1,
+  baseFee = 0,
+  perStudentFee = 0,
+  hourlyRate = 0
+): FeeRule {
+  if (template === "hourly") {
+    return { mode: "hourly", hourlyRate: Math.max(hourlyRate, 0) };
+  }
+  const tier = {
+    id: "tier_1_plus",
+    minStudents: Math.max(Math.round(minStudents), 0),
+    baseFee: Math.max(baseFee, 0),
+    perStudentFee: Math.max(perStudentFee, 0)
+  };
+  return {
+    mode: "class_headcount",
+    baseFee: tier.baseFee,
+    perPresentStudentFee: tier.perStudentFee,
+    classFeeTiers: [tier],
+    makeupFeeMode: "perStudentFee"
+  };
 }
 
 function feeRuleFromAiData(data: Record<string, unknown>, vault: TeacherVault, type: CourseType, fallback?: FeeRule): FeeRule {
