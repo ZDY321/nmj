@@ -80,6 +80,9 @@ type ChatCompletionResponse = {
     message?: {
       content?: string | Array<{ type?: string; text?: string }>;
     };
+    delta?: {
+      content?: string | Array<{ type?: string; text?: string }>;
+    };
     text?: string;
   }>;
   usage?: {
@@ -1338,7 +1341,119 @@ async function addAiUsageLog(
     .run();
 }
 
-function chatContentText(content: string | Array<{ type?: string; text?: string }> | undefined): string {
+function textFromUnknown(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map(textFromUnknown).join("").trim();
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return textFromUnknown(record.text ?? record.output_text ?? record.content ?? record.reasoning_content ?? record.reasoning ?? "");
+  }
+  return "";
+}
+
+function chatContentText(content: unknown): string {
+  return textFromUnknown(content).trim();
+}
+
+function chatChoiceText(choice: unknown): string {
+  if (!choice || typeof choice !== "object") return "";
+  const record = choice as Record<string, unknown>;
+  const message = record.message && typeof record.message === "object" ? record.message as Record<string, unknown> : null;
+  const delta = record.delta && typeof record.delta === "object" ? record.delta as Record<string, unknown> : null;
+  return textFromUnknown(
+    message?.content ??
+      message?.reasoning_content ??
+      message?.reasoning ??
+      delta?.content ??
+      delta?.reasoning_content ??
+      delta?.reasoning ??
+      record.text ??
+      record.content ??
+      record.output_text ??
+      ""
+  ).trim();
+}
+
+function parseAiPayloads(rawText: string): Array<Record<string, unknown>> {
+  const trimmed = rawText.trim();
+  if (!trimmed) return [];
+
+  try {
+    const payload = JSON.parse(trimmed) as unknown;
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? [payload as Record<string, unknown>]
+      : [];
+  } catch {
+    // Some OpenAI-compatible gateways return SSE-style chunks even when stream is not requested.
+  }
+
+  const payloads: Array<Record<string, unknown>> = [];
+  for (const line of rawText.split(/\r?\n/)) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) continue;
+
+    const dataMatch = /^data:\s*(.+)$/i.exec(trimmedLine);
+    const jsonText = dataMatch?.[1]?.trim() ?? (trimmedLine.startsWith("{") ? trimmedLine : "");
+    if (!jsonText || jsonText === "[DONE]") continue;
+
+    try {
+      const payload = JSON.parse(jsonText) as unknown;
+      if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+        payloads.push(payload as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore non-JSON gateway log lines.
+    }
+  }
+  return payloads;
+}
+
+function aiErrorFromPayload(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as Record<string, unknown>;
+  const error = record.error;
+  if (error && typeof error === "object") {
+    const message = (error as Record<string, unknown>).message;
+    if (typeof message === "string" && message.trim()) return message.trim();
+  }
+  return "";
+}
+
+function chatPayloadsText(payloads: Array<Record<string, unknown>>): string {
+  return payloads.map((payload) => {
+    const choices = Array.isArray(payload.choices) ? payload.choices : [];
+    return choices.map(chatChoiceText).join("");
+  }).join("").trim();
+}
+
+function usageFromPayloads(payloads: Array<Record<string, unknown>>): AiScheduleDraftResponse["usage"] | undefined {
+  for (let index = payloads.length - 1; index >= 0; index -= 1) {
+    const usage = usageFromPayload(payloads[index]);
+    if (usage) return usage;
+  }
+  return undefined;
+}
+
+function emptyAiContentError(payload: unknown): Error {
+  if (!payload || typeof payload !== "object") {
+    return new Error("AI returned empty content");
+  }
+  const record = payload as Record<string, unknown>;
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  const firstChoice = choices[0] && typeof choices[0] === "object" ? choices[0] as Record<string, unknown> : null;
+  const message = firstChoice?.message && typeof firstChoice.message === "object" ? firstChoice.message as Record<string, unknown> : null;
+  const detail = [
+    `topLevel=${Object.keys(record).slice(0, 8).join(",") || "none"}`,
+    `choices=${choices.length}`,
+    firstChoice?.finish_reason ? `finish=${String(firstChoice.finish_reason)}` : "",
+    message ? `messageKeys=${Object.keys(message).slice(0, 8).join(",") || "none"}` : ""
+  ].filter(Boolean).join("; ");
+  return new Error(`AI returned empty content (${detail})`);
+}
+
+function legacyChatContentText(content: string | Array<{ type?: string; text?: string }> | undefined): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content.map((part) => typeof part.text === "string" ? part.text : "").join("").trim();
@@ -1353,12 +1468,7 @@ function responseOutputText(payload: Record<string, unknown> | null): string {
   return output.map((item) => {
     if (!item || typeof item !== "object") return "";
     const content = (item as Record<string, unknown>).content;
-    if (!Array.isArray(content)) return "";
-    return content.map((part) => {
-      if (!part || typeof part !== "object") return "";
-      const record = part as Record<string, unknown>;
-      return typeof record.text === "string" ? record.text : "";
-    }).join("");
+    return textFromUnknown(content);
   }).join("").trim();
 }
 
@@ -1486,26 +1596,29 @@ async function callOpenAiChatCompletions(
   for (const attempt of attempts) {
     const response = await send(attempt);
     const rawText = await response.text();
-    let payload: ChatCompletionResponse | null = null;
-    try {
-      payload = rawText ? JSON.parse(rawText) as ChatCompletionResponse : null;
-    } catch {
-      payload = null;
-    }
+    const payloads = parseAiPayloads(rawText);
+    const payload = payloads[0] as ChatCompletionResponse | undefined;
+    const payloadError = payloads.map(aiErrorFromPayload).find(Boolean) ?? "";
     if (!response.ok) {
       lastMessage = aiErrorMessage(payload, rawText, response.status);
       if (shouldRetryAiRequest(lastMessage)) continue;
       throw new Error(lastMessage);
     }
+    if (payloadError) {
+      lastMessage = payloadError;
+      if (shouldRetryAiRequest(lastMessage)) continue;
+      throw new Error(lastMessage);
+    }
     const firstChoice = payload?.choices?.[0];
-    const text = chatContentText(firstChoice?.message?.content) || firstChoice?.text || "";
+    const text = chatPayloadsText(payloads) || chatChoiceText(firstChoice) || chatContentText(firstChoice?.message?.content) || firstChoice?.text || "";
     if (!text.trim()) {
-      throw new Error("AI returned empty content");
+      lastMessage = emptyAiContentError(payload).message;
+      continue;
     }
     return {
       text,
       draft: extractJsonFromText(text),
-      usage: usageFromPayload(payload as Record<string, unknown> | null)
+      usage: usageFromPayloads(payloads) ?? usageFromPayload(payload as Record<string, unknown> | null)
     };
   }
   throw new Error(lastMessage || "AI request failed");
