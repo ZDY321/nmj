@@ -138,7 +138,7 @@ export function SalaryView({
   return (
     <div className="space-y-6">
       {dialog}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard label="基本工资" value={formatPrivateMoney(breakdown.baseSalary, amountsVisible)} hint="月固定项" variant={1} index={0} showSparkline={false} />
         <MetricCard label="一对一" value={formatPrivateMoney(breakdown.oneOnOne, amountsVisible)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
         <MetricCard label="班课" value={formatPrivateMoney(breakdown.classLessons, amountsVisible)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
