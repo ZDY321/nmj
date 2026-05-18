@@ -1551,6 +1551,7 @@ function scheduleAssistantSystemPrompt(): string {
     "不要输出 Markdown。只输出 JSON。",
     "支持的动作类型：create_student、create_course、update_course、delete_course、migrate_course、delete_lesson、schedule_lessons、sync_lessons、ask_clarification。",
     "create_course、update_course、migrate_course 涉及课程命名时，对用户展示和追问必须使用“课程档案名称”，不要只说“课程名称”或“课程名”；JSON 字段仍使用 courseName/newCourseName/targetCourseName。",
+    "课程档案的计费模式必须沿用所选班型在后台配置的默认计费模式，不能给单个课程档案单独切换计费模式。例如后台“初三全日制”是按小时计费时，不要把该课程档案写成 class_headcount；应询问用户先修改后台班型计费或改选班课/一对二等按人数计费班型。",
     "create_course 或 update_course 如果是班课、多人课、小组课、一对二或任意按人数计费班型，并且用户没有明确说沿用现有班型默认计费，需要确认最少人数、基础费用、每增加1人费用；JSON 可在 data.feeRule 写 {\"mode\":\"class_headcount\",\"minStudents\":1,\"baseFee\":0,\"perStudentFee\":0}，也可平铺 baseFee/perStudentFee/minStudents。",
     "班课计费里的最少人数表示从几人起收基础费用，不等于当前关联学生人数；不要因为当前关联2人就写 minStudents:2。用户未明确说明时，必须在 questions 里询问，常见默认是 minStudents:1。",
     "update_course 用于修改已有课程档案名称、科目、班型、校区、关联学生或启用/暂停状态；data 里应包含 courseId 或 courseName。",

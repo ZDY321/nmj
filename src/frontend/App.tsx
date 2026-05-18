@@ -685,6 +685,46 @@ export function App() {
       ].filter(Boolean)));
     };
 
+    const aiDataFeeMode = (data: Record<string, unknown>): FeeRule["mode"] | null => {
+      const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
+      const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
+      if (mode === "class_headcount" || mode === "class") return "class_headcount";
+      if (mode === "fixed") return "fixed";
+      if (mode === "hourly") return "hourly";
+      if (
+        source.baseFee !== undefined ||
+        source.classBaseFee !== undefined ||
+        source.minimumFee !== undefined ||
+        source.perPresentStudentFee !== undefined ||
+        source.perStudentFee !== undefined ||
+        source.extraStudentFee !== undefined ||
+        source.headcountFee !== undefined ||
+        source.minStudents !== undefined ||
+        source.minimumStudents !== undefined ||
+        source.includedStudents !== undefined
+      ) {
+        return "class_headcount";
+      }
+      if (source.fixedFee !== undefined) return "fixed";
+      if (source.hourlyRate !== undefined || source.rate !== undefined) return "hourly";
+      return null;
+    };
+
+    const enforceAiFeeModeMatchesCourseType = (
+      data: Record<string, unknown>,
+      type: CourseType,
+      courseLabel: string
+    ): boolean => {
+      const requestedMode = aiDataFeeMode(data);
+      if (!requestedMode) return true;
+      const templateMode = feeRuleForCourseType(nextVault, type).mode;
+      if (requestedMode === templateMode) return true;
+      blockers.push(
+        `未写入课程「${courseLabel}」：AI 试图把班型「${courseTypeLabel(nextVault, type)}」从「${feeModeLabel(templateMode)}」改成「${feeModeLabel(requestedMode)}」。课程档案需沿用后台班型计费模式；请先在后台修改班型计费，或改选按人数计费的班型。`
+      );
+      return false;
+    };
+
     const needsClassFeeConfirmation = (
       data: Record<string, unknown>,
       type: CourseType,
@@ -756,6 +796,7 @@ export function App() {
       const subject = stringValue(data.subject) || "语文";
       const campus = campusByName(data.campus);
       const studentIds = studentIdsFromAiData(data);
+      if (!enforceAiFeeModeMatchesCourseType(data, type, name)) return null;
       const feeConfirmation = needsClassFeeConfirmation(data, type, studentIds.length, undefined, feeRuleForCourseType(nextVault, type).mode === "class_headcount");
       if (feeConfirmation) {
         blockers.push(`未新增课程「${name}」：${feeConfirmation}`);
@@ -785,6 +826,7 @@ export function App() {
       const nextType = data.type === undefined || data.type === null || data.type === "" ? course.type : normalizeAiCourseType(data.type, nextVault);
       const nextStudentIds = studentIdsFromAiData(data);
       const campus = data.campus === undefined ? undefined : campusByName(data.campus);
+      if (!enforceAiFeeModeMatchesCourseType(data, nextType, course.name)) return null;
       const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
       const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
       const hasFeeEdit =
@@ -2286,24 +2328,23 @@ function numberValue(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function feeModeLabel(mode: FeeRule["mode"]): string {
+  if (mode === "class_headcount") return "按人数班课计费";
+  if (mode === "fixed") return "按单节固定计费";
+  return "按小时计费";
+}
+
 function feeRuleFromAiData(data: Record<string, unknown>, vault: TeacherVault, type: CourseType, fallback?: FeeRule): FeeRule {
   const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
-  const templateRule = fallback ?? feeRuleForCourseType(vault, type);
+  const courseTypeRule = feeRuleForCourseType(vault, type);
+  const templateRule = fallback?.mode === courseTypeRule.mode ? fallback : courseTypeRule;
   const baseFee = numberValue(source.baseFee ?? source.classBaseFee ?? source.minimumFee);
   const perStudentFee = numberValue(source.perPresentStudentFee ?? source.perStudentFee ?? source.extraStudentFee ?? source.headcountFee);
   const minStudents = numberValue(source.minStudents ?? source.minimumStudents ?? source.includedStudents);
   const hourlyRate = numberValue(source.hourlyRate ?? source.rate);
   const fixedFee = numberValue(source.fixedFee);
-  const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
 
-  if (
-    templateRule.mode === "class_headcount" ||
-    mode === "class_headcount" ||
-    mode === "class" ||
-    baseFee !== undefined ||
-    perStudentFee !== undefined ||
-    minStudents !== undefined
-  ) {
+  if (templateRule.mode === "class_headcount") {
     const tier = normalizedSingleClassFeeTier(templateRule);
     const nextTier = {
       id: tier.id,
@@ -2321,21 +2362,17 @@ function feeRuleFromAiData(data: Record<string, unknown>, vault: TeacherVault, t
     };
   }
 
-  if (mode === "fixed" || fixedFee !== undefined) {
+  if (templateRule.mode === "fixed") {
     return {
       mode: "fixed",
-      fixedFee: Math.max(fixedFee ?? templateRule.fixedFee ?? templateRule.hourlyRate ?? 0, 0)
+      fixedFee: Math.max(fixedFee ?? templateRule.fixedFee ?? 0, 0)
     };
   }
 
-  if (mode === "hourly" || hourlyRate !== undefined) {
-    return {
-      mode: "hourly",
-      hourlyRate: Math.max(hourlyRate ?? templateRule.hourlyRate ?? 0, 0)
-    };
-  }
-
-  return templateRule;
+  return {
+    mode: "hourly",
+    hourlyRate: Math.max(hourlyRate ?? templateRule.hourlyRate ?? 0, 0)
+  };
 }
 
 function normalizedSingleClassFeeTier(rule: FeeRule): ClassFeeTier {
