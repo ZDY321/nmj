@@ -918,7 +918,7 @@ export function AdminView({
                           {provider.isDefault && <Badge variant="sky">默认</Badge>}
                         </div>
                         <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                          {aiProviderLabels[provider.provider]} · {provider.model} · {provider.maskedApiKey || "未保存 Key"}
+                          {aiProviderLabels[provider.provider]} · {provider.model} · 每人每日 {provider.dailyLimit} 次 · {provider.maskedApiKey || "未保存 Key"}
                         </div>
                         <div className="mt-1 truncate text-xs font-semibold text-[#64748b]">{provider.baseUrl}</div>
                         {provider.lastTestedAt && (

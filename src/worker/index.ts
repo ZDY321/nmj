@@ -1172,55 +1172,77 @@ async function saveAiProvider(request: Request, env: Env, providerId?: string): 
     await env.DB.prepare("UPDATE ai_provider_configs SET is_default = 0").run();
   }
 
-  await env.DB.prepare(
-    `INSERT INTO ai_provider_configs (
-      id,
-      name,
-      provider,
-      base_url,
-      model,
-      api_key,
-      enabled,
-      is_default,
-      daily_limit,
-      max_output_tokens,
-      temperature,
-      created_at,
-      updated_at,
-      last_tested_at,
-      last_error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      provider = excluded.provider,
-      base_url = excluded.base_url,
-      model = excluded.model,
-      api_key = excluded.api_key,
-      enabled = excluded.enabled,
-      is_default = excluded.is_default,
-      daily_limit = excluded.daily_limit,
-      max_output_tokens = excluded.max_output_tokens,
-      temperature = excluded.temperature,
-      updated_at = excluded.updated_at`
-  )
-    .bind(
-      id,
-      input.name,
-      input.provider,
-      input.baseUrl,
-      input.model,
-      apiKey,
-      input.enabled ? 1 : 0,
-      input.isDefault ? 1 : 0,
-      input.dailyLimit,
-      input.maxOutputTokens,
-      input.temperature,
-      existing?.created_at ?? now,
-      now,
-      existing?.last_tested_at ?? null,
-      existing?.last_error ?? null
+  if (existing) {
+    await env.DB.prepare(
+      `UPDATE ai_provider_configs
+       SET
+         name = ?,
+         provider = ?,
+         base_url = ?,
+         model = ?,
+         api_key = ?,
+         enabled = ?,
+         is_default = ?,
+         daily_limit = ?,
+         max_output_tokens = ?,
+         temperature = ?,
+         updated_at = ?
+       WHERE id = ?`
     )
-    .run();
+      .bind(
+        input.name,
+        input.provider,
+        input.baseUrl,
+        input.model,
+        apiKey,
+        input.enabled ? 1 : 0,
+        input.isDefault ? 1 : 0,
+        input.dailyLimit,
+        input.maxOutputTokens,
+        input.temperature,
+        now,
+        id
+      )
+      .run();
+  } else {
+    await env.DB.prepare(
+      `INSERT INTO ai_provider_configs (
+        id,
+        name,
+        provider,
+        base_url,
+        model,
+        api_key,
+        enabled,
+        is_default,
+        daily_limit,
+        max_output_tokens,
+        temperature,
+        created_at,
+        updated_at,
+        last_tested_at,
+        last_error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        id,
+        input.name,
+        input.provider,
+        input.baseUrl,
+        input.model,
+        apiKey,
+        input.enabled ? 1 : 0,
+        input.isDefault ? 1 : 0,
+        input.dailyLimit,
+        input.maxOutputTokens,
+        input.temperature,
+        now,
+        now,
+        null,
+        null
+      )
+      .run();
+  }
 
   const saved = await getAiProviderRow(env, id);
   return saved ? json(aiProviderFromRow(saved), providerId ? 200 : 201) : notFound();
