@@ -598,6 +598,7 @@ export function App() {
 
     const nextVault = cloneVault(vault);
     const messages: string[] = [];
+    const blockers: string[] = [];
 
     const campusByName = (name: unknown): Campus | undefined => {
       const normalized = stringValue(name).toLowerCase();
@@ -684,6 +685,62 @@ export function App() {
       ].filter(Boolean)));
     };
 
+    const needsClassFeeConfirmation = (
+      data: Record<string, unknown>,
+      type: CourseType,
+      studentCount: number,
+      fallback?: FeeRule,
+      forceCheck = false
+    ): string | null => {
+      const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
+      const templateRule = fallback ?? feeRuleForCourseType(nextVault, type);
+      const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
+      const hasExplicitClassFeeSignal =
+        mode === "class_headcount" ||
+        mode === "class" ||
+        source.baseFee !== undefined ||
+        source.classBaseFee !== undefined ||
+        source.minimumFee !== undefined ||
+        source.perPresentStudentFee !== undefined ||
+        source.perStudentFee !== undefined ||
+        source.extraStudentFee !== undefined ||
+        source.headcountFee !== undefined ||
+        source.minStudents !== undefined ||
+        source.minimumStudents !== undefined ||
+        source.includedStudents !== undefined;
+      const hasClassFeeSignal =
+        forceCheck ||
+        templateRule.mode === "class_headcount" ||
+        hasExplicitClassFeeSignal;
+      if (!hasClassFeeSignal) return null;
+
+      const explicitDefault = Boolean(
+        source.useDefaultFeeRule ??
+        source.useDefaultClassFee ??
+        source.useTemplateFeeRule ??
+        source.useExistingFeeRule ??
+        source.keepFeeRule
+      );
+      if (explicitDefault) return null;
+
+      const hasMinStudents = source.minStudents !== undefined || source.minimumStudents !== undefined || source.includedStudents !== undefined;
+      const hasBaseFee = source.baseFee !== undefined || source.classBaseFee !== undefined || source.minimumFee !== undefined;
+      const hasPerStudentFee =
+        source.perPresentStudentFee !== undefined ||
+        source.perStudentFee !== undefined ||
+        source.extraStudentFee !== undefined ||
+        source.headcountFee !== undefined;
+      if (!hasMinStudents || !hasBaseFee || !hasPerStudentFee) {
+        return "班课/多人课需要先确认计费规则：最少人数、基础费用、每增加1人费用。最少人数不是当前关联学生人数，通常从 1 人起。";
+      }
+
+      const minStudents = numberValue(source.minStudents ?? source.minimumStudents ?? source.includedStudents);
+      if (studentCount > 1 && minStudents === studentCount) {
+        return `当前关联 ${studentCount} 人，但最少人数通常不是关联人数。请确认最少人数是否为 ${studentCount}，还是 1，并同时确认基础费用和每增加1人费用。`;
+      }
+      return null;
+    };
+
     const ensureCourse = (data: Record<string, unknown>): CourseGroup | null => {
       const requestedId = stringValue(data.courseId ?? data.id);
       const existingById = requestedId ? nextVault.courseGroups.find((course) => course.id === requestedId) : undefined;
@@ -699,6 +756,11 @@ export function App() {
       const subject = stringValue(data.subject) || "语文";
       const campus = campusByName(data.campus);
       const studentIds = studentIdsFromAiData(data);
+      const feeConfirmation = needsClassFeeConfirmation(data, type, studentIds.length, undefined, feeRuleForCourseType(nextVault, type).mode === "class_headcount");
+      if (feeConfirmation) {
+        blockers.push(`未新增课程「${name}」：${feeConfirmation}`);
+        return null;
+      }
       const feeRule = feeRuleFromAiData(data, nextVault, type);
       const course: CourseGroup = {
         id: makeId("course"),
@@ -723,6 +785,32 @@ export function App() {
       const nextType = data.type === undefined || data.type === null || data.type === "" ? course.type : normalizeAiCourseType(data.type, nextVault);
       const nextStudentIds = studentIdsFromAiData(data);
       const campus = data.campus === undefined ? undefined : campusByName(data.campus);
+      const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
+      const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
+      const hasFeeEdit =
+        mode === "class_headcount" ||
+        mode === "class" ||
+        source.baseFee !== undefined ||
+        source.classBaseFee !== undefined ||
+        source.minimumFee !== undefined ||
+        source.perPresentStudentFee !== undefined ||
+        source.perStudentFee !== undefined ||
+        source.extraStudentFee !== undefined ||
+        source.headcountFee !== undefined ||
+        source.minStudents !== undefined ||
+        source.minimumStudents !== undefined ||
+        source.includedStudents !== undefined;
+      const feeConfirmation = needsClassFeeConfirmation(
+        data,
+        nextType,
+        nextStudentIds.length > 0 ? nextStudentIds.length : course.studentIds.length,
+        nextType !== previousType ? undefined : course.feeRule,
+        nextType !== previousType || hasFeeEdit
+      );
+      if (feeConfirmation) {
+        blockers.push(`未更新课程「${course.name}」：${feeConfirmation}`);
+        return null;
+      }
       const nextFeeRule = feeRuleFromAiData(data, nextVault, nextType, nextType !== previousType ? undefined : course.feeRule);
       const nextCourse: CourseGroup = {
         ...course,
@@ -964,6 +1052,10 @@ export function App() {
         });
       }
     });
+
+    if (blockers.length > 0) {
+      return { ok: false, message: blockers.join("；") };
+    }
 
     if (messages.length === 0) {
       return { ok: false, message: "AI 建议没有被识别为可写入内容，请补充信息后重新生成。" };
