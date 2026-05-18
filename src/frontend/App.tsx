@@ -30,7 +30,7 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
-import { billableHoursForLesson, calculateFee, classFeeTierForCount, currentAppHour, defaultFeeRuleForCourseType, extraFeeTotal, formatAppDateLabel, formatAppDateTime, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForLesson, calculateFee, classFeeTierForCount, currentAppHour, defaultFeeRuleForCourseType, extraFeeTotal, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   cloneVault,
@@ -705,7 +705,7 @@ export function App() {
         subject,
         defaultCampusId: campus?.id,
         studentIds,
-        feeRule: defaultFeeRuleForCourseType(type),
+        feeRule: feeRuleForCourseType(nextVault, type),
         note: stringValue(data.note) || undefined,
         status: "active"
       };
@@ -728,7 +728,7 @@ export function App() {
         type: nextType,
         defaultCampusId: data.campus === undefined ? course.defaultCampusId : campus?.id,
         studentIds: nextStudentIds.length > 0 ? nextStudentIds : course.studentIds,
-        feeRule: nextType !== previousType ? defaultFeeRuleForCourseType(nextType) : course.feeRule,
+        feeRule: nextType !== previousType ? feeRuleForCourseType(nextVault, nextType) : course.feeRule,
         note: data.note === undefined ? course.note : stringValue(data.note) || undefined,
         status: data.status === "paused" ? "paused" : data.status === "active" ? "active" : course.status
       };
