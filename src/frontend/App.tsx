@@ -1412,6 +1412,10 @@ export function App() {
     };
   }, [token, cloudVersion, syncState, saveState]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [view]);
+
   function acknowledgeNotice() {
     if (!vault || !username) return;
     localStorage.setItem(noticeReadKey(username), vault.notice.updatedAt);
@@ -1497,10 +1501,6 @@ export function App() {
   const showSyncAlert = Boolean(syncMessage) && (syncState === "outdated" || syncState === "conflict" || syncState === "error");
   const greeting = greetingFor(greetingTime);
   const guideNeedsAttention = !isOnboardingSetupComplete(vault, onboardingVisitedSteps);
-
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [view]);
 
   function dismissOnboarding() {
     if (username) {
