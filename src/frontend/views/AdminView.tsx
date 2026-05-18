@@ -832,7 +832,7 @@ export function AdminView({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">每日上限</label>
+              <label className="text-sm font-medium">每人每日上限</label>
               <Input
                 type="number"
                 min={1}

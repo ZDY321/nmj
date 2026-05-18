@@ -555,7 +555,7 @@ export function ScheduleView({
       }
     : null;
   const aiUsageText = selectedAiUsage
-    ? `今日已用 ${selectedAiUsage.usedToday} 次 / 剩余 ${selectedAiUsage.remainingToday} 次 / 上限 ${selectedAiUsage.dailyLimit} 次`
+    ? `今日已用 ${selectedAiUsage.usedToday} 次 / 剩余 ${selectedAiUsage.remainingToday} 次 / 每人上限 ${selectedAiUsage.dailyLimit} 次`
     : "未选择接口，暂无法显示今日次数";
 
   function patchAiSession(patch: Partial<AiScheduleSession>) {
@@ -1502,7 +1502,7 @@ export function ScheduleView({
                   <div className="rounded-[14px] border border-[#bbf7d0] bg-[#f0fdf4] p-4">
                     <div className="mb-2 text-sm font-extrabold text-[#15803d]">使用次数说明</div>
                     <div className="text-sm font-semibold leading-6 text-[#166534]">
-                      每日上限按当前 AI 接口配置统计，管理员和普通用户共用同一个接口额度；只有成功生成建议才会计入次数，生成失败不会扣次数。
+                      每日上限按当前用户统计，每个人各自计算次数；只有成功生成建议才会计入次数，生成失败不会扣次数。
                     </div>
                   </div>
                 </div>

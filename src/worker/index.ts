@@ -294,8 +294,8 @@ function aiProviderFromRow(row: AiProviderRow): AiProviderConfig {
   };
 }
 
-async function aiProviderConfigWithUsage(env: Env, row: AiProviderRow, includeSensitive: boolean): Promise<AiProviderConfig> {
-  const usedToday = await providerDailyUsage(env, row.id);
+async function aiProviderConfigWithUsage(env: Env, row: AiProviderRow, includeSensitive: boolean, actorUserId: string): Promise<AiProviderConfig> {
+  const usedToday = await providerDailyUsage(env, row.id, actorUserId);
   const dailyLimit = Math.max(row.daily_limit, 0);
   return {
     ...aiProviderFromRow(row),
@@ -1096,7 +1096,7 @@ async function getAiProviderRow(env: Env, providerId: string): Promise<AiProvide
     .first<AiProviderRow>();
 }
 
-async function listAiProviders(env: Env): Promise<Response> {
+async function listAiProviders(env: Env, actorUserId: string): Promise<Response> {
   const result = await env.DB.prepare(
     `SELECT
       id,
@@ -1118,11 +1118,11 @@ async function listAiProviders(env: Env): Promise<Response> {
      ORDER BY is_default DESC, updated_at DESC`
   ).all<AiProviderRow>();
 
-  const providers = await Promise.all((result.results ?? []).map((row) => aiProviderConfigWithUsage(env, row, true)));
+  const providers = await Promise.all((result.results ?? []).map((row) => aiProviderConfigWithUsage(env, row, true, actorUserId)));
   return json(providers);
 }
 
-async function listUsableAiProviders(env: Env, includeSensitive: boolean): Promise<Response> {
+async function listUsableAiProviders(env: Env, includeSensitive: boolean, actorUserId: string): Promise<Response> {
   const result = await env.DB.prepare(
     `SELECT
       id,
@@ -1145,7 +1145,7 @@ async function listUsableAiProviders(env: Env, includeSensitive: boolean): Promi
      ORDER BY is_default DESC, updated_at DESC`
   ).all<AiProviderRow>();
 
-  const providers = await Promise.all((result.results ?? []).map((row) => aiProviderConfigWithUsage(env, row, includeSensitive)));
+  const providers = await Promise.all((result.results ?? []).map((row) => aiProviderConfigWithUsage(env, row, includeSensitive, actorUserId)));
   return json(providers);
 }
 
@@ -1231,7 +1231,7 @@ async function deleteAiProvider(env: Env, providerId: string): Promise<Response>
   return json({ ok: true });
 }
 
-async function providerDailyUsage(env: Env, providerId: string): Promise<number> {
+async function providerDailyUsage(env: Env, providerId: string, actorUserId: string): Promise<number> {
   const now = new Date();
   const todayBeijingMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 16, 0, 0, 0);
   const since = new Date(now.getTime() < todayBeijingMidnight ? todayBeijingMidnight - 24 * 60 * 60 * 1000 : todayBeijingMidnight);
@@ -1239,10 +1239,11 @@ async function providerDailyUsage(env: Env, providerId: string): Promise<number>
     `SELECT COUNT(*) AS total
      FROM ai_usage_logs
      WHERE provider_id = ?
+       AND actor_user_id = ?
        AND success = 1
        AND created_at >= ?`
   )
-    .bind(providerId, since.toISOString())
+    .bind(providerId, actorUserId, since.toISOString())
     .first<{ total: number }>();
   return row?.total ?? 0;
 }
@@ -1496,7 +1497,7 @@ async function generateAiScheduleDraft(request: Request, env: Env, actor: AuthCo
     return json({ error: "AI provider disabled" }, 400);
   }
 
-  const usedToday = await providerDailyUsage(env, provider.id);
+  const usedToday = await providerDailyUsage(env, provider.id, actor.user.id);
   if (usedToday >= provider.daily_limit) {
     return json({ error: "AI daily limit reached" }, 429);
   }
@@ -1831,7 +1832,7 @@ async function handleAdminRequest(request: Request, env: Env): Promise<Response 
   }
 
   if (request.method === "GET" && pathname === "/api/admin/ai/providers") {
-    return listAiProviders(env);
+    return listAiProviders(env, context.user.id);
   }
 
   if (request.method === "POST" && pathname === "/api/admin/ai/providers") {
@@ -1940,7 +1941,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
       return context;
     }
     if (request.method === "GET" && pathname === "/api/ai/providers") {
-      return listUsableAiProviders(env, false);
+      return listUsableAiProviders(env, false, context.user.id);
     }
     if (request.method === "POST" && pathname === "/api/ai/schedule-draft") {
       return generateAiScheduleDraft(request, env, context);
