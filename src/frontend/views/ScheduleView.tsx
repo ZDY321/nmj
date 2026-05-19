@@ -72,6 +72,7 @@ import {
   sortStudentsByName,
   studentNames,
   subjectOptionsForVault,
+  weekDatesFor,
   weekStartsOn,
   weekdayOfDateIso,
   weekdayLabels
@@ -147,13 +148,15 @@ export function ScheduleView({
   const [rangeEnd, setRangeEnd] = useState(monthShift(todayIso().slice(0, 7), 1) + "-01");
   const [calendarCourseGroupId, setCalendarCourseGroupId] = useState(firstCourseId);
   const [calendarCourseSearch, setCalendarCourseSearch] = useState("");
-  const [calendarViewCourseFilter, setCalendarViewCourseFilter] = useState("all");
-  const [calendarViewCourseSearch, setCalendarViewCourseSearch] = useState("");
   const [calendarStartTime, setCalendarStartTime] = useState("19:00");
   const [calendarEndTime, setCalendarEndTime] = useState("21:00");
   const [calendarMonth, setCalendarMonth] = useState(todayIso().slice(0, 7));
   const [calendarMode, setCalendarMode] = useState<"schedule" | "view">("view");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(todayIso());
+  const [calendarViewCampusFilter, setCalendarViewCampusFilter] = useState("all");
+  const [calendarViewGradeFilter, setCalendarViewGradeFilter] = useState("all");
+  const [calendarViewSubjectFilter, setCalendarViewSubjectFilter] = useState("all");
+  const [calendarViewStudentFilter, setCalendarViewStudentFilter] = useState("");
   const [syncSourceDate, setSyncSourceDate] = useState(addDays(todayIso(), -7));
   const [syncTargetDate, setSyncTargetDate] = useState(todayIso());
   const [selectedSyncLessonIds, setSelectedSyncLessonIds] = useState<string[]>([]);
@@ -205,6 +208,11 @@ export function ScheduleView({
   const aiMessage = aiSession?.message ?? "";
   const { confirm, dialog } = useConfirmDialog();
   const isAdmin = role === "admin";
+  const calendarViewCampusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
+  const calendarViewGradeOptions = Array.from(
+    new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))
+  ).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  const calendarViewSubjectOptions = subjectOptionsForVault(vault);
   const syncSourceLessons = vault.lessons
     .filter((lesson) => lesson.date === syncSourceDate && lesson.status !== "cancelled")
     .sort(sortLessons);
@@ -246,10 +254,16 @@ export function ScheduleView({
   }, [courseSelectionOptionIds]);
 
   useEffect(() => {
-    setCalendarViewCourseFilter((current) =>
-      current === "all" || courseGroupOptions.some((course) => course.id === current) ? current : "all"
+    setCalendarViewCampusFilter((current) =>
+      current === "all" || calendarViewCampusOptions.some((campus) => campus.id === current) ? current : "all"
     );
-  }, [courseGroupOptionIds]);
+    setCalendarViewGradeFilter((current) =>
+      current === "all" || calendarViewGradeOptions.some((grade) => grade === current) ? current : "all"
+    );
+    setCalendarViewSubjectFilter((current) =>
+      current === "all" || calendarViewSubjectOptions.some((subject) => subject === current) ? current : "all"
+    );
+  }, [calendarViewCampusOptions, calendarViewGradeOptions, calendarViewSubjectOptions]);
 
   useEffect(() => {
     setSyncTargetDate(selectedCalendarDate);
@@ -303,12 +317,6 @@ export function ScheduleView({
   const singleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, singleCourseSearch, singleCourseGroupId);
   const ruleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, ruleCourseSearch, ruleCourseGroupId);
   const calendarCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, calendarCourseSearch, calendarCourseGroupId);
-  const calendarViewCourseOptions = filterScheduleCourseOptions(
-    vault,
-    courseGroupOptions,
-    calendarViewCourseSearch,
-    calendarViewCourseFilter === "all" ? "" : calendarViewCourseFilter
-  );
   const activeMakeupLessons = vault.lessons
     .filter((lesson) => Boolean(lesson.linkedOriginalLessonId) && lesson.status !== "cancelled")
     .sort(sortLessons);
@@ -320,6 +328,7 @@ export function ScheduleView({
   }, {});
   const selectedSyncLessons = syncSourceLessons.filter((lesson) => selectedSyncLessonIds.includes(lesson.id));
   const selectedCalendarLessons = calendarLessonsForDate(selectedCalendarDate);
+  const selectedCalendarWeekLessons = vault.lessons.filter((lesson) => weekDatesFor(selectedCalendarDate, weekStartPreference).includes(lesson.date) && matchesCalendarLessonFilter(lesson));
   const selectedCalendarCompletedCount = selectedCalendarLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const selectedCalendarPendingCount = selectedCalendarLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
   const selectedCalendarCancelledCount = selectedCalendarLessons.filter((lesson) => lesson.status === "cancelled").length;
@@ -797,17 +806,35 @@ export function ScheduleView({
     window.setTimeout(() => setAiApplying(false), 250);
   }
 
-  function matchesCalendarCourseFilter(lesson: Lesson): boolean {
-    if (calendarViewCourseFilter !== "all" && lesson.courseGroupId !== calendarViewCourseFilter) return false;
-    const searchTerms = calendarViewCourseSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (searchTerms.length === 0) return true;
-    const searchText = lessonSearchText(vault, lesson);
-    return searchTerms.every((term) => searchText.includes(term));
+  function matchesCalendarLessonFilter(lesson: Lesson): boolean {
+    const course = getCourse(vault, lesson.courseGroupId);
+    const campusId = lesson.campusId ?? course?.defaultCampusId;
+    const studentIds = lessonStudentIds(lesson);
+    const searchable = [
+      courseName(vault, lesson.courseGroupId),
+      courseSubject(vault, lesson.courseGroupId),
+      campusName(vault, campusId),
+      studentNames(vault, studentIds),
+      ...studentIds.map((studentId) => {
+        const student = findStudent(vault, studentId);
+        return [student?.name ?? "", student?.grade ?? "", student?.note ?? ""].join(" ");
+      })
+    ]
+      .join(" ")
+      .toLowerCase();
+    const matchesCampus = calendarViewCampusFilter === "all" || campusId === calendarViewCampusFilter;
+    const matchesGrade =
+      calendarViewGradeFilter === "all" ||
+      studentIds.some((studentId) => findStudent(vault, studentId)?.grade?.trim() === calendarViewGradeFilter);
+    const matchesSubject = calendarViewSubjectFilter === "all" || course?.subject === calendarViewSubjectFilter;
+    const searchTerms = calendarViewStudentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const matchesStudent = searchTerms.length === 0 || searchTerms.every((term) => searchable.includes(term));
+    return matchesCampus && matchesGrade && matchesSubject && matchesStudent;
   }
 
   function calendarLessonsForDate(date: string): Lesson[] {
     return vault.lessons
-      .filter((lesson) => lesson.date === date && matchesCalendarCourseFilter(lesson))
+      .filter((lesson) => lesson.date === date && matchesCalendarLessonFilter(lesson))
       .sort(sortLessons);
   }
 
@@ -2126,36 +2153,59 @@ export function ScheduleView({
               </div>
             )}
             <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] lg:items-center">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[auto_minmax(130px,0.75fr)_minmax(130px,0.75fr)_minmax(130px,0.75fr)_minmax(220px,1.35fr)_auto_auto] xl:items-end">
                 <div className="min-w-[116px]">
                   <div className="text-sm font-extrabold text-[#061226]">查看课程筛选</div>
                   <div className="mt-0.5 text-xs font-bold text-[#64748b]">
-                    当前每日明细 {selectedCalendarLessons.length} 节
+                    当日 {selectedCalendarLessons.length} 节 · 本周 {selectedCalendarWeekLessons.length} 节
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">校区</label>
+                  <Select value={calendarViewCampusFilter} onChange={(event) => setCalendarViewCampusFilter(event.target.value)} className="h-10 bg-white">
+                    <option value="all">全部校区</option>
+                    {calendarViewCampusOptions.map((campus) => (
+                      <option key={campus.id} value={campus.id}>{campus.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">年级</label>
+                  <Select value={calendarViewGradeFilter} onChange={(event) => setCalendarViewGradeFilter(event.target.value)} className="h-10 bg-white">
+                    <option value="all">全部年级</option>
+                    {calendarViewGradeOptions.map((grade) => (
+                      <option key={grade} value={grade}>{grade}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">科目</label>
+                  <Select value={calendarViewSubjectFilter} onChange={(event) => setCalendarViewSubjectFilter(event.target.value)} className="h-10 bg-white">
+                    <option value="all">全部科目</option>
+                    {calendarViewSubjectOptions.map((subject) => (
+                      <option key={subject} value={subject}>{subject}</option>
+                    ))}
+                  </Select>
                 </div>
                 <label className="relative block">
                   <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                   <Input
-                    value={calendarViewCourseSearch}
-                    onChange={(event) => setCalendarViewCourseSearch(event.target.value)}
-                    placeholder="搜索姓名、年级、校区或班型"
+                    value={calendarViewStudentFilter}
+                    onChange={(event) => setCalendarViewStudentFilter(event.target.value)}
+                    placeholder="搜索学生、课程、校区或备注"
                     className="h-10 bg-white pl-9"
                   />
                 </label>
-                <Select value={calendarViewCourseFilter} onChange={(event) => setCalendarViewCourseFilter(event.target.value)} className="h-10">
-                  <option value="all">全部课程</option>
-                  {calendarViewCourseOptions.map((course) => (
-                    <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
-                  ))}
-                </Select>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setCalendarViewCourseFilter("all");
-                    setCalendarViewCourseSearch("");
+                    setCalendarViewCampusFilter("all");
+                    setCalendarViewGradeFilter("all");
+                    setCalendarViewSubjectFilter("all");
+                    setCalendarViewStudentFilter("");
                   }}
-                  disabled={calendarViewCourseFilter === "all" && !calendarViewCourseSearch}
+                  disabled={calendarViewCampusFilter === "all" && calendarViewGradeFilter === "all" && calendarViewSubjectFilter === "all" && !calendarViewStudentFilter}
                   className="h-10"
                 >
                   清除筛选

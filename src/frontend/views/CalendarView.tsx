@@ -352,6 +352,7 @@ export function CalendarView({
                     <div className="text-xs font-semibold text-[#64748b]">点击某节课可跳转到「排课与课时-课程记录」页面</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#64748b]">
+                    <Badge variant="sky" className="text-[10px]">筛选后本周 {weekLessons.length} 节</Badge>
                     <Badge variant="sage" className="text-[10px]">完成</Badge>
                     <Badge variant="amber" className="text-[10px]">待上课</Badge>
                     <Badge variant="yellow" className="text-[10px]">待补课</Badge>
