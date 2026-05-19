@@ -340,10 +340,6 @@ export function studentNames(vault: TeacherVault, studentIds: string[]): string 
     .join("、");
 }
 
-export function previousHomework(vault: TeacherVault, lesson: Lesson): string {
-  return previousLesson(vault, lesson)?.content.homework || lesson.content.nextLessonReminder;
-}
-
 export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | undefined {
   const previous = vault.lessons
     .filter(
@@ -392,8 +388,6 @@ export function createLessonFromCourse(
     }
   };
 
-  const reminder = previousHomework(vault, lesson);
-  lesson.content.nextLessonReminder = reminder;
   const presentStudentCount = presentCount(lesson);
   const classFeeTier = course.feeRule.mode === "class_headcount"
     ? classFeeTierForCount(course.feeRule, presentStudentCount)

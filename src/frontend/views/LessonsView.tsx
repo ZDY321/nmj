@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, BookText, Clock, GraduationCap, NotebookPen, Plus, Trash2, UserCheck } from "lucide-react";
+import { BookOpen, Clock, GraduationCap, NotebookPen, Plus, Trash2, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -22,6 +22,7 @@ import {
   findStudent,
   formatPrivateMoney,
   lessonStatusLabels,
+  previousLesson,
   sortCampusesForProfile,
   sortCoursesByName,
   sortLessons
@@ -195,6 +196,9 @@ export function LessonsView({
     .sort(sortLessons)
     .reverse();
   const selected = lessons.find((l) => l.id === selectedId) ?? lessons[0];
+  const selectedPreviousLesson = selected ? previousLesson(vault, selected) : undefined;
+  const selectedPreviousTaught = selectedPreviousLesson?.content.taught.trim() ?? "";
+  const selectedPreviousHomework = selectedPreviousLesson?.content.homework.trim() ?? "";
 
   function updateSelected(patch: Partial<Lesson>) {
     if (!selected) return;
@@ -370,6 +374,35 @@ export function LessonsView({
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <div className="rounded-[14px] border border-[#dbeafe] bg-[#f8fbff] p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
+                      <BookOpen size={16} className="text-[#1557c2]" /> 上节课内容
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-[#475569]">
+                      {selectedPreviousTaught || "上一节课没有记录内容。"}
+                    </p>
+                    {selectedPreviousLesson && (
+                      <div className="mt-3 text-xs font-semibold text-[#64748b]">
+                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime}
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-[14px] border border-[#fed7aa] bg-[#fffaf5] p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
+                      <NotebookPen size={16} className="text-[#ff8617]" /> 上节课作业
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-[#475569]">
+                      {selectedPreviousHomework || "上一节课没有记录作业。"}
+                    </p>
+                    {selectedPreviousLesson && (
+                      <div className="mt-3 text-xs font-semibold text-[#64748b]">
+                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-[#ff8617] text-xs font-bold uppercase tracking-widest">
                     <UserCheck size={14} /> 到课情况
@@ -423,17 +456,6 @@ export function LessonsView({
                     value={selected.content.homework}
                     onChange={(e) => updateContent("homework", e.target.value)}
                     placeholder="布置课后作业..."
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-[#1557c2] text-xs font-bold uppercase tracking-widest">
-                    <BookText size={14} /> 下次课提醒
-                  </div>
-                  <Textarea
-                    value={selected.content.nextLessonReminder}
-                    onChange={(e) => updateContent("nextLessonReminder", e.target.value)}
-                    placeholder="下次课需要检查或准备的内容..."
                   />
                 </div>
               </CardContent>

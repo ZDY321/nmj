@@ -59,7 +59,7 @@ export function OnboardingGuide({
       key: "schedule",
       title: "生成课时记录",
       description: "用单节添加、日历点选或批量生成，把未来课程排到系统里。",
-      detail: "上课后在课时记录里确认到课状态、补课、临时学生、作业和下次提醒。",
+      detail: "上课后在课时记录里确认到课状态、补课、临时学生、课程内容和作业。",
       view: "schedule",
       button: "去排课"
     },
@@ -187,7 +187,7 @@ export function OnboardingGuide({
         <GuideNote
           icon={CalendarDays}
           title="日常使用"
-          description="上课前看今日提醒；上课后更新到课状态、作业和下次提醒；有请假时标记待补课。"
+          description="上课前看今日提醒；上课后更新到课状态、课程内容和作业；有请假时标记待补课。"
         />
         <GuideNote
           icon={WalletCards}
