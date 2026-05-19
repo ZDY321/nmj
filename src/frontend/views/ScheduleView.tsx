@@ -2117,7 +2117,7 @@ export function ScheduleView({
                   </div>
                 </div>
                 <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">
-                  说明：这里的排课课程、开始时间和结束时间只用于点击日期时生成新课；下方“查看课程筛选”只影响已排课程展示。
+                  说明：这里的排课课程、开始时间和结束时间只用于点击日期时生成新课；“查看课程筛选”只影响已排课程展示。
                 </div>
               </div>
             ) : (
@@ -2270,7 +2270,7 @@ export function ScheduleView({
                 )}
               </AnimatePresence>
             </div>
-            <div className="order-first grid grid-cols-7 gap-1 sm:gap-2">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {visibleWeekdayLabels.map((day) => (
                 <div key={day} className="py-2 text-center text-xs font-bold text-(--color-muted-foreground)">{day}</div>
               ))}
@@ -2757,7 +2757,14 @@ export function ScheduleView({
               <input
                 type="checkbox"
                 checked={syncRecordsWithCalendarDate}
-                onChange={(event) => setSyncRecordsWithCalendarDate(event.target.checked)}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setSyncRecordsWithCalendarDate(checked);
+                  if (!checked) {
+                    setLessonScope("day");
+                    setLessonDay(selectedCalendarDate);
+                  }
+                }}
                 className="h-4 w-4 accent-[#ff8617]"
               />
               同步日历查看日期（{selectedCalendarDate}）
