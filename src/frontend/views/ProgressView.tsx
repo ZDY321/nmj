@@ -75,6 +75,7 @@ type ProgressRow = {
 type TimelineColumn = {
   date: string;
   label: string;
+  isToday: boolean;
 };
 
 type TimelineCell = {
@@ -431,9 +432,16 @@ export function ProgressView({
                         学生 / 课程
                       </th>
                       {timelineColumns.map((column) => (
-                        <th key={column.date} className="sticky top-0 z-20 min-w-[230px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
-                          <div>{column.label}</div>
-                          <div className="mt-1 font-semibold text-[#64748b]">{column.date}</div>
+                        <th
+                          key={column.date}
+                          className={`sticky top-0 z-20 min-w-[230px] border-b border-r p-3 align-top text-xs font-extrabold ${
+                            column.isToday
+                              ? "border-[#fed7aa] bg-[#fff7ed] text-[#c2410c]"
+                              : "border-[#dbe4ef] bg-[#f8fbff] text-[#25324a]"
+                          }`}
+                        >
+                          <div>{column.isToday ? "今天" : column.label}</div>
+                          <div className={`mt-1 font-semibold ${column.isToday ? "text-[#f97316]" : "text-[#64748b]"}`}>{column.date}</div>
                         </th>
                       ))}
                     </tr>
@@ -463,7 +471,7 @@ export function ProgressView({
                         {timelineColumns.map((column) => {
                           const cell = progressCellForDate(vault, row, column.date);
                           return (
-                            <td key={`${row.key}-${column.date}`} className="border-b border-r border-[#dbe4ef] p-2 align-top">
+                            <td key={`${row.key}-${column.date}`} className={`border-b border-r p-2 align-top ${column.isToday ? "border-[#fed7aa] bg-[#fffaf5]" : "border-[#dbe4ef]"}`}>
                               {cell ? (
                                 <button
                                   type="button"
@@ -472,7 +480,7 @@ export function ProgressView({
                                     setSelectedLessonId(cell.lesson?.id ?? cell.record?.lessonId ?? "");
                                     setEditModalOpen(Boolean(cell.lesson));
                                   }}
-                                  className={`h-[196px] w-full overflow-hidden rounded-[10px] border p-2 text-left transition-colors ${
+                                  className={`flex h-[210px] w-full flex-col overflow-hidden rounded-[10px] border p-2 text-left transition-colors ${
                                     selectedRow?.key === row.key && selectedLesson?.id === cell.lesson?.id
                                       ? "border-[#ff8617] bg-[#fff7ed]"
                                       : selectedRow?.key === row.key
@@ -480,7 +488,7 @@ export function ProgressView({
                                       : "border-[#e8eef6] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
                                   }`}
                                 >
-                                  <div className="mb-2 flex flex-wrap gap-1.5">
+                                  <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
                                     <Badge variant={progressStatusVariant(cell.progressStatus)} className="text-[10px]">{progressStatusLabels[cell.progressStatus]}</Badge>
                                     <Badge variant={homeworkStatusVariant(cell.homeworkStatus)} className="text-[10px]">{homeworkStatusLabels[cell.homeworkStatus]}</Badge>
                                     {cell.needsRecord && <Badge variant="amber" className="text-[10px]">未整理</Badge>}
@@ -489,7 +497,7 @@ export function ProgressView({
                                     {cell.nextPlan && <Badge variant="sky" className="text-[10px]">下次</Badge>}
                                     {cell.note && <Badge variant="plum" className="text-[10px]">备注</Badge>}
                                   </div>
-                                  <div className="max-h-[146px] overflow-y-auto pr-1">
+                                  <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                                     <div className="text-[11px] font-extrabold text-[#1557c2]">内容</div>
                                     <div className="mt-0.5 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
                                       {cell.progressText || "未填写"}
@@ -505,7 +513,7 @@ export function ProgressView({
                                   </div>
                                 </button>
                               ) : (
-                                <div className="min-h-[132px] rounded-[10px] border border-dashed border-[#e8eef6] bg-[#f8fbff]/60 p-2 text-xs font-semibold text-[#94a3b8]">
+                                <div className="h-[210px] rounded-[10px] border border-dashed border-[#e8eef6] bg-[#f8fbff]/60 p-2 text-xs font-semibold text-[#94a3b8]">
                                   无记录
                                 </div>
                               )}
@@ -825,16 +833,19 @@ function buildTimelineColumns(
     : defaultTimelineDates(sortedDates, today, 4);
   return visibleDates.map((date) => ({
     date,
-    label: date.slice(5)
+    label: date.slice(5),
+    isToday: date === today
   }));
 }
 
 function defaultTimelineDates(sortedDates: string[], anchorDate: string, count: number): string[] {
-  if (sortedDates.length <= count) return sortedDates;
-  const firstAfterAnchor = sortedDates.findIndex((date) => date >= anchorDate);
-  const endIndex = firstAfterAnchor === -1 ? sortedDates.length : Math.min(firstAfterAnchor + 1, sortedDates.length);
-  const startIndex = Math.max(0, endIndex - count);
-  return sortedDates.slice(startIndex, startIndex + count);
+  if (sortedDates.length === 0) return [anchorDate];
+  const todayAndAfter = sortedDates.filter((date) => date >= anchorDate);
+  const beforeToday = sortedDates.filter((date) => date < anchorDate).reverse();
+  const chosen = [anchorDate, ...todayAndAfter.filter((date) => date !== anchorDate), ...beforeToday]
+    .filter((date, index, dates) => dates.indexOf(date) === index)
+    .slice(0, count);
+  return chosen;
 }
 
 function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string): TimelineCell | undefined {
