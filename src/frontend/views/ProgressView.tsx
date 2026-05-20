@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { motion } from "framer-motion";
 import {
   AlertTriangle,
   BookOpen,
@@ -72,6 +71,21 @@ type ProgressRow = {
   needsLatestRecord: boolean;
 };
 
+type TimelineColumn = {
+  date: string;
+  label: string;
+};
+
+type TimelineCell = {
+  lesson?: Lesson;
+  record?: StudentProgressRecord;
+  progressText: string;
+  homeworkText: string;
+  progressStatus: StudentProgressStatus;
+  homeworkStatus: StudentHomeworkStatus;
+  needsRecord: boolean;
+};
+
 const progressStatusLabels: Record<StudentProgressStatus, string> = {
   on_track: "正常推进",
   review_needed: "需要复习",
@@ -110,6 +124,8 @@ export function ProgressView({
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [homeworkFilter, setHomeworkFilter] = useState<HomeworkFilter>("all");
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
   const [onlyFollowUp, setOnlyFollowUp] = useState(false);
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedLessonId, setSelectedLessonId] = useState("");
@@ -157,6 +173,8 @@ export function ProgressView({
       const dateCompare = (b.latestLesson?.date ?? "").localeCompare(a.latestLesson?.date ?? "");
       return dateCompare || compareByName(a.student.name, b.student.name) || compareByName(a.course.name, b.course.name);
     });
+
+  const timelineColumns = buildTimelineColumns(vault, visibleRows, dateStart, dateEnd);
 
   const selectedRow = visibleRows.find((row) => row.key === selectedKey) ?? visibleRows[0];
   const selectedLessons = selectedRow?.lessons ?? [];
@@ -311,15 +329,25 @@ export function ProgressView({
               ))}
             </Select>
           </div>
-          <label className="flex w-fit items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
-            <input
-              type="checkbox"
-              checked={onlyFollowUp}
-              onChange={(event) => setOnlyFollowUp(event.target.checked)}
-              className="h-4 w-4 accent-[#ff8617]"
-            />
-            只看需要跟进
-          </label>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_180px_auto] md:items-end">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-[#25324a]">开始日期</label>
+              <Input type="date" value={dateStart} onChange={(event) => setDateStart(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-[#25324a]">结束日期</label>
+              <Input type="date" value={dateEnd} min={dateStart} onChange={(event) => setDateEnd(event.target.value)} />
+            </div>
+            <label className="flex w-fit items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
+              <input
+                type="checkbox"
+                checked={onlyFollowUp}
+                onChange={(event) => setOnlyFollowUp(event.target.checked)}
+                className="h-4 w-4 accent-[#ff8617]"
+              />
+              只看需要跟进
+            </label>
+          </div>
         </CardContent>
       </Card>
 
@@ -327,80 +355,100 @@ export function ProgressView({
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle>学生列表</CardTitle>
-              <CardDescription className="mt-1">同一节班课会按学生拆开，便于记录不同进度和作业完成情况。</CardDescription>
+              <CardTitle>进度作业台账</CardTitle>
+              <CardDescription className="mt-1">行是学生课程，列是上课日期；横向看同一天，纵向看单个学生的连续进度。</CardDescription>
             </div>
-            <Badge variant="secondary" className="w-fit">{visibleRows.length} 组</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary" className="w-fit">{visibleRows.length} 组</Badge>
+              <Badge variant="sky" className="w-fit">{timelineColumns.length} 天</Badge>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {visibleRows.map((row, index) => (
-              <motion.button
-                key={row.key}
-                type="button"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.015 }}
-                onClick={() => {
-                  setSelectedKey(row.key);
-                  setSelectedLessonId(row.latestLesson?.id ?? row.lessons.at(-1)?.id ?? "");
-                }}
-                className={`w-full rounded-[14px] border p-4 text-left transition-all ${
-                  selectedRow?.key === row.key
-                    ? "border-[#ff8617]/45 bg-[#fff7ed] shadow-[0_12px_28px_rgba(255,134,23,0.12)]"
-                    : "border-[#dbe4ef] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
-                }`}
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-extrabold text-[#1557c2] ring-1 ring-[#dbe4ef]">
-                        {row.student.name.slice(0, 1)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-base font-extrabold text-[#061226]">{row.student.name}</div>
-                        <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                          {row.course.name} · {row.course.subject} · {courseTypeLabel(vault, row.course.type)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-[#64748b]">
-                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
-                        {row.latestLesson ? `${row.latestLesson.date} ${row.latestLesson.startTime}-${row.latestLesson.endTime}` : "暂无课时"}
-                      </span>
-                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
-                        {campusName(vault, row.latestLesson?.campusId ?? row.course.defaultCampusId)}
-                      </span>
-                      {row.needsLatestRecord && (
-                        <span className="rounded-full bg-[#fff3e4] px-2.5 py-1 font-extrabold text-[#c2410c] ring-1 ring-[#fed7aa]">
-                          最新课未整理
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
-                    <Badge variant={progressStatusVariant(row.progressStatus)}>{progressStatusLabels[row.progressStatus]}</Badge>
-                    <Badge variant={homeworkStatusVariant(row.homeworkStatus)}>{homeworkStatusLabels[row.homeworkStatus]}</Badge>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
-                    <div className="text-[11px] font-bold text-[#64748b]">当前进度</div>
-                    <div className="mt-1 line-clamp-2 text-sm font-semibold leading-6 text-[#25324a]">
-                      {row.displayRecord?.progressText || row.latestLesson?.content.taught || "还没有记录进度"}
-                    </div>
-                  </div>
-                  <div className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
-                    <div className="text-[11px] font-bold text-[#64748b]">作业安排</div>
-                    <div className="mt-1 line-clamp-2 text-sm font-semibold leading-6 text-[#25324a]">
-                      {row.displayRecord?.homeworkText || row.latestLesson?.content.homework || "还没有布置作业"}
-                    </div>
-                  </div>
-                </div>
-              </motion.button>
-            ))}
-            {visibleRows.length === 0 && (
+          <CardContent>
+            {visibleRows.length === 0 || timelineColumns.length === 0 ? (
               <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
-                没有符合当前筛选条件的学生进度
+                没有符合当前筛选条件的进度台账
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-[14px] border border-[#dbe4ef] bg-white">
+                <table className="min-w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="bg-[#f8fbff]">
+                      <th className="sticky left-0 z-20 w-[230px] min-w-[230px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a]">
+                        学生 / 课程
+                      </th>
+                      {timelineColumns.map((column) => (
+                        <th key={column.date} className="min-w-[220px] border-b border-r border-[#dbe4ef] p-3 align-top text-xs font-extrabold text-[#25324a]">
+                          <div>{column.label}</div>
+                          <div className="mt-1 font-semibold text-[#64748b]">{column.date}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleRows.map((row) => (
+                      <tr key={row.key} className={selectedRow?.key === row.key ? "bg-[#fff7ed]" : "odd:bg-white even:bg-[#fbfdff]"}>
+                        <th className="sticky left-0 z-10 w-[230px] min-w-[230px] border-b border-r border-[#dbe4ef] bg-inherit p-3 align-top">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedKey(row.key);
+                              setSelectedLessonId(row.latestLesson?.id ?? row.lessons.at(-1)?.id ?? "");
+                            }}
+                            className="w-full text-left"
+                          >
+                            <div className="font-extrabold text-[#061226]">{row.student.name}</div>
+                            <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                              {row.course.name} · {row.course.subject}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              <Badge variant={progressStatusVariant(row.progressStatus)} className="text-[10px]">{progressStatusLabels[row.progressStatus]}</Badge>
+                              <Badge variant={homeworkStatusVariant(row.homeworkStatus)} className="text-[10px]">{homeworkStatusLabels[row.homeworkStatus]}</Badge>
+                            </div>
+                          </button>
+                        </th>
+                        {timelineColumns.map((column) => {
+                          const cell = progressCellForDate(vault, row, column.date);
+                          return (
+                            <td key={`${row.key}-${column.date}`} className="border-b border-r border-[#dbe4ef] p-2 align-top">
+                              {cell ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedKey(row.key);
+                                    setSelectedLessonId(cell.lesson?.id ?? cell.record?.lessonId ?? "");
+                                  }}
+                                  className={`min-h-[132px] w-full rounded-[10px] border p-2 text-left transition-colors ${
+                                    selectedRow?.key === row.key && selectedLesson?.id === cell.lesson?.id
+                                      ? "border-[#ff8617] bg-[#fff7ed]"
+                                      : "border-[#e8eef6] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
+                                  }`}
+                                >
+                                  <div className="mb-2 flex flex-wrap gap-1.5">
+                                    <Badge variant={progressStatusVariant(cell.progressStatus)} className="text-[10px]">{progressStatusLabels[cell.progressStatus]}</Badge>
+                                    <Badge variant={homeworkStatusVariant(cell.homeworkStatus)} className="text-[10px]">{homeworkStatusLabels[cell.homeworkStatus]}</Badge>
+                                    {cell.needsRecord && <Badge variant="amber" className="text-[10px]">未整理</Badge>}
+                                  </div>
+                                  <div className="text-[11px] font-extrabold text-[#1557c2]">内容</div>
+                                  <div className="mt-0.5 line-clamp-2 text-xs font-semibold leading-5 text-[#25324a]">
+                                    {cell.progressText || "未填写"}
+                                  </div>
+                                  <div className="mt-2 text-[11px] font-extrabold text-[#c2410c]">作业</div>
+                                  <div className="mt-0.5 line-clamp-2 text-xs font-semibold leading-5 text-[#25324a]">
+                                    {cell.homeworkText || "未布置"}
+                                  </div>
+                                </button>
+                              ) : (
+                                <div className="min-h-[132px] rounded-[10px] border border-dashed border-[#e8eef6] bg-[#f8fbff]/60 p-2 text-xs font-semibold text-[#94a3b8]">
+                                  无记录
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>
@@ -631,6 +679,56 @@ function recordToDraft(record: StudentProgressRecord | undefined, lesson: Lesson
     homeworkStatus: record?.homeworkStatus ?? inferHomeworkStatus(lesson),
     note: record?.note ?? ""
   };
+}
+
+function buildTimelineColumns(
+  vault: TeacherVault,
+  rows: ProgressRow[],
+  dateStart: string,
+  dateEnd: string
+): TimelineColumn[] {
+  const dates = new Set<string>();
+  rows.forEach((row) => {
+    row.lessons.forEach((lesson) => {
+      if (dateInRange(lesson.date, dateStart, dateEnd)) dates.add(lesson.date);
+    });
+  });
+  (vault.studentProgressRecords ?? []).forEach((record) => {
+    if (rows.some((row) => row.student.id === record.studentId && row.course.id === record.courseGroupId) && dateInRange(record.date, dateStart, dateEnd)) {
+      dates.add(record.date);
+    }
+  });
+
+  const sortedDates = Array.from(dates).sort();
+  const visibleDates = dateStart || dateEnd ? sortedDates : sortedDates.slice(-8);
+  return visibleDates.map((date) => ({
+    date,
+    label: date.slice(5)
+  }));
+}
+
+function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string): TimelineCell | undefined {
+  const lesson = row.lessons.filter((item) => item.date === date).sort(sortLessons).at(-1);
+  const records = (vault.studentProgressRecords ?? [])
+    .filter((record) => record.studentId === row.student.id && record.courseGroupId === row.course.id && record.date === date)
+    .sort(sortProgressRecords);
+  const record = lesson
+    ? records.find((item) => item.lessonId === lesson.id) ?? records.at(-1)
+    : records.at(-1);
+  if (!lesson && !record) return undefined;
+  return {
+    lesson,
+    record,
+    progressText: record?.progressText ?? lesson?.content.taught ?? "",
+    homeworkText: record?.homeworkText ?? lesson?.content.homework ?? "",
+    progressStatus: record?.progressStatus ?? inferProgressStatus(lesson),
+    homeworkStatus: record?.homeworkStatus ?? inferHomeworkStatus(lesson),
+    needsRecord: Boolean(lesson && !records.some((item) => item.lessonId === lesson.id))
+  };
+}
+
+function dateInRange(date: string, dateStart: string, dateEnd: string): boolean {
+  return (!dateStart || date >= dateStart) && (!dateEnd || date <= dateEnd) && (!dateStart || !dateEnd || dateStart <= dateEnd);
 }
 
 function pairKey(studentId: string, courseGroupId: string): string {
