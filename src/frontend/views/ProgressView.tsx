@@ -82,6 +82,8 @@ type TimelineCell = {
   record?: StudentProgressRecord;
   progressText: string;
   homeworkText: string;
+  nextPlan: string;
+  note: string;
   progressStatus: StudentProgressStatus;
   homeworkStatus: StudentHomeworkStatus;
   needsRecord: boolean;
@@ -114,14 +116,17 @@ const emptyDraft: ProgressDraft = {
 export function ProgressView({
   vault,
   onSaveProgressRecord,
+  onSaveProgressRecords,
   onDeleteProgressRecord
 }: {
   vault: TeacherVault;
   onSaveProgressRecord: (record: StudentProgressRecord) => void;
+  onSaveProgressRecords: (records: StudentProgressRecord[]) => void;
   onDeleteProgressRecord: (recordId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
+  const [gradeFilter, setGradeFilter] = useState("all");
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [homeworkFilter, setHomeworkFilter] = useState<HomeworkFilter>("all");
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
@@ -136,6 +141,7 @@ export function ProgressView({
 
   const progressRecords = vault.studentProgressRecords ?? [];
   const courseOptions = sortCoursesByName(vault.courseGroups);
+  const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))).sort(compareByName);
   const subjectOptions = subjectOptionsForVault(vault);
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -164,11 +170,12 @@ export function ProgressView({
         !normalizedQuery ||
         normalizedQuery.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
       const matchesCourse = courseFilter === "all" || row.course.id === courseFilter;
+      const matchesGrade = gradeFilter === "all" || (gradeFilter === "__unset" ? !row.student.grade : row.student.grade === gradeFilter);
       const matchesSubject = subjectFilter === "all" || row.course.subject === subjectFilter;
       const matchesHomework = homeworkFilter === "all" || row.homeworkStatus === homeworkFilter;
       const matchesProgress = progressFilter === "all" || row.progressStatus === progressFilter;
       const matchesFollowUp = !onlyFollowUp || needsFollowUp(row);
-      return matchesQuery && matchesCourse && matchesSubject && matchesHomework && matchesProgress && matchesFollowUp;
+      return matchesQuery && matchesCourse && matchesGrade && matchesSubject && matchesHomework && matchesProgress && matchesFollowUp;
     })
     .sort((a, b) => {
       if (needsFollowUp(a) !== needsFollowUp(b)) return needsFollowUp(a) ? -1 : 1;
@@ -237,6 +244,32 @@ export function ProgressView({
     setEditModalOpen(false);
   }
 
+  function saveRecordForLessonStudents() {
+    if (!selectedRow || !selectedLesson) return;
+    const now = new Date().toISOString();
+    const students = lessonStudentIds(selectedLesson);
+    onSaveProgressRecords(students.map((studentId) => {
+      const existing = progressRecords.find(
+        (record) => record.studentId === studentId && record.courseGroupId === selectedRow.course.id && record.lessonId === selectedLesson.id
+      );
+      return {
+        id: existing?.id ?? makeId("progress"),
+        studentId,
+        courseGroupId: selectedRow.course.id,
+        lessonId: selectedLesson.id,
+        date: selectedLesson.date,
+        progressText: draft.progressText.trim(),
+        homeworkText: draft.homeworkText.trim(),
+        nextPlan: draft.nextPlan.trim(),
+        progressStatus: draft.progressStatus,
+        homeworkStatus: draft.homeworkStatus,
+        note: draft.note.trim() || undefined,
+        updatedAt: now
+      };
+    }));
+    setEditModalOpen(false);
+  }
+
   function askDeleteRecord() {
     if (!selectedRecord || !selectedRow) return;
     confirm({
@@ -300,7 +333,7 @@ export function ProgressView({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))]">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.5fr)_repeat(5,minmax(0,1fr))]">
             <label className="relative block">
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
               <Input
@@ -314,6 +347,13 @@ export function ProgressView({
               <option value="all">全部课程</option>
               {courseOptions.map((course) => (
                 <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
+              ))}
+            </Select>
+            <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
+              <option value="all">全部年级</option>
+              <option value="__unset">未设置年级</option>
+              {gradeOptions.map((grade) => (
+                <option key={grade} value={grade}>{grade}</option>
               ))}
             </Select>
             <Select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)}>
@@ -375,15 +415,15 @@ export function ProgressView({
                 没有符合当前筛选条件的进度台账
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-[14px] border border-[#dbe4ef] bg-white">
+              <div className="max-h-[70vh] overflow-auto rounded-[14px] border border-[#dbe4ef] bg-white">
                 <table className="min-w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="bg-[#f8fbff]">
-                      <th className="sticky left-0 z-20 w-[230px] min-w-[230px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a]">
+                      <th className="sticky left-0 top-0 z-30 w-[230px] min-w-[230px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a]">
                         学生 / 课程
                       </th>
                       {timelineColumns.map((column) => (
-                        <th key={column.date} className="min-w-[220px] border-b border-r border-[#dbe4ef] p-3 align-top text-xs font-extrabold text-[#25324a]">
+                        <th key={column.date} className="sticky top-0 z-20 min-w-[240px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
                           <div>{column.label}</div>
                           <div className="mt-1 font-semibold text-[#64748b]">{column.date}</div>
                         </th>
@@ -424,7 +464,7 @@ export function ProgressView({
                                     setSelectedLessonId(cell.lesson?.id ?? cell.record?.lessonId ?? "");
                                     setEditModalOpen(Boolean(cell.lesson));
                                   }}
-                                  className={`min-h-[132px] w-full rounded-[10px] border p-2 text-left transition-colors ${
+                                  className={`min-h-[178px] w-full rounded-[10px] border p-2 text-left transition-colors ${
                                     selectedRow?.key === row.key && selectedLesson?.id === cell.lesson?.id
                                       ? "border-[#ff8617] bg-[#fff7ed]"
                                       : "border-[#e8eef6] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
@@ -434,14 +474,20 @@ export function ProgressView({
                                     <Badge variant={progressStatusVariant(cell.progressStatus)} className="text-[10px]">{progressStatusLabels[cell.progressStatus]}</Badge>
                                     <Badge variant={homeworkStatusVariant(cell.homeworkStatus)} className="text-[10px]">{homeworkStatusLabels[cell.homeworkStatus]}</Badge>
                                     {cell.needsRecord && <Badge variant="amber" className="text-[10px]">未整理</Badge>}
+                                    {cell.nextPlan && <Badge variant="sky" className="text-[10px]">下次</Badge>}
+                                    {cell.note && <Badge variant="plum" className="text-[10px]">备注</Badge>}
                                   </div>
                                   <div className="text-[11px] font-extrabold text-[#1557c2]">内容</div>
-                                  <div className="mt-0.5 line-clamp-2 text-xs font-semibold leading-5 text-[#25324a]">
+                                  <div className="mt-0.5 max-h-[42px] overflow-hidden whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
                                     {cell.progressText || "未填写"}
                                   </div>
                                   <div className="mt-2 text-[11px] font-extrabold text-[#c2410c]">作业</div>
-                                  <div className="mt-0.5 line-clamp-2 text-xs font-semibold leading-5 text-[#25324a]">
+                                  <div className="mt-0.5 max-h-[42px] overflow-hidden whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
                                     {cell.homeworkText || "未布置"}
+                                  </div>
+                                  <div className="mt-2 text-[11px] font-extrabold text-[#5161d6]">下次</div>
+                                  <div className="mt-0.5 max-h-[38px] overflow-hidden whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
+                                    {cell.nextPlan || "未填写"}
                                   </div>
                                 </button>
                               ) : (
@@ -471,7 +517,7 @@ export function ProgressView({
                   </div>
                   <CardTitle>{selectedRow ? `${selectedRow.student.name} · ${selectedRow.course.name}` : "选择学生"}</CardTitle>
                   <CardDescription className="mt-1">
-                    这里保存的是学生个人记录，不会改写 AI 排课助手，也不会自动生成 AI 建议。
+                    单独保存只改当前学生；应用到本节全部学生适合班课整体进度一致的情况。
                   </CardDescription>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => setEditModalOpen(false)} aria-label="关闭编辑">
@@ -590,7 +636,7 @@ export function ProgressView({
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <Button type="button" variant="outline" onClick={useLessonCommonContent}>
-                    <BookOpen size={15} /> 同步共同内容
+                    <BookOpen size={15} /> 填入本节共同内容
                   </Button>
                   <Button type="button" onClick={saveRecord}>
                     <Save size={15} /> 保存记录
@@ -599,6 +645,11 @@ export function ProgressView({
                     <Trash2 size={15} /> 删除
                   </Button>
                 </div>
+                {selectedLesson.expectedStudentIds.length > 1 && (
+                  <Button type="button" variant="outline" onClick={saveRecordForLessonStudents} className="w-full border-[#93c5fd] bg-[#eff6ff] text-[#1557c2] hover:border-[#60a5fa] hover:bg-[#dbeafe] hover:text-[#0f4aa0]">
+                    <UserCheck size={15} /> 应用到本节全部学生（{lessonStudentIds(selectedLesson).length} 人）
+                  </Button>
+                )}
               </>
             )}
               </CardContent>
@@ -737,6 +788,8 @@ function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string
     record,
     progressText: record?.progressText ?? lesson?.content.taught ?? "",
     homeworkText: record?.homeworkText ?? lesson?.content.homework ?? "",
+    nextPlan: record?.nextPlan ?? lesson?.content.nextLessonReminder ?? "",
+    note: record?.note ?? "",
     progressStatus: record?.progressStatus ?? inferProgressStatus(lesson),
     homeworkStatus: record?.homeworkStatus ?? inferHomeworkStatus(lesson),
     needsRecord: Boolean(lesson && !records.some((item) => item.lessonId === lesson.id))

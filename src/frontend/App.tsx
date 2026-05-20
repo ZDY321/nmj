@@ -1244,6 +1244,17 @@ export function App() {
     });
   }
 
+  function saveStudentProgressRecords(recordsToSave: StudentProgressRecord[]) {
+    if (recordsToSave.length === 0) return;
+    updateVault((draft) => {
+      const incomingIds = new Set(recordsToSave.map((record) => record.id));
+      draft.studentProgressRecords = [
+        ...recordsToSave,
+        ...(draft.studentProgressRecords ?? []).filter((record) => !incomingIds.has(record.id))
+      ];
+    });
+  }
+
   function deleteStudentProgressRecord(recordId: string) {
     updateVault((draft) => {
       draft.studentProgressRecords = (draft.studentProgressRecords ?? []).filter((record) => record.id !== recordId);
@@ -2036,6 +2047,7 @@ export function App() {
               <ProgressView
                 vault={vault}
                 onSaveProgressRecord={saveStudentProgressRecord}
+                onSaveProgressRecords={saveStudentProgressRecords}
                 onDeleteProgressRecord={deleteStudentProgressRecord}
               />
             )}
