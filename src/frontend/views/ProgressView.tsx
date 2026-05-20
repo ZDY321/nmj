@@ -80,6 +80,8 @@ type TimelineColumn = {
 type TimelineCell = {
   lesson?: Lesson;
   record?: StudentProgressRecord;
+  studentCount: number;
+  hasDifferences: boolean;
   progressText: string;
   homeworkText: string;
   nextPlan: string;
@@ -199,6 +201,12 @@ export function ProgressView({
           record.lessonId === selectedLesson.id
       )
     : undefined;
+  const selectedLessonStudents = selectedLesson
+    ? lessonStudentIds(selectedLesson)
+        .map((studentId) => findStudent(vault, studentId))
+        .filter((student): student is Student => Boolean(student))
+        .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id))
+    : [];
 
   const rowsNeedingFollowUp = rows.filter(needsFollowUp).length;
   const rowsNeedingRecord = rows.filter((row) => row.needsLatestRecord).length;
@@ -464,7 +472,7 @@ export function ProgressView({
                                     setSelectedLessonId(cell.lesson?.id ?? cell.record?.lessonId ?? "");
                                     setEditModalOpen(Boolean(cell.lesson));
                                   }}
-                                  className={`min-h-[178px] w-full rounded-[10px] border p-2 text-left transition-colors ${
+                                  className={`h-[178px] w-full overflow-hidden rounded-[10px] border p-2 text-left transition-colors ${
                                     selectedRow?.key === row.key && selectedLesson?.id === cell.lesson?.id
                                       ? "border-[#ff8617] bg-[#fff7ed]"
                                       : "border-[#e8eef6] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
@@ -474,6 +482,8 @@ export function ProgressView({
                                     <Badge variant={progressStatusVariant(cell.progressStatus)} className="text-[10px]">{progressStatusLabels[cell.progressStatus]}</Badge>
                                     <Badge variant={homeworkStatusVariant(cell.homeworkStatus)} className="text-[10px]">{homeworkStatusLabels[cell.homeworkStatus]}</Badge>
                                     {cell.needsRecord && <Badge variant="amber" className="text-[10px]">未整理</Badge>}
+                                    {cell.studentCount > 1 && <Badge variant="secondary" className="text-[10px]">{cell.studentCount}人</Badge>}
+                                    {cell.hasDifferences && <Badge variant="destructive" className="text-[10px]">有差异</Badge>}
                                     {cell.nextPlan && <Badge variant="sky" className="text-[10px]">下次</Badge>}
                                     {cell.note && <Badge variant="plum" className="text-[10px]">备注</Badge>}
                                   </div>
@@ -557,24 +567,59 @@ export function ProgressView({
                     <ReadonlyBlock
                       icon={<BookOpen size={15} />}
                       title="本节共同内容"
+                      tone="blue"
                       value={selectedLesson.content.taught}
                     />
                     <ReadonlyBlock
                       icon={<NotebookPen size={15} />}
                       title="课后作业"
+                      tone="orange"
                       value={selectedLesson.content.homework}
                     />
                     <ReadonlyBlock
                       icon={<CalendarDays size={15} />}
                       title="下节提醒"
+                      tone="purple"
                       value={selectedLesson.content.nextLessonReminder}
                     />
                   </div>
                 </div>
 
+                {selectedLessonStudents.length > 1 && (
+                  <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="text-sm font-extrabold text-[#25324a]">本节学生</div>
+                      <Badge variant={lessonHasStudentDifferences(vault, selectedLesson) ? "destructive" : "secondary"}>
+                        {lessonHasStudentDifferences(vault, selectedLesson) ? "存在个人差异" : "暂未发现差异"}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedLessonStudents.map((student) => {
+                        const studentRecord = progressRecords.find(
+                          (record) => record.studentId === student.id && record.courseGroupId === selectedLesson.courseGroupId && record.lessonId === selectedLesson.id
+                        );
+                        const active = selectedRow?.student.id === student.id;
+                        return (
+                          <Button
+                            key={student.id}
+                            type="button"
+                            size="sm"
+                            variant={active ? "default" : "outline"}
+                            onClick={() => setSelectedKey(pairKey(student.id, selectedLesson.courseGroupId))}
+                            className="h-9"
+                          >
+                            {student.name}
+                            {studentRecord?.note ? " · 备注" : studentRecord ? " · 已记" : " · 未记"}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <label className="text-sm font-bold text-[#25324a]">进度状态</label>
+                    <label className="text-sm font-bold text-[#1557c2]">进度状态</label>
                     <Select
                       value={draft.progressStatus}
                       onChange={(event) => setDraft((current) => ({ ...current, progressStatus: event.target.value as StudentProgressStatus }))}
@@ -585,7 +630,7 @@ export function ProgressView({
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-bold text-[#25324a]">作业状态</label>
+                    <label className="text-sm font-bold text-[#c2410c]">作业状态</label>
                     <Select
                       value={draft.homeworkStatus}
                       onChange={(event) => setDraft((current) => ({ ...current, homeworkStatus: event.target.value as StudentHomeworkStatus }))}
@@ -598,7 +643,7 @@ export function ProgressView({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-[#25324a]">该学生当前进度</label>
+                  <label className="text-sm font-bold text-[#1557c2]">该学生当前进度</label>
                   <Textarea
                     value={draft.progressText}
                     onChange={(event) => setDraft((current) => ({ ...current, progressText: event.target.value }))}
@@ -607,7 +652,7 @@ export function ProgressView({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-[#25324a]">该学生作业安排</label>
+                  <label className="text-sm font-bold text-[#c2410c]">该学生作业安排</label>
                   <Textarea
                     value={draft.homeworkText}
                     onChange={(event) => setDraft((current) => ({ ...current, homeworkText: event.target.value }))}
@@ -616,7 +661,7 @@ export function ProgressView({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-[#25324a]">下次处理</label>
+                  <label className="text-sm font-bold text-[#5161d6]">下次处理</label>
                   <Textarea
                     value={draft.nextPlan}
                     onChange={(event) => setDraft((current) => ({ ...current, nextPlan: event.target.value }))}
@@ -625,7 +670,7 @@ export function ProgressView({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-[#25324a]">备注</label>
+                  <label className="text-sm font-bold text-[#7c3aed]">备注</label>
                   <Textarea
                     value={draft.note}
                     onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
@@ -664,15 +709,18 @@ export function ProgressView({
 function ReadonlyBlock({
   icon,
   title,
+  tone,
   value
 }: {
   icon: ReactNode;
   title: string;
+  tone: "blue" | "orange" | "purple";
   value: string;
 }) {
+  const toneClass = tone === "blue" ? "text-[#1557c2]" : tone === "orange" ? "text-[#c2410c]" : "text-[#5161d6]";
   return (
     <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
-      <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#64748b]">
+      <div className={`mb-1 flex items-center gap-2 text-xs font-extrabold ${toneClass}`}>
         {icon}
         {title}
       </div>
@@ -786,6 +834,8 @@ function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string
   return {
     lesson,
     record,
+    studentCount: lesson ? lessonStudentIds(lesson).length : 1,
+    hasDifferences: lesson ? lessonHasStudentDifferences(vault, lesson) : false,
     progressText: record?.progressText ?? lesson?.content.taught ?? "",
     homeworkText: record?.homeworkText ?? lesson?.content.homework ?? "",
     nextPlan: record?.nextPlan ?? lesson?.content.nextLessonReminder ?? "",
@@ -794,6 +844,25 @@ function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string
     homeworkStatus: record?.homeworkStatus ?? inferHomeworkStatus(lesson),
     needsRecord: Boolean(lesson && !records.some((item) => item.lessonId === lesson.id))
   };
+}
+
+function lessonHasStudentDifferences(vault: TeacherVault, lesson: Lesson): boolean {
+  const studentIds = lessonStudentIds(lesson);
+  if (studentIds.length <= 1) return false;
+  const signatures = studentIds.map((studentId) => {
+    const record = (vault.studentProgressRecords ?? []).find(
+      (item) => item.studentId === studentId && item.courseGroupId === lesson.courseGroupId && item.lessonId === lesson.id
+    );
+    return [
+      record?.progressText ?? lesson.content.taught,
+      record?.homeworkText ?? lesson.content.homework,
+      record?.nextPlan ?? lesson.content.nextLessonReminder,
+      record?.progressStatus ?? inferProgressStatus(lesson),
+      record?.homeworkStatus ?? inferHomeworkStatus(lesson),
+      record?.note ?? ""
+    ].map((value) => String(value).trim()).join("\u001f");
+  });
+  return new Set(signatures).size > 1;
 }
 
 function dateInRange(date: string, dateStart: string, dateEnd: string): boolean {
