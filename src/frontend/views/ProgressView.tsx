@@ -427,11 +427,11 @@ export function ProgressView({
                 <table className="min-w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="bg-[#f8fbff]">
-                      <th className="sticky left-0 top-0 z-30 w-[230px] min-w-[230px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a]">
+                      <th className="sticky top-0 z-30 w-[170px] min-w-[170px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a] md:left-0 md:w-[230px] md:min-w-[230px]">
                         学生 / 课程
                       </th>
                       {timelineColumns.map((column) => (
-                        <th key={column.date} className="sticky top-0 z-20 min-w-[240px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
+                        <th key={column.date} className="sticky top-0 z-20 min-w-[230px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
                           <div>{column.label}</div>
                           <div className="mt-1 font-semibold text-[#64748b]">{column.date}</div>
                         </th>
@@ -441,7 +441,7 @@ export function ProgressView({
                   <tbody>
                     {visibleRows.map((row) => (
                       <tr key={row.key} className={selectedRow?.key === row.key ? "bg-[#fff7ed]" : "odd:bg-white even:bg-[#fbfdff]"}>
-                        <th className="sticky left-0 z-10 w-[230px] min-w-[230px] border-b border-r border-[#dbe4ef] bg-inherit p-3 align-top">
+                        <th className="z-10 w-[170px] min-w-[170px] border-b border-r border-[#dbe4ef] bg-inherit p-3 align-top md:sticky md:left-0 md:w-[230px] md:min-w-[230px]">
                           <button
                             type="button"
                             onClick={() => {
@@ -472,9 +472,11 @@ export function ProgressView({
                                     setSelectedLessonId(cell.lesson?.id ?? cell.record?.lessonId ?? "");
                                     setEditModalOpen(Boolean(cell.lesson));
                                   }}
-                                  className={`h-[178px] w-full overflow-hidden rounded-[10px] border p-2 text-left transition-colors ${
+                                  className={`h-[196px] w-full overflow-hidden rounded-[10px] border p-2 text-left transition-colors ${
                                     selectedRow?.key === row.key && selectedLesson?.id === cell.lesson?.id
                                       ? "border-[#ff8617] bg-[#fff7ed]"
+                                      : selectedRow?.key === row.key
+                                        ? "border-[#fed7aa] bg-[#fff7ed]/70"
                                       : "border-[#e8eef6] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
                                   }`}
                                 >
@@ -487,17 +489,19 @@ export function ProgressView({
                                     {cell.nextPlan && <Badge variant="sky" className="text-[10px]">下次</Badge>}
                                     {cell.note && <Badge variant="plum" className="text-[10px]">备注</Badge>}
                                   </div>
-                                  <div className="text-[11px] font-extrabold text-[#1557c2]">内容</div>
-                                  <div className="mt-0.5 max-h-[42px] overflow-hidden whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
-                                    {cell.progressText || "未填写"}
-                                  </div>
-                                  <div className="mt-2 text-[11px] font-extrabold text-[#c2410c]">作业</div>
-                                  <div className="mt-0.5 max-h-[42px] overflow-hidden whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
-                                    {cell.homeworkText || "未布置"}
-                                  </div>
-                                  <div className="mt-2 text-[11px] font-extrabold text-[#5161d6]">下次</div>
-                                  <div className="mt-0.5 max-h-[38px] overflow-hidden whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
-                                    {cell.nextPlan || "未填写"}
+                                  <div className="max-h-[146px] overflow-y-auto pr-1">
+                                    <div className="text-[11px] font-extrabold text-[#1557c2]">内容</div>
+                                    <div className="mt-0.5 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
+                                      {cell.progressText || "未填写"}
+                                    </div>
+                                    <div className="mt-2 text-[11px] font-extrabold text-[#c2410c]">作业</div>
+                                    <div className="mt-0.5 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
+                                      {cell.homeworkText || "未布置"}
+                                    </div>
+                                    <div className="mt-2 text-[11px] font-extrabold text-[#5161d6]">下次</div>
+                                    <div className="mt-0.5 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
+                                      {cell.nextPlan || "未填写"}
+                                    </div>
                                   </div>
                                 </button>
                               ) : (
@@ -815,11 +819,22 @@ function buildTimelineColumns(
   });
 
   const sortedDates = Array.from(dates).sort();
-  const visibleDates = dateStart || dateEnd ? sortedDates : sortedDates.slice(-8);
+  const today = new Date().toISOString().slice(0, 10);
+  const visibleDates = dateStart || dateEnd
+    ? sortedDates
+    : defaultTimelineDates(sortedDates, today, 4);
   return visibleDates.map((date) => ({
     date,
     label: date.slice(5)
   }));
+}
+
+function defaultTimelineDates(sortedDates: string[], anchorDate: string, count: number): string[] {
+  if (sortedDates.length <= count) return sortedDates;
+  const firstAfterAnchor = sortedDates.findIndex((date) => date >= anchorDate);
+  const endIndex = firstAfterAnchor === -1 ? sortedDates.length : Math.min(firstAfterAnchor + 1, sortedDates.length);
+  const startIndex = Math.max(0, endIndex - count);
+  return sortedDates.slice(startIndex, startIndex + count);
 }
 
 function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string): TimelineCell | undefined {
