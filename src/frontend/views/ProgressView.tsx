@@ -840,9 +840,9 @@ function buildTimelineColumns(
 
 function defaultTimelineDates(sortedDates: string[], anchorDate: string, count: number): string[] {
   if (sortedDates.length === 0) return [anchorDate];
-  const todayAndAfter = sortedDates.filter((date) => date >= anchorDate);
   const beforeToday = sortedDates.filter((date) => date < anchorDate).reverse();
-  const chosen = [anchorDate, ...todayAndAfter.filter((date) => date !== anchorDate), ...beforeToday]
+  const afterToday = sortedDates.filter((date) => date > anchorDate);
+  const chosen = [anchorDate, ...beforeToday, ...afterToday]
     .filter((date, index, dates) => dates.indexOf(date) === index)
     .slice(0, count);
   return chosen;
