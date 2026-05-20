@@ -10,7 +10,8 @@ import {
   Search,
   Target,
   Trash2,
-  UserCheck
+  UserCheck,
+  X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,7 @@ export function ProgressView({
   const [onlyFollowUp, setOnlyFollowUp] = useState(false);
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedLessonId, setSelectedLessonId] = useState("");
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [draft, setDraft] = useState<ProgressDraft>(emptyDraft);
   const { confirm, dialog } = useConfirmDialog();
 
@@ -232,6 +234,7 @@ export function ProgressView({
       note: draft.note.trim() || undefined,
       updatedAt: new Date().toISOString()
     });
+    setEditModalOpen(false);
   }
 
   function askDeleteRecord() {
@@ -241,7 +244,10 @@ export function ProgressView({
       description: `${selectedRow.student.name} · ${selectedRow.course.name} · ${selectedRecord.date}`,
       confirmLabel: "删除",
       tone: "danger",
-      onConfirm: () => onDeleteProgressRecord(selectedRecord.id)
+      onConfirm: () => {
+        onDeleteProgressRecord(selectedRecord.id);
+        setEditModalOpen(false);
+      }
     });
   }
 
@@ -351,7 +357,7 @@ export function ProgressView({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.72fr)] xl:items-start">
+      <div>
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -416,6 +422,7 @@ export function ProgressView({
                                   onClick={() => {
                                     setSelectedKey(row.key);
                                     setSelectedLessonId(cell.lesson?.id ?? cell.record?.lessonId ?? "");
+                                    setEditModalOpen(Boolean(cell.lesson));
                                   }}
                                   className={`min-h-[132px] w-full rounded-[10px] border p-2 text-left transition-colors ${
                                     selectedRow?.key === row.key && selectedLesson?.id === cell.lesson?.id
@@ -454,20 +461,27 @@ export function ProgressView({
           </CardContent>
         </Card>
 
-        <Card className="sticky top-4 overflow-hidden">
-          <CardHeader>
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
-              <NotebookPen size={14} /> 学生记录
-            </div>
-            <CardTitle>{selectedRow ? `${selectedRow.student.name} · ${selectedRow.course.name}` : "选择学生"}</CardTitle>
-            <CardDescription>
-              这里保存的是学生个人记录，不会改写 AI 排课助手，也不会自动生成 AI 建议。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
+        {editModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/45 p-4 backdrop-blur-sm">
+            <Card className="max-h-[92vh] w-full max-w-[920px] overflow-hidden shadow-[0_30px_90px_rgba(6,18,38,0.28)]">
+              <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-[#e8eef6]">
+                <div>
+                  <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
+                    <NotebookPen size={14} /> 学生记录
+                  </div>
+                  <CardTitle>{selectedRow ? `${selectedRow.student.name} · ${selectedRow.course.name}` : "选择学生"}</CardTitle>
+                  <CardDescription className="mt-1">
+                    这里保存的是学生个人记录，不会改写 AI 排课助手，也不会自动生成 AI 建议。
+                  </CardDescription>
+                </div>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setEditModalOpen(false)} aria-label="关闭编辑">
+                  <X size={18} />
+                </Button>
+              </CardHeader>
+              <CardContent className="max-h-[calc(92vh-118px)] space-y-5 overflow-y-auto p-5 sm:p-6">
             {!selectedRow || !selectedLesson ? (
               <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
-                请选择左侧有课时的学生课程
+                请选择有课时的学生课程
               </div>
             ) : (
               <>
@@ -587,8 +601,10 @@ export function ProgressView({
                 </div>
               </>
             )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
