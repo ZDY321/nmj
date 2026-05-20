@@ -285,6 +285,25 @@ export type TodoItem = {
   createdAt: string;
 };
 
+export type StudentProgressStatus = "on_track" | "review_needed" | "behind" | "ahead";
+
+export type StudentHomeworkStatus = "unassigned" | "assigned" | "checked" | "partial" | "missing";
+
+export type StudentProgressRecord = {
+  id: string;
+  studentId: string;
+  courseGroupId: string;
+  lessonId: string;
+  date: string;
+  progressText: string;
+  homeworkText: string;
+  nextPlan: string;
+  progressStatus: StudentProgressStatus;
+  homeworkStatus: StudentHomeworkStatus;
+  note?: string;
+  updatedAt: string;
+};
+
 export type GradeRecord = {
   id: string;
   studentId: string;
@@ -330,6 +349,7 @@ export type TeacherVault = {
   lessons: Lesson[];
   salaryAdjustments: SalaryAdjustment[];
   todoItems?: TodoItem[];
+  studentProgressRecords?: StudentProgressRecord[];
   gradeRecords?: GradeRecord[];
   notice: Notice;
 };

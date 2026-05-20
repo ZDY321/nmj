@@ -26,6 +26,7 @@ import { AdminView } from "@/frontend/views/AdminView";
 import { CalendarView } from "@/frontend/views/CalendarView";
 import { GradesView } from "@/frontend/views/GradesView";
 import { PayrollReviewView } from "@/frontend/views/PayrollReviewView";
+import { ProgressView } from "@/frontend/views/ProgressView";
 import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
@@ -61,6 +62,7 @@ import type {
   SalaryAdjustment,
   Student,
   StudentCourseTransition,
+  StudentProgressRecord,
   TeacherVault,
   TeacherProfile,
   TimePreset,
@@ -1232,6 +1234,22 @@ export function App() {
     });
   }
 
+  function saveStudentProgressRecord(record: StudentProgressRecord) {
+    updateVault((draft) => {
+      const records = draft.studentProgressRecords ?? [];
+      const exists = records.some((item) => item.id === record.id);
+      draft.studentProgressRecords = exists
+        ? records.map((item) => (item.id === record.id ? record : item))
+        : [record, ...records];
+    });
+  }
+
+  function deleteStudentProgressRecord(recordId: string) {
+    updateVault((draft) => {
+      draft.studentProgressRecords = (draft.studentProgressRecords ?? []).filter((record) => record.id !== recordId);
+    });
+  }
+
   function addGradeRecord(record: GradeRecord) {
     updateVault((draft) => {
       draft.gradeRecords = [record, ...(draft.gradeRecords ?? [])];
@@ -2014,6 +2032,13 @@ export function App() {
                 onApplyAiDraft={applyAiScheduleDraft}
               />
             )}
+            {!onboardingVisible && view === "progress" && (
+              <ProgressView
+                vault={vault}
+                onSaveProgressRecord={saveStudentProgressRecord}
+                onDeleteProgressRecord={deleteStudentProgressRecord}
+              />
+            )}
             {!onboardingVisible && view === "students" && (
               <StudentsView
                 vault={vault}
@@ -2110,6 +2135,7 @@ const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
   { key: "today", label: viewTitles.today },
   { key: "calendar", label: viewTitles.calendar },
   { key: "schedule", label: viewTitles.schedule },
+  { key: "progress", label: viewTitles.progress },
   { key: "students", label: viewTitles.students },
   { key: "grades", label: viewTitles.grades },
   { key: "payroll", label: viewTitles.payroll },

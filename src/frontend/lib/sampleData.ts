@@ -39,6 +39,7 @@ export function createEmptyVault(displayName = ""): TeacherVault {
     lessons: [],
     salaryAdjustments: [],
     todoItems: [],
+    studentProgressRecords: [],
     gradeRecords: []
   };
 }
@@ -207,6 +208,36 @@ export function createSampleVault(): TeacherVault {
         status: "open",
         priority: "high",
         createdAt: "2026-05-10T00:00:00.000Z"
+      }
+    ],
+    studentProgressRecords: [
+      {
+        id: "progress_student_a_20260506",
+        studentId: "student_a",
+        courseGroupId: "course_one_math",
+        lessonId: "lesson_20260506_a",
+        date: "2026-05-06",
+        progressText: "一次函数图像与应用题已完成，应用题读题需要继续放慢。",
+        homeworkText: "完成函数练习 3-4 页。",
+        nextPlan: "检查函数练习错题，再进入二次函数概念。",
+        progressStatus: "on_track",
+        homeworkStatus: "assigned",
+        note: "下节课先看错题是否集中在图像读取。",
+        updatedAt: "2026-05-10T00:00:00.000Z"
+      },
+      {
+        id: "progress_student_c_20260509",
+        studentId: "student_c",
+        courseGroupId: "course_class_math",
+        lessonId: "lesson_20260509_class",
+        date: "2026-05-09",
+        progressText: "本节请假，整式乘法内容未同步。",
+        homeworkText: "先补看整式乘法例题，再完成小卷基础题。",
+        nextPlan: "需要安排补课或课前 15 分钟同步核心知识点。",
+        progressStatus: "behind",
+        homeworkStatus: "partial",
+        note: "与班课共同内容不同步，需要单独跟进。",
+        updatedAt: "2026-05-10T00:00:00.000Z"
       }
     ],
     gradeRecords: [
