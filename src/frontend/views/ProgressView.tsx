@@ -351,7 +351,7 @@ export function ProgressView({
       <Card className="overflow-hidden">
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-            <Target size={14} /> 进度作业
+            <Target size={14} /> 进度与作业
           </div>
           <CardTitle>学生进度与作业总览</CardTitle>
           <CardDescription>
@@ -441,7 +441,7 @@ export function ProgressView({
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle>进度作业台账</CardTitle>
+              <CardTitle>进度与作业台账</CardTitle>
               <CardDescription className="mt-1">行是学生课程，列是上课日期；横向看同一天，纵向看单个学生的连续进度。</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
