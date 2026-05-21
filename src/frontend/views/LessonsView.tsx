@@ -444,7 +444,7 @@ export function LessonsView({
                   <Textarea
                     value={selected.content.taught}
                     onChange={(e) => updateContent("taught", e.target.value)}
-                    placeholder="记录本次教学内容..."
+                    placeholder="例如：本节讲了什么知识点、重点方法、课堂例题、常见错误和掌握情况。"
                   />
                 </div>
 
@@ -455,7 +455,7 @@ export function LessonsView({
                   <Textarea
                     value={selected.content.homework}
                     onChange={(e) => updateContent("homework", e.target.value)}
-                    placeholder="布置课后作业..."
+                    placeholder="例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。"
                   />
                 </div>
               </CardContent>

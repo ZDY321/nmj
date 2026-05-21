@@ -137,6 +137,7 @@ const emptyDraft: ProgressDraft = {
 
 export function ProgressView({
   vault,
+  token,
   onSaveProgressRecord,
   onSaveProgressRecords,
   onDeleteProgressRecord,
@@ -147,6 +148,7 @@ export function ProgressView({
   onOpenLessonInRecords
 }: {
   vault: TeacherVault;
+  token?: string;
   onSaveProgressRecord: (record: StudentProgressRecord) => void;
   onSaveProgressRecords: (records: StudentProgressRecord[]) => void;
   onDeleteProgressRecord: (recordId: string) => void;
@@ -369,6 +371,7 @@ export function ProgressView({
         {sectionSwitcher}
         <ProgressChecklistView
           vault={vault}
+          token={token}
           onSaveChecklistTemplate={onSaveChecklistTemplate}
           onDeleteChecklistTemplate={onDeleteChecklistTemplate}
           onSaveChecklistCompletion={onSaveChecklistCompletion}

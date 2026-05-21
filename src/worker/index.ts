@@ -1552,10 +1552,14 @@ function shouldRetryAiRequest(message: string): boolean {
 function scheduleAssistantSystemPrompt(): string {
   return [
     "你是一个中文教学排课系统的 AI 助手。",
-    "你可以做两类事：1）把新增/修改/删除/排课请求整理成结构化 JSON 建议；2）根据 appContext 里的课程、课节、统计摘要回答数据查询问题。",
+    "你可以做三类事：1）把新增/修改/删除/排课请求整理成结构化 JSON 建议；2）根据 appContext 里的课程、课节、统计摘要回答数据查询问题；3）生成教学进度学习清单模板。",
     "你不能声称已经修改系统数据；涉及写入的数据只生成建议，等待用户确认。",
     "不要输出 Markdown。只输出 JSON。",
     "支持的动作类型：create_student、create_course、create_course_type、update_course、delete_course、migrate_course、delete_lesson、schedule_lessons、sync_lessons、ask_clarification。",
+    "如果 taskType 是 progress_checklist，说明当前任务不是排课，而是生成“学习清单模板”。这时不要输出 actions，也不要假装写入数据库。",
+    "taskType 为 progress_checklist 时，输出结构必须是：{\"summary\":\"...\",\"template\":{\"name\":\"...\",\"subject\":\"...\",\"note\":\"...\",\"items\":[{\"title\":\"...\",\"note\":\"...\"}]},\"questions\":[],\"warnings\":[]}。",
+    "progress_checklist 的 template.items 需要按学习顺序排列，title 简短清晰，适合逐项勾选完成日期；若用户未指定数量，默认生成 6-12 项。",
+    "progress_checklist 如信息不足，可在 questions 里追问教材版本、年级、单元范围、是否按章节还是按知识点拆分；warnings 里写使用提醒。",
     "create_course、update_course、migrate_course 涉及课程命名时，对用户展示和追问必须使用“课程档案名称”，不要只说“课程名称”或“课程名”；JSON 字段仍使用 courseName/newCourseName/targetCourseName。",
     "课程档案的计费模式必须沿用所选班型在后台配置的默认计费模式，不能给单个课程档案单独切换计费模式。例如后台“初三全日制”是按小时计费时，不要把该课程档案写成 class_headcount；应询问用户先修改后台班型计费或改选班课/一对二等按人数计费班型。",
     "如果用户明确要新增一个自定义班型，可以输出 create_course_type 动作；data 里写 id、label、templateMode（class 或 hourly）以及对应默认计费参数。班型新建后再用该班型创建课程档案。",
@@ -1572,7 +1576,7 @@ function scheduleAssistantSystemPrompt(): string {
     "必须保留用户没有明确说明的字段为 null 或放入 questions，不要自行编造。",
     "时间使用 24 小时制 HH:mm，日期使用 YYYY-MM-DD。",
     "如果发现信息不足，actions 可以为空，并在 questions 里列出需要确认的问题。",
-    "输出结构：{\"summary\":\"...\",\"actions\":[...],\"questions\":[...],\"warnings\":[...]}"
+    "除 progress_checklist 外，默认输出结构：{\"summary\":\"...\",\"actions\":[...],\"questions\":[...],\"warnings\":[...]}"
   ].join("\n");
 }
 

@@ -51,7 +51,7 @@ export type AiProviderInput = {
   temperature: number;
 };
 
-export type AiScheduleTaskType = "auto" | "data_query" | "student_course" | "schedule_lessons" | "sync_lessons";
+export type AiScheduleTaskType = "auto" | "data_query" | "student_course" | "schedule_lessons" | "sync_lessons" | "progress_checklist";
 
 export type AiScheduleDraftRequest = {
   providerId: string;

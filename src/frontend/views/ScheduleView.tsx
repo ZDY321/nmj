@@ -3322,14 +3322,14 @@ export function ScheduleView({
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
                     <BookOpen size={14} /> 本次课内容
                   </div>
-                  <Textarea value={selected.content.taught} onChange={(event) => updateContent("taught", event.target.value)} placeholder="记录本次教学内容..." />
+                  <Textarea value={selected.content.taught} onChange={(event) => updateContent("taught", event.target.value)} placeholder="例如：本节讲了什么知识点、重点方法、课堂例题、常见错误和掌握情况。" />
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                     <NotebookPen size={14} /> 课后作业
                   </div>
-                  <Textarea value={selected.content.homework} onChange={(event) => updateContent("homework", event.target.value)} placeholder="布置课后作业..." />
+                  <Textarea value={selected.content.homework} onChange={(event) => updateContent("homework", event.target.value)} placeholder="例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。" />
                 </div>
               </CardContent>
             </Card>

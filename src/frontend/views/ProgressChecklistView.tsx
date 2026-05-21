@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCheck,
   ClipboardList,
+  ChevronDown,
   Plus,
   Save,
   Search,
@@ -16,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { generateAiScheduleDraft, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -28,6 +30,8 @@ import {
   sortLessons
 } from "@/frontend/lib/helpers";
 import type {
+  AiProviderConfig,
+  AiScheduleDraftResponse,
   Lesson,
   ProgressChecklistCompletion,
   ProgressChecklistTemplate,
@@ -49,12 +53,14 @@ type LatestChecklistContext = {
 
 export function ProgressChecklistView({
   vault,
+  token,
   onSaveChecklistTemplate,
   onDeleteChecklistTemplate,
   onSaveChecklistCompletion,
   onDeleteChecklistCompletion
 }: {
   vault: TeacherVault;
+  token?: string;
   onSaveChecklistTemplate: (template: ProgressChecklistTemplate) => void;
   onDeleteChecklistTemplate: (templateId: string) => void;
   onSaveChecklistCompletion: (completion: ProgressChecklistCompletion) => void;
@@ -66,10 +72,17 @@ export function ProgressChecklistView({
   const [templateSubject, setTemplateSubject] = useState("");
   const [templateNote, setTemplateNote] = useState("");
   const [templateItemsText, setTemplateItemsText] = useState("");
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(true);
   const [itemSearch, setItemSearch] = useState("");
   const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false);
   const [selectedCell, setSelectedCell] = useState<ChecklistCellSelection | null>(null);
   const [selectedCellDate, setSelectedCellDate] = useState(todayIso());
+  const [completionNote, setCompletionNote] = useState("");
+  const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
+  const [aiProviderId, setAiProviderId] = useState("");
+  const [aiPrompt, setAiPrompt] = useState("请按教材或知识点顺序生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。");
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
 
   const courseOptions = useMemo(
@@ -94,6 +107,32 @@ export function ProgressChecklistView({
       setSelectedTemplateId(templates[0]?.id ?? "");
     }
   }, [templates, selectedTemplateId]);
+
+  useEffect(() => {
+    if (!token) {
+      setAiProviders([]);
+      setAiProviderId("");
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const providers = await getUsableAiProviders(token);
+        if (cancelled) return;
+        setAiProviders(providers);
+        setAiProviderId((current) => current && providers.some((provider) => provider.id === current && provider.enabled)
+          ? current
+          : providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "");
+      } catch (error) {
+        if (!cancelled) {
+          setAiMessage(error instanceof Error ? error.message : "AI 模板配置加载失败。");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const selectedCourse = courseOptions.find((course) => course.id === selectedCourseId);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
@@ -156,6 +195,7 @@ export function ProgressChecklistView({
     if (!selectedStudents.some((student) => student.id === selectedCell.studentId) || !allItems.some((item) => item.id === selectedCell.itemId)) {
       setSelectedCell(null);
       setSelectedCellDate(todayIso());
+      setCompletionNote("");
     }
   }, [selectedCell, selectedStudents, allItems]);
 
@@ -166,7 +206,8 @@ export function ProgressChecklistView({
 
   useEffect(() => {
     setSelectedCellDate(selectedCompletion?.completedDate ?? todayIso());
-  }, [selectedCompletion?.id, selectedCompletion?.completedDate, selectedCell?.studentId, selectedCell?.itemId]);
+    setCompletionNote(selectedCompletion?.note ?? "");
+  }, [selectedCompletion?.id, selectedCompletion?.completedDate, selectedCompletion?.note, selectedCell?.studentId, selectedCell?.itemId]);
 
   const totalPossible = selectedStudents.length * allItems.length;
   const completedCount = completionList.length;
@@ -181,6 +222,7 @@ export function ProgressChecklistView({
     setTemplateSubject(selectedCourse?.subject ?? "");
     setTemplateNote("");
     setTemplateItemsText("");
+    setAiMessage("");
   }
 
   function saveTemplate() {
@@ -244,7 +286,7 @@ export function ProgressChecklistView({
       completedDate: selectedCellDate || todayIso(),
       lessonId: existing?.lessonId ?? latestContext?.lesson?.id,
       progressRecordId: existing?.progressRecordId ?? latestContext?.record?.id,
-      note: existing?.note,
+      note: completionNote.trim() || undefined,
       updatedAt: now
     });
   }
@@ -252,6 +294,74 @@ export function ProgressChecklistView({
   function clearSelectedCompletion() {
     if (!selectedCompletion) return;
     onDeleteChecklistCompletion(selectedCompletion.id);
+  }
+
+  async function generateAiTemplateDraft() {
+    if (!token) {
+      setAiMessage("请先登录后再使用 AI 生成模板。");
+      return;
+    }
+    const fallbackProviderId = aiProviders.find((provider) => provider.enabled && provider.isDefault)?.id
+      ?? aiProviders.find((provider) => provider.enabled)?.id
+      ?? "";
+    const providerId = aiProviderId || fallbackProviderId;
+    if (!providerId) {
+      setAiMessage("当前没有可用的 AI 接口配置。");
+      return;
+    }
+    const prompt = aiPrompt.trim();
+    if (!prompt) {
+      setAiMessage("请先填写 AI 生成说明。");
+      return;
+    }
+    setAiLoading(true);
+    setAiMessage("正在生成模板草稿...");
+    try {
+      const result = await generateAiScheduleDraft(token, {
+        providerId,
+        taskType: "progress_checklist",
+        instruction: prompt,
+        context: {
+          courseId: selectedCourse?.id ?? "",
+          courseName: selectedCourse?.name ?? "",
+          subject: selectedCourse?.subject ?? "",
+          existingTemplateId: selectedTemplate?.id ?? "",
+          existingTemplateName: selectedTemplate?.name ?? ""
+        }
+      });
+      if (!applyAiChecklistDraft(result)) {
+        setAiMessage("AI 已返回内容，但未识别出模板结构，请查看原始结果后手动调整。");
+      } else {
+        setAiMessage("AI 模板草稿已填入表单，请核对后保存。");
+      }
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : "AI 模板生成失败。");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function applyAiChecklistDraft(result: AiScheduleDraftResponse): boolean {
+    if (!result.draft || typeof result.draft !== "object") return false;
+    const draft = result.draft as Record<string, unknown>;
+    const template = draft.template;
+    if (!template || typeof template !== "object") return false;
+    const templateObject = template as Record<string, unknown>;
+    const itemObjects = Array.isArray(templateObject.items) ? templateObject.items : [];
+    const itemTitles = itemObjects
+      .map((item) => (item && typeof item === "object" ? stringValue((item as Record<string, unknown>).title) : ""))
+      .filter(Boolean);
+    if (stringValue(templateObject.name)) setTemplateName(stringValue(templateObject.name));
+    if (stringValue(templateObject.subject)) {
+      setTemplateSubject(stringValue(templateObject.subject));
+    } else if (selectedCourse?.subject) {
+      setTemplateSubject(selectedCourse.subject);
+    }
+    setTemplateNote(stringValue(templateObject.note));
+    setTemplateItemsText(itemTitles.join("\n"));
+    setSelectedTemplateId("");
+    setTemplatePanelOpen(true);
+    return Boolean(stringValue(templateObject.name) || itemTitles.length > 0 || stringValue(templateObject.note));
   }
 
   return (
@@ -284,83 +394,131 @@ export function ProgressChecklistView({
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
         <Card className="overflow-hidden">
-          <CardHeader>
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-              <ClipboardList size={14} /> 学习清单模板
-            </div>
-            <CardTitle>模板管理</CardTitle>
-            <CardDescription>把同一本书或同一套知识点整理成固定清单，后续可重复用于不同学生课程。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-[#25324a]">已有模板</label>
-              <div className="max-h-[240px] space-y-2 overflow-y-auto pr-1">
-                {templates.map((template) => {
-                  const active = template.id === selectedTemplateId;
-                  return (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => setSelectedTemplateId(template.id)}
-                      className={`w-full rounded-[12px] border p-3 text-left transition-colors ${
-                        active
-                          ? "border-[#93c5fd] bg-[#eff6ff]"
-                          : "border-[#e8eef6] bg-white hover:border-[#cbd6e3] hover:bg-[#f8fbff]"
-                      }`}
-                    >
-                      <div className="font-extrabold text-[#061226]">{template.name}</div>
-                      <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        {(template.subject || "未设科目")} · {template.items.length} 项
-                      </div>
-                    </button>
-                  );
-                })}
-                {templates.length === 0 && (
-                  <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-4 text-sm font-semibold text-[#64748b]">
-                    还没有模板，先创建一套教材清单。
-                  </div>
-                )}
+          <CardHeader className="flex flex-row items-start justify-between gap-3">
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                <ClipboardList size={14} /> 学习清单模板
               </div>
+              <CardTitle>模板管理</CardTitle>
+              <CardDescription>把同一本书或同一套知识点整理成固定清单，后续可重复用于不同学生课程。</CardDescription>
             </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge variant="secondary" className="w-fit">{templates.length} 套</Badge>
+              <Button type="button" variant="outline" size="sm" onClick={() => setTemplatePanelOpen((open) => !open)}>
+                <ChevronDown size={14} className={`transition-transform ${templatePanelOpen ? "rotate-180" : ""}`} />
+                {templatePanelOpen ? "收起" : "展开"}
+              </Button>
+            </div>
+          </CardHeader>
+          {templatePanelOpen && (
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-[#25324a]">已有模板</label>
+                <div className="max-h-[240px] space-y-2 overflow-y-auto pr-1">
+                  {templates.map((template) => {
+                    const active = template.id === selectedTemplateId;
+                    return (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => setSelectedTemplateId(template.id)}
+                        className={`w-full rounded-[12px] border p-3 text-left transition-colors ${
+                          active
+                            ? "border-[#93c5fd] bg-[#eff6ff]"
+                            : "border-[#e8eef6] bg-white hover:border-[#cbd6e3] hover:bg-[#f8fbff]"
+                        }`}
+                      >
+                        <div className="font-extrabold text-[#061226]">{template.name}</div>
+                        <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                          {(template.subject || "未设科目")} · {template.items.length} 项
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {templates.length === 0 && (
+                    <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-4 text-sm font-semibold text-[#64748b]">
+                      还没有模板，先创建一套教材清单。
+                    </div>
+                  )}
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-[#25324a]">模板名称</label>
-              <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="例如：七下数学同步教材" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-[#25324a]">关联科目</label>
-              <Input value={templateSubject} onChange={(event) => setTemplateSubject(event.target.value)} placeholder="例如：数学 / 英语" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-[#25324a]">条目清单</label>
-              <Textarea
-                value={templateItemsText}
-                onChange={(event) => setTemplateItemsText(event.target.value)}
-                placeholder={"每行一个知识点，例如：\n整式乘法\n平方差公式\n完全平方公式"}
-                className="min-h-[220px]"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-[#25324a]">备注</label>
-              <Textarea
-                value={templateNote}
-                onChange={(event) => setTemplateNote(event.target.value)}
-                placeholder="可写教材版本、适用班级、使用说明"
-                className="min-h-[88px]"
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <Button type="button" variant="outline" onClick={startNewTemplate}>
-                <Plus size={15} /> 新建
-              </Button>
-              <Button type="button" onClick={saveTemplate} disabled={!templateName.trim() || !templateItemsText.trim()}>
-                <Save size={15} /> 保存
-              </Button>
-              <Button type="button" variant="destructive" onClick={askDeleteTemplate} disabled={!selectedTemplate}>
-                <Trash2 size={15} /> 删除
-              </Button>
-            </div>
-          </CardContent>
+              {token && (
+                <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
+                    <BookCheck size={16} className="text-[#1557c2]" /> AI 生成模板草稿
+                  </div>
+                  {aiProviders.length > 1 && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-[#25324a]">AI 接口</label>
+                      <Select value={aiProviderId} onChange={(event) => setAiProviderId(event.target.value)}>
+                        {aiProviders.filter((provider) => provider.enabled).map((provider) => (
+                          <option key={provider.id} value={provider.id}>{provider.name} · {provider.model}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  )}
+                  <div className="mt-3 space-y-2">
+                    <label className="text-sm font-bold text-[#25324a]">生成说明</label>
+                    <Textarea
+                      value={aiPrompt}
+                      onChange={(event) => setAiPrompt(event.target.value)}
+                      placeholder="例如：按初一数学上册，生成 10 个由浅入深的知识点清单，适合一对一进度跟踪。"
+                      className="min-h-[110px] bg-white"
+                    />
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button type="button" onClick={generateAiTemplateDraft} disabled={aiLoading}>
+                      <BookCheck size={15} /> {aiLoading ? "生成中..." : "AI 生成模板"}
+                    </Button>
+                    {aiMessage && (
+                      <Badge variant={aiMessage.includes("已") || aiMessage.includes("成功") ? "sage" : aiMessage.includes("正在") ? "amber" : "secondary"}>
+                        {aiMessage}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-[#25324a]">模板名称</label>
+                <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="例如：七下数学同步教材" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-[#25324a]">关联科目</label>
+                <Input value={templateSubject} onChange={(event) => setTemplateSubject(event.target.value)} placeholder="例如：数学 / 英语" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-[#25324a]">条目清单</label>
+                <Textarea
+                  value={templateItemsText}
+                  onChange={(event) => setTemplateItemsText(event.target.value)}
+                  placeholder={"每行一个知识点，例如：\n整式乘法\n平方差公式\n完全平方公式"}
+                  className="min-h-[220px]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-[#25324a]">备注</label>
+                <Textarea
+                  value={templateNote}
+                  onChange={(event) => setTemplateNote(event.target.value)}
+                  placeholder="可写教材版本、适用班级、使用说明"
+                  className="min-h-[88px]"
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Button type="button" variant="outline" onClick={startNewTemplate}>
+                  <Plus size={15} /> 新建
+                </Button>
+                <Button type="button" onClick={saveTemplate} disabled={!templateName.trim() || !templateItemsText.trim()}>
+                  <Save size={15} /> 保存
+                </Button>
+                <Button type="button" variant="destructive" onClick={askDeleteTemplate} disabled={!selectedTemplate}>
+                  <Trash2 size={15} /> 删除
+                </Button>
+              </div>
+            </CardContent>
+          )}
         </Card>
 
         <div className="space-y-4">
@@ -539,6 +697,16 @@ export function ProgressChecklistView({
                       <Input type="date" value={selectedCellDate} onChange={(event) => setSelectedCellDate(event.target.value)} />
                     </div>
 
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-[#25324a]">备注</label>
+                      <Textarea
+                        value={completionNote}
+                        onChange={(event) => setCompletionNote(event.target.value)}
+                        placeholder="例如：今天只完成前半部分；课堂会做但课后还要再练；已和家长说明需要补一节。"
+                        className="min-h-[88px]"
+                      />
+                    </div>
+
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <Button type="button" onClick={saveSelectedCompletion}>
                         <Save size={15} /> {selectedCompletion ? "保存日期" : "标记完成"}
@@ -618,4 +786,8 @@ function buildLatestChecklistContextMap(
   });
 
   return map;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }

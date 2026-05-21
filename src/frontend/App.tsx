@@ -2086,6 +2086,7 @@ export function App() {
             {!onboardingVisible && view === "progress" && (
               <ProgressView
                 vault={vault}
+                token={token}
                 onSaveProgressRecord={saveStudentProgressRecord}
                 onSaveProgressRecords={saveStudentProgressRecords}
                 onDeleteProgressRecord={deleteStudentProgressRecord}
