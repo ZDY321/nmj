@@ -958,6 +958,7 @@ function sortProgressRows(
   today: string
 ): number {
   if (sortOption === "smart") {
+    if (hasLessonOnDate(a, today) !== hasLessonOnDate(b, today)) return hasLessonOnDate(a, today) ? -1 : 1;
     if (needsFollowUp(a) !== needsFollowUp(b)) return needsFollowUp(a) ? -1 : 1;
     return (
       compareRowsByLessonPresence(a, b) ||
