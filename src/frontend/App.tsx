@@ -2049,6 +2049,7 @@ export function App() {
                 onSaveProgressRecord={saveStudentProgressRecord}
                 onSaveProgressRecords={saveStudentProgressRecords}
                 onDeleteProgressRecord={deleteStudentProgressRecord}
+                onOpenLessonInRecords={openLessonInScheduleRecords}
               />
             )}
             {!onboardingVisible && view === "students" && (
