@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  MapPin,
   NotebookPen,
   Save,
   Search,
@@ -492,6 +493,9 @@ export function ProgressView({
                             <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
                               {row.course.name} · {row.course.subject}
                             </div>
+                            <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[#64748b]">
+                              <MapPin size={11} /> {row.campusLabel}
+                            </div>
                             <div className="mt-2 flex flex-wrap gap-1.5">
                               <Badge variant={progressStatusVariant(row.progressStatus)} className="text-[10px]">{progressStatusLabels[row.progressStatus]}</Badge>
                               <Badge variant={homeworkStatusVariant(row.homeworkStatus)} className="text-[10px]">{homeworkStatusLabels[row.homeworkStatus]}</Badge>
@@ -519,6 +523,11 @@ export function ProgressView({
                                   }`}
                                 >
                                   <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
+                                    {column.isToday && cell.lesson && (
+                                      <Badge variant="secondary" className="flex items-center gap-1 text-[10px]">
+                                        <Clock3 size={10} /> {cell.lesson.startTime}-{cell.lesson.endTime}
+                                      </Badge>
+                                    )}
                                     <Badge variant={progressStatusVariant(cell.progressStatus)} className="text-[10px]">{progressStatusLabels[cell.progressStatus]}</Badge>
                                     <Badge variant={homeworkStatusVariant(cell.homeworkStatus)} className="text-[10px]">{homeworkStatusLabels[cell.homeworkStatus]}</Badge>
                                     {cell.needsRecord && <Badge variant="amber" className="text-[10px]">未整理</Badge>}
@@ -897,7 +906,7 @@ function defaultTimelineDates(sortedDates: string[], anchorDate: string, count: 
 }
 
 function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string): TimelineCell | undefined {
-  const lesson = row.lessons.filter((item) => item.date === date).sort(sortLessons).at(-1);
+  const lesson = lessonOnDate(row, date);
   const records = (vault.studentProgressRecords ?? [])
     .filter((record) => record.studentId === row.student.id && record.courseGroupId === row.course.id && record.date === date)
     .sort(sortProgressRecords);
@@ -959,6 +968,8 @@ function sortProgressRows(
 ): number {
   if (sortOption === "smart") {
     if (hasLessonOnDate(a, today) !== hasLessonOnDate(b, today)) return hasLessonOnDate(a, today) ? -1 : 1;
+    const todayTimeCompare = compareRowsByLessonTimeOnDate(a, b, today);
+    if (todayTimeCompare) return todayTimeCompare;
     if (needsFollowUp(a) !== needsFollowUp(b)) return needsFollowUp(a) ? -1 : 1;
     return (
       compareRowsByLessonPresence(a, b) ||
@@ -971,6 +982,8 @@ function sortProgressRows(
 
   if (sortOption === "today") {
     if (hasLessonOnDate(a, today) !== hasLessonOnDate(b, today)) return hasLessonOnDate(a, today) ? -1 : 1;
+    const todayTimeCompare = compareRowsByLessonTimeOnDate(a, b, today);
+    if (todayTimeCompare) return todayTimeCompare;
     return (
       compareRowsByLessonPresence(a, b) ||
       compareRowsByLatestLesson(a, b) ||
@@ -1016,6 +1029,14 @@ function compareRowsByLessonPresence(a: ProgressRow, b: ProgressRow): number {
   return a.latestLesson ? -1 : 1;
 }
 
+function compareRowsByLessonTimeOnDate(a: ProgressRow, b: ProgressRow, date: string): number {
+  const lessonA = lessonOnDate(a, date, "first");
+  const lessonB = lessonOnDate(b, date, "first");
+  if (Boolean(lessonA) !== Boolean(lessonB)) return lessonA ? -1 : 1;
+  if (!lessonA || !lessonB) return 0;
+  return `${lessonA.startTime} ${lessonA.endTime}`.localeCompare(`${lessonB.startTime} ${lessonB.endTime}`);
+}
+
 function compareRowsByLatestLesson(a: ProgressRow, b: ProgressRow): number {
   return `${b.latestLesson?.date ?? ""} ${b.latestLesson?.startTime ?? ""}`.localeCompare(
     `${a.latestLesson?.date ?? ""} ${a.latestLesson?.startTime ?? ""}`
@@ -1033,6 +1054,12 @@ function compareOptionalLabel(a: string | undefined, b: string | undefined, empt
 
 function hasLessonOnDate(row: ProgressRow, date: string): boolean {
   return row.lessons.some((lesson) => lesson.date === date);
+}
+
+function lessonOnDate(row: ProgressRow, date: string, mode: "first" | "last" = "last"): Lesson | undefined {
+  const lessonsOnDate = row.lessons.filter((lesson) => lesson.date === date);
+  if (lessonsOnDate.length === 0) return undefined;
+  return mode === "first" ? lessonsOnDate[0] : lessonsOnDate.at(-1);
 }
 
 function inferProgressStatus(lesson?: Lesson): StudentProgressStatus {
