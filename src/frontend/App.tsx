@@ -59,6 +59,8 @@ import type {
   FeeRule,
   GradeRecord,
   Lesson,
+  ProgressChecklistCompletion,
+  ProgressChecklistTemplate,
   SalaryAdjustment,
   Student,
   StudentCourseTransition,
@@ -1261,6 +1263,44 @@ export function App() {
     });
   }
 
+  function saveProgressChecklistTemplate(template: ProgressChecklistTemplate) {
+    updateVault((draft) => {
+      const templates = draft.progressChecklistTemplates ?? [];
+      const exists = templates.some((item) => item.id === template.id);
+      draft.progressChecklistTemplates = exists
+        ? templates.map((item) => (item.id === template.id ? template : item))
+        : [template, ...templates];
+
+      const validItemIds = new Set(template.items.map((item) => item.id));
+      draft.progressChecklistCompletions = (draft.progressChecklistCompletions ?? []).filter(
+        (completion) => completion.templateId !== template.id || validItemIds.has(completion.itemId)
+      );
+    });
+  }
+
+  function deleteProgressChecklistTemplate(templateId: string) {
+    updateVault((draft) => {
+      draft.progressChecklistTemplates = (draft.progressChecklistTemplates ?? []).filter((template) => template.id !== templateId);
+      draft.progressChecklistCompletions = (draft.progressChecklistCompletions ?? []).filter((completion) => completion.templateId !== templateId);
+    });
+  }
+
+  function saveProgressChecklistCompletion(completion: ProgressChecklistCompletion) {
+    updateVault((draft) => {
+      const completions = draft.progressChecklistCompletions ?? [];
+      const exists = completions.some((item) => item.id === completion.id);
+      draft.progressChecklistCompletions = exists
+        ? completions.map((item) => (item.id === completion.id ? completion : item))
+        : [completion, ...completions];
+    });
+  }
+
+  function deleteProgressChecklistCompletion(completionId: string) {
+    updateVault((draft) => {
+      draft.progressChecklistCompletions = (draft.progressChecklistCompletions ?? []).filter((completion) => completion.id !== completionId);
+    });
+  }
+
   function addGradeRecord(record: GradeRecord) {
     updateVault((draft) => {
       draft.gradeRecords = [record, ...(draft.gradeRecords ?? [])];
@@ -2049,6 +2089,10 @@ export function App() {
                 onSaveProgressRecord={saveStudentProgressRecord}
                 onSaveProgressRecords={saveStudentProgressRecords}
                 onDeleteProgressRecord={deleteStudentProgressRecord}
+                onSaveChecklistTemplate={saveProgressChecklistTemplate}
+                onDeleteChecklistTemplate={deleteProgressChecklistTemplate}
+                onSaveChecklistCompletion={saveProgressChecklistCompletion}
+                onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
                 onOpenLessonInRecords={openLessonInScheduleRecords}
               />
             )}

@@ -304,6 +304,36 @@ export type StudentProgressRecord = {
   updatedAt: string;
 };
 
+export type ProgressChecklistTemplateItem = {
+  id: string;
+  title: string;
+  note?: string;
+  order: number;
+};
+
+export type ProgressChecklistTemplate = {
+  id: string;
+  name: string;
+  subject?: string;
+  note?: string;
+  items: ProgressChecklistTemplateItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProgressChecklistCompletion = {
+  id: string;
+  templateId: string;
+  itemId: string;
+  studentId: string;
+  courseGroupId: string;
+  completedDate: string;
+  lessonId?: string;
+  progressRecordId?: string;
+  note?: string;
+  updatedAt: string;
+};
+
 export type GradeRecord = {
   id: string;
   studentId: string;
@@ -350,6 +380,8 @@ export type TeacherVault = {
   salaryAdjustments: SalaryAdjustment[];
   todoItems?: TodoItem[];
   studentProgressRecords?: StudentProgressRecord[];
+  progressChecklistTemplates?: ProgressChecklistTemplate[];
+  progressChecklistCompletions?: ProgressChecklistCompletion[];
   gradeRecords?: GradeRecord[];
   notice: Notice;
 };

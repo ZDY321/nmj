@@ -5,6 +5,8 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  ClipboardList,
+  CheckCheck,
   MapPin,
   NotebookPen,
   Save,
@@ -38,9 +40,12 @@ import {
   studentNames,
   subjectOptionsForVault
 } from "@/frontend/lib/helpers";
+import { ProgressChecklistView } from "@/frontend/views/ProgressChecklistView";
 import type {
   CourseGroup,
   Lesson,
+  ProgressChecklistCompletion,
+  ProgressChecklistTemplate,
   Student,
   StudentHomeworkStatus,
   StudentProgressRecord,
@@ -51,6 +56,7 @@ import type {
 type HomeworkFilter = "all" | StudentHomeworkStatus;
 type ProgressFilter = "all" | StudentProgressStatus;
 type ProgressSortOption = "smart" | "today" | "student_name" | "campus" | "grade";
+type ProgressSectionView = "ledger" | "checklist";
 
 type ProgressDraft = {
   progressText: string;
@@ -134,12 +140,20 @@ export function ProgressView({
   onSaveProgressRecord,
   onSaveProgressRecords,
   onDeleteProgressRecord,
+  onSaveChecklistTemplate,
+  onDeleteChecklistTemplate,
+  onSaveChecklistCompletion,
+  onDeleteChecklistCompletion,
   onOpenLessonInRecords
 }: {
   vault: TeacherVault;
   onSaveProgressRecord: (record: StudentProgressRecord) => void;
   onSaveProgressRecords: (records: StudentProgressRecord[]) => void;
   onDeleteProgressRecord: (recordId: string) => void;
+  onSaveChecklistTemplate: (template: ProgressChecklistTemplate) => void;
+  onDeleteChecklistTemplate: (templateId: string) => void;
+  onSaveChecklistCompletion: (completion: ProgressChecklistCompletion) => void;
+  onDeleteChecklistCompletion: (completionId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -157,6 +171,7 @@ export function ProgressView({
   const [selectedLessonId, setSelectedLessonId] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [draft, setDraft] = useState<ProgressDraft>(emptyDraft);
+  const [sectionView, setSectionView] = useState<ProgressSectionView>("ledger");
   const { confirm, dialog } = useConfirmDialog();
 
   const progressRecords = vault.studentProgressRecords ?? [];
@@ -230,6 +245,32 @@ export function ProgressView({
   const rowsNeedingRecord = rows.filter((row) => row.needsLatestRecord).length;
   const assignedHomeworkRows = rows.filter((row) => row.homeworkStatus === "assigned").length;
   const checkedHomeworkRows = rows.filter((row) => row.homeworkStatus === "checked").length;
+  const sectionSwitcher = (
+    <Card className="overflow-hidden">
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-sm font-extrabold text-[#061226]">进度与作业</div>
+          <div className="mt-1 text-xs font-semibold text-[#64748b]">台账页保留不动，学习清单是新增子页面。</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={sectionView === "ledger" ? "default" : "outline"}
+            onClick={() => setSectionView("ledger")}
+          >
+            <ClipboardList size={15} /> 进度台账
+          </Button>
+          <Button
+            type="button"
+            variant={sectionView === "checklist" ? "default" : "outline"}
+            onClick={() => setSectionView("checklist")}
+          >
+            <CheckCheck size={15} /> 学习清单
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   useEffect(() => {
     if (!selectedRow) {
@@ -321,9 +362,26 @@ export function ProgressView({
     }));
   }
 
+  if (sectionView === "checklist") {
+    return (
+      <div className="space-y-6">
+        {dialog}
+        {sectionSwitcher}
+        <ProgressChecklistView
+          vault={vault}
+          onSaveChecklistTemplate={onSaveChecklistTemplate}
+          onDeleteChecklistTemplate={onDeleteChecklistTemplate}
+          onSaveChecklistCompletion={onSaveChecklistCompletion}
+          onDeleteChecklistCompletion={onDeleteChecklistCompletion}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {dialog}
+      {sectionSwitcher}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "学生课程", value: `${rows.length} 组`, icon: UserCheck, tone: "bg-[#eaf2ff] text-[#1557c2]" },
