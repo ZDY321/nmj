@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
   CalendarDays,
+  ChevronDown,
   Clock3,
   MapPin,
   NotebookPen,
@@ -63,6 +64,7 @@ export function TodayView({
   const [editingTodoId, setEditingTodoId] = useState("");
   const [editingTodoTitle, setEditingTodoTitle] = useState("");
   const [editingTodoDueDate, setEditingTodoDueDate] = useState("");
+  const [todoPanelOpen, setTodoPanelOpen] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
@@ -183,7 +185,7 @@ export function TodayView({
       </Card>
 
       <Card className="overflow-hidden">
-        <CardHeader className="border-b border-[#e8eef6] pb-5">
+        <CardHeader className={todoPanelOpen ? "border-b border-[#e8eef6] pb-5" : "pb-5"}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
@@ -191,93 +193,119 @@ export function TodayView({
               </div>
               <CardTitle className="text-xl">今天要跟进的事</CardTitle>
             </div>
-            <Badge variant={openTodoCount ? "amber" : "secondary"} className="w-fit">
-              {openTodoCount ? `${openTodoCount} 条待办` : "已清空"}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={openTodoCount ? "amber" : "secondary"} className="w-fit">
+                {openTodoCount ? `${openTodoCount} 条待办` : "已清空"}
+              </Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setTodoPanelOpen((open) => !open)}
+                aria-expanded={todoPanelOpen}
+                className="border-[#dbe4ef]"
+              >
+                <ChevronDown size={14} className={`transition-transform ${todoPanelOpen ? "rotate-180" : ""}`} />
+                {todoPanelOpen ? "收起" : "展开"}
+              </Button>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4 p-4 sm:p-6">
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_auto]">
-            <Input value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} placeholder="例如：联系家长确认补课时间" />
-            <Input type="date" value={todoDueDate} onChange={(event) => setTodoDueDate(event.target.value)} />
-            <Button type="button" onClick={addTodo}>
-              <Plus size={15} /> 添加待办
-            </Button>
-          </div>
-          <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
-            {todos.map((todo) => {
-              const isEditingTodo = editingTodoId === todo.id;
-              return (
-                <div
-                  key={todo.id}
-                  className={`flex flex-col gap-3 rounded-[14px] border p-3 sm:flex-row sm:items-center sm:justify-between ${
-                    todo.status === "done" ? "border-[#dbe4ef] bg-[#f8fbff] opacity-70" : "border-[#fed7aa] bg-[#fff7ed]"
-                  }`}
-                >
-                  {isEditingTodo ? (
-                    <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_180px]">
-                      <Input
-                        value={editingTodoTitle}
-                        onChange={(event) => setEditingTodoTitle(event.target.value)}
-                        placeholder="待办内容"
-                        className="bg-white"
-                      />
-                      <Input
-                        type="date"
-                        value={editingTodoDueDate}
-                        onChange={(event) => setEditingTodoDueDate(event.target.value)}
-                        className="bg-white"
-                      />
-                    </div>
-                  ) : (
-                    <label className="flex min-w-0 flex-1 items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={todo.status === "done"}
-                        onChange={(event) => onUpdateTodo({ ...todo, status: event.target.checked ? "done" : "open" })}
-                        className="mt-1 h-4 w-4 accent-[#ff8617]"
-                      />
-                      <span className="min-w-0">
-                        <span className={`block text-sm font-extrabold ${todo.status === "done" ? "text-[#64748b] line-through" : "text-[#061226]"}`}>
-                          {todo.title}
-                        </span>
-                        <span className="mt-1 block text-xs font-semibold text-[#64748b]">
-                          {todo.dueDate ? `截止：${todo.dueDate}` : "未设置截止日期"}
-                        </span>
-                      </span>
-                    </label>
-                  )}
-                  <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
-                    {isEditingTodo ? (
-                      <>
-                        <Button type="button" size="sm" onClick={() => saveTodo(todo)} disabled={!editingTodoTitle.trim()}>
-                          <Save size={14} /> 保存
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={cancelEditTodo}>
-                          <X size={14} /> 取消
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button type="button" size="sm" variant="outline" onClick={() => startEditTodo(todo)}>
-                          <Pencil size={14} /> 编辑
-                        </Button>
-                        <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)}>
-                          <Trash2 size={14} /> 删除
-                        </Button>
-                      </>
-                    )}
-                  </div>
+        <AnimatePresence initial={false}>
+          {todoPanelOpen && (
+            <motion.div
+              key="todo-panel"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <CardContent className="space-y-4 p-4 sm:p-6">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_auto]">
+                  <Input value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} placeholder="例如：联系家长确认补课时间" />
+                  <Input type="date" value={todoDueDate} onChange={(event) => setTodoDueDate(event.target.value)} />
+                  <Button type="button" onClick={addTodo}>
+                    <Plus size={15} /> 添加待办
+                  </Button>
                 </div>
-              );
-            })}
-            {todos.length === 0 && (
-              <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
-                暂无待办事项
-              </div>
-            )}
-          </div>
-        </CardContent>
+                <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
+                  {todos.map((todo) => {
+                    const isEditingTodo = editingTodoId === todo.id;
+                    return (
+                      <div
+                        key={todo.id}
+                        className={`flex flex-col gap-3 rounded-[14px] border p-3 sm:flex-row sm:items-center sm:justify-between ${
+                          todo.status === "done" ? "border-[#dbe4ef] bg-[#f8fbff] opacity-70" : "border-[#fed7aa] bg-[#fff7ed]"
+                        }`}
+                      >
+                        {isEditingTodo ? (
+                          <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_180px]">
+                            <Input
+                              value={editingTodoTitle}
+                              onChange={(event) => setEditingTodoTitle(event.target.value)}
+                              placeholder="待办内容"
+                              className="bg-white"
+                            />
+                            <Input
+                              type="date"
+                              value={editingTodoDueDate}
+                              onChange={(event) => setEditingTodoDueDate(event.target.value)}
+                              className="bg-white"
+                            />
+                          </div>
+                        ) : (
+                          <label className="flex min-w-0 flex-1 items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={todo.status === "done"}
+                              onChange={(event) => onUpdateTodo({ ...todo, status: event.target.checked ? "done" : "open" })}
+                              className="mt-1 h-4 w-4 accent-[#ff8617]"
+                            />
+                            <span className="min-w-0">
+                              <span className={`block text-sm font-extrabold ${todo.status === "done" ? "text-[#64748b] line-through" : "text-[#061226]"}`}>
+                                {todo.title}
+                              </span>
+                              <span className="mt-1 block text-xs font-semibold text-[#64748b]">
+                                {todo.dueDate ? `截止：${todo.dueDate}` : "未设置截止日期"}
+                              </span>
+                            </span>
+                          </label>
+                        )}
+                        <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+                          {isEditingTodo ? (
+                            <>
+                              <Button type="button" size="sm" onClick={() => saveTodo(todo)} disabled={!editingTodoTitle.trim()}>
+                                <Save size={14} /> 保存
+                              </Button>
+                              <Button type="button" size="sm" variant="outline" onClick={cancelEditTodo}>
+                                <X size={14} /> 取消
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button type="button" size="sm" variant="outline" onClick={() => startEditTodo(todo)}>
+                                <Pencil size={14} /> 编辑
+                              </Button>
+                              <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)}>
+                                <Trash2 size={14} /> 删除
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {todos.length === 0 && (
+                    <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
+                      暂无待办事项
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Card>
 
       <Card className="overflow-hidden">
