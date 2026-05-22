@@ -372,18 +372,23 @@ export function ProgressChecklistView({
     if (!template || typeof template !== "object") return false;
     const templateObject = template as Record<string, unknown>;
     const itemObjects = Array.isArray(templateObject.items) ? templateObject.items : [];
-    const itemTitles = itemObjects
-      .map((item) => {
-        if (!item || typeof item !== "object") return "";
+    const structuredItems = itemObjects
+      .map((item, index) => {
+        if (!item || typeof item !== "object") return null;
         const itemObject = item as Record<string, unknown>;
         const chapter = stringValue(itemObject.chapter);
         const title = stringValue(itemObject.title);
-        if (!title) return "";
-        return formatChecklistItemLine({
+        if (!title) return null;
+        return {
+          id: `ai-draft-item-${index}`,
           chapter: chapter || undefined,
-          title
-        });
+          title,
+          order: index
+        } satisfies ProgressChecklistTemplateItem;
       })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    const itemTitles = structuredItems
+      .map((item) => formatChecklistItemLine(item, structuredItems))
       .filter(Boolean);
     if (stringValue(templateObject.name)) setTemplateName(stringValue(templateObject.name));
     if (stringValue(templateObject.subject)) {
@@ -444,7 +449,13 @@ export function ProgressChecklistView({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Badge variant="secondary" className="w-fit">{templates.length} 套</Badge>
-                <Button type="button" variant="outline" size="sm" onClick={() => setTemplatePanelOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTemplatePanelOpen(false)}
+                  className="border-[#bfdbfe] bg-[#eff6ff] text-[#1557c2] shadow-sm hover:border-[#93c5fd] hover:bg-[#dbeafe] hover:text-[#0f4aa0]"
+                >
                   <ChevronLeft size={14} />
                   收起侧栏
                 </Button>
@@ -571,7 +582,13 @@ export function ProgressChecklistView({
                 <CardDescription>原有进度台账保留不动；这里是新增的清单子页面，用来记录每个学生哪一天完成了哪个知识点。</CardDescription>
               </div>
               {!templatePanelOpen && (
-                <Button type="button" variant="outline" size="sm" onClick={() => setTemplatePanelOpen(true)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTemplatePanelOpen(true)}
+                  className="border-[#fdba74] bg-[#fff7ed] text-[#c2410c] shadow-sm hover:border-[#fb923c] hover:bg-[#ffedd5] hover:text-[#9a3412]"
+                >
                   <ChevronRight size={14} />
                   展开模板区
                 </Button>
@@ -670,7 +687,7 @@ export function ProgressChecklistView({
                           {visibleItems.map((item) => (
                             <th key={item.id} className="sticky top-0 z-20 min-w-[150px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
                               {item.chapter && <div className="mb-1 text-[10px] font-bold text-[#5161d6]">{item.chapter}</div>}
-                              <div className="max-h-[3.75rem] overflow-hidden leading-5">{formatChecklistItemTitle(item)}</div>
+                              <div className="max-h-[3.75rem] overflow-hidden leading-5">{formatChecklistItemTitle(item, allItems)}</div>
                             </th>
                           ))}
                         </tr>
@@ -748,7 +765,7 @@ export function ProgressChecklistView({
                       </div>
                       <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-white p-3 text-sm font-bold text-[#25324a]">
                         {selectedItem.chapter && <div className="mb-1 text-xs font-extrabold text-[#5161d6]">{selectedItem.chapter}</div>}
-                        {formatChecklistItemTitle(selectedItem)}
+                        {formatChecklistItemTitle(selectedItem, allItems)}
                       </div>
                     </div>
 
@@ -802,13 +819,13 @@ export function ProgressChecklistView({
                         <div>
                           最近课堂关联：
                           <span className="font-semibold text-[#061226]">
-                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.taughtItems)}
+                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.taughtItems, selectedLatestLessonChecklist?.template?.items)}
                           </span>
                         </div>
                         <div>
                           最近作业关联：
                           <span className="font-semibold text-[#061226]">
-                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.homeworkItems)}
+                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.homeworkItems, selectedLatestLessonChecklist?.template?.items)}
                           </span>
                         </div>
                       </div>
@@ -833,7 +850,7 @@ function templateItemsToText(items: ProgressChecklistTemplateItem[]): string {
   return items
     .slice()
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-    .map((item) => formatChecklistItemLine(item))
+    .map((item) => formatChecklistItemLine(item, items))
     .join("\n");
 }
 
@@ -893,9 +910,12 @@ function resolveLessonChecklistLinks(
   return { template, taughtItems, homeworkItems };
 }
 
-function formatLessonChecklistSummary(items: ProgressChecklistTemplateItem[] | undefined): string {
+function formatLessonChecklistSummary(
+  items: ProgressChecklistTemplateItem[] | undefined,
+  orderedItems?: ProgressChecklistTemplateItem[]
+): string {
   if (!items || items.length === 0) return " 暂无";
-  return ` ${items.map((item) => formatChecklistItemLine(item)).join("、")}`;
+  return ` ${items.map((item) => formatChecklistItemLine(item, orderedItems ?? items)).join("、")}`;
 }
 
 function isSelectedItemLinkedToLesson(

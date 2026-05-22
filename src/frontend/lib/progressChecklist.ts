@@ -46,22 +46,44 @@ export function stripChecklistTitlePrefix(chapter: string | undefined, title: st
 
   const escapedIndex = escapeRegExp(chapterIndex);
   const stripped = normalizedTitle.replace(
-    new RegExp(`^${escapedIndex}(?![\\d.])(?:\\s*[.．、:：-]\\s*|\\s+)?`),
+    new RegExp(`^${escapedIndex}(?:\\.\\d+)*(?!\\d)(?:\\s*[.．、:：-]\\s*|\\s+)?`),
     ""
   ).trim();
 
   return stripped || normalizedTitle;
 }
 
-export function formatChecklistItemTitle(item: Pick<ProgressChecklistTemplateItem, "chapter" | "title">): string {
+export function formatChecklistItemTitle(
+  item: Pick<ProgressChecklistTemplateItem, "id" | "chapter" | "title">,
+  orderedItems?: Array<Pick<ProgressChecklistTemplateItem, "id" | "chapter" | "title" | "order">>
+): string {
   const normalizedTitle = stripChecklistTitlePrefix(item.chapter, item.title);
-  const chapterIndex = checklistChapterIndex(item.chapter);
+  const chapterIndex = checklistDisplayIndex(item, orderedItems);
   return chapterIndex ? `${chapterIndex} ${normalizedTitle}` : normalizedTitle;
 }
 
-export function formatChecklistItemLine(item: Pick<ProgressChecklistTemplateItem, "chapter" | "title">): string {
-  const title = formatChecklistItemTitle(item);
+export function formatChecklistItemLine(
+  item: Pick<ProgressChecklistTemplateItem, "id" | "chapter" | "title">,
+  orderedItems?: Array<Pick<ProgressChecklistTemplateItem, "id" | "chapter" | "title" | "order">>
+): string {
+  const title = formatChecklistItemTitle(item, orderedItems);
   return item.chapter ? `${item.chapter}｜${title}` : title;
+}
+
+export function checklistDisplayIndex(
+  item: Pick<ProgressChecklistTemplateItem, "id" | "chapter" | "title">,
+  orderedItems?: Array<Pick<ProgressChecklistTemplateItem, "id" | "chapter" | "title" | "order">>
+): string | undefined {
+  const chapterIndex = checklistChapterIndex(item.chapter);
+  if (!chapterIndex) return undefined;
+  if (chapterIndex.includes(".")) return chapterIndex;
+  if (!orderedItems || !item.chapter?.trim()) return chapterIndex;
+
+  const chapterKey = item.chapter.trim();
+  const chapterItems = orderedItems.filter((candidate) => candidate.chapter?.trim() === chapterKey);
+  const position = chapterItems.findIndex((candidate) => candidate.id === item.id);
+  if (position < 0) return chapterIndex;
+  return `${chapterIndex}.${position + 1}`;
 }
 
 function parseOrdinalNumber(token: string): number | null {

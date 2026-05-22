@@ -156,7 +156,7 @@ export function LessonChecklistLinker({
                 return (
                   <div key={item.id} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
                     {item.chapter && <div className="text-[11px] font-bold text-[#5161d6]">{item.chapter}</div>}
-                    <div className="mt-1 text-sm font-extrabold text-[#061226]">{formatChecklistItemTitle(item)}</div>
+                    <div className="mt-1 text-sm font-extrabold text-[#061226]">{formatChecklistItemTitle(item, selectedTemplate?.items)}</div>
                     {item.note && (
                       <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
                         {item.note}
@@ -191,6 +191,7 @@ export function LessonChecklistLinker({
               title="本节课内容已关联"
               tone="blue"
               items={taughtItems}
+              orderedItems={selectedTemplate?.items}
               onClear={() => clearChecklistItems("taught")}
               onRemove={(itemId) => toggleChecklistItem("taught", itemId)}
             />
@@ -198,6 +199,7 @@ export function LessonChecklistLinker({
               title="课后作业已关联"
               tone="orange"
               items={homeworkItems}
+              orderedItems={selectedTemplate?.items}
               onClear={() => clearChecklistItems("homework")}
               onRemove={(itemId) => toggleChecklistItem("homework", itemId)}
             />
@@ -216,12 +218,14 @@ function SelectedChecklistItems({
   title,
   tone,
   items,
+  orderedItems,
   onClear,
   onRemove
 }: {
   title: string;
   tone: "blue" | "orange";
   items: ProgressChecklistTemplateItem[];
+  orderedItems?: ProgressChecklistTemplateItem[];
   onClear: () => void;
   onRemove: (itemId: string) => void;
 }) {
@@ -246,7 +250,7 @@ function SelectedChecklistItems({
               className="inline-flex items-center gap-1 rounded-full border border-[#dbe4ef] bg-[#f8fbff] px-3 py-1.5 text-left text-xs font-bold text-[#25324a] transition-colors hover:border-[#93c5fd] hover:bg-[#eef5ff]"
               title="点击移除关联"
             >
-              <span>{formatChecklistItemLabel(item)}</span>
+              <span>{formatChecklistItemLabel(item, orderedItems)}</span>
               <X size={12} className="text-[#94a3b8]" />
             </button>
           ))}
@@ -266,6 +270,6 @@ function resolveSelectedItems(
     .filter((item): item is ProgressChecklistTemplateItem => Boolean(item));
 }
 
-function formatChecklistItemLabel(item: ProgressChecklistTemplateItem): string {
-  return formatChecklistItemLine(item);
+function formatChecklistItemLabel(item: ProgressChecklistTemplateItem, orderedItems?: ProgressChecklistTemplateItem[]): string {
+  return formatChecklistItemLine(item, orderedItems);
 }
