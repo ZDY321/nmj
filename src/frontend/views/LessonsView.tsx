@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { TimeTextInput } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
 import type { AttendanceStatus, CourseType, Lesson, TeacherVault } from "@/shared/types";
 import { calculateFee, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
 import {
@@ -458,6 +459,15 @@ export function LessonsView({
                     placeholder="例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。"
                   />
                 </div>
+
+                {selected && (
+                  <LessonChecklistLinker
+                    vault={vault}
+                    content={selected.content}
+                    subjectHint={courseSubject(vault, selected.courseGroupId)}
+                    onChange={(content) => onUpdateLesson({ ...selected, content })}
+                  />
+                )}
               </CardContent>
             </Card>
           </motion.div>

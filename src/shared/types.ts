@@ -225,6 +225,9 @@ export type LessonContent = {
   homework: string;
   nextLessonReminder: string;
   internalNote?: string;
+  checklistTemplateId?: string;
+  taughtChecklistItemIds?: string[];
+  homeworkChecklistItemIds?: string[];
 };
 
 export type Lesson = {
@@ -306,6 +309,7 @@ export type StudentProgressRecord = {
 
 export type ProgressChecklistTemplateItem = {
   id: string;
+  chapter?: string;
   title: string;
   note?: string;
   order: number;

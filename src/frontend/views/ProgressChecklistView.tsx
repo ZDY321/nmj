@@ -4,7 +4,8 @@ import {
   CalendarDays,
   CheckCheck,
   ClipboardList,
-  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Plus,
   Save,
   Search,
@@ -50,6 +51,8 @@ type LatestChecklistContext = {
   lesson?: Lesson;
   record?: StudentProgressRecord;
 };
+
+const NEW_TEMPLATE_ID = "__new_template__";
 
 export function ProgressChecklistView({
   vault,
@@ -103,6 +106,7 @@ export function ProgressChecklistView({
   }, [courseOptions, selectedCourseId]);
 
   useEffect(() => {
+    if (selectedTemplateId === NEW_TEMPLATE_ID) return;
     if (!templates.some((template) => template.id === selectedTemplateId)) {
       setSelectedTemplateId(templates[0]?.id ?? "");
     }
@@ -138,6 +142,7 @@ export function ProgressChecklistView({
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
 
   useEffect(() => {
+    if (selectedTemplateId === NEW_TEMPLATE_ID) return;
     if (selectedTemplate) {
       setTemplateName(selectedTemplate.name);
       setTemplateSubject(selectedTemplate.subject ?? selectedCourse?.subject ?? "");
@@ -164,12 +169,19 @@ export function ProgressChecklistView({
     [vault, selectedCourseId, selectedStudents]
   );
 
+  const draftTemplateItems = useMemo(
+    () => parseTemplateItemsText(templateItemsText),
+    [templateItemsText]
+  );
   const allItems = useMemo(
-    () => (selectedTemplate?.items ?? []).slice().sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)),
-    [selectedTemplate?.id, selectedTemplate?.updatedAt]
+    () => (selectedTemplateId === NEW_TEMPLATE_ID ? draftTemplateItems : (selectedTemplate?.items ?? [])).slice().sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)),
+    [selectedTemplateId, selectedTemplate?.id, selectedTemplate?.updatedAt, draftTemplateItems]
   );
   const completionList = useMemo(
     () =>
+      selectedTemplateId === NEW_TEMPLATE_ID
+        ? []
+        :
       (vault.progressChecklistCompletions ?? []).filter(
         (completion) => completion.templateId === selectedTemplateId && completion.courseGroupId === selectedCourseId
       ),
@@ -183,7 +195,9 @@ export function ProgressChecklistView({
   const visibleItems = useMemo(
     () =>
       allItems.filter((item) => {
-        const matchesSearch = !normalizedItemSearch || item.title.toLowerCase().includes(normalizedItemSearch);
+        const searchable = `${item.chapter ?? ""} ${item.title}`.toLowerCase();
+        const matchesSearch = !normalizedItemSearch
+          || normalizedItemSearch.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
         const matchesIncomplete = !showOnlyIncomplete || selectedStudents.some((student) => !completionMap.has(checklistCellKey(student.id, item.id)));
         return matchesSearch && matchesIncomplete;
       }),
@@ -203,6 +217,7 @@ export function ProgressChecklistView({
   const selectedItem = allItems.find((item) => item.id === selectedCell?.itemId);
   const selectedCompletion = selectedCell ? completionMap.get(checklistCellKey(selectedCell.studentId, selectedCell.itemId)) : undefined;
   const selectedLatestContext = selectedStudent ? latestContextByStudent.get(selectedStudent.id) : undefined;
+  const selectedLatestLessonChecklist = selectedLatestContext?.lesson ? resolveLessonChecklistLinks(vault, selectedLatestContext.lesson) : null;
 
   useEffect(() => {
     setSelectedCellDate(selectedCompletion?.completedDate ?? todayIso());
@@ -217,40 +232,48 @@ export function ProgressChecklistView({
     : selectedStudents.filter((student) => allItems.every((item) => completionMap.has(checklistCellKey(student.id, item.id)))).length;
 
   function startNewTemplate() {
-    setSelectedTemplateId("");
+    setSelectedTemplateId(NEW_TEMPLATE_ID);
     setTemplateName("");
     setTemplateSubject(selectedCourse?.subject ?? "");
     setTemplateNote("");
     setTemplateItemsText("");
+    setItemSearch("");
+    setShowOnlyIncomplete(false);
+    setSelectedCell(null);
+    setSelectedCellDate(todayIso());
+    setCompletionNote("");
     setAiMessage("");
   }
 
   function saveTemplate() {
     const name = templateName.trim();
-    const itemTitles = templateItemsText
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (!name || itemTitles.length === 0) return;
+    const parsedItems = draftTemplateItems;
+    if (!name || parsedItems.length === 0) return;
 
-    const existingItems = selectedTemplate?.items ?? [];
+    const existingItems = selectedTemplateId === NEW_TEMPLATE_ID ? [] : selectedTemplate?.items ?? [];
     const now = new Date().toISOString();
     const nextTemplate: ProgressChecklistTemplate = {
-      id: selectedTemplate?.id ?? makeId("progress_template"),
+      id: selectedTemplateId === NEW_TEMPLATE_ID ? makeId("progress_template") : selectedTemplate?.id ?? makeId("progress_template"),
       name,
       subject: templateSubject.trim() || selectedCourse?.subject || undefined,
       note: templateNote.trim() || undefined,
-      items: itemTitles.map((title, index) => ({
-        id: existingItems[index]?.id ?? makeId("progress_item"),
-        title,
-        note: existingItems[index]?.note,
-        order: index
-      })),
-      createdAt: selectedTemplate?.createdAt ?? now,
+      items: parsedItems.map((item, index) => {
+        return {
+          id: existingItems[index]?.id ?? makeId("progress_item"),
+          chapter: item.chapter || existingItems[index]?.chapter,
+          title: item.title,
+          note: existingItems[index]?.note,
+          order: index
+        };
+      }),
+      createdAt: selectedTemplateId === NEW_TEMPLATE_ID ? now : selectedTemplate?.createdAt ?? now,
       updatedAt: now
     };
     onSaveChecklistTemplate(nextTemplate);
     setSelectedTemplateId(nextTemplate.id);
+    setItemSearch("");
+    setShowOnlyIncomplete(false);
+    setSelectedCell(null);
   }
 
   function askDeleteTemplate() {
@@ -349,7 +372,14 @@ export function ProgressChecklistView({
     const templateObject = template as Record<string, unknown>;
     const itemObjects = Array.isArray(templateObject.items) ? templateObject.items : [];
     const itemTitles = itemObjects
-      .map((item) => (item && typeof item === "object" ? stringValue((item as Record<string, unknown>).title) : ""))
+      .map((item) => {
+        if (!item || typeof item !== "object") return "";
+        const itemObject = item as Record<string, unknown>;
+        const chapter = stringValue(itemObject.chapter);
+        const title = stringValue(itemObject.title);
+        if (!title) return "";
+        return chapter ? `${chapter}｜${title}` : title;
+      })
       .filter(Boolean);
     if (stringValue(templateObject.name)) setTemplateName(stringValue(templateObject.name));
     if (stringValue(templateObject.subject)) {
@@ -359,7 +389,12 @@ export function ProgressChecklistView({
     }
     setTemplateNote(stringValue(templateObject.note));
     setTemplateItemsText(itemTitles.join("\n"));
-    setSelectedTemplateId("");
+    setSelectedTemplateId(NEW_TEMPLATE_ID);
+    setItemSearch("");
+    setShowOnlyIncomplete(false);
+    setSelectedCell(null);
+    setSelectedCellDate(todayIso());
+    setCompletionNote("");
     setTemplatePanelOpen(true);
     return Boolean(stringValue(templateObject.name) || itemTitles.length > 0 || stringValue(templateObject.note));
   }
@@ -392,25 +427,25 @@ export function ProgressChecklistView({
         })}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-start justify-between gap-3">
-            <div>
-              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                <ClipboardList size={14} /> 学习清单模板
+      <div className={`grid grid-cols-1 gap-4 ${templatePanelOpen ? "xl:grid-cols-[340px_minmax(0,1fr)]" : "xl:grid-cols-[minmax(0,1fr)]"}`}>
+        {templatePanelOpen && (
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                  <ClipboardList size={14} /> 学习清单模板
+                </div>
+                <CardTitle>模板管理</CardTitle>
+                <CardDescription>把同一本书或同一套知识点整理成固定清单，后续可重复用于不同学生课程。</CardDescription>
               </div>
-              <CardTitle>模板管理</CardTitle>
-              <CardDescription>把同一本书或同一套知识点整理成固定清单，后续可重复用于不同学生课程。</CardDescription>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Badge variant="secondary" className="w-fit">{templates.length} 套</Badge>
-              <Button type="button" variant="outline" size="sm" onClick={() => setTemplatePanelOpen((open) => !open)}>
-                <ChevronDown size={14} className={`transition-transform ${templatePanelOpen ? "rotate-180" : ""}`} />
-                {templatePanelOpen ? "收起" : "展开"}
-              </Button>
-            </div>
-          </CardHeader>
-          {templatePanelOpen && (
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge variant="secondary" className="w-fit">{templates.length} 套</Badge>
+                <Button type="button" variant="outline" size="sm" onClick={() => setTemplatePanelOpen(false)}>
+                  <ChevronLeft size={14} />
+                  收起侧栏
+                </Button>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-bold text-[#25324a]">已有模板</label>
@@ -518,17 +553,25 @@ export function ProgressChecklistView({
                 </Button>
               </div>
             </CardContent>
-          )}
-        </Card>
+          </Card>
+        )}
 
         <div className="space-y-4">
           <Card className="overflow-hidden">
-            <CardHeader>
-              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
-                <CheckCheck size={14} /> 学习清单
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
+                  <CheckCheck size={14} /> 学习清单
+                </div>
+                <CardTitle>按学生查看完成日期</CardTitle>
+                <CardDescription>原有进度台账保留不动；这里是新增的清单子页面，用来记录每个学生哪一天完成了哪个知识点。</CardDescription>
               </div>
-              <CardTitle>按学生查看完成日期</CardTitle>
-              <CardDescription>原有进度台账保留不动；这里是新增的清单子页面，用来记录每个学生哪一天完成了哪个知识点。</CardDescription>
+              {!templatePanelOpen && (
+                <Button type="button" variant="outline" size="sm" onClick={() => setTemplatePanelOpen(true)}>
+                  <ChevronRight size={14} />
+                  展开模板区
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -545,6 +588,7 @@ export function ProgressChecklistView({
                   <label className="text-sm font-bold text-[#25324a]">选择模板</label>
                   <Select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
                     <option value="">请选择模板</option>
+                    {selectedTemplateId === NEW_TEMPLATE_ID && <option value={NEW_TEMPLATE_ID}>当前草稿（未保存）</option>}
                     {templates.map((template) => (
                       <option key={template.id} value={template.id}>{template.name}</option>
                     ))}
@@ -559,7 +603,7 @@ export function ProgressChecklistView({
                     className="pl-9"
                     value={itemSearch}
                     onChange={(event) => setItemSearch(event.target.value)}
-                    placeholder="搜索知识点"
+                    placeholder="搜索章节或知识点"
                   />
                 </label>
                 <label className="flex w-fit items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
@@ -582,6 +626,11 @@ export function ProgressChecklistView({
                   <Badge variant="amber">{fullyCompletedStudents} 人已全完成</Badge>
                 </div>
               )}
+              {selectedTemplateId === NEW_TEMPLATE_ID && (
+                <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] p-3 text-sm font-semibold leading-6 text-[#9a3412]">
+                  当前下方显示的是未保存草稿。确认无误后点击“保存”，它才会进入正式模板列表并用于长期勾选记录。
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -598,7 +647,7 @@ export function ProgressChecklistView({
                 </div>
               </CardHeader>
               <CardContent>
-                {!selectedCourse || !selectedTemplate ? (
+                {!selectedCourse || (!selectedTemplate && selectedTemplateId !== NEW_TEMPLATE_ID) ? (
                   <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
                     先选择课程和模板，就能开始勾选完成日期。
                   </div>
@@ -616,6 +665,7 @@ export function ProgressChecklistView({
                           </th>
                           {visibleItems.map((item) => (
                             <th key={item.id} className="sticky top-0 z-20 min-w-[150px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
+                              {item.chapter && <div className="mb-1 text-[10px] font-bold text-[#5161d6]">{item.chapter}</div>}
                               <div className="max-h-[3.75rem] overflow-hidden leading-5">{item.title}</div>
                             </th>
                           ))}
@@ -650,6 +700,11 @@ export function ProgressChecklistView({
                                       <>
                                         <div className="text-lg font-extrabold text-[#15803d]">✓</div>
                                         <div className="mt-1 text-xs font-bold text-[#166534]">{completion.completedDate.slice(5)}</div>
+                                        {completion.note && (
+                                          <div className="mt-1 max-h-[2.2rem] overflow-hidden text-[10px] font-semibold leading-4 text-[#166534]" title={completion.note}>
+                                            {completion.note}
+                                          </div>
+                                        )}
                                       </>
                                     ) : (
                                       <div className="text-xs font-bold text-[#94a3b8]">待完成</div>
@@ -688,6 +743,7 @@ export function ProgressChecklistView({
                         {selectedCourse.name} · {selectedCourse.subject}
                       </div>
                       <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-white p-3 text-sm font-bold text-[#25324a]">
+                        {selectedItem.chapter && <div className="mb-1 text-xs font-extrabold text-[#5161d6]">{selectedItem.chapter}</div>}
                         {selectedItem.title}
                       </div>
                     </div>
@@ -739,7 +795,24 @@ export function ProgressChecklistView({
                             {selectedLatestContext?.record?.nextPlan?.trim() || " 暂无记录"}
                           </span>
                         </div>
+                        <div>
+                          最近课堂关联：
+                          <span className="font-semibold text-[#061226]">
+                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.taughtItems)}
+                          </span>
+                        </div>
+                        <div>
+                          最近作业关联：
+                          <span className="font-semibold text-[#061226]">
+                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.homeworkItems)}
+                          </span>
+                        </div>
                       </div>
+                      {selectedItem && isSelectedItemLinkedToLesson(selectedItem.id, selectedLatestLessonChecklist) && (
+                        <Badge variant="sky" className="mt-3">
+                          最近课时已关联当前清单条目
+                        </Badge>
+                      )}
                     </div>
                   </>
                 )}
@@ -756,12 +829,80 @@ function templateItemsToText(items: ProgressChecklistTemplateItem[]): string {
   return items
     .slice()
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-    .map((item) => item.title)
+    .map((item) => item.chapter ? `${item.chapter}｜${item.title}` : item.title)
     .join("\n");
 }
 
 function checklistCellKey(studentId: string, itemId: string): string {
   return `${studentId}::${itemId}`;
+}
+
+function parseTemplateItemsText(text: string): ProgressChecklistTemplateItem[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const parsed = parseTemplateLine(line);
+      return {
+        id: `draft-item-${index}`,
+        chapter: parsed.chapter,
+        title: parsed.title,
+        order: index
+      };
+    });
+}
+
+function parseTemplateLine(line: string): { chapter?: string; title: string } {
+  const normalized = line.trim();
+  const match = /^(.*?)\s*[|｜>]\s*(.+)$/.exec(normalized);
+  if (!match) {
+    return { title: normalized };
+  }
+  const chapter = match[1]?.trim();
+  const title = match[2]?.trim() || normalized;
+  return {
+    chapter: chapter || undefined,
+    title
+  };
+}
+
+function resolveLessonChecklistLinks(
+  vault: TeacherVault,
+  lesson: Lesson
+): {
+  template?: ProgressChecklistTemplate;
+  taughtItems: ProgressChecklistTemplateItem[];
+  homeworkItems: ProgressChecklistTemplateItem[];
+} | null {
+  const templateId = lesson.content.checklistTemplateId;
+  if (!templateId) return null;
+  const template = (vault.progressChecklistTemplates ?? []).find((item) => item.id === templateId);
+  if (!template) return null;
+  const itemMap = new Map(template.items.map((item) => [item.id, item]));
+  const taughtItems = (lesson.content.taughtChecklistItemIds ?? [])
+    .map((itemId) => itemMap.get(itemId))
+    .filter((item): item is ProgressChecklistTemplateItem => Boolean(item));
+  const homeworkItems = (lesson.content.homeworkChecklistItemIds ?? [])
+    .map((itemId) => itemMap.get(itemId))
+    .filter((item): item is ProgressChecklistTemplateItem => Boolean(item));
+  return { template, taughtItems, homeworkItems };
+}
+
+function formatLessonChecklistSummary(items: ProgressChecklistTemplateItem[] | undefined): string {
+  if (!items || items.length === 0) return " 暂无";
+  return ` ${items.map((item) => item.chapter ? `${item.chapter}｜${item.title}` : item.title).join("、")}`;
+}
+
+function isSelectedItemLinkedToLesson(
+  itemId: string,
+  lessonChecklist: {
+    taughtItems: ProgressChecklistTemplateItem[];
+    homeworkItems: ProgressChecklistTemplateItem[];
+  } | null
+): boolean {
+  if (!lessonChecklist) return false;
+  return [...lessonChecklist.taughtItems, ...lessonChecklist.homeworkItems].some((item) => item.id === itemId);
 }
 
 function buildLatestChecklistContextMap(

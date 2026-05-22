@@ -37,6 +37,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
@@ -3331,6 +3332,15 @@ export function ScheduleView({
                   </div>
                   <Textarea value={selected.content.homework} onChange={(event) => updateContent("homework", event.target.value)} placeholder="例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。" />
                 </div>
+
+                {selected && (
+                  <LessonChecklistLinker
+                    vault={vault}
+                    content={selected.content}
+                    subjectHint={courseSubject(vault, selected.courseGroupId)}
+                    onChange={(content) => onUpdateLesson({ ...selected, content })}
+                  />
+                )}
               </CardContent>
             </Card>
           </motion.div>
