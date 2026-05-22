@@ -1558,7 +1558,7 @@ function scheduleAssistantSystemPrompt(): string {
     "支持的动作类型：create_student、create_course、create_course_type、update_course、delete_course、migrate_course、delete_lesson、schedule_lessons、sync_lessons、ask_clarification。",
     "如果 taskType 是 progress_checklist，说明当前任务不是排课，而是生成“学习清单模板”。这时不要输出 actions，也不要假装写入数据库。",
     "taskType 为 progress_checklist 时，输出结构必须是：{\"summary\":\"...\",\"template\":{\"name\":\"...\",\"subject\":\"...\",\"note\":\"...\",\"items\":[{\"chapter\":\"...\",\"title\":\"...\",\"note\":\"...\"}]},\"questions\":[],\"warnings\":[]}。",
-    "progress_checklist 的 template.items 需要按学习顺序排列，优先补齐 chapter；title 简短清晰，适合逐项勾选完成日期；若用户未指定数量，默认生成 6-12 项。",
+    "progress_checklist 的 template.items 需要按学习顺序排列，优先补齐 chapter；chapter 尽量写成“第三章第二节”这类完整层级；title 只写具体章节名或知识点名，不要重复“第几章第几节”；若用户未指定数量，默认生成 6-12 项。",
     "progress_checklist 如信息不足，可在 questions 里追问教材版本、年级、单元范围、是否按章节还是按知识点拆分；warnings 里写使用提醒。",
     "create_course、update_course、migrate_course 涉及课程命名时，对用户展示和追问必须使用“课程档案名称”，不要只说“课程名称”或“课程名”；JSON 字段仍使用 courseName/newCourseName/targetCourseName。",
     "课程档案的计费模式必须沿用所选班型在后台配置的默认计费模式，不能给单个课程档案单独切换计费模式。例如后台“初三全日制”是按小时计费时，不要把该课程档案写成 class_headcount；应询问用户先修改后台班型计费或改选班课/一对二等按人数计费班型。",

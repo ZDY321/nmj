@@ -21,6 +21,7 @@ import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { generateAiScheduleDraft, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
+import { formatChecklistItemLine, formatChecklistItemTitle, stripChecklistTitlePrefix } from "@/frontend/lib/progressChecklist";
 import {
   campusName,
   compareByName,
@@ -378,7 +379,10 @@ export function ProgressChecklistView({
         const chapter = stringValue(itemObject.chapter);
         const title = stringValue(itemObject.title);
         if (!title) return "";
-        return chapter ? `${chapter}｜${title}` : title;
+        return formatChecklistItemLine({
+          chapter: chapter || undefined,
+          title
+        });
       })
       .filter(Boolean);
     if (stringValue(templateObject.name)) setTemplateName(stringValue(templateObject.name));
@@ -666,7 +670,7 @@ export function ProgressChecklistView({
                           {visibleItems.map((item) => (
                             <th key={item.id} className="sticky top-0 z-20 min-w-[150px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
                               {item.chapter && <div className="mb-1 text-[10px] font-bold text-[#5161d6]">{item.chapter}</div>}
-                              <div className="max-h-[3.75rem] overflow-hidden leading-5">{item.title}</div>
+                              <div className="max-h-[3.75rem] overflow-hidden leading-5">{formatChecklistItemTitle(item)}</div>
                             </th>
                           ))}
                         </tr>
@@ -744,7 +748,7 @@ export function ProgressChecklistView({
                       </div>
                       <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-white p-3 text-sm font-bold text-[#25324a]">
                         {selectedItem.chapter && <div className="mb-1 text-xs font-extrabold text-[#5161d6]">{selectedItem.chapter}</div>}
-                        {selectedItem.title}
+                        {formatChecklistItemTitle(selectedItem)}
                       </div>
                     </div>
 
@@ -829,7 +833,7 @@ function templateItemsToText(items: ProgressChecklistTemplateItem[]): string {
   return items
     .slice()
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-    .map((item) => item.chapter ? `${item.chapter}｜${item.title}` : item.title)
+    .map((item) => formatChecklistItemLine(item))
     .join("\n");
 }
 
@@ -860,7 +864,7 @@ function parseTemplateLine(line: string): { chapter?: string; title: string } {
     return { title: normalized };
   }
   const chapter = match[1]?.trim();
-  const title = match[2]?.trim() || normalized;
+  const title = stripChecklistTitlePrefix(chapter, match[2]?.trim() || normalized);
   return {
     chapter: chapter || undefined,
     title
@@ -891,7 +895,7 @@ function resolveLessonChecklistLinks(
 
 function formatLessonChecklistSummary(items: ProgressChecklistTemplateItem[] | undefined): string {
   if (!items || items.length === 0) return " 暂无";
-  return ` ${items.map((item) => item.chapter ? `${item.chapter}｜${item.title}` : item.title).join("、")}`;
+  return ` ${items.map((item) => formatChecklistItemLine(item)).join("、")}`;
 }
 
 function isSelectedItemLinkedToLesson(

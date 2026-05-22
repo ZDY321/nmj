@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { compareByName } from "@/frontend/lib/helpers";
+import { formatChecklistItemLine, formatChecklistItemTitle } from "@/frontend/lib/progressChecklist";
 import type { LessonContent, ProgressChecklistTemplate, ProgressChecklistTemplateItem, TeacherVault } from "@/shared/types";
 
 type ChecklistField = "taught" | "homework";
@@ -155,7 +156,7 @@ export function LessonChecklistLinker({
                 return (
                   <div key={item.id} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
                     {item.chapter && <div className="text-[11px] font-bold text-[#5161d6]">{item.chapter}</div>}
-                    <div className="mt-1 text-sm font-extrabold text-[#061226]">{item.title}</div>
+                    <div className="mt-1 text-sm font-extrabold text-[#061226]">{formatChecklistItemTitle(item)}</div>
                     {item.note && (
                       <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
                         {item.note}
@@ -266,5 +267,5 @@ function resolveSelectedItems(
 }
 
 function formatChecklistItemLabel(item: ProgressChecklistTemplateItem): string {
-  return item.chapter ? `${item.chapter}｜${item.title}` : item.title;
+  return formatChecklistItemLine(item);
 }
