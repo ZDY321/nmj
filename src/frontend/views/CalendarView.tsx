@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarDays, ChevronLeft, ChevronRight, Search, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -34,25 +34,37 @@ import { MetricCard } from "@/frontend/components/MetricCard";
 import { todayIso } from "@/frontend/lib/calculations";
 
 type CalendarOverviewPage = "month" | "week";
+type CalendarOverviewFocusState = {
+  selectedDate: string;
+  month: string;
+  overviewPage: CalendarOverviewPage;
+  weekCampusFilter: string;
+  weekGradeFilter: string;
+  weekSubjectFilter: string;
+  weekStudentFilter: string;
+};
+type CalendarOverviewFocusRequest = CalendarOverviewFocusState & { nonce: number };
 
 export function CalendarView({
   vault,
   amountsVisible,
   onWeekStartChange,
-  onOpenLessonInRecords
+  onOpenLessonInRecords,
+  focusRequest
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
   onWeekStartChange: (weekStart: WeekStart) => void;
-  onOpenLessonInRecords?: (lesson: Lesson) => void;
+  onOpenLessonInRecords?: (lesson: Lesson, returnFocus: CalendarOverviewFocusState) => void;
+  focusRequest?: CalendarOverviewFocusRequest | null;
 }) {
-  const [month, setMonth] = useState(() => todayIso().slice(0, 7));
-  const [selectedDate, setSelectedDate] = useState(() => todayIso());
-  const [overviewPage, setOverviewPage] = useState<CalendarOverviewPage>("month");
-  const [weekCampusFilter, setWeekCampusFilter] = useState("all");
-  const [weekGradeFilter, setWeekGradeFilter] = useState("all");
-  const [weekSubjectFilter, setWeekSubjectFilter] = useState("all");
-  const [weekStudentFilter, setWeekStudentFilter] = useState("");
+  const [month, setMonth] = useState(() => focusRequest?.month ?? todayIso().slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState(() => focusRequest?.selectedDate ?? todayIso());
+  const [overviewPage, setOverviewPage] = useState<CalendarOverviewPage>(() => focusRequest?.overviewPage ?? "month");
+  const [weekCampusFilter, setWeekCampusFilter] = useState(() => focusRequest?.weekCampusFilter ?? "all");
+  const [weekGradeFilter, setWeekGradeFilter] = useState(() => focusRequest?.weekGradeFilter ?? "all");
+  const [weekSubjectFilter, setWeekSubjectFilter] = useState(() => focusRequest?.weekSubjectFilter ?? "all");
+  const [weekStudentFilter, setWeekStudentFilter] = useState(() => focusRequest?.weekStudentFilter ?? "");
   const weekStartPreference = weekStartsOn(vault);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const gradeOptions = Array.from(
@@ -84,9 +96,33 @@ export function CalendarView({
       return groups;
     }, {});
 
+  useEffect(() => {
+    if (!focusRequest) return;
+    setSelectedDate(focusRequest.selectedDate);
+    setMonth(focusRequest.month);
+    setOverviewPage(focusRequest.overviewPage);
+    setWeekCampusFilter(focusRequest.weekCampusFilter);
+    setWeekGradeFilter(focusRequest.weekGradeFilter);
+    setWeekSubjectFilter(focusRequest.weekSubjectFilter);
+    setWeekStudentFilter(focusRequest.weekStudentFilter);
+  }, [focusRequest?.nonce]);
+
   function selectCalendarDate(date: string) {
     setSelectedDate(date);
     setMonth(date.slice(0, 7));
+  }
+
+  function buildReturnFocus(overrides: Partial<CalendarOverviewFocusState> = {}): CalendarOverviewFocusState {
+    return {
+      selectedDate,
+      month,
+      overviewPage,
+      weekCampusFilter,
+      weekGradeFilter,
+      weekSubjectFilter,
+      weekStudentFilter,
+      ...overrides
+    };
   }
 
   function shiftSelectedWeek(days: number) {
@@ -427,7 +463,7 @@ export function CalendarView({
                                         onClick={(event) => {
                                           event.stopPropagation();
                                           selectCalendarDate(date);
-                                          onOpenLessonInRecords?.(lesson);
+                                          onOpenLessonInRecords?.(lesson, buildReturnFocus({ selectedDate: date, month: date.slice(0, 7) }));
                                         }}
                                         className={`block w-full rounded-[10px] border p-2 text-left text-xs transition-all hover:border-[#1557c2] ${lessonStatusSurfaceClass(lesson.status)}`}
                                       >
@@ -513,7 +549,7 @@ export function CalendarView({
                   type="button"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  onClick={() => onOpenLessonInRecords?.(lesson)}
+                  onClick={() => onOpenLessonInRecords?.(lesson, buildReturnFocus())}
                   className={`flex w-full flex-col gap-3 rounded-[12px] border p-3 text-left transition-all hover:border-[#1557c2] sm:flex-row sm:items-center sm:justify-between ${lessonStatusSurfaceClass(lesson.status)}`}
                 >
                   <div className="min-w-0">

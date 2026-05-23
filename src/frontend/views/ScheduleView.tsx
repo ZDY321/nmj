@@ -76,13 +76,39 @@ import {
   weekDatesFor,
   weekStartsOn,
   weekdayOfDateIso,
-  weekdayLabels
+  weekdayLabels,
+  type ViewKey
 } from "@/frontend/lib/helpers";
 
 type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
 type SchedulePanel = "ai" | "schedule" | "calendar" | "records" | "studentStats";
-type CalendarFocus = { date: string; lessonId?: string; targetPanel?: SchedulePanel; nonce: number } | null;
+type CalendarOverviewReturnFocus = {
+  selectedDate: string;
+  month: string;
+  overviewPage: "month" | "week";
+  weekCampusFilter: string;
+  weekGradeFilter: string;
+  weekSubjectFilter: string;
+  weekStudentFilter: string;
+};
+type ExternalLessonReturnTarget = {
+  kind: "view";
+  view: ViewKey;
+  label: string;
+  calendarFocus?: CalendarOverviewReturnFocus;
+};
+type InternalLessonReturnTarget = {
+  kind: "panel";
+  panel: Exclude<SchedulePanel, "records">;
+  label: string;
+  calendarDate?: string;
+  calendarMonth?: string;
+  calendarMode?: "schedule" | "view";
+  calendarDetailDate?: string | null;
+};
+type LessonReturnTarget = ExternalLessonReturnTarget | InternalLessonReturnTarget;
+type CalendarFocus = { date: string; lessonId?: string; targetPanel?: SchedulePanel; nonce: number; returnTarget?: ExternalLessonReturnTarget | null } | null;
 
 export function ScheduleView({
   vault,
@@ -101,7 +127,8 @@ export function ScheduleView({
   calendarFocus,
   aiSession,
   onAiSessionChange,
-  onApplyAiDraft
+  onApplyAiDraft,
+  onReturnToView
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
@@ -127,6 +154,7 @@ export function ScheduleView({
   aiSession: AiScheduleSession | null;
   onAiSessionChange: (session: AiScheduleSession | null) => void;
   onApplyAiDraft: (session: AiScheduleSession | null) => { ok: boolean; message: string };
+  onReturnToView: (target: ExternalLessonReturnTarget) => void;
 }) {
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
@@ -165,6 +193,7 @@ export function ScheduleView({
   const [calendarDetailDate, setCalendarDetailDate] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
   const [lessonHistory, setLessonHistory] = useState<string[]>([]);
+  const [lessonReturnTarget, setLessonReturnTarget] = useState<LessonReturnTarget | null>(null);
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
@@ -307,8 +336,9 @@ export function ScheduleView({
       const focusedLesson = vault.lessons.find((lesson) => lesson.id === calendarFocus.lessonId);
       if (focusedLesson) {
         setLessonHistory([]);
-        openLessonInRecords(focusedLesson, false);
+        openLessonInRecords(focusedLesson, { pushHistory: false, returnTarget: calendarFocus.returnTarget ?? null });
       } else {
+        setLessonReturnTarget(calendarFocus.returnTarget ?? null);
         setSelectedId(calendarFocus.lessonId);
       }
     }
@@ -858,7 +888,7 @@ export function ScheduleView({
     setSelectedCalendarDate(singleDate);
     setCalendarMonth(singleDate.slice(0, 7));
     setCalendarMode("schedule");
-    setSchedulePanel("calendar");
+    switchSchedulePanel("calendar");
   }
 
   function addLessonFromCourse(
@@ -1085,9 +1115,49 @@ export function ScheduleView({
     );
   }
 
-  function openLessonInRecords(lesson: Lesson, pushHistory = true) {
+  function switchSchedulePanel(nextPanel: SchedulePanel) {
+    setSchedulePanel(nextPanel);
+    if (nextPanel !== "records") {
+      setLessonReturnTarget(null);
+    }
+  }
+
+  function buildPanelReturnTarget(panel: SchedulePanel): InternalLessonReturnTarget | null {
+    switch (panel) {
+      case "ai":
+        return { kind: "panel", panel, label: "返回 AI 排课助手" };
+      case "schedule":
+        return { kind: "panel", panel, label: "返回排课" };
+      case "calendar":
+        return {
+          kind: "panel",
+          panel,
+          label: "返回日历查看",
+          calendarDate: selectedCalendarDate,
+          calendarMonth: calendarMonth,
+          calendarMode,
+          calendarDetailDate
+        };
+      case "studentStats":
+        return { kind: "panel", panel, label: "返回学生课次统计" };
+      default:
+        return null;
+    }
+  }
+
+  function openLessonInRecords(
+    lesson: Lesson,
+    options: { pushHistory?: boolean; preserveReturnTarget?: boolean; returnTarget?: LessonReturnTarget | null } = {}
+  ) {
+    const pushHistory = options.pushHistory ?? true;
+    const preserveReturnTarget = options.preserveReturnTarget ?? schedulePanel === "records";
     if (pushHistory && lesson.id !== selectedId) {
       setLessonHistory((history) => [...history, selectedId].filter(Boolean).slice(-12));
+    }
+    if (Object.prototype.hasOwnProperty.call(options, "returnTarget")) {
+      setLessonReturnTarget(options.returnTarget ?? null);
+    } else if (!preserveReturnTarget) {
+      setLessonReturnTarget(buildPanelReturnTarget(schedulePanel));
     }
     setSelectedId(lesson.id);
     setSelectedCalendarDate(lesson.date);
@@ -1105,10 +1175,33 @@ export function ScheduleView({
     setLessonHistory((history) => history.slice(0, -1));
     const previousLesson = vault.lessons.find((lesson) => lesson.id === previousId);
     if (previousLesson) {
-      openLessonInRecords(previousLesson, false);
+      openLessonInRecords(previousLesson, { pushHistory: false });
       return;
     }
     setSelectedId(previousId);
+  }
+
+  function goBackToLessonSource() {
+    if (!lessonReturnTarget) return;
+    if (lessonReturnTarget.kind === "panel") {
+      if (lessonReturnTarget.panel === "calendar") {
+        if (lessonReturnTarget.calendarDate) {
+          setSelectedCalendarDate(lessonReturnTarget.calendarDate);
+        }
+        if (lessonReturnTarget.calendarMonth) {
+          setCalendarMonth(lessonReturnTarget.calendarMonth);
+        }
+        if (lessonReturnTarget.calendarMode) {
+          setCalendarMode(lessonReturnTarget.calendarMode);
+        }
+        setCalendarDetailDate(lessonReturnTarget.calendarDetailDate ?? null);
+      }
+      setLessonReturnTarget(null);
+      setSchedulePanel(lessonReturnTarget.panel);
+      return;
+    }
+    setLessonReturnTarget(null);
+    onReturnToView(lessonReturnTarget);
   }
 
   function makeupMarkerForLesson(lesson: Lesson): string | null {
@@ -1450,7 +1543,7 @@ export function ScheduleView({
           <Fragment key={item.key}>
           <button
             type="button"
-            onClick={() => setSchedulePanel(item.key)}
+            onClick={() => switchSchedulePanel(item.key)}
             className={`min-w-[112px] flex-1 rounded-[12px] px-3 py-2 text-sm font-extrabold transition-colors ${
               schedulePanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
             }`}
@@ -2969,6 +3062,17 @@ export function ScheduleView({
                   <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {lessonReturnTarget && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={goBackToLessonSource}
+                      className="border-[#dbe4ef] bg-white text-[#25324a] hover:border-[#cbd5e1] hover:bg-[#f8fbff] hover:text-[#0f172a]"
+                    >
+                      <CornerUpLeft size={15} /> {lessonReturnTarget.label}
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"

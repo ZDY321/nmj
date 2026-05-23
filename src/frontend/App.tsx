@@ -85,11 +85,27 @@ type UnlockedSession = {
   cloudVersion?: string;
 };
 
+type CalendarOverviewFocusState = {
+  selectedDate: string;
+  month: string;
+  overviewPage: "month" | "week";
+  weekCampusFilter: string;
+  weekGradeFilter: string;
+  weekSubjectFilter: string;
+  weekStudentFilter: string;
+};
+
 type ScheduleCalendarFocus = {
   date: string;
   lessonId?: string;
   targetPanel?: "calendar" | "records";
   nonce: number;
+  returnTarget?: {
+    kind: "view";
+    view: ViewKey;
+    label: string;
+    calendarFocus?: CalendarOverviewFocusState;
+  } | null;
 };
 
 const unlockedSessionKey = "teacher-salary-tracker:unlocked-session";
@@ -124,6 +140,7 @@ export function App() {
   const [syncCountdownSeconds, setSyncCountdownSeconds] = useState(syncCheckIntervalSeconds);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
+  const [calendarOverviewFocus, setCalendarOverviewFocus] = useState<(CalendarOverviewFocusState & { nonce: number }) | null>(null);
   const [aiScheduleSession, setAiScheduleSession] = useState<AiScheduleSession | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
   const cloudVersionRef = useRef("");
@@ -1521,6 +1538,18 @@ export function App() {
   }, [selectedDate]);
 
   useEffect(() => {
+    if (view === "schedule" && scheduleCalendarFocus) {
+      setScheduleCalendarFocus(null);
+    }
+  }, [scheduleCalendarFocus, view]);
+
+  useEffect(() => {
+    if (view === "calendar" && calendarOverviewFocus) {
+      setCalendarOverviewFocus(null);
+    }
+  }, [calendarOverviewFocus, view]);
+
+  useEffect(() => {
     if (!token || !cloudVersion) return;
     if (syncState === "outdated" || syncState === "conflict") return;
     const timer = window.setInterval(() => {
@@ -1695,13 +1724,41 @@ export function App() {
     setView("schedule");
   }
 
-  function openLessonInScheduleRecords(lesson: Lesson) {
+  function openLessonInScheduleRecords(lesson: Lesson, returnTarget?: ScheduleCalendarFocus["returnTarget"]) {
     setNoticeModalOpen(false);
     setFeedbackModalOpen(false);
     setMobileNavOpen(false);
     setOnboardingVisible(false);
-    setScheduleCalendarFocus({ date: lesson.date, lessonId: lesson.id, targetPanel: "records", nonce: Date.now() });
+    setScheduleCalendarFocus({ date: lesson.date, lessonId: lesson.id, targetPanel: "records", returnTarget: returnTarget ?? null, nonce: Date.now() });
     setView("schedule");
+  }
+
+  function openTodayLessonInScheduleRecords(lesson: Lesson) {
+    openLessonInScheduleRecords(lesson, { kind: "view", view: "today", label: "返回今日提醒" });
+  }
+
+  function openCalendarLessonInScheduleRecords(lesson: Lesson, calendarFocus: CalendarOverviewFocusState) {
+    openLessonInScheduleRecords(lesson, {
+      kind: "view",
+      view: "calendar",
+      label: "返回日历总览",
+      calendarFocus
+    });
+  }
+
+  function openProgressLessonInScheduleRecords(lesson: Lesson) {
+    openLessonInScheduleRecords(lesson, { kind: "view", view: "progress", label: "返回进度与作业" });
+  }
+
+  function returnToViewFromSchedule(target: NonNullable<ScheduleCalendarFocus["returnTarget"]>) {
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setMobileNavOpen(false);
+    setOnboardingVisible(false);
+    if (target.view === "calendar" && target.calendarFocus) {
+      setCalendarOverviewFocus({ ...target.calendarFocus, nonce: Date.now() });
+    }
+    setView(target.view);
   }
 
   return (
@@ -2132,11 +2189,17 @@ export function App() {
                 onAddTodo={addTodo}
                 onUpdateTodo={updateTodo}
                 onDeleteTodo={deleteTodo}
-                onOpenLessonInRecords={openLessonInScheduleRecords}
+                onOpenLessonInRecords={openTodayLessonInScheduleRecords}
               />
             )}
             {!onboardingVisible && view === "calendar" && (
-              <CalendarView vault={vault} amountsVisible={amountsVisible} onWeekStartChange={updateWeekStart} onOpenLessonInRecords={openLessonInScheduleRecords} />
+              <CalendarView
+                vault={vault}
+                amountsVisible={amountsVisible}
+                onWeekStartChange={updateWeekStart}
+                onOpenLessonInRecords={openCalendarLessonInScheduleRecords}
+                focusRequest={calendarOverviewFocus}
+              />
             )}
             {!onboardingVisible && view === "schedule" && (
               <ScheduleView
@@ -2157,6 +2220,7 @@ export function App() {
                 aiSession={aiScheduleSession}
                 onAiSessionChange={updateAiScheduleSession}
                 onApplyAiDraft={applyAiScheduleDraft}
+                onReturnToView={returnToViewFromSchedule}
               />
             )}
             {!onboardingVisible && view === "progress" && (
@@ -2170,7 +2234,7 @@ export function App() {
                 onDeleteChecklistTemplate={deleteProgressChecklistTemplate}
                 onSaveChecklistCompletion={saveProgressChecklistCompletion}
                 onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
-                onOpenLessonInRecords={openLessonInScheduleRecords}
+                onOpenLessonInRecords={openProgressLessonInScheduleRecords}
               />
             )}
             {!onboardingVisible && view === "students" && (
