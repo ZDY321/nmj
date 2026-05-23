@@ -1538,18 +1538,6 @@ export function App() {
   }, [selectedDate]);
 
   useEffect(() => {
-    if (view === "schedule" && scheduleCalendarFocus) {
-      setScheduleCalendarFocus(null);
-    }
-  }, [scheduleCalendarFocus, view]);
-
-  useEffect(() => {
-    if (view === "calendar" && calendarOverviewFocus) {
-      setCalendarOverviewFocus(null);
-    }
-  }, [calendarOverviewFocus, view]);
-
-  useEffect(() => {
     if (!token || !cloudVersion) return;
     if (syncState === "outdated" || syncState === "conflict") return;
     const timer = window.setInterval(() => {
