@@ -707,7 +707,7 @@ export function ProgressChecklistView({
                     <table className="min-w-full border-collapse text-left text-sm">
                       <thead>
                         <tr className="bg-[#f8fbff]">
-                          <th className="sticky left-0 top-0 z-30 min-w-[210px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a]">
+                          <th className="sticky top-0 z-30 min-w-[210px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a] md:left-0">
                             学生
                           </th>
                           {visibleItems.map((item) => (
@@ -721,7 +721,7 @@ export function ProgressChecklistView({
                       <tbody>
                         {selectedStudents.map((student) => (
                           <tr key={student.id} className="odd:bg-white even:bg-[#fbfdff]">
-                            <th className="sticky left-0 z-10 min-w-[210px] border-b border-r border-[#dbe4ef] bg-inherit p-3 align-top">
+                            <th className="min-w-[210px] border-b border-r border-[#dbe4ef] bg-inherit p-3 align-top md:sticky md:left-0 md:z-10">
                               <div className="font-extrabold text-[#061226]">{student.name}</div>
                               <div className="mt-1 text-xs font-semibold text-[#64748b]">
                                 {student.grade || "未设年级"}
