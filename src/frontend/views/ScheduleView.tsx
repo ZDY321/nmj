@@ -164,6 +164,7 @@ export function ScheduleView({
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const [calendarDetailDate, setCalendarDetailDate] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
+  const [lessonHistory, setLessonHistory] = useState<string[]>([]);
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
@@ -303,7 +304,13 @@ export function ScheduleView({
       setShowOnlyMakeup(false);
     }
     if (calendarFocus.lessonId) {
-      setSelectedId(calendarFocus.lessonId);
+      const focusedLesson = vault.lessons.find((lesson) => lesson.id === calendarFocus.lessonId);
+      if (focusedLesson) {
+        setLessonHistory([]);
+        openLessonInRecords(focusedLesson, false);
+      } else {
+        setSelectedId(calendarFocus.lessonId);
+      }
     }
   }, [calendarFocus?.nonce]);
 
@@ -1078,7 +1085,10 @@ export function ScheduleView({
     );
   }
 
-  function openLessonInRecords(lesson: Lesson) {
+  function openLessonInRecords(lesson: Lesson, pushHistory = true) {
+    if (pushHistory && lesson.id !== selectedId) {
+      setLessonHistory((history) => [...history, selectedId].filter(Boolean).slice(-12));
+    }
     setSelectedId(lesson.id);
     setSelectedCalendarDate(lesson.date);
     setCalendarMonth(lesson.date.slice(0, 7));
@@ -1087,6 +1097,18 @@ export function ScheduleView({
     setSyncRecordsWithCalendarDate(true);
     setCalendarDetailDate(null);
     setSchedulePanel("records");
+  }
+
+  function goBackToPreviousLesson() {
+    const previousId = lessonHistory.at(-1);
+    if (!previousId) return;
+    setLessonHistory((history) => history.slice(0, -1));
+    const previousLesson = vault.lessons.find((lesson) => lesson.id === previousId);
+    if (previousLesson) {
+      openLessonInRecords(previousLesson, false);
+      return;
+    }
+    setSelectedId(previousId);
   }
 
   function makeupMarkerForLesson(lesson: Lesson): string | null {
@@ -1213,7 +1235,7 @@ export function ScheduleView({
       )
     };
     onAddLessonAndUpdateLesson(nextMakeup, nextOriginal);
-    setSelectedId(nextMakeup.id);
+    openLessonInRecords(nextMakeup);
     setSelectedCalendarDate(scheduledDate);
     setCalendarMonth(scheduledDate.slice(0, 7));
   }
@@ -2565,11 +2587,7 @@ export function ScheduleView({
                             type="button"
                             size="sm"
                             variant="outline"
-                            onClick={() => {
-                              setSelectedId(lesson.id);
-                              setSelectedCalendarDate(lesson.date);
-                              setCalendarMonth(lesson.date.slice(0, 7));
-                            }}
+                            onClick={() => openLessonInRecords(lesson)}
                           >
                             查看补课详情
                           </Button>
@@ -2909,7 +2927,7 @@ export function ScheduleView({
                   transition={{ delay: index * 0.02 }}
                   whileHover={{ scale: 1.01, x: 2 }}
                   whileTap={{ scale: 0.99 }}
-                  onClick={() => setSelectedId(lesson.id)}
+                  onClick={() => openLessonInRecords(lesson)}
                   className={`flex w-full items-center justify-between rounded-[14px] border p-3 text-left transition-all duration-200 ${
                     selected?.id === lesson.id
                       ? "border-[#93c5fd] bg-[#eaf2ff] shadow-[0_10px_24px_rgba(21,87,194,0.12)]"
@@ -2945,14 +2963,26 @@ export function ScheduleView({
         {selected && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
             <Card className="overflow-hidden">
-              <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-[#e8eef6] bg-white">
+              <CardHeader className="flex flex-col gap-3 border-b border-[#e8eef6] bg-white sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle>课程详情</CardTitle>
                   <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
-                <Button variant="destructive" size="sm" onClick={() => askDeleteLesson(selected)}>
-                  <Trash2 size={15} /> 删除
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={goBackToPreviousLesson}
+                    disabled={lessonHistory.length === 0}
+                    className="border-[#bfdbfe] bg-white text-[#1557c2] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#0f4aa0]"
+                  >
+                    <ChevronLeft size={15} /> 返回上一条
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => askDeleteLesson(selected)}>
+                    <Trash2 size={15} /> 删除
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-5">
                 {selectedOriginalLesson && (

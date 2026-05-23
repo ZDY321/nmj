@@ -541,7 +541,7 @@ export function ProgressView({
                   <tbody>
                     {visibleRows.map((row) => (
                       <tr key={row.key} className={selectedRow?.key === row.key ? "bg-[#fff7ed]" : "odd:bg-white even:bg-[#fbfdff]"}>
-                        <th className="z-10 w-[170px] min-w-[170px] border-b border-r border-[#dbe4ef] bg-inherit p-3 align-top md:sticky md:left-0 md:w-[230px] md:min-w-[230px]">
+                        <th className="w-[170px] min-w-[170px] border-b border-r border-[#dbe4ef] bg-inherit p-3 align-top md:sticky md:left-0 md:z-10 md:w-[230px] md:min-w-[230px]">
                           <button
                             type="button"
                             onClick={() => {

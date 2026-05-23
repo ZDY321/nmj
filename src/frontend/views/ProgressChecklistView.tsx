@@ -174,6 +174,27 @@ export function ProgressChecklistView({
     () => parseTemplateItemsText(templateItemsText),
     [templateItemsText]
   );
+  const normalizedDraftItemsText = useMemo(
+    () => templateItemsToText(draftTemplateItems),
+    [draftTemplateItems]
+  );
+  const normalizedStoredItemsText = useMemo(
+    () => selectedTemplate ? templateItemsToText(selectedTemplate.items) : "",
+    [selectedTemplate?.id, selectedTemplate?.updatedAt]
+  );
+  const currentTemplateName = templateName.trim();
+  const currentTemplateSubject = templateSubject.trim() || (selectedCourse?.subject ?? "");
+  const currentTemplateNote = templateNote.trim();
+  const storedTemplateName = selectedTemplate?.name.trim() ?? "";
+  const storedTemplateSubject = selectedTemplate?.subject ?? (selectedCourse?.subject ?? "");
+  const storedTemplateNote = selectedTemplate?.note?.trim() ?? "";
+  const templateIsDirty = selectedTemplateId === NEW_TEMPLATE_ID
+    ? Boolean(currentTemplateName || currentTemplateSubject || currentTemplateNote || normalizedDraftItemsText)
+    : currentTemplateName !== storedTemplateName
+      || currentTemplateSubject !== storedTemplateSubject
+      || currentTemplateNote !== storedTemplateNote
+      || normalizedDraftItemsText !== normalizedStoredItemsText;
+  const canSaveTemplate = Boolean(currentTemplateName && draftTemplateItems.length > 0 && templateIsDirty);
   const allItems = useMemo(
     () => (selectedTemplateId === NEW_TEMPLATE_ID ? draftTemplateItems : (selectedTemplate?.items ?? [])).slice().sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)),
     [selectedTemplateId, selectedTemplate?.id, selectedTemplate?.updatedAt, draftTemplateItems]
@@ -247,17 +268,17 @@ export function ProgressChecklistView({
   }
 
   function saveTemplate() {
-    const name = templateName.trim();
+    const name = currentTemplateName;
     const parsedItems = draftTemplateItems;
-    if (!name || parsedItems.length === 0) return;
+    if (!canSaveTemplate || !name || parsedItems.length === 0) return;
 
     const existingItems = selectedTemplateId === NEW_TEMPLATE_ID ? [] : selectedTemplate?.items ?? [];
     const now = new Date().toISOString();
     const nextTemplate: ProgressChecklistTemplate = {
       id: selectedTemplateId === NEW_TEMPLATE_ID ? makeId("progress_template") : selectedTemplate?.id ?? makeId("progress_template"),
       name,
-      subject: templateSubject.trim() || selectedCourse?.subject || undefined,
-      note: templateNote.trim() || undefined,
+      subject: currentTemplateSubject || undefined,
+      note: currentTemplateNote || undefined,
       items: parsedItems.map((item, index) => {
         return {
           id: existingItems[index]?.id ?? makeId("progress_item"),
@@ -560,7 +581,12 @@ export function ProgressChecklistView({
                 <Button type="button" variant="outline" onClick={startNewTemplate}>
                   <Plus size={15} /> 新建
                 </Button>
-                <Button type="button" onClick={saveTemplate} disabled={!templateName.trim() || !templateItemsText.trim()}>
+                <Button
+                  type="button"
+                  onClick={saveTemplate}
+                  disabled={!canSaveTemplate}
+                  className="disabled:border-[#e5e7eb] disabled:bg-[#f3f4f6] disabled:text-[#9ca3af] disabled:shadow-none"
+                >
                   <Save size={15} /> 保存
                 </Button>
                 <Button type="button" variant="destructive" onClick={askDeleteTemplate} disabled={!selectedTemplate}>

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Clock, GraduationCap, NotebookPen, Plus, Trash2, UserCheck } from "lucide-react";
+import { BookOpen, ChevronLeft, Clock, GraduationCap, NotebookPen, Plus, Trash2, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -175,6 +175,7 @@ export function LessonsView({
   onDeleteLesson: (lessonId: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState(vault.lessons[0]?.id ?? "");
+  const [lessonHistory, setLessonHistory] = useState<string[]>([]);
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | CourseType>("all");
@@ -200,6 +201,21 @@ export function LessonsView({
   const selectedPreviousLesson = selected ? previousLesson(vault, selected) : undefined;
   const selectedPreviousTaught = selectedPreviousLesson?.content.taught.trim() ?? "";
   const selectedPreviousHomework = selectedPreviousLesson?.content.homework.trim() ?? "";
+
+  function openLesson(lesson: Lesson, pushHistory = true) {
+    if (lesson.id === selectedId) return;
+    if (pushHistory) {
+      setLessonHistory((history) => [...history, selectedId].filter(Boolean).slice(-12));
+    }
+    setSelectedId(lesson.id);
+  }
+
+  function goBackToPreviousLesson() {
+    const previousId = lessonHistory.at(-1);
+    if (!previousId) return;
+    setLessonHistory((history) => history.slice(0, -1));
+    setSelectedId(previousId);
+  }
 
   function updateSelected(patch: Partial<Lesson>) {
     if (!selected) return;
@@ -299,7 +315,7 @@ export function LessonsView({
                   transition={{ delay: index * 0.02 }}
                   whileHover={{ scale: 1.01, x: 2 }}
                   whileTap={{ scale: 0.99 }}
-                  onClick={() => setSelectedId(lesson.id)}
+                  onClick={() => openLesson(lesson)}
                   className={`w-full flex items-center justify-between p-3 rounded-[14px] text-left transition-all duration-200 ${
                     selected?.id === lesson.id
                       ? "bg-[#fff7ed] border border-[#ff8617]/35 shadow-[0_10px_24px_rgba(255,134,23,0.12)]"
@@ -333,14 +349,26 @@ export function LessonsView({
         {selected && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
             <Card className="overflow-hidden">
-              <CardHeader className="flex flex-row items-start justify-between">
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle>课程详情</CardTitle>
                   <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
-                <Button variant="destructive" size="sm" onClick={() => askDeleteLesson(selected)}>
-                  <Trash2 size={15} /> 删除
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={goBackToPreviousLesson}
+                    disabled={lessonHistory.length === 0}
+                    className="border-[#bfdbfe] bg-white text-[#1557c2] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#0f4aa0]"
+                  >
+                    <ChevronLeft size={15} /> 返回上一条
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => askDeleteLesson(selected)}>
+                    <Trash2 size={15} /> 删除
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid grid-cols-2 gap-4">
@@ -378,7 +406,7 @@ export function LessonsView({
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() => selectedPreviousLesson && setSelectedId(selectedPreviousLesson.id)}
+                    onClick={() => selectedPreviousLesson && openLesson(selectedPreviousLesson)}
                     disabled={!selectedPreviousLesson}
                     className="rounded-[14px] border border-[#dbeafe] bg-[#f8fbff] p-4 text-left transition-colors hover:border-[#1557c2] hover:bg-[#f1f7ff] disabled:cursor-default disabled:hover:border-[#dbeafe] disabled:hover:bg-[#f8fbff]"
                   >
@@ -396,7 +424,7 @@ export function LessonsView({
                   </button>
                   <button
                     type="button"
-                    onClick={() => selectedPreviousLesson && setSelectedId(selectedPreviousLesson.id)}
+                    onClick={() => selectedPreviousLesson && openLesson(selectedPreviousLesson)}
                     disabled={!selectedPreviousLesson}
                     className="rounded-[14px] border border-[#fed7aa] bg-[#fffaf5] p-4 text-left transition-colors hover:border-[#ff8617] hover:bg-[#fff8ef] disabled:cursor-default disabled:hover:border-[#fed7aa] disabled:hover:bg-[#fffaf5]"
                   >
