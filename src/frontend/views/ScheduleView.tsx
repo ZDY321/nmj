@@ -618,8 +618,11 @@ export function ScheduleView({
         id: student.id,
         name: student.name,
         grade: student.grade ?? "",
+        school: student.school ?? "",
         campus: campusName(vault, student.defaultCampusId),
-        note: student.note ?? ""
+        note: student.note ?? "",
+        status: student.status,
+        temporaryTrial: student.temporaryTrial ?? false
       }));
     const activeCourses = vault.courseGroups
       .filter((course) => course.status === "active")
@@ -816,6 +819,7 @@ export function ScheduleView({
       courseSubject(vault, lesson.courseGroupId),
       campusName(vault, campusId),
       studentNames(vault, studentIds),
+      lesson.note ?? "",
       ...studentIds.map((studentId) => {
         const student = findStudent(vault, studentId);
         return [student?.name ?? "", student?.grade ?? "", student?.note ?? ""].join(" ");
@@ -1504,7 +1508,7 @@ export function ScheduleView({
                       <Select value={aiTaskType} onChange={(event) => patchAiSession({ taskType: event.target.value as AiScheduleTaskType, draft: null, message: "" })} disabled={aiLoading}>
                         <option value="auto">智能识别</option>
                         <option value="data_query">数据问答</option>
-                        <option value="student_course">新增学生和课程</option>
+                        <option value="student_course">新增或修改学生和课程</option>
                         <option value="schedule_lessons">新增排课</option>
                         <option value="sync_lessons">同步课程</option>
                       </Select>
@@ -1527,6 +1531,7 @@ export function ScheduleView({
                         "涉及课时费时，AI 只能根据系统已有金额回答；缺少单价时会提示无法计算总额。",
                         "可以按日常说法输入，例如“本周日上午9点、下午2点”；如果跨周或容易混淆，再补充完整日期或24小时制时间。",
                         "创建班课或多人课时，请写清最少人数、基础费用、每增加1人费用；最少人数不是当前关联学生人数。",
+                        "修改学生档案时，请写清原姓名或学生ID，以及新姓名、年级、校区、学校或备注。",
                         "涉及修改或删除时，请写清原课程日期、时间、科目和学生，避免 AI 匹配到相近课程。",
                         "AI 只生成建议，点击确认写入前请核对摘要、操作建议和风险提醒。"
                       ].map((text) => (
@@ -1581,6 +1586,7 @@ export function ScheduleView({
                         "回答本周、本月、某时间段课节数量和日期分布",
                         "按当前课节金额汇总已知课时费，缺少单价时明确提示无法计算",
                         "录入新学生和课程 / 班课信息",
+                        "修改学生档案（姓名、年级、校区、学校、备注）",
                         "新增自定义班型并设置默认计费",
                         "修改课程班型、校区、关联学生，或迁移到新课程",
                         "按指定日期或星期批量新增排课",
@@ -3044,7 +3050,12 @@ export function ScheduleView({
                 )}
 
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                  <div className="rounded-[14px] border border-[#dbeafe] bg-[#f8fbff] p-4">
+                  <button
+                    type="button"
+                    onClick={() => selectedPreviousLesson && openLessonInRecords(selectedPreviousLesson)}
+                    disabled={!selectedPreviousLesson}
+                    className="rounded-[14px] border border-[#dbeafe] bg-[#f8fbff] p-4 text-left transition-colors hover:border-[#1557c2] hover:bg-[#f1f7ff] disabled:cursor-default disabled:hover:border-[#dbeafe] disabled:hover:bg-[#f8fbff]"
+                  >
                     <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
                       <BookOpen size={16} className="text-[#1557c2]" /> 上节课内容
                     </div>
@@ -3053,11 +3064,16 @@ export function ScheduleView({
                     </p>
                     {selectedPreviousLesson && (
                       <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime}
+                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
                       </div>
                     )}
-                  </div>
-                  <div className="rounded-[14px] border border-[#fed7aa] bg-[#fffaf5] p-4">
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectedPreviousLesson && openLessonInRecords(selectedPreviousLesson)}
+                    disabled={!selectedPreviousLesson}
+                    className="rounded-[14px] border border-[#fed7aa] bg-[#fffaf5] p-4 text-left transition-colors hover:border-[#ff8617] hover:bg-[#fff8ef] disabled:cursor-default disabled:hover:border-[#fed7aa] disabled:hover:bg-[#fffaf5]"
+                  >
                     <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
                       <NotebookPen size={16} className="text-[#ff8617]" /> 上节课作业
                     </div>
@@ -3066,10 +3082,10 @@ export function ScheduleView({
                     </p>
                     {selectedPreviousLesson && (
                       <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime}
+                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
                       </div>
                     )}
-                  </div>
+                  </button>
                 </div>
 
                 <div className="space-y-3">
@@ -3499,6 +3515,9 @@ function formatAiValue(value: unknown): string {
 function aiActionLabel(type: string): string {
   const labels: Record<string, string> = {
     create_student: "新增学生",
+    update_student: "修改学生档案",
+    modify_student: "修改学生档案",
+    rename_student: "修改学生姓名",
     create_course: "添加课程档案",
     create_course_type: "新增班型",
     create_custom_course_type: "新增班型",
@@ -3520,7 +3539,14 @@ function aiActionLabel(type: string): string {
 
 function aiFieldLabel(key: string): string {
   const labels: Record<string, string> = {
+    studentId: "学生ID",
     studentName: "学生姓名",
+    currentName: "当前姓名",
+    oldName: "原姓名",
+    sourceStudentName: "原学生姓名",
+    sourceName: "原姓名",
+    newStudentName: "新学生姓名",
+    targetName: "新姓名",
     studentNames: "学生",
     name: "名称",
     newName: "新名称",
@@ -3535,8 +3561,11 @@ function aiFieldLabel(key: string): string {
     targetType: "目标班型",
     subject: "科目",
     campus: "校区",
+    defaultCampusId: "默认校区",
     grade: "年级",
+    school: "学校",
     status: "状态",
+    temporaryTrial: "试听标记",
     mode: "处理方式",
     deleteMode: "删除方式",
     forceDelete: "强制删除",
@@ -3600,6 +3629,7 @@ function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {
     campusName(vault, lesson.campusId ?? course?.defaultCampusId),
     lessonStatusLabels[lesson.status],
     studentNames(vault, lesson.expectedStudentIds),
+    lesson.note ?? "",
     ...studentFields
   ].join(" ").toLowerCase();
 }

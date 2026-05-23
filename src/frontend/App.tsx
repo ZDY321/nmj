@@ -607,13 +607,13 @@ export function App() {
     const campusByName = (name: unknown): Campus | undefined => {
       const normalized = stringValue(name).toLowerCase();
       if (!normalized) return undefined;
-      return nextVault.campuses.find((campus) => campus.name.trim().toLowerCase() === normalized);
+      return nextVault.campuses.find((campus) => campus.id.toLowerCase() === normalized || campus.name.trim().toLowerCase() === normalized);
     };
 
     const studentByName = (name: unknown): Student | undefined => {
       const normalized = stringValue(name).toLowerCase();
       if (!normalized) return undefined;
-      return nextVault.students.find((student) => student.name.trim().toLowerCase() === normalized);
+      return nextVault.students.find((student) => student.id.toLowerCase() === normalized || student.name.trim().toLowerCase() === normalized);
     };
 
     const courseByIdOrName = (value: unknown): CourseGroup | undefined => {
@@ -909,6 +909,78 @@ export function App() {
       return nextCourse;
     };
 
+    const updateStudentFromAi = (data: Record<string, unknown>): Student | null => {
+      const requestedId = stringValue(data.studentId ?? data.id);
+      const currentName = stringValue(data.studentName ?? data.currentName ?? data.oldName ?? data.fromName ?? data.sourceStudentName ?? data.sourceName);
+      const hasOtherFields =
+        data.grade !== undefined ||
+        data.school !== undefined ||
+        data.campus !== undefined ||
+        data.defaultCampusId !== undefined ||
+        data.note !== undefined ||
+        data.status !== undefined ||
+        data.temporaryTrial !== undefined ||
+        data.newName !== undefined ||
+        data.newStudentName !== undefined ||
+        data.targetName !== undefined;
+      const lookupName = currentName || (!requestedId && hasOtherFields ? stringValue(data.name) : "");
+      const student = requestedId
+        ? nextVault.students.find((item) => item.id === requestedId)
+        : lookupName
+          ? studentByName(lookupName)
+          : undefined;
+      if (!student) return null;
+
+      const previousName = student.name;
+      const updates: string[] = [];
+      let renamed = false;
+      const nextName = stringValue(data.newName ?? data.newStudentName ?? data.targetName ?? ((requestedId || currentName) ? data.name : ""));
+      if (nextName.trim() && nextName.trim() !== student.name.trim()) {
+        student.name = nextName.trim();
+        renamed = true;
+        updates.push(`姓名改为「${student.name}」`);
+      }
+      if (data.grade !== undefined) {
+        const grade = stringValue(data.grade);
+        student.grade = grade || undefined;
+        updates.push(student.grade ? `年级改为「${student.grade}」` : "年级已清空");
+      }
+      if (data.school !== undefined) {
+        const school = stringValue(data.school);
+        student.school = school || undefined;
+        updates.push(student.school ? `学校改为「${student.school}」` : "学校已清空");
+      }
+      if (data.campus !== undefined || data.defaultCampusId !== undefined) {
+        const campus = campusByName(data.campus ?? data.defaultCampusId);
+        student.defaultCampusId = campus?.id;
+        updates.push(student.defaultCampusId ? `默认校区改为「${campus?.name ?? student.defaultCampusId}」` : "默认校区已清空");
+      }
+      if (data.note !== undefined) {
+        const note = stringValue(data.note);
+        student.note = note || undefined;
+        updates.push(student.note ? "备注已更新" : "备注已清空");
+      }
+      if (data.status !== undefined) {
+        const status = stringValue(data.status).toLowerCase();
+        if (status === "active" || status === "paused") {
+          student.status = status;
+          updates.push(status === "active" ? "状态改为在读" : "状态改为归档");
+        }
+      }
+      if (data.temporaryTrial !== undefined) {
+        student.temporaryTrial = Boolean(data.temporaryTrial);
+        updates.push(student.temporaryTrial ? "已标记试听" : "已取消试听标记");
+      }
+      if (updates.length === 0) return null;
+
+      if (renamed && updates.length === 1) {
+        messages.push(`已将学生「${previousName}」改名为「${student.name}」`);
+      } else {
+        messages.push(`已更新学生「${renamed ? previousName : student.name}」：${updates.join("；")}`);
+      }
+      return student;
+    };
+
     const deleteOrPauseCourseFromAi = (data: Record<string, unknown>) => {
       const course = courseByIdOrName(data.courseId ?? data.id ?? data.name ?? data.courseName);
       if (!course) return;
@@ -1086,6 +1158,10 @@ export function App() {
       const data = isPlainRecordLocal(action.data) ? action.data : action;
       if (type === "create_student") {
         ensureStudent(data);
+        return;
+      }
+      if (type === "update_student" || type === "modify_student" || type === "rename_student") {
+        updateStudentFromAi(data);
         return;
       }
       if (type === "create_course_type" || type === "create_custom_course_type") {

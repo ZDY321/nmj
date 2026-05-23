@@ -106,6 +106,7 @@ export function CalendarView({
       courseSubject(vault, lesson.courseGroupId),
       campusName(vault, campusId),
       studentNames(vault, studentIds),
+      lesson.note ?? "",
       ...studentIds.map((studentId) => {
         const student = findStudent(vault, studentId);
         return [student?.name ?? "", student?.grade ?? "", student?.note ?? ""].join(" ");
@@ -449,6 +450,11 @@ export function CalendarView({
                                         <span className="mt-0.5 block truncate text-[11px] font-semibold opacity-80">
                                           {courseSubject(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
                                         </span>
+                                        {lesson.note && (
+                                          <span className="mt-1 block truncate text-[11px] font-semibold text-[#7f1d1d]">
+                                            备注：{lesson.note}
+                                          </span>
+                                        )}
                                       </button>
                                     ))}
                                   </span>
@@ -533,6 +539,11 @@ export function CalendarView({
                     <span className="text-xs text-(--color-muted-foreground)">
                       {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
                     </span>
+                    {lesson.note && (
+                      <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#7f1d1d]">
+                        {lesson.note}
+                      </div>
+                    )}
                   </div>
                   <span className="shrink-0 text-sm font-bold text-[#1557c2] sm:ml-3">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</span>
                 </motion.button>

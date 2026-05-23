@@ -196,7 +196,7 @@ export function LessonsView({
     })
     .sort(sortLessons)
     .reverse();
-  const selected = lessons.find((l) => l.id === selectedId) ?? lessons[0];
+  const selected = lessons.find((l) => l.id === selectedId) ?? vault.lessons.find((l) => l.id === selectedId) ?? lessons[0];
   const selectedPreviousLesson = selected ? previousLesson(vault, selected) : undefined;
   const selectedPreviousTaught = selectedPreviousLesson?.content.taught.trim() ?? "";
   const selectedPreviousHomework = selectedPreviousLesson?.content.homework.trim() ?? "";
@@ -376,7 +376,12 @@ export function LessonsView({
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                  <div className="rounded-[14px] border border-[#dbeafe] bg-[#f8fbff] p-4">
+                  <button
+                    type="button"
+                    onClick={() => selectedPreviousLesson && setSelectedId(selectedPreviousLesson.id)}
+                    disabled={!selectedPreviousLesson}
+                    className="rounded-[14px] border border-[#dbeafe] bg-[#f8fbff] p-4 text-left transition-colors hover:border-[#1557c2] hover:bg-[#f1f7ff] disabled:cursor-default disabled:hover:border-[#dbeafe] disabled:hover:bg-[#f8fbff]"
+                  >
                     <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
                       <BookOpen size={16} className="text-[#1557c2]" /> 上节课内容
                     </div>
@@ -385,11 +390,16 @@ export function LessonsView({
                     </p>
                     {selectedPreviousLesson && (
                       <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime}
+                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
                       </div>
                     )}
-                  </div>
-                  <div className="rounded-[14px] border border-[#fed7aa] bg-[#fffaf5] p-4">
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectedPreviousLesson && setSelectedId(selectedPreviousLesson.id)}
+                    disabled={!selectedPreviousLesson}
+                    className="rounded-[14px] border border-[#fed7aa] bg-[#fffaf5] p-4 text-left transition-colors hover:border-[#ff8617] hover:bg-[#fff8ef] disabled:cursor-default disabled:hover:border-[#fed7aa] disabled:hover:bg-[#fffaf5]"
+                  >
                     <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
                       <NotebookPen size={16} className="text-[#ff8617]" /> 上节课作业
                     </div>
@@ -398,10 +408,10 @@ export function LessonsView({
                     </p>
                     {selectedPreviousLesson && (
                       <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime}
+                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
                       </div>
                     )}
-                  </div>
+                  </button>
                 </div>
 
                 <div className="space-y-3">
