@@ -24,7 +24,7 @@ import type {
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, monthOf, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, monthOf, namedTrialStudentCount, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 
 export type ViewKey = "today" | "calendar" | "schedule" | "progress" | "students" | "grades" | "payroll" | "salary" | "admin";
@@ -377,7 +377,11 @@ export function createLessonFromCourse(
     type: course.type,
     status: values.status ?? "scheduled",
     expectedStudentIds: [...course.studentIds],
-    attendance: course.studentIds.map((studentId) => ({ studentId, status: "attended" })),
+    attendance: course.studentIds.map((studentId) => ({
+      studentId,
+      status: "attended",
+      trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
+    })),
     feeSnapshot: { amount: 0 },
     linkedOriginalLessonId: null,
     sourceScheduleRuleId: values.sourceScheduleRuleId,
@@ -401,7 +405,7 @@ export function createLessonFromCourse(
     perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
     classFeeTierId: classFeeTier?.id,
     presentStudentCount,
-    trialStudentCount: lesson.trialStudentCount ?? 0,
+    trialStudentCount: namedTrialStudentCount(lesson) + (lesson.trialStudentCount ?? 0),
     trialFee: lesson.trialFee ?? 0,
     hours: billableHoursForLesson(lesson, course.feeRule),
     manualAdjustment: extraFeeTotal(lesson),

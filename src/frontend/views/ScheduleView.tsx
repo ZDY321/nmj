@@ -39,7 +39,7 @@ import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-inpu
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -225,6 +225,7 @@ export function ScheduleView({
   const [temporaryStudentId, setTemporaryStudentId] = useState("");
   const [temporaryStudentSearch, setTemporaryStudentSearch] = useState("");
   const [attendanceStudentFilter, setAttendanceStudentFilter] = useState("");
+  const [attendancePanelOpen, setAttendancePanelOpen] = useState(false);
   const [makeupOriginalDateFilter, setMakeupOriginalDateFilter] = useState("");
   const [makeupDate, setMakeupDate] = useState(todayIso());
   const [makeupStartTime, setMakeupStartTime] = useState("19:00");
@@ -350,6 +351,7 @@ export function ScheduleView({
 
   useEffect(() => {
     setDetailMakeupStudentIds([]);
+    setAttendancePanelOpen(false);
   }, [selectedId]);
 
   const weekStartPreference = weekStartsOn(vault);
@@ -488,6 +490,12 @@ export function ScheduleView({
     selectedTemporaryStudent && !temporaryStudentOptions.some((student) => student.id === selectedTemporaryStudent.id)
       ? [selectedTemporaryStudent, ...temporaryStudentOptions]
       : temporaryStudentOptions;
+  const selectedNamedTrialStudentCount = selected
+    ? selected.attendance.filter((entry) => {
+        const student = findStudent(vault, entry.studentId);
+        return Boolean(entry.trial || (entry.temporary && student?.temporaryTrial));
+      }).length
+    : 0;
   const selectedAttendanceEntries = selected
     ? selected.attendance.filter((entry) => {
         const student = findStudent(vault, entry.studentId);
@@ -497,7 +505,8 @@ export function ScheduleView({
           campusName(vault, student?.defaultCampusId),
           student?.note ?? "",
           attendanceLabels[entry.status],
-          entry.temporary ? "临时加入" : ""
+          entry.temporary ? "临时加入" : "",
+          entry.trial || (entry.temporary && student?.temporaryTrial) ? "试听 试听学生" : ""
         ].join(" ").toLowerCase();
         return !normalizedAttendanceStudentFilter || searchable.includes(normalizedAttendanceStudentFilter);
       }).sort((a, b) => {
@@ -1020,26 +1029,33 @@ export function ScheduleView({
   function recalculateLessonFee(lesson: Lesson): Lesson {
     const course = getCourse(vault, lesson.courseGroupId);
     if (!course) return lesson;
-    const presentStudentCount = presentCount(lesson);
+    const normalizedLesson: Lesson = {
+      ...lesson,
+      attendance: lesson.attendance.map((entry) => ({
+        ...entry,
+        trial: entry.trial ?? Boolean(entry.temporary && vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
+      }))
+    };
+    const presentStudentCount = presentCount(normalizedLesson);
     const classFeeTier = course.feeRule.mode === "class_headcount"
       ? classFeeTierForCount(course.feeRule, presentStudentCount)
       : undefined;
     return {
-      ...lesson,
+      ...normalizedLesson,
       type: course.type,
       feeSnapshot: {
-        ...lesson.feeSnapshot,
+        ...normalizedLesson.feeSnapshot,
         baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
         hourlyRate: course.feeRule.hourlyRate,
         fixedFee: course.feeRule.fixedFee,
         perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
         classFeeTierId: classFeeTier?.id,
         presentStudentCount,
-        trialStudentCount: lesson.trialStudentCount ?? 0,
-        trialFee: lesson.trialFee ?? 0,
-        hours: billableHoursForLesson(lesson, course.feeRule),
-        manualAdjustment: extraFeeTotal(lesson),
-        amount: calculateFee(course.feeRule, lesson)
+        trialStudentCount: namedTrialStudentCount(normalizedLesson) + (normalizedLesson.trialStudentCount ?? 0),
+        trialFee: normalizedLesson.trialFee ?? 0,
+        hours: billableHoursForLesson(normalizedLesson, course.feeRule),
+        manualAdjustment: extraFeeTotal(normalizedLesson),
+        amount: calculateFee(course.feeRule, normalizedLesson)
       }
     };
   }
@@ -1075,7 +1091,11 @@ export function ScheduleView({
       campusId: course.defaultCampusId,
       type: course.type,
       expectedStudentIds: [...course.studentIds],
-      attendance: course.studentIds.map((studentId) => ({ studentId, status: "attended" })),
+      attendance: course.studentIds.map((studentId) => ({
+        studentId,
+        status: "attended",
+        trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
+      })),
       trialStudentCount: course.type === "class" ? selected.trialStudentCount ?? 0 : 0,
       trialFee: course.type === "class" ? selected.trialFee ?? 0 : 0,
       feeSnapshot: { ...selected.feeSnapshot, amount: 0 }
@@ -1246,10 +1266,22 @@ export function ScheduleView({
 
   function addTemporaryStudent() {
     if (!selected || !temporaryStudentId || selected.expectedStudentIds.includes(temporaryStudentId)) return;
+    const student = findStudent(vault, temporaryStudentId);
+    const isTrialStudent = Boolean(student?.temporaryTrial);
     const next: Lesson = {
       ...selected,
       expectedStudentIds: [...selected.expectedStudentIds, temporaryStudentId],
-      attendance: [...selected.attendance, { studentId: temporaryStudentId, status: "attended", temporary: true, temporaryFee: 0, note: "临时添加" }]
+      attendance: [
+        ...selected.attendance,
+        {
+          studentId: temporaryStudentId,
+          status: "attended",
+          temporary: true,
+          trial: isTrialStudent,
+          temporaryFee: 0,
+          note: isTrialStudent ? "试听加入" : "临时添加"
+        }
+      ]
     };
     onUpdateLesson(recalculateLessonFee(next));
     setTemporaryStudentId("");
@@ -1269,8 +1301,8 @@ export function ScheduleView({
   function askRemoveTemporaryStudent(studentId: string) {
     const student = findStudent(vault, studentId);
     confirm({
-      title: `移除临时学生「${student?.name ?? "未知学生"}」？`,
-      description: "移除后这名学生的到课状态和临时费用会从本节课删除。",
+      title: `移除学生「${student?.name ?? "未知学生"}」？`,
+      description: "移除后这名临时/试听学生的到课状态和附加费用会从本节课删除。",
       confirmLabel: "移除",
       tone: "danger",
       onConfirm: () => removeTemporaryStudent(studentId)
@@ -3233,9 +3265,14 @@ export function ScheduleView({
                   {selected.type === "class" && (
                     <div className="rounded-[14px] border border-[#c7d2fe] bg-[#eef0ff] p-3">
                       <div className="mb-3 text-sm font-extrabold text-[#25324a]">班课试听统计</div>
+                      {selectedNamedTrialStudentCount > 0 && (
+                        <div className="mb-3 rounded-[12px] bg-white/75 px-3 py-2 text-xs font-semibold text-[#5161d6]">
+                          已关联试听学生档案 {selectedNamedTrialStudentCount} 人。下方“试听人数”用于补录没有选择学生档案的试听人数。
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold text-[#64748b]">试听人数</label>
+                          <label className="text-xs font-bold text-[#64748b]">补录试听人数</label>
                           <Input
                             type="number"
                             min={0}
@@ -3355,11 +3392,11 @@ export function ScheduleView({
                         className="h-10 pl-9"
                         value={temporaryStudentSearch}
                         onChange={(event) => setTemporaryStudentSearch(event.target.value)}
-                        placeholder="搜索临时加入学生"
+                        placeholder="搜索临时或试听学生"
                       />
                     </label>
                     <Select value={temporaryStudentId} onChange={(event) => setTemporaryStudentId(event.target.value)}>
-                      <option value="">选择临时加入学生</option>
+                      <option value="">选择学生档案</option>
                       {displayedTemporaryStudentOptions.map((student) => (
                         <option key={student.id} value={student.id}>
                           {student.name}{student.grade ? ` · ${student.grade}` : ""}{student.temporaryTrial ? "（试听档案）" : ""}
@@ -3367,27 +3404,37 @@ export function ScheduleView({
                       ))}
                     </Select>
                     <Button type="button" variant="outline" onClick={addTemporaryStudent} disabled={!temporaryStudentId || selected.expectedStudentIds.includes(temporaryStudentId)}>
-                      <UserPlus size={15} /> 添加临时学生
+                      <UserPlus size={15} /> 添加学生
                     </Button>
                   </div>
                   <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setAttendancePanelOpen((open) => !open)}
+                      className="flex w-full items-center justify-between gap-3 text-left"
+                    >
                       <div className="text-sm font-extrabold text-[#061226]">关联学生</div>
-                      <Badge variant="secondary">{selectedAttendanceEntries.length} / {selected.attendance.length} 人</Badge>
-                    </div>
-                    <label className="relative mt-3 block">
-                      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                      <Input
-                        className="h-10 bg-white pl-9"
-                        value={attendanceStudentFilter}
-                        onChange={(event) => setAttendanceStudentFilter(event.target.value)}
-                        placeholder="搜索姓名、年级、校区或到课状态"
-                      />
-                    </label>
-                    <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{selectedAttendanceEntries.length} / {selected.attendance.length} 人</Badge>
+                        {attendancePanelOpen ? <ChevronUp size={16} className="text-[#64748b]" /> : <ChevronDown size={16} className="text-[#64748b]" />}
+                      </div>
+                    </button>
+                    {attendancePanelOpen && (
+                      <>
+                        <label className="relative mt-3 block">
+                          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                          <Input
+                            className="h-10 bg-white pl-9"
+                            value={attendanceStudentFilter}
+                            onChange={(event) => setAttendanceStudentFilter(event.target.value)}
+                            placeholder="搜索姓名、年级、校区、试听或到课状态"
+                          />
+                        </label>
+                        <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
                       {selectedAttendanceEntries.map((entry) => {
                         const student = findStudent(vault, entry.studentId);
-                        const isTemporary = entry.temporary || student?.temporaryTrial || !selectedCourse?.studentIds.includes(entry.studentId);
+                        const isTrialStudent = Boolean(entry.trial || (entry.temporary && student?.temporaryTrial));
+                        const isTemporary = Boolean(entry.temporary || !selectedCourse?.studentIds.includes(entry.studentId));
                         const scheduledMakeupLesson = selected && !selected.linkedOriginalLessonId
                           ? scheduledMakeupLessonForStudent(selected.id, entry.studentId)
                           : undefined;
@@ -3404,7 +3451,11 @@ export function ScheduleView({
                                   <span className="text-xs font-bold text-[#ff8617]">{(student?.name ?? "未知").slice(0, 1)}</span>
                                 </div>
                                 <span className="truncate text-sm font-medium">{student?.name ?? "未知学生"}</span>
-                                {isTemporary && <Badge variant="plum" className="shrink-0">临时加入</Badge>}
+                                {isTrialStudent ? (
+                                  <Badge variant="plum" className="shrink-0">试听学生</Badge>
+                                ) : isTemporary ? (
+                                  <Badge variant="plum" className="shrink-0">临时加入</Badge>
+                                ) : null}
                               </div>
                               <div className="flex items-center gap-2">
                                 {scheduledMakeupLesson && (
@@ -3430,7 +3481,7 @@ export function ScheduleView({
                                 )}
                               </div>
                             </div>
-                            {isTemporary && (
+                            {isTemporary && !isTrialStudent && (
                               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px]">
                                 <div className="rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
                                   临时加入费用会在正常排课费用基础上额外相加。
@@ -3453,6 +3504,11 @@ export function ScheduleView({
                                 )}
                               </div>
                             )}
+                            {isTrialStudent && (
+                              <div className="mt-3 rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
+                                试听学生不计入班课新增人头费；如需记录试听收入，请在上方“班课试听统计”里填写试听费用。
+                              </div>
+                            )}
                             {(entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending" || entry.note) && (
                               <Input
                                 className="mt-3 bg-white"
@@ -3469,7 +3525,9 @@ export function ScheduleView({
                           没有符合条件的关联学生
                         </div>
                       )}
-                    </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 

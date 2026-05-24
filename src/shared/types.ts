@@ -202,6 +202,7 @@ export type AttendanceEntry = {
   status: AttendanceStatus;
   note?: string;
   temporary?: boolean;
+  trial?: boolean;
   temporaryFee?: number;
 };
 

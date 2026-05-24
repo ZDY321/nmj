@@ -31,7 +31,7 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
-import { billableHoursForLesson, calculateFee, classFeeTierForCount, currentAppHour, defaultFeeRuleForCourseType, extraFeeTotal, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForLesson, calculateFee, classFeeTierForCount, currentAppHour, defaultFeeRuleForCourseType, extraFeeTotal, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   cloneVault,
@@ -2383,25 +2383,32 @@ function greetingFor(date: Date): string {
 function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Lesson {
   const course = getCourse(vault, lesson.courseGroupId);
   if (!course) return lesson;
-  const presentStudentCount = presentCount(lesson);
+  const normalizedLesson: Lesson = {
+    ...lesson,
+    attendance: lesson.attendance.map((entry) => ({
+      ...entry,
+      trial: entry.trial ?? Boolean(entry.temporary && vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
+    }))
+  };
+  const presentStudentCount = presentCount(normalizedLesson);
   const classFeeTier = course.feeRule.mode === "class_headcount"
     ? classFeeTierForCount(course.feeRule, presentStudentCount)
     : undefined;
   return {
-    ...lesson,
+    ...normalizedLesson,
     feeSnapshot: {
-      ...lesson.feeSnapshot,
+      ...normalizedLesson.feeSnapshot,
       baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
       hourlyRate: course.feeRule.hourlyRate,
       fixedFee: course.feeRule.fixedFee,
       perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
       classFeeTierId: classFeeTier?.id,
       presentStudentCount,
-      trialStudentCount: lesson.trialStudentCount ?? 0,
-      trialFee: lesson.trialFee ?? 0,
-      hours: billableHoursForLesson(lesson, course.feeRule),
-      manualAdjustment: extraFeeTotal(lesson),
-      amount: calculateFee(course.feeRule, lesson)
+      trialStudentCount: namedTrialStudentCount(normalizedLesson) + (normalizedLesson.trialStudentCount ?? 0),
+      trialFee: normalizedLesson.trialFee ?? 0,
+      hours: billableHoursForLesson(normalizedLesson, course.feeRule),
+      manualAdjustment: extraFeeTotal(normalizedLesson),
+      amount: calculateFee(course.feeRule, normalizedLesson)
     }
   };
 }

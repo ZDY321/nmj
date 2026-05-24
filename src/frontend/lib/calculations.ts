@@ -98,8 +98,16 @@ export function lessonBillableHours(lesson: Lesson): number {
   return Number.isFinite(lesson.feeSnapshot.hours) ? Math.max(lesson.feeSnapshot.hours ?? 0, 0) : billableHoursForLesson(lesson);
 }
 
+function isPresentAttendanceEntry(lesson: Lesson, entry: Lesson["attendance"][number]): boolean {
+  return entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed");
+}
+
 export function presentCount(lesson: Lesson): number {
-  return lesson.attendance.filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed")).length;
+  return lesson.attendance.filter((entry) => isPresentAttendanceEntry(lesson, entry) && !entry.trial).length;
+}
+
+export function namedTrialStudentCount(lesson: Lesson): number {
+  return lesson.attendance.filter((entry) => isPresentAttendanceEntry(lesson, entry) && entry.trial).length;
 }
 
 function nonNegativeNumber(value: number | undefined, fallback = 0): number {
