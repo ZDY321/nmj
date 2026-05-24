@@ -425,7 +425,14 @@ export function App() {
 
   function updateStudent(student: Student) {
     updateVault((draft) => {
+      const previousStudent = draft.students.find((item) => item.id === student.id);
+      if (previousStudent && Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
+        materializeStudentTrialStatusOnLessons(draft, student.id, Boolean(previousStudent.temporaryTrial));
+      }
       draft.students = draft.students.map((item) => (item.id === student.id ? student : item));
+      if (previousStudent && Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
+        syncFutureLessonsWithStudentTrialStatus(draft, student.id, Boolean(student.temporaryTrial));
+      }
     });
   }
 
@@ -985,8 +992,19 @@ export function App() {
         }
       }
       if (data.temporaryTrial !== undefined) {
+        const previousTrial = Boolean(student.temporaryTrial);
+        const nextTrial = Boolean(data.temporaryTrial);
+        if (previousTrial !== nextTrial) {
+          materializeStudentTrialStatusOnLessons(nextVault, student.id, previousTrial);
+        }
         student.temporaryTrial = Boolean(data.temporaryTrial);
         updates.push(student.temporaryTrial ? "已标记试听" : "已取消试听标记");
+        if (previousTrial !== nextTrial) {
+          const syncedCount = syncFutureLessonsWithStudentTrialStatus(nextVault, student.id, nextTrial);
+          if (syncedCount > 0) {
+            updates.push(`已同步 ${syncedCount} 节未来未上课程`);
+          }
+        }
       }
       if (updates.length === 0) return null;
 
@@ -2453,6 +2471,40 @@ function syncLessonsWithCourseDefaults(vault: TeacherVault, course: CourseGroup,
       type: course.type,
       campusId: course.defaultCampusId ?? lesson.campusId
     });
+  });
+  return changedCount;
+}
+
+function shouldSyncFutureLessonWithStudentTrialStatus(lesson: Lesson): boolean {
+  if (lesson.date < todayIso()) return false;
+  return lesson.status !== "completed" && lesson.status !== "cancelled" && lesson.status !== "makeup_completed";
+}
+
+function materializeStudentTrialStatusOnLessons(vault: TeacherVault, studentId: string, currentTrial: boolean) {
+  vault.lessons = vault.lessons.map((lesson) => {
+    let changed = false;
+    const attendance = lesson.attendance.map((entry) => {
+      if (entry.studentId !== studentId || entry.trial !== undefined) return entry;
+      changed = true;
+      return { ...entry, trial: currentTrial };
+    });
+    return changed ? { ...lesson, attendance } : lesson;
+  });
+}
+
+function syncFutureLessonsWithStudentTrialStatus(vault: TeacherVault, studentId: string, nextTrial: boolean): number {
+  let changedCount = 0;
+  vault.lessons = vault.lessons.map((lesson) => {
+    if (!shouldSyncFutureLessonWithStudentTrialStatus(lesson)) return lesson;
+    let changed = false;
+    const attendance = lesson.attendance.map((entry) => {
+      if (entry.studentId !== studentId || entry.trial === nextTrial) return entry;
+      changed = true;
+      return { ...entry, trial: nextTrial };
+    });
+    if (!changed) return lesson;
+    changedCount += 1;
+    return recalculateLessonFeeSnapshot(vault, { ...lesson, attendance });
   });
   return changedCount;
 }

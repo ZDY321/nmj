@@ -126,6 +126,7 @@ export function StudentsView({
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
   const [studentStatusFilter, setStudentStatusFilter] = useState<"active" | "archived" | "all">("active");
+  const [studentTrialFilter, setStudentTrialFilter] = useState<"all" | "trial" | "regular">("all");
   const [studentCourseTypeFilter, setStudentCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [studentSubjectFilter, setStudentSubjectFilter] = useState("all");
   const [courseSearch, setCourseSearch] = useState("");
@@ -169,6 +170,9 @@ export function StudentsView({
       const matchesStatus =
         studentStatusFilter === "all" ||
         (studentStatusFilter === "archived" ? student.status === "paused" : student.status !== "paused");
+      const matchesTrial =
+        studentTrialFilter === "all" ||
+        (studentTrialFilter === "trial" ? Boolean(student.temporaryTrial) : !student.temporaryTrial);
       const matchesGrade = matchesGradeFilter(student.grade, gradeFilter);
       const matchesCampus = studentCampusFilter === "all" || student.defaultCampusId === studentCampusFilter;
       const studentCourses = vault.courseGroups.filter((course) => course.studentIds.includes(student.id));
@@ -179,7 +183,7 @@ export function StudentsView({
         student.name.toLowerCase().includes(normalizedArchiveSearch) ||
         (student.school ?? "").toLowerCase().includes(normalizedArchiveSearch) ||
         (student.note ?? "").toLowerCase().includes(normalizedArchiveSearch);
-      return matchesStatus && matchesGrade && matchesCampus && matchesType && matchesSubject && matchesSearch;
+      return matchesStatus && matchesTrial && matchesGrade && matchesCampus && matchesType && matchesSubject && matchesSearch;
     })
     .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id));
   const visibleCourses = courseGroupOptions
@@ -1994,11 +1998,16 @@ export function StudentsView({
               <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
               <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名、学校或备注" />
             </label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
               <Select value={studentStatusFilter} onChange={(event) => setStudentStatusFilter(event.target.value as "active" | "archived" | "all")} className="h-10">
                 <option value="active">在读学生</option>
                 <option value="archived">已归档学生</option>
                 <option value="all">全部学生</option>
+              </Select>
+              <Select value={studentTrialFilter} onChange={(event) => setStudentTrialFilter(event.target.value as "all" | "trial" | "regular")} className="h-10">
+                <option value="all">全部档案</option>
+                <option value="trial">仅试听档案</option>
+                <option value="regular">非试听档案</option>
               </Select>
               <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} className="h-10">
                 <option value="all">全部年级</option>
