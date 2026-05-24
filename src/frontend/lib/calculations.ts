@@ -118,7 +118,28 @@ function nonNegativeInteger(value: number | undefined, fallback = 0): number {
   return Math.floor(nonNegativeNumber(value, fallback));
 }
 
-export function temporaryFeeTotal(lesson: Lesson): number {
+function hasCustomTemporaryFee(entry: Lesson["attendance"][number]): boolean {
+  return entry.temporaryFee !== undefined && Number.isFinite(entry.temporaryFee);
+}
+
+function temporaryFeeOverrideDelta(rule: FeeRule, lesson: Lesson): number {
+  const presentStudentCount = presentCount(lesson);
+  return lesson.attendance.reduce((sum, entry) => {
+    if (!entry.temporary || entry.trial || !hasCustomTemporaryFee(entry)) return sum;
+    const customFee = nonNegativeNumber(entry.temporaryFee);
+    if (!isPresentAttendanceEntry(lesson, entry)) {
+      return sum + customFee;
+    }
+    const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
+    const defaultIncrement = calculateClassHeadcountFee(rule, presentStudentCount) - calculateClassHeadcountFee(rule, countWithoutEntry);
+    return sum + customFee - defaultIncrement;
+  }, 0);
+}
+
+export function temporaryFeeTotal(lesson: Lesson, rule?: FeeRule): number {
+  if (rule?.mode === "class_headcount") {
+    return temporaryFeeOverrideDelta(rule, lesson);
+  }
   return lesson.attendance.reduce((sum, entry) => sum + nonNegativeNumber(entry.temporaryFee), 0);
 }
 
@@ -126,8 +147,8 @@ export function trialFeeTotal(lesson: Lesson): number {
   return nonNegativeNumber(lesson.trialFee);
 }
 
-export function extraFeeTotal(lesson: Lesson): number {
-  return temporaryFeeTotal(lesson) + trialFeeTotal(lesson);
+export function extraFeeTotal(lesson: Lesson, rule?: FeeRule): number {
+  return temporaryFeeTotal(lesson, rule) + trialFeeTotal(lesson);
 }
 
 export function defaultClassFeeTiers(rule?: FeeRule): ClassFeeTier[] {
@@ -176,7 +197,7 @@ export function calculateFee(rule: FeeRule, lesson: Lesson): number {
   if (isOriginalFullyMadeUp(lesson)) {
     return 0;
   }
-  const extraFee = extraFeeTotal(lesson);
+  const extraFee = extraFeeTotal(lesson, rule);
   if (lesson.type === "trial") {
     return Math.round(fixedFeeForRule(rule) + extraFee);
   }

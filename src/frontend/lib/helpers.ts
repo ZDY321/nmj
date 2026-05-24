@@ -408,7 +408,7 @@ export function createLessonFromCourse(
     trialStudentCount: namedTrialStudentCount(lesson) + (lesson.trialStudentCount ?? 0),
     trialFee: lesson.trialFee ?? 0,
     hours: billableHoursForLesson(lesson, course.feeRule),
-    manualAdjustment: extraFeeTotal(lesson),
+    manualAdjustment: extraFeeTotal(lesson, course.feeRule),
     amount: calculateFee(course.feeRule, lesson)
   };
   return lesson;

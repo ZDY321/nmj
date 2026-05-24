@@ -2387,7 +2387,7 @@ function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Less
     ...lesson,
     attendance: lesson.attendance.map((entry) => ({
       ...entry,
-      trial: entry.trial ?? Boolean(entry.temporary && vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
+      trial: entry.trial ?? Boolean(vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
     }))
   };
   const presentStudentCount = presentCount(normalizedLesson);
@@ -2407,7 +2407,7 @@ function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Less
       trialStudentCount: namedTrialStudentCount(normalizedLesson) + (normalizedLesson.trialStudentCount ?? 0),
       trialFee: normalizedLesson.trialFee ?? 0,
       hours: billableHoursForLesson(normalizedLesson, course.feeRule),
-      manualAdjustment: extraFeeTotal(normalizedLesson),
+      manualAdjustment: extraFeeTotal(normalizedLesson, course.feeRule),
       amount: calculateFee(course.feeRule, normalizedLesson)
     }
   };

@@ -490,10 +490,11 @@ export function ScheduleView({
     selectedTemporaryStudent && !temporaryStudentOptions.some((student) => student.id === selectedTemporaryStudent.id)
       ? [selectedTemporaryStudent, ...temporaryStudentOptions]
       : temporaryStudentOptions;
+  const availableTrialStudentOptionCount = temporaryStudentOptions.filter((student) => student.temporaryTrial).length;
   const selectedNamedTrialStudentCount = selected
     ? selected.attendance.filter((entry) => {
         const student = findStudent(vault, entry.studentId);
-        return Boolean(entry.trial || (entry.temporary && student?.temporaryTrial));
+        return Boolean(entry.trial ?? student?.temporaryTrial);
       }).length
     : 0;
   const selectedAttendanceEntries = selected
@@ -506,7 +507,7 @@ export function ScheduleView({
           student?.note ?? "",
           attendanceLabels[entry.status],
           entry.temporary ? "临时加入" : "",
-          entry.trial || (entry.temporary && student?.temporaryTrial) ? "试听 试听学生" : ""
+          (entry.trial ?? student?.temporaryTrial) ? "试听 试听学生" : ""
         ].join(" ").toLowerCase();
         return !normalizedAttendanceStudentFilter || searchable.includes(normalizedAttendanceStudentFilter);
       }).sort((a, b) => {
@@ -1033,7 +1034,7 @@ export function ScheduleView({
       ...lesson,
       attendance: lesson.attendance.map((entry) => ({
         ...entry,
-        trial: entry.trial ?? Boolean(entry.temporary && vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
+        trial: entry.trial ?? Boolean(vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
       }))
     };
     const presentStudentCount = presentCount(normalizedLesson);
@@ -1054,7 +1055,7 @@ export function ScheduleView({
         trialStudentCount: namedTrialStudentCount(normalizedLesson) + (normalizedLesson.trialStudentCount ?? 0),
         trialFee: normalizedLesson.trialFee ?? 0,
         hours: billableHoursForLesson(normalizedLesson, course.feeRule),
-        manualAdjustment: extraFeeTotal(normalizedLesson),
+        manualAdjustment: extraFeeTotal(normalizedLesson, course.feeRule),
         amount: calculateFee(course.feeRule, normalizedLesson)
       }
     };
@@ -1248,12 +1249,12 @@ export function ScheduleView({
     setDetailMakeupStudentIds([]);
   }
 
-  function updateTemporaryFee(studentId: string, value: number) {
+  function updateTemporaryFee(studentId: string, value?: number) {
     if (!selected) return;
     const nextLesson: Lesson = {
       ...selected,
       attendance: selected.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, temporaryFee: Number.isFinite(value) ? value : 0 } : entry
+        entry.studentId === studentId ? { ...entry, temporaryFee: value !== undefined && Number.isFinite(value) ? value : undefined } : entry
       )
     };
     onUpdateLesson(recalculateLessonFee(nextLesson));
@@ -1278,7 +1279,7 @@ export function ScheduleView({
           status: "attended",
           temporary: true,
           trial: isTrialStudent,
-          temporaryFee: 0,
+          temporaryFee: undefined,
           note: isTrialStudent ? "试听加入" : "临时添加"
         }
       ]
@@ -3396,7 +3397,7 @@ export function ScheduleView({
                       />
                     </label>
                     <Select value={temporaryStudentId} onChange={(event) => setTemporaryStudentId(event.target.value)}>
-                      <option value="">选择学生档案</option>
+                      <option value="">选择学生档案（含试听）</option>
                       {displayedTemporaryStudentOptions.map((student) => (
                         <option key={student.id} value={student.id}>
                           {student.name}{student.grade ? ` · ${student.grade}` : ""}{student.temporaryTrial ? "（试听档案）" : ""}
@@ -3404,8 +3405,11 @@ export function ScheduleView({
                       ))}
                     </Select>
                     <Button type="button" variant="outline" onClick={addTemporaryStudent} disabled={!temporaryStudentId || selected.expectedStudentIds.includes(temporaryStudentId)}>
-                      <UserPlus size={15} /> 添加学生
+                      <UserPlus size={15} /> {selectedTemporaryStudent?.temporaryTrial ? "添加试听学生" : "添加学生"}
                     </Button>
+                  </div>
+                  <div className="rounded-[12px] border border-dashed border-[#c7d2fe] bg-[#f8faff] px-3 py-2 text-xs font-semibold text-[#5161d6]">
+                    已保存试听档案 {availableTrialStudentOptionCount} 人，可直接从上面选择后添加为试听学生。
                   </div>
                   <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                     <button
@@ -3433,7 +3437,7 @@ export function ScheduleView({
                         <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
                       {selectedAttendanceEntries.map((entry) => {
                         const student = findStudent(vault, entry.studentId);
-                        const isTrialStudent = Boolean(entry.trial || (entry.temporary && student?.temporaryTrial));
+                        const isTrialStudent = Boolean(entry.trial ?? student?.temporaryTrial);
                         const isTemporary = Boolean(entry.temporary || !selectedCourse?.studentIds.includes(entry.studentId));
                         const scheduledMakeupLesson = selected && !selected.linkedOriginalLessonId
                           ? scheduledMakeupLessonForStudent(selected.id, entry.studentId)
@@ -3451,11 +3455,8 @@ export function ScheduleView({
                                   <span className="text-xs font-bold text-[#ff8617]">{(student?.name ?? "未知").slice(0, 1)}</span>
                                 </div>
                                 <span className="truncate text-sm font-medium">{student?.name ?? "未知学生"}</span>
-                                {isTrialStudent ? (
-                                  <Badge variant="plum" className="shrink-0">试听学生</Badge>
-                                ) : isTemporary ? (
-                                  <Badge variant="plum" className="shrink-0">临时加入</Badge>
-                                ) : null}
+                                {isTrialStudent && <Badge variant="plum" className="shrink-0">试听学生</Badge>}
+                                {isTemporary && <Badge variant="secondary" className="shrink-0">临时加入</Badge>}
                               </div>
                               <div className="flex items-center gap-2">
                                 {scheduledMakeupLesson && (
@@ -3484,17 +3485,20 @@ export function ScheduleView({
                             {isTemporary && !isTrialStudent && (
                               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px]">
                                 <div className="rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
-                                  临时加入费用会在正常排课费用基础上额外相加。
+                                  默认已按班课人头费计入；如果这里填写金额，会用你填写的金额替换这名临时学生原本的人头增量。
                                 </div>
                                 {amountsVisible ? (
                                   <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
                                     <Input
                                       type="number"
-                                      value={entry.temporaryFee ?? 0}
-                                      onChange={(event) => updateTemporaryFee(entry.studentId, Number(event.target.value))}
+                                      value={entry.temporaryFee ?? ""}
+                                      onChange={(event) => {
+                                        const value = event.target.value.trim();
+                                        updateTemporaryFee(entry.studentId, value === "" ? undefined : Number(value));
+                                      }}
                                       className="bg-white pl-10"
-                                      placeholder="临时费用"
+                                      placeholder="留空则按默认人头费"
                                     />
                                   </div>
                                 ) : (
