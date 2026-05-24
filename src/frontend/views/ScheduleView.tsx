@@ -3105,7 +3105,7 @@ export function ScheduleView({
                       variant="outline"
                       size="sm"
                       onClick={goBackToLessonSource}
-                      className="border-[#dbe4ef] bg-white text-[#25324a] hover:border-[#cbd5e1] hover:bg-[#f8fbff] hover:text-[#0f172a]"
+                      className="border-[#bfdbfe] bg-[#f8fbff] text-[#1557c2] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#0f4aa0]"
                     >
                       <CornerUpLeft size={15} /> {lessonReturnTarget.label}
                     </Button>
