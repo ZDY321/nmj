@@ -352,6 +352,9 @@ export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | un
     .sort(sortLessons)
     .at(-1);
 
+  if (previous && lesson.syncTargetStartDate && previous.date < lesson.syncTargetStartDate) {
+    return undefined;
+  }
   return previous;
 }
 
@@ -365,6 +368,7 @@ export function createLessonFromCourse(
     campusId?: string;
     status?: LessonStatus;
     sourceScheduleRuleId?: string;
+    syncTargetStartDate?: string;
   }
 ): Lesson {
   const lesson: Lesson = {
@@ -385,6 +389,7 @@ export function createLessonFromCourse(
     feeSnapshot: { amount: 0 },
     linkedOriginalLessonId: null,
     sourceScheduleRuleId: values.sourceScheduleRuleId,
+    syncTargetStartDate: values.syncTargetStartDate,
     content: {
       taught: "",
       performance: "",
@@ -412,6 +417,62 @@ export function createLessonFromCourse(
     amount: calculateFee(course.feeRule, lesson)
   };
   return lesson;
+}
+
+function clockMinutes(value: string): number {
+  const [hoursText, minutesText] = value.split(":");
+  const hours = Number(hoursText);
+  const minutes = Number(minutesText);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return Number.NaN;
+  return hours * 60 + minutes;
+}
+
+function lessonTimesOverlap(firstStart: string, firstEnd: string, secondStart: string, secondEnd: string): boolean {
+  const firstStartMinutes = clockMinutes(firstStart);
+  const firstEndMinutes = clockMinutes(firstEnd);
+  const secondStartMinutes = clockMinutes(secondStart);
+  const secondEndMinutes = clockMinutes(secondEnd);
+  if (![firstStartMinutes, firstEndMinutes, secondStartMinutes, secondEndMinutes].every(Number.isFinite)) return false;
+  return firstStartMinutes < secondEndMinutes && secondStartMinutes < firstEndMinutes;
+}
+
+export function buildScheduleSyncLessonsForDate(
+  vault: TeacherVault,
+  sourceLessons: Lesson[],
+  targetDate: string,
+  syncTargetStartDate: string
+): { lessons: Lesson[]; replaceLessonIds: string[]; skippedCount: number } {
+  const replaceLessonIds = new Set<string>();
+  const lessons: Lesson[] = [];
+  let skippedCount = 0;
+
+  sourceLessons.forEach((sourceLesson) => {
+    const course = getCourse(vault, sourceLesson.courseGroupId);
+    if (!course || course.status !== "active") {
+      skippedCount += 1;
+      return;
+    }
+
+    vault.lessons.forEach((existingLesson) => {
+      if (existingLesson.date !== targetDate) return;
+      if (lessonTimesOverlap(existingLesson.startTime, existingLesson.endTime, sourceLesson.startTime, sourceLesson.endTime)) {
+        replaceLessonIds.add(existingLesson.id);
+      }
+    });
+
+    lessons.push(
+      createLessonFromCourse(vault, course, {
+        date: targetDate,
+        startTime: sourceLesson.startTime,
+        endTime: sourceLesson.endTime,
+        campusId: sourceLesson.campusId ?? course.defaultCampusId,
+        status: "scheduled",
+        syncTargetStartDate
+      })
+    );
+  });
+
+  return { lessons, replaceLessonIds: [...replaceLessonIds], skippedCount };
 }
 
 export function nextSevenDates(fromDate: string): string[] {

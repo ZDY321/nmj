@@ -45,6 +45,7 @@ import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
   addDays,
+  buildScheduleSyncLessonsForDate,
   calendarDates,
   campusName,
   compareByName,
@@ -133,7 +134,7 @@ export function ScheduleView({
   vault: TeacherVault;
   amountsVisible: boolean;
   onAddLesson: (lesson: Lesson) => void;
-  onAddLessons: (lessons: Lesson[]) => void;
+  onAddLessons: (lessons: Lesson[], options?: { replaceLessonIds?: string[] }) => void;
   onAddLessonAndUpdateLesson: (lessonToAdd: Lesson, lessonToUpdate: Lesson) => void;
   onUpdateLesson: (lesson: Lesson) => void;
   onDeleteLesson: (lessonId: string) => void;
@@ -250,7 +251,7 @@ export function ScheduleView({
   ).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
   const calendarViewSubjectOptions = subjectOptionsForVault(vault);
   const syncSourceLessons = vault.lessons
-    .filter((lesson) => lesson.date === syncSourceDate && lesson.status !== "cancelled")
+    .filter((lesson) => lesson.date === syncSourceDate)
     .sort(sortLessons);
   const syncSourceLessonIds = syncSourceLessons.map((lesson) => lesson.id).join("|");
   const selectableSyncLessons = syncSourceLessons.filter((lesson) => getCourse(vault, lesson.courseGroupId)?.status === "active");
@@ -967,44 +968,28 @@ export function ScheduleView({
       return;
     }
 
-    const activeLessons = selectedSyncLessons.filter((lesson) => getCourse(vault, lesson.courseGroupId)?.status === "active");
-    const pausedCount = selectedSyncLessons.length - activeLessons.length;
-    const conflictedLessons = activeLessons.filter((lesson) => findTimeConflict(syncTargetDate, lesson.startTime, lesson.endTime));
-    if (conflictedLessons.length > 0 && !force) {
+    const syncBuild = buildScheduleSyncLessonsForDate(vault, selectedSyncLessons, syncTargetDate, syncTargetDate);
+    if (syncBuild.replaceLessonIds.length > 0 && !force) {
       confirm({
-        title: "目标日期已有时间冲突",
-        description: `${syncTargetDate} 有 ${conflictedLessons.length} 节课时间冲突。系统会跳过冲突课程，只同步没有冲突的课程。`,
-        confirmLabel: "跳过冲突并同步",
+        title: "目标日期已有同时间课节",
+        description: `${syncTargetDate} 有 ${syncBuild.replaceLessonIds.length} 节课会被覆盖。已取消的来源课节也会同步为待上课。`,
+        confirmLabel: "覆盖并同步",
         onConfirm: () => copySelectedLessonsToDate(true)
       });
       return;
     }
 
-    const lessonsToCopy = activeLessons.filter((lesson) => !findTimeConflict(syncTargetDate, lesson.startTime, lesson.endTime));
-    if (lessonsToCopy.length === 0) {
-      showScheduleError(pausedCount > 0 ? "可同步课程已暂停或全部与目标日期冲突。" : "勾选课程都与目标日期已有课程冲突。");
+    if (syncBuild.lessons.length === 0) {
+      showScheduleError(syncBuild.skippedCount > 0 ? "可同步课程已暂停，未同步。" : "没有可同步的来源课节。");
       return;
     }
 
-    const copiedLessons = lessonsToCopy.flatMap((lesson) => {
-      const course = getCourse(vault, lesson.courseGroupId);
-      if (!course) return [];
-      return [
-        createLessonFromCourse(vault, course, {
-          date: syncTargetDate,
-          startTime: lesson.startTime,
-          endTime: lesson.endTime,
-          campusId: lesson.campusId ?? course.defaultCampusId,
-          status: "scheduled"
-        })
-      ];
-    });
-    onAddLessons(copiedLessons);
+    onAddLessons(syncBuild.lessons, { replaceLessonIds: syncBuild.replaceLessonIds });
     setSelectedCalendarDate(syncTargetDate);
     setCalendarMonth(syncTargetDate.slice(0, 7));
     setScheduleError("");
-    if (pausedCount > 0) {
-      showScheduleError(`已同步 ${lessonsToCopy.length} 节；${pausedCount} 节来源课程已暂停，未同步。`);
+    if (syncBuild.skippedCount > 0) {
+      showScheduleError(`已同步 ${syncBuild.lessons.length} 节；${syncBuild.skippedCount} 节来源课程已暂停，未同步。`);
     }
   }
 
@@ -1662,7 +1647,7 @@ export function ScheduleView({
                         <option value="data_query">数据问答</option>
                         <option value="student_course">新增或修改学生和课程</option>
                         <option value="schedule_lessons">新增排课</option>
-                        <option value="sync_lessons">同步课程</option>
+                        <option value="sync_lessons">同步排课</option>
                       </Select>
                     </div>
                   </div>
@@ -1685,6 +1670,7 @@ export function ScheduleView({
                         "创建班课或多人课时，请写清最少人数、基础费用、每增加1人费用；最少人数不是当前关联学生人数。",
                         "修改学生档案时，请写清原姓名或学生ID，以及新姓名、年级、校区、学校或备注。",
                         "涉及修改或删除时，请写清原课程日期、时间、科目和学生，避免 AI 匹配到相近课程。",
+                        "同步排课时，请写清来源日期/日期段、目标日期/日期段、是否覆盖已有课节、是否包含已取消课节；系统只复制课程安排。",
                         "AI 只生成建议，点击确认写入前请核对摘要、操作建议和风险提醒。"
                       ].map((text) => (
                         <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
@@ -1742,7 +1728,7 @@ export function ScheduleView({
                         "新增自定义班型并设置默认计费",
                         "修改课程班型、校区、关联学生，或迁移到新课程",
                         "按指定日期或星期批量新增排课",
-                        "同步某一天或某几天的课程",
+                        "同步某一天或某几天的排课",
                         "生成结果必须预览并确认后写入"
                       ].map((text) => (
                         <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
@@ -2391,7 +2377,7 @@ export function ScheduleView({
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="text-sm font-extrabold text-[#061226]">同步某一天课程</div>
-                  <div className="mt-1 text-xs font-semibold text-[#64748b]">从来源日期勾选课程，复制到目标日期，生成待上课。</div>
+                  <div className="mt-1 text-xs font-semibold text-[#64748b]">从来源日期勾选课程，复制到目标日期；已取消课节会同步为待上课，同时间课节会被覆盖。</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="w-fit">{selectedSyncLessons.length} / {syncSourceLessons.length} 节</Badge>
@@ -2422,7 +2408,7 @@ export function ScheduleView({
                           <Input type="date" value={syncTargetDate} onChange={(event) => setSyncTargetDate(event.target.value)} className="h-10 bg-white" />
                         </div>
                         <Button type="button" className="self-end" onClick={() => copySelectedLessonsToDate()} disabled={selectedSyncLessons.length === 0 || syncSourceDate === syncTargetDate}>
-                          <Copy size={15} /> 同步课程
+                          <Copy size={15} /> 同步排课
                         </Button>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -2462,7 +2448,7 @@ export function ScheduleView({
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate font-extrabold">{lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}</span>
                                 <span className="mt-1 block text-xs font-semibold">
-                                  {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期有冲突" : ""}
+                                  {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)} · {lessonStatusLabels[lesson.status]}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期会覆盖" : ""}
                                 </span>
                               </span>
                             </label>
@@ -2470,7 +2456,7 @@ export function ScheduleView({
                         })}
                         {syncSourceLessons.length === 0 && (
                           <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
-                            来源日期没有可同步课程
+                            来源日期没有可同步课节
                           </div>
                         )}
                       </div>
@@ -3731,7 +3717,7 @@ function aiActionLabel(type: string): string {
     remove_lesson: "删除课节",
     cancel_lesson: "删除课节",
     schedule_lessons: "新增排课",
-    sync_lessons: "同步课程",
+    sync_lessons: "同步排课",
     ask_clarification: "需要补充信息"
   };
   return labels[type] ?? type;
@@ -3785,8 +3771,14 @@ function aiFieldLabel(key: string): string {
     endTime: "结束时间",
     sourceDate: "来源日期",
     targetDate: "目标日期",
+    sourceDateStart: "来源开始日期",
+    sourceDateEnd: "来源结束日期",
+    targetDateStart: "目标开始日期",
+    targetDateEnd: "目标结束日期",
     sourceDates: "来源日期",
     targetDates: "目标日期",
+    overwriteExisting: "覆盖已有课节",
+    includeCancelled: "包含已取消课节",
     lessonId: "课节",
     lessonIds: "课节",
     note: "备注",

@@ -34,6 +34,7 @@ import { TodayView } from "@/frontend/views/TodayView";
 import { billableHoursForLesson, calculateFee, classFeeTierForCount, currentAppHour, defaultFeeRuleForCourseType, extraFeeTotal, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
+  buildScheduleSyncLessonsForDate,
   cloneVault,
   type ViewKey,
   viewTitles,
@@ -383,9 +384,13 @@ export function App() {
     });
   }
 
-  function addLessons(lessons: Lesson[]) {
+  function addLessons(lessons: Lesson[], options: { replaceLessonIds?: string[] } = {}) {
     if (lessons.length === 0) return;
     updateVault((draft) => {
+      const replaceLessonIds = new Set(options.replaceLessonIds ?? []);
+      if (replaceLessonIds.size > 0) {
+        draft.lessons = draft.lessons.filter((lesson) => !replaceLessonIds.has(lesson.id));
+      }
       draft.lessons.push(...lessons);
     });
   }
@@ -1188,6 +1193,123 @@ export function App() {
       }
     };
 
+    const falseyAiValue = (value: unknown): boolean => {
+      if (value === false) return true;
+      const normalized = stringValue(value).toLowerCase();
+      return normalized === "false" || normalized === "no" || normalized === "0" || normalized === "不包含" || normalized === "不包括" || normalized === "排除";
+    };
+
+    const dateListFromAi = (listValue: unknown, singleValue: unknown, startValue: unknown, endValue: unknown): string[] => {
+      const explicitDates = arrayValueLocal(listValue).map(stringValue).filter(Boolean);
+      if (explicitDates.length > 0) return explicitDates;
+      const singleDate = stringValue(singleValue);
+      if (singleDate) return [singleDate];
+      const startDate = stringValue(startValue);
+      const endDate = stringValue(endValue);
+      if (startDate && endDate) return datesBetween(startDate, endDate);
+      return startDate ? [startDate] : [];
+    };
+
+    const applyScheduleSyncFromAi = (data: Record<string, unknown>): boolean => {
+      const sourceLessonIds = Array.from(new Set([
+        ...arrayValueLocal(data.lessonIds ?? data.sourceLessonIds).map(stringValue),
+        stringValue(data.lessonId ?? data.sourceLessonId)
+      ].filter(Boolean)));
+      const sourceLessonIdSet = new Set(sourceLessonIds);
+      const sourceDates = dateListFromAi(
+        data.sourceDates,
+        data.sourceDate,
+        data.sourceDateStart ?? data.sourceStartDate,
+        data.sourceDateEnd ?? data.sourceEndDate
+      );
+      const targetDates = dateListFromAi(
+        data.targetDates,
+        data.targetDate,
+        data.targetDateStart ?? data.targetStartDate,
+        data.targetDateEnd ?? data.targetEndDate
+      );
+      const hasScheduleSyncShape =
+        sourceDates.length > 0 ||
+        targetDates.length > 0 ||
+        stringValue(data.sourceDateStart ?? data.sourceStartDate ?? data.sourceDateEnd ?? data.sourceEndDate) ||
+        stringValue(data.targetDateStart ?? data.targetStartDate ?? data.targetDateEnd ?? data.targetEndDate);
+      if (!hasScheduleSyncShape) return false;
+
+      if (targetDates.length === 0) {
+        blockers.push("同步课节缺少目标日期。");
+        return true;
+      }
+
+      const includeCancelled = !falseyAiValue(data.includeCancelled ?? data.copyCancelled ?? data.cancelledLessons);
+      const sourceSnapshot = [...nextVault.lessons];
+      let syncedCount = 0;
+      let replacedCount = 0;
+      let skippedCount = 0;
+      const emptySourceDates: string[] = [];
+
+      const applySyncBatch = (sourceLessons: Lesson[], targetDate: string, targetStartDate: string) => {
+        const filteredSourceLessons = sourceLessons.filter((lesson) => includeCancelled || lesson.status !== "cancelled");
+        if (filteredSourceLessons.length === 0) return;
+        const syncBuild = buildScheduleSyncLessonsForDate(nextVault, filteredSourceLessons, targetDate, targetStartDate);
+        if (syncBuild.lessons.length === 0) {
+          skippedCount += syncBuild.skippedCount;
+          return;
+        }
+        const replaceLessonIds = new Set(syncBuild.replaceLessonIds);
+        nextVault.lessons = nextVault.lessons.filter((lesson) => !replaceLessonIds.has(lesson.id));
+        nextVault.lessons.push(...syncBuild.lessons);
+        syncedCount += syncBuild.lessons.length;
+        replacedCount += syncBuild.replaceLessonIds.length;
+        skippedCount += syncBuild.skippedCount;
+      };
+
+      if (sourceDates.length === 0 && sourceLessonIds.length > 0) {
+        if (targetDates.length !== 1) {
+          blockers.push("按课节同步时，请只提供一个目标日期。");
+          return true;
+        }
+        const selectedSourceLessons = sourceSnapshot.filter((lesson) => sourceLessonIdSet.has(lesson.id));
+        applySyncBatch(selectedSourceLessons, targetDates[0], targetDates[0]);
+      } else {
+        if (sourceDates.length === 0) {
+          blockers.push("同步课节缺少来源日期。");
+          return true;
+        }
+        if (sourceDates.length !== targetDates.length) {
+          blockers.push("同步课节的来源日期和目标日期数量不一致，请重新生成建议。");
+          return true;
+        }
+        const targetStartDate = targetDates[0];
+        sourceDates.forEach((sourceDate, index) => {
+          const sourceLessons = sourceSnapshot.filter((lesson) =>
+            lesson.date === sourceDate &&
+            (sourceLessonIdSet.size === 0 || sourceLessonIdSet.has(lesson.id))
+          );
+          if (sourceLessons.length === 0) {
+            emptySourceDates.push(sourceDate);
+            return;
+          }
+          applySyncBatch(sourceLessons, targetDates[index], targetStartDate);
+        });
+      }
+
+      if (syncedCount === 0) {
+        blockers.push(skippedCount > 0 ? "来源课程已暂停或缺失，未同步课节。" : "没有找到可同步的来源课节。");
+        return true;
+      }
+
+      const sourceLabel = sourceDates.length > 1
+        ? `${sourceDates[0]} 至 ${sourceDates[sourceDates.length - 1]}`
+        : sourceDates[0] ?? `${sourceLessonIds.length} 个来源课节`;
+      const targetLabel = targetDates.length > 1
+        ? `${targetDates[0]} 至 ${targetDates[targetDates.length - 1]}`
+        : targetDates[0];
+      messages.push(
+        `已同步 ${syncedCount} 节课：${sourceLabel} 到 ${targetLabel}${replacedCount > 0 ? `，覆盖 ${replacedCount} 节已有课节` : ""}${skippedCount > 0 ? `，${skippedCount} 节来源课程已暂停未同步` : ""}${emptySourceDates.length > 0 ? `，${emptySourceDates.length} 个来源日期没有课节` : ""}`
+      );
+      return true;
+    };
+
     actions.forEach((action) => {
       const type = stringValue(action.type ?? action.action);
       const data = isPlainRecordLocal(action.data) ? action.data : action;
@@ -1229,7 +1351,11 @@ export function App() {
         return;
       }
       if (type === "sync_lessons") {
-        const lessonIds = arrayValueLocal(data.lessonIds).map(stringValue).filter(Boolean);
+        if (applyScheduleSyncFromAi(data)) return;
+        const lessonIds = Array.from(new Set([
+          ...arrayValueLocal(data.lessonIds).map(stringValue),
+          stringValue(data.lessonId)
+        ].filter(Boolean)));
         const studentIds = studentIdsFromAiData(data);
         addStudentsToLessons(lessonIds, studentIds);
         const affectedCourseIds = Array.from(new Set(
