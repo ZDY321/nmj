@@ -84,6 +84,12 @@ type UnlockedSession = {
   vault: TeacherVault;
   selectedDate: string;
   cloudVersion?: string;
+  persistAfterClose?: boolean;
+};
+
+type StoredUnlockedSession = {
+  raw: string;
+  persistAfterClose: boolean;
 };
 
 type CalendarOverviewFocusState = {
@@ -110,6 +116,7 @@ type ScheduleCalendarFocus = {
 };
 
 const unlockedSessionKey = "teacher-salary-tracker:unlocked-session";
+const persistentLoginPreferencePrefix = "teacher-salary-tracker:persistent-login:";
 const syncCheckIntervalSeconds = 90;
 
 export function App() {
@@ -133,6 +140,7 @@ export function App() {
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [onboardingVisitedSteps, setOnboardingVisitedSteps] = useState<OnboardingStepKey[]>([]);
   const [amountsVisible, setAmountsVisible] = useState(false);
+  const [persistLoginAfterClose, setPersistLoginAfterClose] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [cloudVersion, setCloudVersion] = useState("");
   const [remoteCloudVersion, setRemoteCloudVersion] = useState("");
@@ -161,13 +169,14 @@ export function App() {
       vault: vault!,
       selectedDate,
       cloudVersion,
+      persistAfterClose: persistLoginAfterClose,
       ...next
     };
     if (!session.username || !session.password || !session.token || !session.vault) return;
     writeUnlockedSession(session);
   }
 
-  async function login(nextUsername: string, nextPassword: string) {
+  async function login(nextUsername: string, nextPassword: string, nextPersistLoginAfterClose: boolean) {
     const result = await loginAccount(nextUsername, nextPassword);
     setUsername(result.account.username);
     setPassword(nextPassword);
@@ -176,6 +185,8 @@ export function App() {
     setDeletion(result.deletion);
     setVault(result.vault);
     setAmountsVisible(false);
+    setPersistLoginAfterClose(nextPersistLoginAfterClose);
+    writePersistentLoginPreference(result.account.username, nextPersistLoginAfterClose);
     cloudVersionRef.current = result.cloudVersion;
     setCloudVersion(result.cloudVersion);
     setRemoteCloudVersion("");
@@ -188,14 +199,15 @@ export function App() {
       role: result.account.role,
       deletion: result.deletion,
       vault: result.vault,
-      cloudVersion: result.cloudVersion
+      cloudVersion: result.cloudVersion,
+      persistAfterClose: nextPersistLoginAfterClose
     });
     if (view === "admin" && result.account.role !== "admin") {
       setView("today");
     }
   }
 
-  async function register(nextUsername: string, nextPassword: string): Promise<UserRole> {
+  async function register(nextUsername: string, nextPassword: string, nextPersistLoginAfterClose: boolean): Promise<UserRole> {
     const result = await registerAccount(nextUsername, nextPassword);
     setUsername(result.account.username);
     setPassword(nextPassword);
@@ -204,6 +216,8 @@ export function App() {
     setDeletion(result.deletion);
     setVault(result.vault);
     setAmountsVisible(false);
+    setPersistLoginAfterClose(nextPersistLoginAfterClose);
+    writePersistentLoginPreference(result.account.username, nextPersistLoginAfterClose);
     cloudVersionRef.current = result.cloudVersion;
     setCloudVersion(result.cloudVersion);
     setRemoteCloudVersion("");
@@ -216,9 +230,18 @@ export function App() {
       role: result.account.role,
       deletion: result.deletion,
       vault: result.vault,
-      cloudVersion: result.cloudVersion
+      cloudVersion: result.cloudVersion,
+      persistAfterClose: nextPersistLoginAfterClose
     });
     return result.account.role;
+  }
+
+  function updatePersistLoginAfterClose(nextPersistLoginAfterClose: boolean) {
+    setPersistLoginAfterClose(nextPersistLoginAfterClose);
+    if (username) {
+      writePersistentLoginPreference(username, nextPersistLoginAfterClose);
+    }
+    rememberUnlockedSession({ persistAfterClose: nextPersistLoginAfterClose });
   }
 
   async function persist(nextVault: TeacherVault, options: { force?: boolean } = {}) {
@@ -1588,16 +1611,16 @@ export function App() {
   }
 
   useEffect(() => {
-    localStorage.removeItem(unlockedSessionKey);
     const stored = readUnlockedSession();
     if (stored) {
       try {
-        const session = JSON.parse(stored) as UnlockedSession;
+        const session = JSON.parse(stored.raw) as UnlockedSession;
         if (!session.username || !session.password || !session.token || !session.vault) {
           clearUnlockedSession();
         } else {
           const today = todayIso();
           const cachedCloudVersion = session.cloudVersion ?? "";
+          const restoredPersistLoginAfterClose = Boolean(session.persistAfterClose ?? stored.persistAfterClose);
           setUsername(session.username);
           setPassword(session.password);
           setToken(session.token);
@@ -1606,10 +1629,13 @@ export function App() {
           setVault(session.vault);
           setCloudVersion(cachedCloudVersion);
           setSelectedDate(today);
+          setPersistLoginAfterClose(restoredPersistLoginAfterClose);
+          writePersistentLoginPreference(session.username, restoredPersistLoginAfterClose);
           writeUnlockedSession({
             ...session,
             selectedDate: today,
-            cloudVersion: cachedCloudVersion
+            cloudVersion: cachedCloudVersion,
+            persistAfterClose: restoredPersistLoginAfterClose
           });
           void loadCloudVaultWithVersion(session.token, session.password, session.username, { allowLocalFallback: false })
             .then((cloud) => {
@@ -1623,7 +1649,8 @@ export function App() {
                 ...session,
                 vault: cloud.vault,
                 selectedDate: today,
-                cloudVersion: nextCloudVersion
+                cloudVersion: nextCloudVersion,
+                persistAfterClose: restoredPersistLoginAfterClose
               });
             })
             .catch(() => {
@@ -1773,6 +1800,7 @@ export function App() {
     return (<LoginScreen
       onLogin={login}
       onRegister={register}
+      getPersistentLoginPreference={readPersistentLoginPreference}
     />);
   }
 
@@ -1959,6 +1987,18 @@ export function App() {
                 >
                   新手指引{guideNeedsAttention ? " · 待配置" : ""}
                 </button>
+                <label className="col-span-2 flex items-start gap-3 rounded-[12px] bg-[#f8fbff] px-3 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={persistLoginAfterClose}
+                    onChange={(event) => updatePersistLoginAfterClose(event.target.checked)}
+                    className="mt-1 h-4 w-4 shrink-0 accent-[#ff8617]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-extrabold text-[#25324a]">关闭标签页后保持登录</span>
+                    <span className="mt-1 block text-xs font-semibold leading-5 text-[#64748b]">仅建议在自己的手机或电脑上开启</span>
+                  </span>
+                </label>
               </motion.div>
             )}
           </AnimatePresence>
@@ -2087,6 +2127,18 @@ export function App() {
               </label>
 
               <div className="hidden items-center gap-2 md:flex">
+                <label className="flex h-[58px] min-w-[210px] items-center gap-3 rounded-[16px] border border-[#dbe4ef] bg-white px-4 shadow-[0_12px_28px_rgba(15,35,66,0.08)]">
+                  <input
+                    type="checkbox"
+                    checked={persistLoginAfterClose}
+                    onChange={(event) => updatePersistLoginAfterClose(event.target.checked)}
+                    className="h-4 w-4 shrink-0 accent-[#ff8617]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-extrabold text-[#25324a]">保持登录</span>
+                    <span className="block truncate text-xs font-semibold text-[#64748b]">关闭标签页后自动进入</span>
+                  </span>
+                </label>
                 <Button variant="outline" className="h-[58px] rounded-[16px]" onClick={() => {
                   if (token) {
                     void logoutCloud(token);
@@ -2503,12 +2555,41 @@ function shouldShowOnboarding(vault: TeacherVault): boolean {
   );
 }
 
-function readUnlockedSession(): string | null {
-  return sessionStorage.getItem(unlockedSessionKey);
+function persistentLoginPreferenceKey(username: string): string {
+  return `${persistentLoginPreferencePrefix}${encodeURIComponent(username)}`;
+}
+
+function readPersistentLoginPreference(username: string): boolean {
+  if (!username.trim()) return false;
+  return localStorage.getItem(persistentLoginPreferenceKey(username.trim())) === "true";
+}
+
+function writePersistentLoginPreference(username: string, persistAfterClose: boolean): void {
+  if (!username.trim()) return;
+  localStorage.setItem(persistentLoginPreferenceKey(username.trim()), persistAfterClose ? "true" : "false");
+}
+
+function readUnlockedSession(): StoredUnlockedSession | null {
+  const sessionSession = sessionStorage.getItem(unlockedSessionKey);
+  if (sessionSession) {
+    return { raw: sessionSession, persistAfterClose: false };
+  }
+  const persistentSession = localStorage.getItem(unlockedSessionKey);
+  if (persistentSession) {
+    return { raw: persistentSession, persistAfterClose: true };
+  }
+  return null;
 }
 
 function writeUnlockedSession(session: UnlockedSession): void {
-  sessionStorage.setItem(unlockedSessionKey, JSON.stringify(session));
+  const serialized = JSON.stringify(session);
+  if (session.persistAfterClose) {
+    localStorage.setItem(unlockedSessionKey, serialized);
+    sessionStorage.removeItem(unlockedSessionKey);
+    return;
+  }
+  sessionStorage.setItem(unlockedSessionKey, serialized);
+  localStorage.removeItem(unlockedSessionKey);
 }
 
 function clearUnlockedSession(): void {

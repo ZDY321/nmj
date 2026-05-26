@@ -49,16 +49,19 @@ function PasswordField({
 
 export function LoginScreen({
   onLogin,
-  onRegister
+  onRegister,
+  getPersistentLoginPreference
 }: {
-  onLogin: (username: string, password: string) => Promise<void>;
-  onRegister: (username: string, password: string) => Promise<UserRole>;
+  onLogin: (username: string, password: string, persistAfterClose: boolean) => Promise<void>;
+  onRegister: (username: string, password: string, persistAfterClose: boolean) => Promise<UserRole>;
+  getPersistentLoginPreference: (username: string) => boolean;
 }) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordAcknowledged, setPasswordAcknowledged] = useState(false);
+  const [persistAfterClose, setPersistAfterClose] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -82,6 +85,12 @@ export function LoginScreen({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) return;
+    setPersistAfterClose(getPersistentLoginPreference(trimmedUsername));
+  }, [getPersistentLoginPreference, username]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -110,7 +119,7 @@ export function LoginScreen({
           setError("请先勾选确认：你已经阅读提醒，并且已经严肃保存登录密码 / 数据密码。");
           return;
         }
-        const role = await onRegister(username.trim(), password);
+        const role = await onRegister(username.trim(), password, persistAfterClose);
         setSuccess(
           role === "admin"
             ? "注册成功。第一位注册用户已设为管理员，正在进入工作台。"
@@ -118,7 +127,7 @@ export function LoginScreen({
         );
         return;
       }
-      await onLogin(username.trim(), password);
+      await onLogin(username.trim(), password, persistAfterClose);
     } catch (err) {
       setError(err instanceof Error ? err.message : "无法解锁数据。请确认用户名和密码。");
     } finally {
@@ -207,6 +216,20 @@ export function LoginScreen({
                   )}
                 </div>
                 <PasswordField label="登录密码 / 数据密码" value={password} onChange={setPassword} />
+                <label className="flex items-start gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4 text-sm font-bold leading-6 text-[#25324a]">
+                  <input
+                    type="checkbox"
+                    checked={persistAfterClose}
+                    onChange={(event) => setPersistAfterClose(event.target.checked)}
+                    className="mt-1 h-4 w-4 shrink-0 accent-[#ff8617]"
+                  />
+                  <span>
+                    <span className="block">关闭标签页后保持登录</span>
+                    <span className="mt-1 block text-xs font-semibold leading-5 text-[#64748b]">
+                      仅建议在自己的手机或电脑上开启；关闭后会按当前方式，下次打开需要重新输入账号和密码。
+                    </span>
+                  </span>
+                </label>
                 {mode === "register" && (
                   <>
                     <PasswordField label="再次确认密码" value={confirmPassword} onChange={setConfirmPassword} />
