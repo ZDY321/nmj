@@ -1987,18 +1987,6 @@ export function App() {
                 >
                   新手指引{guideNeedsAttention ? " · 待配置" : ""}
                 </button>
-                <label className="col-span-2 flex items-start gap-3 rounded-[12px] bg-[#f8fbff] px-3 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={persistLoginAfterClose}
-                    onChange={(event) => updatePersistLoginAfterClose(event.target.checked)}
-                    className="mt-1 h-4 w-4 shrink-0 accent-[#ff8617]"
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-extrabold text-[#25324a]">关闭标签页后保持登录</span>
-                    <span className="mt-1 block text-xs font-semibold leading-5 text-[#64748b]">仅建议在自己的手机或电脑上开启</span>
-                  </span>
-                </label>
               </motion.div>
             )}
           </AnimatePresence>
@@ -2127,18 +2115,6 @@ export function App() {
               </label>
 
               <div className="hidden items-center gap-2 md:flex">
-                <label className="flex h-[58px] min-w-[210px] items-center gap-3 rounded-[16px] border border-[#dbe4ef] bg-white px-4 shadow-[0_12px_28px_rgba(15,35,66,0.08)]">
-                  <input
-                    type="checkbox"
-                    checked={persistLoginAfterClose}
-                    onChange={(event) => updatePersistLoginAfterClose(event.target.checked)}
-                    className="h-4 w-4 shrink-0 accent-[#ff8617]"
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-extrabold text-[#25324a]">保持登录</span>
-                    <span className="block truncate text-xs font-semibold text-[#64748b]">关闭标签页后自动进入</span>
-                  </span>
-                </label>
                 <Button variant="outline" className="h-[58px] rounded-[16px]" onClick={() => {
                   if (token) {
                     void logoutCloud(token);
@@ -2485,6 +2461,8 @@ export function App() {
                 vault={vault}
                 token={token}
                 adminUsername={username}
+                persistLoginAfterClose={persistLoginAfterClose}
+                onPersistLoginAfterCloseChange={updatePersistLoginAfterClose}
                 onNoticeChange={(notice) =>
                   updateVault((draft) => {
                     draft.notice = notice;

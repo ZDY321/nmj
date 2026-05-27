@@ -144,12 +144,16 @@ export function AdminView({
   vault,
   token,
   adminUsername,
+  persistLoginAfterClose,
+  onPersistLoginAfterCloseChange,
   onNoticeChange,
   onClearData
 }: {
   vault: TeacherVault;
   token: string;
   adminUsername: string;
+  persistLoginAfterClose: boolean;
+  onPersistLoginAfterCloseChange: (persistAfterClose: boolean) => void;
   onNoticeChange: (notice: Notice) => void;
   onClearData: () => void;
 }) {
@@ -751,6 +755,26 @@ export function AdminView({
                   <span className="text-sm font-medium">{item.text}</span>
                 </motion.div>
               ))}
+            </div>
+
+            <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#9a3412]">
+                <ShieldCheck size={16} /> 注意与隐私边界
+              </div>
+              <label className="flex items-start gap-3 rounded-[12px] border border-[#fed7aa] bg-white/80 px-3 py-3 text-[#25324a]">
+                <input
+                  type="checkbox"
+                  checked={persistLoginAfterClose}
+                  onChange={(event) => onPersistLoginAfterCloseChange(event.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0 accent-[#ff8617]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-extrabold">关闭标签页后保持登录</span>
+                  <span className="mt-1 block text-xs font-semibold leading-5 text-[#9a3412]">
+                    仅建议在自己的手机或电脑上开启。关闭后会按当前安全方式，下次打开需要重新输入账号和密码。
+                  </span>
+                </span>
+              </label>
             </div>
 
             <Button variant="destructive" className="w-full" onClick={askClearData}>
