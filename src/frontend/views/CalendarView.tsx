@@ -28,12 +28,21 @@ import {
   studentNames,
   subjectOptionsForVault,
   weekDatesFor,
-  weekStartsOn
+  weekStartsOn,
+  weekdayLabels as fullWeekdayLabels,
+  weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { todayIso } from "@/frontend/lib/calculations";
 
 type CalendarOverviewPage = "month" | "week";
+type WeekTimeRow = {
+  key: string;
+  label: string;
+  rangeLabel: string;
+  sortMinute: number;
+  lessons: Lesson[];
+};
 type CalendarOverviewFocusState = {
   selectedDate: string;
   month: string;
@@ -44,6 +53,70 @@ type CalendarOverviewFocusState = {
   weekStudentFilter: string;
 };
 type CalendarOverviewFocusRequest = CalendarOverviewFocusState & { nonce: number };
+
+function dateWithWeekday(date: string): string {
+  return `${date} · ${fullWeekdayLabels[weekdayOfDateIso(date)]}`;
+}
+
+function timeToMinutes(value: string): number {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return Number.NaN;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return Number.NaN;
+  }
+  return hour * 60 + minute;
+}
+
+function formatTimeFromMinutes(minutes: number): string {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function buildCompactWeekTimeRows(lessons: Lesson[]): WeekTimeRow[] {
+  const rows = new Map<string, WeekTimeRow & { minStart: number; maxEnd: number }>();
+
+  lessons.forEach((lesson) => {
+    const startMinute = timeToMinutes(lesson.startTime);
+    const endMinute = timeToMinutes(lesson.endTime);
+    const hasStart = Number.isFinite(startMinute);
+    const bucketStart = hasStart ? Math.floor(startMinute / 60) * 60 : Number.POSITIVE_INFINITY;
+    const key = hasStart ? String(bucketStart) : `unknown-${lesson.startTime || "empty"}`;
+    const existing = rows.get(key);
+
+    if (existing) {
+      existing.lessons.push(lesson);
+      if (hasStart) existing.minStart = Math.min(existing.minStart, startMinute);
+      if (Number.isFinite(endMinute)) existing.maxEnd = Math.max(existing.maxEnd, endMinute);
+      return;
+    }
+
+    rows.set(key, {
+      key,
+      label: hasStart ? `${formatTimeFromMinutes(bucketStart)} 时段` : "时间未设置",
+      rangeLabel: "",
+      sortMinute: bucketStart,
+      minStart: hasStart ? startMinute : Number.POSITIVE_INFINITY,
+      maxEnd: Number.isFinite(endMinute) ? endMinute : Number.NEGATIVE_INFINITY,
+      lessons: [lesson]
+    });
+  });
+
+  return Array.from(rows.values())
+    .sort((a, b) => a.sortMinute - b.sortMinute || a.key.localeCompare(b.key))
+    .map((row) => ({
+      key: row.key,
+      label: row.label,
+      rangeLabel:
+        Number.isFinite(row.minStart) && Number.isFinite(row.maxEnd)
+          ? `${formatTimeFromMinutes(row.minStart)}-${formatTimeFromMinutes(row.maxEnd)}`
+          : "查看课程卡片时间",
+      sortMinute: row.sortMinute,
+      lessons: row.lessons
+    }));
+}
 
 export function CalendarView({
   vault,
@@ -86,7 +159,7 @@ export function CalendarView({
 
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
   const weekRangeLabel = `${weekDates[0].slice(5)} - ${weekDates[6].slice(5)}`;
-  const weekTimeSlots = Array.from(new Set(weekLessons.map((lesson) => `${lesson.startTime}-${lesson.endTime}`))).sort();
+  const weekTimeRows = buildCompactWeekTimeRows(weekLessons);
   const activeMakeupLessonsByOriginal = visibleLessons
     .filter((lesson) => Boolean(lesson.linkedOriginalLessonId) && lesson.status !== "cancelled")
     .reduce<Record<string, Lesson[]>>((groups, lesson) => {
@@ -431,29 +504,30 @@ export function CalendarView({
                       })}
                     </div>
 
-                    {weekTimeSlots.length === 0 ? (
+                    {weekTimeRows.length === 0 ? (
                       <div className="p-8 text-center text-sm font-semibold text-[#64748b]">
                         这一周还没有课程
                       </div>
                     ) : (
-                      weekTimeSlots.map((timeSlot) => (
-                        <div key={timeSlot} className="grid grid-cols-[86px_repeat(7,minmax(110px,1fr))] border-b border-[#e8eef6] last:border-b-0">
-                          <div className="sticky left-0 z-10 flex min-h-[88px] items-start border-r border-[#e8eef6] bg-[#f8fbff] px-3 py-3 text-left text-xs font-extrabold text-[#25324a]">
-                            {timeSlot}
+                      weekTimeRows.map((timeRow) => (
+                        <div key={timeRow.key} className="grid grid-cols-[86px_repeat(7,minmax(110px,1fr))] border-b border-[#e8eef6] last:border-b-0">
+                          <div className="sticky left-0 z-10 flex min-h-[76px] flex-col items-start border-r border-[#e8eef6] bg-[#f8fbff] px-3 py-3 text-left">
+                            <span className="text-xs font-extrabold text-[#25324a]">{timeRow.label}</span>
+                            <span className="mt-1 text-[10px] font-bold leading-4 text-[#64748b]">{timeRow.rangeLabel}</span>
                           </div>
                           {weekDates.map((date) => {
-                            const cellLessons = weekLessons.filter((lesson) => lesson.date === date && `${lesson.startTime}-${lesson.endTime}` === timeSlot);
+                            const cellLessons = timeRow.lessons.filter((lesson) => lesson.date === date);
                             const isSelected = date === selectedDate;
                             return (
                               <div
-                                key={`${date}-${timeSlot}`}
+                                key={`${date}-${timeRow.key}`}
                                 onClick={() => selectCalendarDate(date)}
-                                className={`min-h-[88px] border-r border-[#e8eef6] p-2 text-left transition-colors last:border-r-0 ${
+                                className={`min-h-[76px] border-r border-[#e8eef6] p-2 text-left transition-colors last:border-r-0 ${
                                   isSelected ? "bg-[#fffaf2]" : "hover:bg-[#f8fbff]"
                                 }`}
                               >
                                 {cellLessons.length === 0 ? (
-                                  <span className="block h-full min-h-[62px] rounded-[10px] border border-dashed border-[#e2e8f0] bg-[#fbfdff]" />
+                                  <span className="block min-h-[48px]" />
                                 ) : (
                                   <span className="flex flex-col gap-2">
                                     {cellLessons.map((lesson) => (
@@ -467,6 +541,9 @@ export function CalendarView({
                                         }}
                                         className={`block w-full rounded-[10px] border p-2 text-left text-xs transition-all hover:border-[#1557c2] ${lessonStatusSurfaceClass(lesson.status)}`}
                                       >
+                                        <span className="mb-1 block text-[11px] font-extrabold text-[#1557c2]">
+                                          {lesson.startTime}-{lesson.endTime}
+                                        </span>
                                         <span className="flex min-w-0 items-center justify-between gap-2">
                                           <strong className="truncate">{courseName(vault, lesson.courseGroupId)}</strong>
                                           <span className="flex shrink-0 gap-1">
@@ -501,7 +578,7 @@ export function CalendarView({
                         </div>
                       ))
                     )}
-                    {weekLessons.length > 0 && weekTimeSlots.length === 0 && (
+                    {weekLessons.length > 0 && weekTimeRows.length === 0 && (
                       <div className="p-8 text-center text-sm font-semibold text-[#64748b]">
                         这一周的课程缺少开始或结束时间，无法生成时间表。
                       </div>
@@ -516,7 +593,7 @@ export function CalendarView({
         {overviewPage === "month" && (
         <Card className="h-fit overflow-hidden">
           <CardHeader>
-            <CardTitle>{selectedDate} 明细</CardTitle>
+            <CardTitle>{dateWithWeekday(selectedDate)} 明细</CardTitle>
             <CardDescription>仅统计课程课时金额，不等同于工资总额。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

@@ -111,6 +111,14 @@ type InternalLessonReturnTarget = {
 type LessonReturnTarget = ExternalLessonReturnTarget | InternalLessonReturnTarget;
 type CalendarFocus = { date: string; lessonId?: string; targetPanel?: SchedulePanel; nonce: number; returnTarget?: ExternalLessonReturnTarget | null } | null;
 
+function dateWithWeekday(date: string): string {
+  return `${date} · ${weekdayLabels[weekdayOfDateIso(date)]}`;
+}
+
+function optionalDateWithWeekday(date: string | null | undefined): string {
+  return date ? dateWithWeekday(date) : "未知";
+}
+
 export function ScheduleView({
   vault,
   amountsVisible,
@@ -1371,7 +1379,7 @@ export function ScheduleView({
     if (conflict) {
       confirm({
         title: "这个时间段已有课程",
-        description: `${nextDate} ${selected.startTime}-${selected.endTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
+        description: `${dateWithWeekday(nextDate)} ${selected.startTime}-${selected.endTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
         confirmLabel: "仍然调整",
         tone: "danger",
         onConfirm: applyChange
@@ -1389,7 +1397,7 @@ export function ScheduleView({
     if (conflict) {
       confirm({
         title: "这个时间段已有课程",
-        description: `${selected.date} ${nextStart}-${selected.endTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
+        description: `${dateWithWeekday(selected.date)} ${nextStart}-${selected.endTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
         confirmLabel: "仍然调整",
         tone: "danger",
         onConfirm: applyChange
@@ -1407,7 +1415,7 @@ export function ScheduleView({
     if (conflict) {
       confirm({
         title: "这个时间段已有课程",
-        description: `${selected.date} ${selected.startTime}-${nextEnd} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
+        description: `${dateWithWeekday(selected.date)} ${selected.startTime}-${nextEnd} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
         confirmLabel: "仍然调整",
         tone: "danger",
         onConfirm: applyChange
@@ -1420,7 +1428,7 @@ export function ScheduleView({
   function askDeleteLesson(lesson: Lesson) {
     confirm({
       title: "删除这条课时记录？",
-      description: `${lesson.date} ${lesson.startTime}-${lesson.endTime} · ${courseName(vault, lesson.courseGroupId)}`,
+      description: `${dateWithWeekday(lesson.date)} ${lesson.startTime}-${lesson.endTime} · ${courseName(vault, lesson.courseGroupId)}`,
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => onDeleteLesson(lesson.id)
@@ -1486,7 +1494,7 @@ export function ScheduleView({
                   <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
                     <CalendarDays size={14} /> 当日课程
                   </div>
-                  <h2 className="text-2xl font-extrabold leading-tight text-[#061226]">{calendarDetailDate}</h2>
+                  <h2 className="text-2xl font-extrabold leading-tight text-[#061226]">{dateWithWeekday(calendarDetailDate)}</h2>
                   <p className="mt-1 text-sm font-semibold text-[#64748b]">点击课程可跳转到课程记录详情。</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => setCalendarDetailDate(null)} className="shrink-0 rounded-full">
@@ -2544,7 +2552,7 @@ export function ScheduleView({
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
                 <Clock size={14} /> 每日课程详情
               </div>
-              <CardTitle>{selectedCalendarDate} 课程</CardTitle>
+              <CardTitle>{dateWithWeekday(selectedCalendarDate)} 课程</CardTitle>
               <CardDescription>状态与课时记录同步，点击课程可跳转到课程记录详情。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -2626,7 +2634,7 @@ export function ScheduleView({
                       <div className="min-w-0">
                         <div className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</div>
                         <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                          {courseSubject(vault, lesson.courseGroupId)} · 原课：{lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                          {courseSubject(vault, lesson.courseGroupId)} · 原课：{dateWithWeekday(lesson.date)} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Badge variant="amber" className="px-2 py-0.5 text-[10px]">
@@ -2688,7 +2696,7 @@ export function ScheduleView({
                               {courseName(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
                             </div>
                             <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                              {courseSubject(vault, lesson.courseGroupId)} · 原课：{original?.date ?? lesson.makeupOriginalDate ?? "未知"} · 补课：{lesson.makeupScheduledDate ?? lesson.date} · {lesson.startTime}-{lesson.endTime}
+                              {courseSubject(vault, lesson.courseGroupId)} · 原课：{optionalDateWithWeekday(original?.date ?? lesson.makeupOriginalDate)} · 补课：{optionalDateWithWeekday(lesson.makeupScheduledDate ?? lesson.date)} · {lesson.startTime}-{lesson.endTime}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <Badge variant={lessonStatusVariant(lesson.status)} className="px-2 py-0.5 text-[10px]">
@@ -2958,7 +2966,7 @@ export function ScheduleView({
                 }}
                 className="h-4 w-4 accent-[#ff8617]"
               />
-              同步日历查看日期（{selectedCalendarDate}）
+              同步日历查看日期（{dateWithWeekday(selectedCalendarDate)}）
             </label>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -3057,7 +3065,7 @@ export function ScheduleView({
                     <div className="min-w-0">
                       <span className="block truncate text-sm font-medium">{courseName(vault, lesson.courseGroupId)}</span>
                       <span className="text-xs text-(--color-muted-foreground)">
-                        {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                        {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {dateWithWeekday(lesson.date)} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
                       </span>
                     </div>
                   </div>
@@ -3082,7 +3090,7 @@ export function ScheduleView({
               <CardHeader className="flex flex-col gap-3 border-b border-[#e8eef6] bg-white sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle>课程详情</CardTitle>
-                  <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
+                  <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)} · {dateWithWeekday(selected.date)} · {selected.startTime}-{selected.endTime}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {lessonReturnTarget && (
@@ -3123,8 +3131,8 @@ export function ScheduleView({
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#7c2d12] sm:grid-cols-2">
-                      <div>原课日期：{selectedOriginalLesson.date}</div>
-                      <div>补课日期：{selected.date}</div>
+                      <div>原课日期：{dateWithWeekday(selectedOriginalLesson.date)}</div>
+                      <div>补课日期：{dateWithWeekday(selected.date)}</div>
                       <div>学生：{selected.makeupStudentId ? studentNames(vault, [selected.makeupStudentId]) : studentNames(vault, selected.expectedStudentIds)}</div>
                       <div>原课程：{courseName(vault, selectedOriginalLesson.courseGroupId)}</div>
                       <div>原课科目：{courseSubject(vault, selectedOriginalLesson.courseGroupId)}</div>
@@ -3221,7 +3229,7 @@ export function ScheduleView({
                     </p>
                     {selectedPreviousLesson && (
                       <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
+                        来源：{dateWithWeekday(selectedPreviousLesson.date)} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
                       </div>
                     )}
                   </button>
@@ -3239,7 +3247,7 @@ export function ScheduleView({
                     </p>
                     {selectedPreviousLesson && (
                       <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
+                        来源：{dateWithWeekday(selectedPreviousLesson.date)} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
                       </div>
                     )}
                   </button>
