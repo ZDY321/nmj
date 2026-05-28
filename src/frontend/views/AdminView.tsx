@@ -140,6 +140,8 @@ function isMigrationMessage(message: string): boolean {
   return message.includes("云端迁移") || message.includes("D1") || message.includes("migration");
 }
 
+type AdminSection = "settings" | "ai" | "users";
+
 export function AdminView({
   vault,
   token,
@@ -172,6 +174,7 @@ export function AdminView({
   const [aiStatus, setAiStatus] = useState<{ tone: "info" | "success" | "error"; message: string } | null>(null);
   const [feedbackFilter, setFeedbackFilter] = useState<"all" | FeedbackStatus>("all");
   const [feedbackNotes, setFeedbackNotes] = useState<Record<string, string>>({});
+  const [adminSection, setAdminSection] = useState<AdminSection>("settings");
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [deleteReasons, setDeleteReasons] = useState<Record<string, string>>({});
   const [deletePasswords, setDeletePasswords] = useState<Record<string, string>>({});
@@ -613,6 +616,39 @@ export function AdminView({
         </div>
       )}
 
+      <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white p-1">
+        <div className="flex min-w-max gap-1">
+          <button
+            type="button"
+            onClick={() => setAdminSection("settings")}
+            className={`inline-flex items-center justify-center gap-2 rounded-[12px] px-4 py-2.5 text-sm font-extrabold transition-colors ${
+              adminSection === "settings" ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
+            }`}
+          >
+            <ShieldCheck size={16} /> 基础设置
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminSection("ai")}
+            className={`inline-flex items-center justify-center gap-2 rounded-[12px] px-4 py-2.5 text-sm font-extrabold transition-colors ${
+              adminSection === "ai" ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
+            }`}
+          >
+            <Bot size={16} /> AI 接口
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminSection("users")}
+            className={`inline-flex items-center justify-center gap-2 rounded-[12px] px-4 py-2.5 text-sm font-extrabold transition-colors ${
+              adminSection === "users" ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
+            }`}
+          >
+            <Users size={16} /> 用户列表
+          </button>
+        </div>
+      </div>
+
+      {adminSection === "settings" && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-row items-start justify-between">
@@ -783,7 +819,9 @@ export function AdminView({
           </CardContent>
         </Card>
       </div>
+      )}
 
+      {adminSection === "ai" && (
       <Card className="overflow-hidden border-2 border-[#bfdbfe]">
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -1043,7 +1081,9 @@ export function AdminView({
           </div>
         </CardContent>
       </Card>
+      )}
 
+      {adminSection === "settings" && (
       <Card className="overflow-hidden">
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -1122,7 +1162,9 @@ export function AdminView({
           )}
         </CardContent>
       </Card>
+      )}
 
+      {adminSection === "users" && (
       <Card className="overflow-hidden">
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -1250,6 +1292,7 @@ export function AdminView({
           </div>
         </CardContent>
       </Card>
+      )}
 
       {confirmingDeleteUser && (
         <motion.div

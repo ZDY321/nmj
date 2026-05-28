@@ -38,7 +38,9 @@ import {
   sortCoursesByName,
   sortLessons,
   studentNames,
-  subjectOptionsForVault
+  subjectOptionsForVault,
+  weekdayLabels,
+  weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { ProgressChecklistView } from "@/frontend/views/ProgressChecklistView";
 import type {
@@ -86,6 +88,7 @@ type ProgressRow = {
 type TimelineColumn = {
   date: string;
   label: string;
+  weekday: string;
   isToday: boolean;
 };
 
@@ -533,7 +536,9 @@ export function ProgressView({
                           }`}
                         >
                           <div>{column.isToday ? "今天" : column.label}</div>
-                          <div className={`mt-1 font-semibold ${column.isToday ? "text-[#f97316]" : "text-[#64748b]"}`}>{column.date}</div>
+                          <div className={`mt-1 font-semibold ${column.isToday ? "text-[#f97316]" : "text-[#64748b]"}`}>
+                            {column.date} · {column.weekday}
+                          </div>
                         </th>
                       ))}
                     </tr>
@@ -952,6 +957,7 @@ function buildTimelineColumns(
   return visibleDates.map((date) => ({
     date,
     label: date.slice(5),
+    weekday: weekdayLabels[weekdayOfDateIso(date)],
     isToday: date === today
   }));
 }
