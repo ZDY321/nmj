@@ -584,7 +584,7 @@ export function ProgressView({
                                   }`}
                                 >
                                   <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
-                                    {column.isToday && cell.lesson && (
+                                    {cell.lesson && (
                                       <Badge variant="secondary" className="flex items-center gap-1 text-[10px]">
                                         <Clock3 size={10} /> {cell.lesson.startTime}-{cell.lesson.endTime}
                                       </Badge>

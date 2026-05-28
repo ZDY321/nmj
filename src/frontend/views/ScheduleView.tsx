@@ -167,7 +167,7 @@ export function ScheduleView({
 }) {
   const initialFocusedDate = calendarFocus?.date ?? todayIso();
   const initialFocusedMonth = initialFocusedDate.slice(0, 7);
-  const initialTargetPanel = calendarFocus?.targetPanel ?? "schedule";
+  const initialTargetPanel = calendarFocus?.targetPanel ?? "calendar";
   const initialSelectedLessonId = calendarFocus?.lessonId ?? vault.lessons[0]?.id ?? "";
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
