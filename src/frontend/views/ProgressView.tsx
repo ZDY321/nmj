@@ -949,8 +949,11 @@ function buildTimelineColumns(
     }
   });
 
-  const sortedDates = Array.from(dates).sort();
   const today = todayIso();
+  const hasExplicitDateRange = Boolean(dateStart || dateEnd);
+  const sortedDates = Array.from(dates)
+    .filter((date) => hasExplicitDateRange || date <= today)
+    .sort((a, b) => b.localeCompare(a));
   const visibleDates = sortedDates.length > 0 ? sortedDates : [today];
   return visibleDates.map((date) => ({
     date,
