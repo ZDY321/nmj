@@ -951,25 +951,13 @@ function buildTimelineColumns(
 
   const sortedDates = Array.from(dates).sort();
   const today = todayIso();
-  const visibleDates = dateStart || dateEnd
-    ? sortedDates
-    : defaultTimelineDates(sortedDates, today, 4);
+  const visibleDates = sortedDates.length > 0 ? sortedDates : [today];
   return visibleDates.map((date) => ({
     date,
     label: date.slice(5),
     weekday: weekdayLabels[weekdayOfDateIso(date)],
     isToday: date === today
   }));
-}
-
-function defaultTimelineDates(sortedDates: string[], anchorDate: string, count: number): string[] {
-  if (sortedDates.length === 0) return [anchorDate];
-  const beforeToday = sortedDates.filter((date) => date < anchorDate).reverse();
-  const afterToday = sortedDates.filter((date) => date > anchorDate);
-  const chosen = [anchorDate, ...beforeToday, ...afterToday]
-    .filter((date, index, dates) => dates.indexOf(date) === index)
-    .slice(0, count);
-  return chosen;
 }
 
 function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string): TimelineCell | undefined {
