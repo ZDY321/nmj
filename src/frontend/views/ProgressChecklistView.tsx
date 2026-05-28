@@ -54,6 +54,7 @@ type LatestChecklistContext = {
 };
 
 const NEW_TEMPLATE_ID = "__new_template__";
+const examChecklistPattern = /真题|试卷|中考|高考|模考|联考|统考|一模|二模|市卷|省卷|十三市|城市|题型|专题|压轴|实验题|选择题|填空题|计算题|综合题/;
 
 export function ProgressChecklistView({
   vault,
@@ -84,7 +85,7 @@ export function ProgressChecklistView({
   const [completionNote, setCompletionNote] = useState("");
   const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
   const [aiProviderId, setAiProviderId] = useState("");
-  const [aiPrompt, setAiPrompt] = useState("请按教材或知识点顺序生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。");
+  const [aiPrompt, setAiPrompt] = useState("请按教材、真题、专题或题型要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。");
   const [aiMessage, setAiMessage] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
@@ -362,16 +363,23 @@ export function ProgressChecklistView({
     setAiLoading(true);
     setAiMessage("正在生成模板草稿...");
     try {
+      const instruction = buildChecklistAiInstruction(prompt);
       const result = await generateAiScheduleDraft(token, {
         providerId,
         taskType: "progress_checklist",
-        instruction: prompt,
+        instruction,
         context: {
           courseId: selectedCourse?.id ?? "",
           courseName: selectedCourse?.name ?? "",
           subject: selectedCourse?.subject ?? "",
           existingTemplateId: selectedTemplate?.id ?? "",
-          existingTemplateName: selectedTemplate?.name ?? ""
+          existingTemplateName: selectedTemplate?.name ?? "",
+          checklistGuidance: [
+            "清单条目必须服从用户指定依据；用户说真题/试卷/地区/年份/题型时，不要改成教材章节目录。",
+            "如果用户同时说教材版本和真题来源，教材版本只用于限定真题范围，不用于生成章节目录。",
+            "chapter 字段可作为分组标签，不限于教材章节；可写城市卷、年份、题型、专题或复盘阶段。",
+            "title 字段要写成具体可完成的任务，便于学生按完成日期逐项勾选。"
+          ]
         }
       });
       if (!applyAiChecklistDraft(result)) {
@@ -400,10 +408,11 @@ export function ProgressChecklistView({
         const chapter = stringValue(itemObject.chapter);
         const title = stringValue(itemObject.title);
         if (!title) return null;
+        const note = stringValue(itemObject.note);
         return {
           id: `ai-draft-item-${index}`,
           chapter: chapter || undefined,
-          title,
+          title: note ? `${title}（${note}）` : title,
           order: index
         } satisfies ProgressChecklistTemplateItem;
       })
@@ -534,7 +543,7 @@ export function ProgressChecklistView({
                     <Textarea
                       value={aiPrompt}
                       onChange={(event) => setAiPrompt(event.target.value)}
-                      placeholder="例如：按初一数学上册，生成 10 个由浅入深的知识点清单，适合一对一进度跟踪。"
+                      placeholder="例如：按江苏省十三市 2025 年中考物理真题，按城市卷和题型生成可勾选清单；不要按教材章节目录生成。"
                       className="min-h-[110px] bg-white"
                     />
                   </div>
@@ -553,7 +562,7 @@ export function ProgressChecklistView({
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-[#25324a]">模板名称</label>
-                <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="例如：七下数学同步教材" />
+                <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="例如：2025 江苏中考物理真题清单" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-[#25324a]">关联科目</label>
@@ -573,7 +582,7 @@ export function ProgressChecklistView({
                 <Textarea
                   value={templateNote}
                   onChange={(event) => setTemplateNote(event.target.value)}
-                  placeholder="可写教材版本、适用班级、使用说明"
+                  placeholder="可写教材版本、真题来源、适用班级、使用说明"
                   className="min-h-[88px]"
                 />
               </div>
@@ -977,6 +986,22 @@ function buildLatestChecklistContextMap(
   });
 
   return map;
+}
+
+function buildChecklistAiInstruction(prompt: string): string {
+  const normalized = prompt.trim();
+  if (!examChecklistPattern.test(normalized)) return normalized;
+
+  return [
+    normalized,
+    "",
+    "本次清单检测为真题/试卷/考试类清单：",
+    "1. 不要按教材章节目录生成条目；即使用户提到“教材相同/教材版本”，也只把它当作筛选真题范围的条件。",
+    "2. 请按试卷来源、城市/地区、年份、题型、专题、复盘步骤等组织条目。",
+    "3. chapter 字段写分组标签，例如“连云港卷”“南京卷”“实验探究题”“力学综合题”“错题复盘”。",
+    "4. title 字段写具体可完成任务，例如“完成连云港卷选择题并订正错因”，不能只写“声现象”“光现象”“物态变化”等教材章节名。",
+    "5. 如果无法确认具体十三市试卷题号，不要编造题号；可以生成按城市卷/题型/专题完成与订正的任务清单。"
+  ].join("\n");
 }
 
 function stringValue(value: unknown): string {
