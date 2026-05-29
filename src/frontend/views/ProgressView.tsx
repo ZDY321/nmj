@@ -1015,7 +1015,7 @@ function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string
     progressText: record?.progressText ?? lesson?.content.taught ?? "",
     homeworkText: record?.homeworkText ?? lesson?.content.homework ?? "",
     nextPlan: record?.nextPlan ?? lesson?.content.nextLessonReminder ?? "",
-    note: record?.note ?? "",
+    note: lesson?.status === "cancelled" ? (lesson.note?.trim() || record?.note || "") : record?.note ?? "",
     progressStatus: record?.progressStatus ?? inferProgressStatus(lesson),
     homeworkStatus: record?.homeworkStatus ?? inferHomeworkStatus(lesson),
     needsRecord: Boolean(lesson && !records.some((item) => item.lessonId === lesson.id))
