@@ -599,7 +599,7 @@ export function ProgressView({
                                   <div className="flex min-h-0 flex-1 flex-col justify-center rounded-[8px] border border-dashed border-[#fecaca] bg-white/70 px-3 py-4 text-center">
                                     <div className="text-sm font-extrabold text-[#b91c1c]">这天课程已取消</div>
                                     <div className="mt-3 text-left text-xs font-semibold leading-5 text-[#7f1d1d]">
-                                      <div className="mb-1 font-extrabold text-[#991b1b]">取消原因</div>
+                                      <div className="mb-1 font-extrabold text-[#991b1b]">取消原因：</div>
                                       <div className="line-clamp-5 whitespace-pre-wrap">
                                         {cell.note || "未填写取消原因"}
                                       </div>
