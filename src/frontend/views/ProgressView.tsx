@@ -598,14 +598,12 @@ export function ProgressView({
                                   </div>
                                   <div className="flex min-h-0 flex-1 flex-col justify-center rounded-[8px] border border-dashed border-[#fecaca] bg-white/70 px-3 py-4 text-center">
                                     <div className="text-sm font-extrabold text-[#b91c1c]">这天课程已取消</div>
-                                    <div className="mt-2 text-xs font-semibold leading-5 text-[#991b1b]">
-                                      取消课不会作为最近一次上课进度继承；如有原因可在课程详情备注中查看或补充。
-                                    </div>
-                                    {cell.note && (
-                                      <div className="mt-3 line-clamp-3 text-left text-xs font-semibold leading-5 text-[#7f1d1d]">
-                                        备注：{cell.note}
+                                    <div className="mt-3 text-left text-xs font-semibold leading-5 text-[#7f1d1d]">
+                                      <div className="mb-1 font-extrabold text-[#991b1b]">取消原因</div>
+                                      <div className="line-clamp-5 whitespace-pre-wrap">
+                                        {cell.note || "未填写取消原因"}
                                       </div>
-                                    )}
+                                    </div>
                                   </div>
                                 </button>
                               ) : cell ? (
@@ -654,8 +652,8 @@ export function ProgressView({
                                   </div>
                                 </button>
                               ) : (
-                                <div className="h-[210px] rounded-[10px] border border-dashed border-[#e8eef6] bg-[#f8fbff]/60 p-2 text-xs font-semibold text-[#94a3b8]">
-                                  无课
+                                <div className="flex h-[210px] items-center justify-center rounded-[10px] border border-dashed border-[#e8eef6] bg-[#f8fbff]/60 p-2 text-center">
+                                  <div className="text-sm font-extrabold text-[#94a3b8]">无课</div>
                                 </div>
                               )}
                             </td>
