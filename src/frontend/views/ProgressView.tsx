@@ -97,6 +97,7 @@ type TimelineCell = {
   record?: StudentProgressRecord;
   studentCount: number;
   hasDifferences: boolean;
+  isCancelled: boolean;
   progressText: string;
   homeworkText: string;
   nextPlan: string;
@@ -572,7 +573,42 @@ export function ProgressView({
                           const cell = progressCellForDate(vault, row, column.date);
                           return (
                             <td key={`${row.key}-${column.date}`} className={`border-b border-r p-2 align-top ${column.isToday ? "border-[#fed7aa] bg-[#fffaf5]" : "border-[#dbe4ef]"}`}>
-                              {cell ? (
+                              {cell?.isCancelled ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedKey(row.key);
+                                    setSelectedLessonId(cell.lesson?.id ?? cell.record?.lessonId ?? "");
+                                    setEditModalOpen(Boolean(cell.lesson));
+                                  }}
+                                  className={`flex h-[210px] w-full flex-col rounded-[10px] border p-2 text-left transition-colors ${
+                                    selectedRow?.key === row.key && selectedLesson?.id === cell.lesson?.id
+                                      ? "border-[#fca5a5] bg-[#fff1f2]"
+                                      : "border-[#fecaca] bg-[#fff7f7] hover:border-[#f87171] hover:bg-[#fff1f2]"
+                                  }`}
+                                >
+                                  <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
+                                    {cell.lesson && (
+                                      <Badge variant="secondary" className="flex items-center gap-1 text-[10px]">
+                                        <Clock3 size={10} /> {cell.lesson.startTime}-{cell.lesson.endTime}
+                                      </Badge>
+                                    )}
+                                    <Badge variant="destructive" className="text-[10px]">已取消</Badge>
+                                    {cell.note && <Badge variant="plum" className="text-[10px]">备注</Badge>}
+                                  </div>
+                                  <div className="flex min-h-0 flex-1 flex-col justify-center rounded-[8px] border border-dashed border-[#fecaca] bg-white/70 px-3 py-4 text-center">
+                                    <div className="text-sm font-extrabold text-[#b91c1c]">这天课程已取消</div>
+                                    <div className="mt-2 text-xs font-semibold leading-5 text-[#991b1b]">
+                                      取消课不会作为最近一次上课进度继承；如有原因可在课程详情备注中查看或补充。
+                                    </div>
+                                    {cell.note && (
+                                      <div className="mt-3 line-clamp-3 text-left text-xs font-semibold leading-5 text-[#7f1d1d]">
+                                        备注：{cell.note}
+                                      </div>
+                                    )}
+                                  </div>
+                                </button>
+                              ) : cell ? (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -619,7 +655,7 @@ export function ProgressView({
                                 </button>
                               ) : (
                                 <div className="h-[210px] rounded-[10px] border border-dashed border-[#e8eef6] bg-[#f8fbff]/60 p-2 text-xs font-semibold text-[#94a3b8]">
-                                  无记录
+                                  无课
                                 </div>
                               )}
                             </td>
@@ -977,6 +1013,7 @@ function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string
     record,
     studentCount: lesson ? lessonStudentIds(lesson).length : 1,
     hasDifferences: lesson ? lessonHasStudentDifferences(vault, lesson) : false,
+    isCancelled: lesson?.status === "cancelled",
     progressText: record?.progressText ?? lesson?.content.taught ?? "",
     homeworkText: record?.homeworkText ?? lesson?.content.homework ?? "",
     nextPlan: record?.nextPlan ?? lesson?.content.nextLessonReminder ?? "",
