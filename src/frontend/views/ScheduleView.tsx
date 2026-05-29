@@ -3090,7 +3090,10 @@ export function ScheduleView({
               <CardHeader className="flex flex-col gap-3 border-b border-[#e8eef6] bg-white sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle>课程详情</CardTitle>
-                  <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)} · {dateWithWeekday(selected.date)} · {selected.startTime}-{selected.endTime}</CardDescription>
+                  <CardDescription className="space-y-1 leading-5">
+                    <span className="block">{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)}</span>
+                    <span className="block">{dateWithWeekday(selected.date)} · {selected.startTime}-{selected.endTime}</span>
+                  </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {lessonReturnTarget && (

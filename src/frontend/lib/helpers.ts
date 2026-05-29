@@ -347,6 +347,7 @@ export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | un
     .filter(
       (item) =>
         item.courseGroupId === lesson.courseGroupId &&
+        item.status !== "cancelled" &&
         `${item.date} ${item.startTime}` < `${lesson.date} ${lesson.startTime}`
     )
     .sort(sortLessons)

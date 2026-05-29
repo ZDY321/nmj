@@ -890,7 +890,7 @@ function buildProgressRows(vault: TeacherVault): ProgressRow[] {
       const lessons = vault.lessons
         .filter((lesson) => lesson.courseGroupId === courseGroupId && lessonStudentIds(lesson).includes(studentId))
         .sort(sortLessons);
-      const latestLesson = lessons.at(-1);
+      const latestLesson = lessons.filter((lesson) => lesson.status !== "cancelled").at(-1);
       const records = (vault.studentProgressRecords ?? [])
         .filter((record) => record.studentId === studentId && record.courseGroupId === courseGroupId)
         .sort(sortProgressRecords);
