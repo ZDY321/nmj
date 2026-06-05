@@ -249,6 +249,8 @@ export type Lesson = {
   makeupStudentId?: string;
   makeupOriginalDate?: string;
   makeupScheduledDate?: string;
+  syncSourceLessonId?: string;
+  syncSourceDate?: string;
   syncTargetStartDate?: string;
   content: LessonContent;
   note?: string;

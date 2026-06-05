@@ -169,6 +169,8 @@ export function ScheduleView({
   const initialFocusedMonth = initialFocusedDate.slice(0, 7);
   const initialTargetPanel = calendarFocus?.targetPanel ?? "calendar";
   const initialSelectedLessonId = calendarFocus?.lessonId ?? vault.lessons[0]?.id ?? "";
+  const weekStartPreference = weekStartsOn(vault);
+  const initialWeekDates = weekDatesFor(initialFocusedDate, weekStartPreference);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
   const studentOptions = sortStudentsByName(vault.students);
@@ -201,6 +203,10 @@ export function ScheduleView({
   const [calendarViewStudentFilter, setCalendarViewStudentFilter] = useState("");
   const [syncSourceDate, setSyncSourceDate] = useState(addDays(initialFocusedDate, -7));
   const [syncTargetDate, setSyncTargetDate] = useState(initialFocusedDate);
+  const [syncRangeSourceStart, setSyncRangeSourceStart] = useState(addDays(initialWeekDates[0] ?? initialFocusedDate, -7));
+  const [syncRangeSourceEnd, setSyncRangeSourceEnd] = useState(addDays(initialWeekDates[6] ?? initialFocusedDate, -7));
+  const [syncRangeTargetStart, setSyncRangeTargetStart] = useState(initialWeekDates[0] ?? initialFocusedDate);
+  const [syncRangeTargetEnd, setSyncRangeTargetEnd] = useState(initialWeekDates[6] ?? initialFocusedDate);
   const [selectedSyncLessonIds, setSelectedSyncLessonIds] = useState<string[]>([]);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const [calendarDetailDate, setCalendarDetailDate] = useState<string | null>(null);
@@ -220,6 +226,7 @@ export function ScheduleView({
   const [studentStatsDateEnd, setStudentStatsDateEnd] = useState(todayIso());
   const [studentStatsStartTime, setStudentStatsStartTime] = useState("");
   const [studentStatsEndTime, setStudentStatsEndTime] = useState("");
+  const [expandedStudentStatsGroupIds, setExpandedStudentStatsGroupIds] = useState<string[]>([]);
   const [lessonScope, setLessonScope] = useState<LessonScope>("month");
   const [lessonMonth, setLessonMonth] = useState(initialFocusedMonth);
   const [lessonDay, setLessonDay] = useState(initialFocusedDate);
@@ -313,8 +320,13 @@ export function ScheduleView({
   useEffect(() => {
     setSyncTargetDate(selectedCalendarDate);
     setSyncSourceDate(addDays(selectedCalendarDate, -7));
+    const selectedWeekDates = weekDatesFor(selectedCalendarDate, weekStartPreference);
+    setSyncRangeSourceStart(addDays(selectedWeekDates[0] ?? selectedCalendarDate, -7));
+    setSyncRangeSourceEnd(addDays(selectedWeekDates[6] ?? selectedCalendarDate, -7));
+    setSyncRangeTargetStart(selectedWeekDates[0] ?? selectedCalendarDate);
+    setSyncRangeTargetEnd(selectedWeekDates[6] ?? selectedCalendarDate);
     setMakeupDate(selectedCalendarDate);
-  }, [selectedCalendarDate]);
+  }, [selectedCalendarDate, weekStartPreference]);
 
   useEffect(() => {
     if (syncRecordsWithCalendarDate) {
@@ -363,7 +375,6 @@ export function ScheduleView({
     setAttendancePanelOpen(false);
   }, [selectedId]);
 
-  const weekStartPreference = weekStartsOn(vault);
   const visibleWeekdays = orderedWeekdays(weekStartPreference);
   const visibleWeekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
   const customTimePresets = vault.preferences?.customTimePresets ?? [];
@@ -380,6 +391,10 @@ export function ScheduleView({
     return groups;
   }, {});
   const selectedSyncLessons = syncSourceLessons.filter((lesson) => selectedSyncLessonIds.includes(lesson.id));
+  const syncRangeSourceDates = datesBetweenLocal(syncRangeSourceStart, syncRangeSourceEnd);
+  const syncRangeTargetDates = datesBetweenLocal(syncRangeTargetStart, syncRangeTargetEnd);
+  const syncRangeSourceLessons = vault.lessons.filter((lesson) => syncRangeSourceDates.includes(lesson.date));
+  const syncRangeActiveLessons = syncRangeSourceLessons.filter((lesson) => getCourse(vault, lesson.courseGroupId)?.status === "active");
   const selectedCalendarLessons = calendarLessonsForDate(selectedCalendarDate);
   const selectedCalendarWeekLessons = vault.lessons.filter((lesson) => weekDatesFor(selectedCalendarDate, weekStartPreference).includes(lesson.date) && matchesCalendarLessonFilter(lesson));
   const selectedCalendarCompletedCount = selectedCalendarLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
@@ -451,6 +466,7 @@ export function ScheduleView({
     })
     .sort(sortLessons);
   const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
+  const studentStatsGroupedLessonRows = buildStudentStatsGroupedLessonRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
   const studentStatsTotalHours = studentStatsLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
   const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
@@ -962,6 +978,53 @@ export function ScheduleView({
     setSelectedSyncLessonIds(selected ? selectableSyncLessons.map((lesson) => lesson.id) : []);
   }
 
+  function toggleExpandedStudentStatsGroup(groupId: string) {
+    setExpandedStudentStatsGroupIds((current) =>
+      current.includes(groupId) ? current.filter((id) => id !== groupId) : [...current, groupId]
+    );
+  }
+
+  function copyLessonBatchesToDates(
+    batches: Array<{ sourceLessons: Lesson[]; targetDate: string; targetStartDate: string }>,
+    options: {
+      force?: boolean;
+      onConfirm: () => void;
+      afterSync: () => void;
+      conflictDescription: (replaceCount: number) => string;
+      skippedMessage?: (syncedCount: number, skippedCount: number) => string;
+    }
+  ) {
+    const syncBuilds = batches.map((batch) => ({
+      ...buildScheduleSyncLessonsForDate(vault, batch.sourceLessons, batch.targetDate, batch.targetStartDate),
+      targetDate: batch.targetDate
+    }));
+    const lessonsToAdd = syncBuilds.flatMap((build) => build.lessons);
+    const replaceLessonIds = Array.from(new Set(syncBuilds.flatMap((build) => build.replaceLessonIds)));
+    const skippedCount = syncBuilds.reduce((sum, build) => sum + build.skippedCount, 0);
+
+    if (replaceLessonIds.length > 0 && !options.force) {
+      confirm({
+        title: "目标日期已有同时间课节",
+        description: options.conflictDescription(replaceLessonIds.length),
+        confirmLabel: "覆盖并同步",
+        onConfirm: options.onConfirm
+      });
+      return;
+    }
+
+    if (lessonsToAdd.length === 0) {
+      showScheduleError(skippedCount > 0 ? "可同步课程已暂停，未同步。" : "没有可同步的来源课节。");
+      return;
+    }
+
+    onAddLessons(lessonsToAdd, { replaceLessonIds });
+    options.afterSync();
+    setScheduleError("");
+    if (skippedCount > 0) {
+      showScheduleError(options.skippedMessage?.(lessonsToAdd.length, skippedCount) ?? `已同步 ${lessonsToAdd.length} 节；${skippedCount} 节来源课程已暂停，未同步。`);
+    }
+  }
+
   function copySelectedLessonsToDate(force = false) {
     if (!syncSourceDate || !syncTargetDate) {
       showScheduleError("请选择要同步的来源日期和目标日期。");
@@ -976,29 +1039,69 @@ export function ScheduleView({
       return;
     }
 
-    const syncBuild = buildScheduleSyncLessonsForDate(vault, selectedSyncLessons, syncTargetDate, syncTargetDate);
-    if (syncBuild.replaceLessonIds.length > 0 && !force) {
-      confirm({
-        title: "目标日期已有同时间课节",
-        description: `${syncTargetDate} 有 ${syncBuild.replaceLessonIds.length} 节课会被覆盖。已取消的来源课节也会同步为待上课。`,
-        confirmLabel: "覆盖并同步",
-        onConfirm: () => copySelectedLessonsToDate(true)
-      });
+    copyLessonBatchesToDates(
+      [{ sourceLessons: selectedSyncLessons, targetDate: syncTargetDate, targetStartDate: syncTargetDate }],
+      {
+        force,
+        onConfirm: () => copySelectedLessonsToDate(true),
+        afterSync: () => {
+          setSelectedCalendarDate(syncTargetDate);
+          setCalendarMonth(syncTargetDate.slice(0, 7));
+        },
+        conflictDescription: (replaceCount) => `${syncTargetDate} 有 ${replaceCount} 节课会被覆盖。已取消的来源课节也会同步为待上课。`
+      }
+    );
+  }
+
+  function copyLessonRangeToDateRange(force = false) {
+    if (!syncRangeSourceStart || !syncRangeSourceEnd || !syncRangeTargetStart || !syncRangeTargetEnd) {
+      showScheduleError("请选择完整的来源日期段和目标日期段。");
+      return;
+    }
+    if (!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) || !isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd)) {
+      showScheduleError("日期段结束日期不能早于开始日期。");
+      return;
+    }
+    if (syncRangeSourceDates.length !== syncRangeTargetDates.length) {
+      showScheduleError(`来源日期段有 ${syncRangeSourceDates.length} 天，目标日期段有 ${syncRangeTargetDates.length} 天，请保持天数一致。`);
+      return;
+    }
+    if (syncRangeSourceDates.some((date, index) => date === syncRangeTargetDates[index])) {
+      showScheduleError("来源日期和对应目标日期不能相同。");
       return;
     }
 
-    if (syncBuild.lessons.length === 0) {
-      showScheduleError(syncBuild.skippedCount > 0 ? "可同步课程已暂停，未同步。" : "没有可同步的来源课节。");
+    const sourceSnapshot = [...vault.lessons];
+    const batches = syncRangeSourceDates.map((sourceDate, index) => ({
+      sourceLessons: sourceSnapshot.filter((lesson) => lesson.date === sourceDate),
+      targetDate: syncRangeTargetDates[index],
+      targetStartDate: syncRangeTargetDates[0]
+    }));
+    if (!batches.some((batch) => batch.sourceLessons.length > 0)) {
+      showScheduleError("来源日期段没有可同步课节。");
       return;
     }
 
-    onAddLessons(syncBuild.lessons, { replaceLessonIds: syncBuild.replaceLessonIds });
-    setSelectedCalendarDate(syncTargetDate);
-    setCalendarMonth(syncTargetDate.slice(0, 7));
-    setScheduleError("");
-    if (syncBuild.skippedCount > 0) {
-      showScheduleError(`已同步 ${syncBuild.lessons.length} 节；${syncBuild.skippedCount} 节来源课程已暂停，未同步。`);
-    }
+    copyLessonBatchesToDates(batches, {
+      force,
+      onConfirm: () => copyLessonRangeToDateRange(true),
+      afterSync: () => {
+        setSelectedCalendarDate(syncRangeTargetStart);
+        setCalendarMonth(syncRangeTargetStart.slice(0, 7));
+      },
+      conflictDescription: (replaceCount) => `${syncRangeTargetStart} 至 ${syncRangeTargetEnd} 有 ${replaceCount} 节同时间课节会被覆盖。已取消的来源课节也会同步为待上课。`,
+      skippedMessage: (syncedCount, skippedCount) => `已同步 ${syncedCount} 节；${skippedCount} 节来源课程已暂停，未同步。`
+    });
+  }
+
+  function fillSyncRangeFromSelectedWeek() {
+    const selectedWeekDates = weekDatesFor(selectedCalendarDate, weekStartPreference);
+    const targetStart = selectedWeekDates[0] ?? selectedCalendarDate;
+    const targetEnd = selectedWeekDates[6] ?? selectedCalendarDate;
+    setSyncRangeSourceStart(addDays(targetStart, -7));
+    setSyncRangeSourceEnd(addDays(targetEnd, -7));
+    setSyncRangeTargetStart(targetStart);
+    setSyncRangeTargetEnd(targetEnd);
   }
 
   function toggleWeekday(day: Weekday) {
@@ -1678,7 +1781,7 @@ export function ScheduleView({
                         "创建班课或多人课时，请写清最少人数、基础费用、每增加1人费用；最少人数不是当前关联学生人数。",
                         "修改学生档案时，请写清原姓名或学生ID，以及新姓名、年级、校区、学校或备注。",
                         "涉及修改或删除时，请写清原课程日期、时间、科目和学生，避免 AI 匹配到相近课程。",
-                        "同步排课时，请写清来源日期/日期段、目标日期/日期段、是否覆盖已有课节、是否包含已取消课节；系统只复制课程安排。",
+                        "同步排课时，请写清来源日期/日期段、目标日期/日期段、是否覆盖已有课节、是否包含已取消课节；系统只复制课程安排，新课节的上节课内容会指向来源课节。",
                         "AI 只生成建议，点击确认写入前请核对摘要、操作建议和风险提醒。"
                       ].map((text) => (
                         <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
@@ -2384,12 +2487,22 @@ export function ScheduleView({
             <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <div className="text-sm font-extrabold text-[#061226]">同步某一天课程</div>
-                  <div className="mt-1 text-xs font-semibold text-[#64748b]">从来源日期勾选课程，复制到目标日期；已取消课节会同步为待上课，同时间课节会被覆盖。</div>
+                  <div className="text-sm font-extrabold text-[#061226]">同步课程</div>
+                  <div className="mt-1 text-xs font-semibold text-[#64748b]">支持单日勾选同步，也支持日期段一一对应同步；同步后新课节的上节课内容会指向来源课节。</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="w-fit">{selectedSyncLessons.length} / {syncSourceLessons.length} 节</Badge>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setSyncPanelOpen((value) => !value)} className="h-9 border border-[#facc15] bg-[#fefce8] px-3 font-extrabold text-[#854d0e] hover:bg-[#fef3c7]">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setSyncPanelOpen((value) => !value)}
+                    className={`h-9 border px-3 font-extrabold shadow-sm ${
+                      syncPanelOpen
+                        ? "border-[#fb923c] bg-[#fff7ed] text-[#c2410c] hover:bg-[#ffedd5]"
+                        : "border-[#93c5fd] bg-[#eff6ff] text-[#1557c2] hover:bg-[#dbeafe]"
+                    }`}
+                  >
                     {syncPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     {syncPanelOpen ? "折叠" : "展开"}
                   </Button>
@@ -2406,67 +2519,131 @@ export function ScheduleView({
                     className="overflow-hidden"
                   >
                     <div className="space-y-3 pt-1">
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">来源日期</label>
-                          <Input type="date" value={syncSourceDate} onChange={(event) => setSyncSourceDate(event.target.value)} className="h-10 bg-white" />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">目标日期</label>
-                          <Input type="date" value={syncTargetDate} onChange={(event) => setSyncTargetDate(event.target.value)} className="h-10 bg-white" />
-                        </div>
-                        <Button type="button" className="self-end" onClick={() => copySelectedLessonsToDate()} disabled={selectedSyncLessons.length === 0 || syncSourceDate === syncTargetDate}>
-                          <Copy size={15} /> 同步排课
-                        </Button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => setSyncSourceDate(addDays(syncTargetDate || selectedCalendarDate, -7))}>
-                          上周同日
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => setAllSyncLessons(true)} disabled={selectableSyncLessons.length === 0}>
-                          全选
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => setAllSyncLessons(false)} disabled={selectedSyncLessons.length === 0}>
-                          清空
-                        </Button>
-                      </div>
-                      <div className="max-h-[190px] space-y-2 overflow-y-auto pr-1">
-                        {syncSourceLessons.map((lesson) => {
-                          const course = getCourse(vault, lesson.courseGroupId);
-                          const disabled = course?.status !== "active";
-                          const conflicted = Boolean(syncTargetDate && findTimeConflict(syncTargetDate, lesson.startTime, lesson.endTime));
-                          return (
-                            <label
-                              key={lesson.id}
-                              className={`flex items-start gap-3 rounded-[12px] border px-3 py-2 text-sm ${
-                                disabled
-                                  ? "border-[#e2e8f0] bg-white text-[#94a3b8]"
-                                  : conflicted
-                                    ? "border-[#facc15] bg-[#fefce8] text-[#854d0e]"
-                                    : "border-[#dbe4ef] bg-white text-[#25324a]"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedSyncLessonIds.includes(lesson.id)}
-                                onChange={() => toggleSyncLesson(lesson.id)}
-                                disabled={disabled}
-                                className="mt-1 h-4 w-4 accent-[#ff8617]"
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate font-extrabold">{lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}</span>
-                                <span className="mt-1 block text-xs font-semibold">
-                                  {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)} · {lessonStatusLabels[lesson.status]}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期会覆盖" : ""}
-                                </span>
-                              </span>
-                            </label>
-                          );
-                        })}
-                        {syncSourceLessons.length === 0 && (
-                          <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
-                            来源日期没有可同步课节
+                      <div className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-sm font-extrabold text-[#061226]">同步某一天课程</div>
+                            <div className="mt-1 text-xs font-semibold text-[#64748b]">从来源日期勾选课节，复制到目标日期。</div>
                           </div>
-                        )}
+                          <Badge variant="secondary" className="w-fit">{selectedSyncLessons.length} / {syncSourceLessons.length} 节</Badge>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">来源日期</label>
+                            <Input type="date" value={syncSourceDate} onChange={(event) => setSyncSourceDate(event.target.value)} className="h-10 bg-white" />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">目标日期</label>
+                            <Input type="date" value={syncTargetDate} onChange={(event) => setSyncTargetDate(event.target.value)} className="h-10 bg-white" />
+                          </div>
+                          <Button type="button" className="self-end" onClick={() => copySelectedLessonsToDate()} disabled={selectedSyncLessons.length === 0 || syncSourceDate === syncTargetDate}>
+                            <Copy size={15} /> 同步单日
+                          </Button>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => setSyncSourceDate(addDays(syncTargetDate || selectedCalendarDate, -7))}>
+                            上周同日
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setAllSyncLessons(true)} disabled={selectableSyncLessons.length === 0}>
+                            全选
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setAllSyncLessons(false)} disabled={selectedSyncLessons.length === 0}>
+                            清空
+                          </Button>
+                        </div>
+                        <div className="mt-3 max-h-[190px] space-y-2 overflow-y-auto pr-1">
+                          {syncSourceLessons.map((lesson) => {
+                            const course = getCourse(vault, lesson.courseGroupId);
+                            const disabled = course?.status !== "active";
+                            const conflicted = Boolean(syncTargetDate && findTimeConflict(syncTargetDate, lesson.startTime, lesson.endTime));
+                            return (
+                              <label
+                                key={lesson.id}
+                                className={`flex items-start gap-3 rounded-[12px] border px-3 py-2 text-sm ${
+                                  disabled
+                                    ? "border-[#e2e8f0] bg-white text-[#94a3b8]"
+                                    : conflicted
+                                      ? "border-[#facc15] bg-[#fefce8] text-[#854d0e]"
+                                      : "border-[#dbe4ef] bg-white text-[#25324a]"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedSyncLessonIds.includes(lesson.id)}
+                                  onChange={() => toggleSyncLesson(lesson.id)}
+                                  disabled={disabled}
+                                  className="mt-1 h-4 w-4 accent-[#ff8617]"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate font-extrabold">{lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}</span>
+                                  <span className="mt-1 block text-xs font-semibold">
+                                    {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)} · {lessonStatusLabels[lesson.status]}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期会覆盖" : ""}
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                          {syncSourceLessons.length === 0 && (
+                            <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
+                              来源日期没有可同步课节
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[12px] border border-[#cfe0f5] bg-[#f8fbff] p-3">
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-sm font-extrabold text-[#061226]">同步日期段</div>
+                            <div className="mt-1 text-xs font-semibold text-[#64748b]">来源第 1 天同步到目标第 1 天，来源第 2 天同步到目标第 2 天，以此类推。</div>
+                          </div>
+                          <Badge variant="sky" className="w-fit">{syncRangeActiveLessons.length} / {syncRangeSourceLessons.length} 节</Badge>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">来源开始</label>
+                              <Input type="date" value={syncRangeSourceStart} onChange={(event) => setSyncRangeSourceStart(event.target.value)} className={!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">来源结束</label>
+                              <Input type="date" value={syncRangeSourceEnd} min={syncRangeSourceStart} onChange={(event) => setSyncRangeSourceEnd(event.target.value)} className={!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">目标开始</label>
+                              <Input type="date" value={syncRangeTargetStart} onChange={(event) => setSyncRangeTargetStart(event.target.value)} className={!isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">目标结束</label>
+                              <Input type="date" value={syncRangeTargetEnd} min={syncRangeTargetStart} onChange={(event) => setSyncRangeTargetEnd(event.target.value)} className={!isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            className="self-end"
+                            onClick={() => copyLessonRangeToDateRange()}
+                            disabled={
+                              syncRangeSourceLessons.length === 0 ||
+                              syncRangeSourceDates.length === 0 ||
+                              syncRangeSourceDates.length !== syncRangeTargetDates.length
+                            }
+                          >
+                            <Copy size={15} /> 同步日期段
+                          </Button>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={fillSyncRangeFromSelectedWeek}>
+                            上周整周到本周
+                          </Button>
+                          <Badge variant={syncRangeSourceDates.length === syncRangeTargetDates.length ? "secondary" : "yellow"} className="w-fit">
+                            {`${syncRangeSourceDates.length} 天 -> ${syncRangeTargetDates.length} 天`}
+                          </Badge>
+                          {syncRangeSourceLessons.length > syncRangeActiveLessons.length && (
+                            <Badge variant="yellow" className="w-fit">{syncRangeSourceLessons.length - syncRangeActiveLessons.length} 节课程已暂停</Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </motion.div>
@@ -2847,12 +3024,97 @@ export function ScheduleView({
             <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle>学生课程数量</CardTitle>
-                <CardDescription className="mt-1">同一节班课会分别计入每个关联学生的课次数。</CardDescription>
+                <CardDescription className="mt-1">一对一按学生展示；非一对一班型会放在同一节课里折叠，展开后查看每个学生。</CardDescription>
               </div>
-              <Badge variant="secondary" className="w-fit">{studentStatsRows.length} 人</Badge>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary" className="w-fit">{studentStatsRows.length} 人</Badge>
+                <Badge variant="sky" className="w-fit">{studentStatsGroupedLessonRows.length} 组</Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {studentStatsRows.map((row, index) => (
+              {studentStatsGroupedLessonRows.map((row, index) => {
+                const isExpanded = expandedStudentStatsGroupIds.includes(row.groupId);
+                const lesson = row.kind === "grouped" ? vault.lessons.find((item) => item.id === row.lessonId) : undefined;
+                return row.kind === "grouped" ? (
+                  <motion.div
+                    key={row.groupId}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.02 }}
+                    className="rounded-[14px] border border-[#cfe0f5] bg-[#f8fbff] p-4"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleExpandedStudentStatsGroup(row.groupId)}
+                      className="flex w-full flex-col gap-3 text-left lg:flex-row lg:items-start lg:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff] text-sm font-extrabold text-[#1557c2]">
+                            {row.studentCount}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-base font-extrabold text-[#061226]">{row.courseName}</div>
+                            <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                              {row.date} · {row.startTime}-{row.endTime} · {row.campusName}
+                            </div>
+                          </div>
+                          <Badge variant="secondary" className="text-[10px]">{row.subject}</Badge>
+                          <Badge variant="sky" className="text-[10px]">{row.courseTypeLabel}</Badge>
+                          <Badge variant={lessonStatusVariant(row.status)} className="text-[10px]">{lessonStatusLabels[row.status]}</Badge>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
+                        {[
+                          { label: "学生", value: `${row.studentCount} 人` },
+                          { label: "课时", value: `${row.hours.toFixed(1)} 小时` },
+                          { label: "课时费", value: formatPrivateMoney(row.amount, amountsVisible) },
+                          { label: "明细", value: isExpanded ? "收起" : "展开" }
+                        ].map((item) => (
+                          <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                            <div className="text-[11px] font-semibold text-[#64748b]">{item.label}</div>
+                            <div className="mt-1 text-sm font-extrabold text-[#061226]">{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: "easeInOut" }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-4 rounded-[12px] border border-[#e8eef6] bg-white p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <div className="text-xs font-bold text-[#64748b]">同一节课里的学生</div>
+                              {lesson && (
+                                <Button type="button" size="sm" variant="outline" onClick={() => openLessonInRecords(lesson)}>
+                                  查看课节
+                                </Button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                              {row.students.map((student) => (
+                                <div key={`${row.groupId}-${student.studentId}`} className="rounded-[10px] border border-[#eef2f7] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
+                                  <div className="font-extrabold text-[#061226]">{student.studentName}</div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                    <Badge variant={student.attendanceStatus === "attended" ? "sage" : student.attendanceStatus === "cancelled" ? "destructive" : "yellow"} className="text-[10px]">
+                                      {attendanceLabels[student.attendanceStatus]}
+                                    </Badge>
+                                    {student.note && <span className="truncate">{student.note}</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                ) : (
                 <motion.div
                   key={row.studentId}
                   initial={{ opacity: 0, y: 8 }}
@@ -2931,8 +3193,9 @@ export function ScheduleView({
                     </div>
                   </div>
                 </motion.div>
-              ))}
-              {studentStatsRows.length === 0 && (
+                );
+              })}
+              {studentStatsGroupedLessonRows.length === 0 && (
                 <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
                   没有符合当前筛选条件的学生课次
                 </div>
@@ -3950,6 +4213,73 @@ function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalize
   return [...rows.values()]
     .map((row) => ({ ...row, courseNames: [...row.courseNames].sort(compareByName) }))
     .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
+}
+
+function buildStudentStatsGroupedLessonRows(vault: TeacherVault, lessons: Lesson[], normalizedNameFilter: string) {
+  const oneToOneLessons = lessons.filter((lesson) => isOneOnOneStatsLesson(vault, lesson));
+  const groupedLessons = lessons.filter((lesson) => !isOneOnOneStatsLesson(vault, lesson));
+  const oneToOneRows = buildStudentStatsRows(
+    vault,
+    oneToOneLessons,
+    normalizedNameFilter
+  ).map((row) => ({ kind: "student" as const, groupId: `student-${row.studentId}`, ...row }));
+
+  const groupedRows = groupedLessons
+    .map((lesson) => {
+      const filteredStudentIds = filteredStudentIdsForStats(vault, lesson, normalizedNameFilter);
+      if (filteredStudentIds.length === 0) return null;
+      const hours = lessonBillableHours(lesson);
+      return {
+        kind: "grouped" as const,
+        groupId: `lesson-${lesson.id}`,
+        lessonId: lesson.id,
+        courseName: courseName(vault, lesson.courseGroupId),
+        subject: courseSubject(vault, lesson.courseGroupId),
+        courseTypeLabel: courseTypeLabel(vault, lesson.type),
+        campusName: campusName(vault, lesson.campusId),
+        date: lesson.date,
+        startTime: lesson.startTime,
+        endTime: lesson.endTime,
+        status: lesson.status,
+        studentCount: filteredStudentIds.length,
+        hours,
+        amount: lesson.feeSnapshot.amount,
+        students: filteredStudentIds
+          .map((studentId) => {
+            const attendance = lesson.attendance.find((entry) => entry.studentId === studentId);
+            return {
+              studentId,
+              studentName: findStudent(vault, studentId)?.name ?? "未知学生",
+              attendanceStatus: attendance?.status ?? attendanceStatusForLessonStatus(lesson.status),
+              note: attendance?.note ?? ""
+            };
+          })
+          .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId))
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  return [...groupedRows, ...oneToOneRows].sort((a, b) => {
+    const aDateTime = a.kind === "grouped" ? `${a.date} ${a.startTime}` : a.details[0] ? `${a.details[0].date} ${a.details[0].startTime}` : "";
+    const bDateTime = b.kind === "grouped" ? `${b.date} ${b.startTime}` : b.details[0] ? `${b.details[0].date} ${b.details[0].startTime}` : "";
+    if (aDateTime !== bDateTime) return bDateTime.localeCompare(aDateTime);
+    const aLabel = a.kind === "grouped" ? a.courseName : a.studentName;
+    const bLabel = b.kind === "grouped" ? b.courseName : b.studentName;
+    return compareByName(aLabel, bLabel) || a.groupId.localeCompare(b.groupId);
+  });
+}
+
+function isOneOnOneStatsLesson(vault: TeacherVault, lesson: Lesson): boolean {
+  const course = getCourse(vault, lesson.courseGroupId);
+  if (lesson.type === "one_on_one" || course?.type === "one_on_one") return true;
+  return false;
+}
+
+function filteredStudentIdsForStats(vault: TeacherVault, lesson: Lesson, normalizedNameFilter: string): string[] {
+  return lessonStudentIds(lesson).filter((studentId) => {
+    const studentName = findStudent(vault, studentId)?.name ?? "未知学生";
+    return !normalizedNameFilter || studentName.toLowerCase().includes(normalizedNameFilter);
+  });
 }
 
 function attendanceSurfaceClass(status: AttendanceStatus, isTemporary: boolean): string {

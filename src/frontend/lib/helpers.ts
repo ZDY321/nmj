@@ -343,6 +343,22 @@ export function studentNames(vault: TeacherVault, studentIds: string[]): string 
 }
 
 export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | undefined {
+  if (lesson.syncSourceLessonId) {
+    const sourceLesson = vault.lessons.find((item) => item.id === lesson.syncSourceLessonId);
+    if (sourceLesson) return sourceLesson;
+  }
+
+  if (lesson.syncSourceDate) {
+    const sourceLesson = vault.lessons.find(
+      (item) =>
+        item.courseGroupId === lesson.courseGroupId &&
+        item.date === lesson.syncSourceDate &&
+        item.startTime === lesson.startTime &&
+        item.endTime === lesson.endTime
+    );
+    if (sourceLesson) return sourceLesson;
+  }
+
   const previous = vault.lessons
     .filter(
       (item) =>
@@ -462,14 +478,18 @@ export function buildScheduleSyncLessonsForDate(
     });
 
     lessons.push(
-      createLessonFromCourse(vault, course, {
-        date: targetDate,
-        startTime: sourceLesson.startTime,
-        endTime: sourceLesson.endTime,
-        campusId: sourceLesson.campusId ?? course.defaultCampusId,
-        status: "scheduled",
-        syncTargetStartDate
-      })
+      {
+        ...createLessonFromCourse(vault, course, {
+          date: targetDate,
+          startTime: sourceLesson.startTime,
+          endTime: sourceLesson.endTime,
+          campusId: sourceLesson.campusId ?? course.defaultCampusId,
+          status: "scheduled",
+          syncTargetStartDate
+        }),
+        syncSourceLessonId: sourceLesson.id,
+        syncSourceDate: sourceLesson.date
+      }
     );
   });
 

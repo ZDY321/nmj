@@ -1265,26 +1265,16 @@ export function App() {
 
       const includeCancelled = !falseyAiValue(data.includeCancelled ?? data.copyCancelled ?? data.cancelledLessons);
       const sourceSnapshot = [...nextVault.lessons];
-      let syncedCount = 0;
-      let replacedCount = 0;
-      let skippedCount = 0;
       const emptySourceDates: string[] = [];
 
-      const applySyncBatch = (sourceLessons: Lesson[], targetDate: string, targetStartDate: string) => {
+      const buildSyncBatch = (sourceLessons: Lesson[], targetDate: string, targetStartDate: string) => {
         const filteredSourceLessons = sourceLessons.filter((lesson) => includeCancelled || lesson.status !== "cancelled");
-        if (filteredSourceLessons.length === 0) return;
-        const syncBuild = buildScheduleSyncLessonsForDate(nextVault, filteredSourceLessons, targetDate, targetStartDate);
-        if (syncBuild.lessons.length === 0) {
-          skippedCount += syncBuild.skippedCount;
-          return;
-        }
-        const replaceLessonIds = new Set(syncBuild.replaceLessonIds);
-        nextVault.lessons = nextVault.lessons.filter((lesson) => !replaceLessonIds.has(lesson.id));
-        nextVault.lessons.push(...syncBuild.lessons);
-        syncedCount += syncBuild.lessons.length;
-        replacedCount += syncBuild.replaceLessonIds.length;
-        skippedCount += syncBuild.skippedCount;
+        return filteredSourceLessons.length > 0
+          ? buildScheduleSyncLessonsForDate(nextVault, filteredSourceLessons, targetDate, targetStartDate)
+          : { lessons: [], replaceLessonIds: [], skippedCount: 0 };
       };
+
+      const syncBuilds: Array<ReturnType<typeof buildScheduleSyncLessonsForDate>> = [];
 
       if (sourceDates.length === 0 && sourceLessonIds.length > 0) {
         if (targetDates.length !== 1) {
@@ -1292,7 +1282,7 @@ export function App() {
           return true;
         }
         const selectedSourceLessons = sourceSnapshot.filter((lesson) => sourceLessonIdSet.has(lesson.id));
-        applySyncBatch(selectedSourceLessons, targetDates[0], targetDates[0]);
+        syncBuilds.push(buildSyncBatch(selectedSourceLessons, targetDates[0], targetDates[0]));
       } else {
         if (sourceDates.length === 0) {
           blockers.push("同步课节缺少来源日期。");
@@ -1312,14 +1302,26 @@ export function App() {
             emptySourceDates.push(sourceDate);
             return;
           }
-          applySyncBatch(sourceLessons, targetDates[index], targetStartDate);
+          syncBuilds.push(buildSyncBatch(sourceLessons, targetDates[index], targetStartDate));
         });
       }
+
+      const lessonsToAdd = syncBuilds.flatMap((build) => build.lessons);
+      const replaceLessonIds = Array.from(new Set(syncBuilds.flatMap((build) => build.replaceLessonIds)));
+      const skippedCount = syncBuilds.reduce((sum, build) => sum + build.skippedCount, 0);
+      const syncedCount = lessonsToAdd.length;
+      const replacedCount = replaceLessonIds.length;
 
       if (syncedCount === 0) {
         blockers.push(skippedCount > 0 ? "来源课程已暂停或缺失，未同步课节。" : "没有找到可同步的来源课节。");
         return true;
       }
+
+      if (replaceLessonIds.length > 0) {
+        const replaceLessonIdSet = new Set(replaceLessonIds);
+        nextVault.lessons = nextVault.lessons.filter((lesson) => !replaceLessonIdSet.has(lesson.id));
+      }
+      nextVault.lessons.push(...lessonsToAdd);
 
       const sourceLabel = sourceDates.length > 1
         ? `${sourceDates[0]} 至 ${sourceDates[sourceDates.length - 1]}`
