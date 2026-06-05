@@ -1030,10 +1030,11 @@ export function ScheduleView({
       replaceLessonIds
     );
     const skippedCount = syncBuilds.reduce((sum, build) => sum + build.skippedCount, 0);
+    const conflictSkippedCount = syncBuilds.reduce((sum, build) => sum + build.conflictSkippedCount, 0);
 
     if (replaceLessonIds.length > 0 && !options.force) {
       confirm({
-        title: "目标日期已有同时间课节",
+        title: "目标日期已有同课程课节",
         description: options.conflictDescription(replaceLessonIds.length),
         confirmLabel: "覆盖并同步",
         onConfirm: options.onConfirm
@@ -1042,15 +1043,29 @@ export function ScheduleView({
     }
 
     if (lessonsToAdd.length === 0) {
-      showScheduleError(skippedCount > 0 ? "可同步课程已暂停，未同步。" : "没有可同步的来源课节。");
+      showScheduleError(
+        conflictSkippedCount > 0
+          ? "目标时间已有其他课程，已跳过同步，未覆盖原有手动排课。"
+          : skippedCount > 0
+            ? "可同步课程已暂停，未同步。"
+            : "没有可同步的来源课节。"
+      );
       return;
     }
 
     onAddLessons(lessonsToAdd, { replaceLessonIds });
     options.afterSync();
     setScheduleError("");
-    if (skippedCount > 0) {
-      showScheduleError(options.skippedMessage?.(lessonsToAdd.length, skippedCount) ?? `已同步 ${lessonsToAdd.length} 节；${skippedCount} 节来源课程已暂停，未同步。`);
+    if (skippedCount > 0 || conflictSkippedCount > 0) {
+      const messages = [
+        skippedCount > 0 ? `${skippedCount} 节来源课程已暂停，未同步` : "",
+        conflictSkippedCount > 0 ? `${conflictSkippedCount} 节目标时间已有其他课程，已跳过` : ""
+      ].filter(Boolean);
+      showScheduleError(
+        skippedCount > 0 && conflictSkippedCount === 0 && options.skippedMessage
+          ? options.skippedMessage(lessonsToAdd.length, skippedCount)
+          : `已同步 ${lessonsToAdd.length} 节；${messages.join("；")}。`
+      );
     }
   }
 
@@ -2617,7 +2632,16 @@ export function ScheduleView({
                           {syncSourceLessons.map((lesson) => {
                             const course = getCourse(vault, lesson.courseGroupId);
                             const disabled = course?.status !== "active";
-                            const conflicted = Boolean(syncTargetDate && findTimeConflict(syncTargetDate, lesson.startTime, lesson.endTime));
+                            const conflicted = Boolean(
+                              syncTargetDate &&
+                              vault.lessons.some(
+                                (existingLesson) =>
+                                  existingLesson.date === syncTargetDate &&
+                                  existingLesson.courseGroupId === lesson.courseGroupId &&
+                                  existingLesson.status !== "cancelled" &&
+                                  timesOverlap(existingLesson.startTime, existingLesson.endTime, lesson.startTime, lesson.endTime)
+                              )
+                            );
                             return (
                               <label
                                 key={lesson.id}

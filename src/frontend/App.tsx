@@ -1272,7 +1272,7 @@ export function App() {
         const filteredSourceLessons = sourceLessons.filter((lesson) => includeCancelled || lesson.status !== "cancelled");
         return filteredSourceLessons.length > 0
           ? buildScheduleSyncLessonsForDate(nextVault, filteredSourceLessons, targetDate, targetStartDate)
-          : { lessons: [], replaceLessonIds: [], skippedCount: 0 };
+          : { lessons: [], replaceLessonIds: [], skippedCount: 0, conflictSkippedCount: 0 };
       };
 
       const syncBuilds: Array<ReturnType<typeof buildScheduleSyncLessonsForDate>> = [];
@@ -1314,11 +1314,18 @@ export function App() {
         replaceLessonIds
       );
       const skippedCount = syncBuilds.reduce((sum, build) => sum + build.skippedCount, 0);
+      const conflictSkippedCount = syncBuilds.reduce((sum, build) => sum + build.conflictSkippedCount, 0);
       const syncedCount = lessonsToAdd.length;
       const replacedCount = replaceLessonIds.length;
 
       if (syncedCount === 0) {
-        blockers.push(skippedCount > 0 ? "来源课程已暂停或缺失，未同步课节。" : "没有找到可同步的来源课节。");
+        blockers.push(
+          conflictSkippedCount > 0
+            ? "目标时间已有其他课程，已跳过同步，未覆盖原有手动排课。"
+            : skippedCount > 0
+              ? "来源课程已暂停或缺失，未同步课节。"
+              : "没有找到可同步的来源课节。"
+        );
         return true;
       }
 
@@ -1336,6 +1343,7 @@ export function App() {
         : targetDates[0];
       messages.push(
         `已同步 ${syncedCount} 节课：${sourceLabel} 到 ${targetLabel}${replacedCount > 0 ? `，覆盖 ${replacedCount} 节已有课节` : ""}${skippedCount > 0 ? `，${skippedCount} 节来源课程已暂停未同步` : ""}${emptySourceDates.length > 0 ? `，${emptySourceDates.length} 个来源日期没有课节` : ""}`
+        + `${conflictSkippedCount > 0 ? `，${conflictSkippedCount} 节目标时间已有其他课程已跳过` : ""}`
       );
       return true;
     };

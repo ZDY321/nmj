@@ -500,10 +500,11 @@ export function buildScheduleSyncLessonsForDate(
   sourceLessons: Lesson[],
   targetDate: string,
   syncTargetStartDate: string
-): { lessons: Lesson[]; replaceLessonIds: string[]; skippedCount: number } {
+): { lessons: Lesson[]; replaceLessonIds: string[]; skippedCount: number; conflictSkippedCount: number } {
   const replaceLessonIds = new Set<string>();
   const lessons: Lesson[] = [];
   let skippedCount = 0;
+  let conflictSkippedCount = 0;
 
   sourceLessons.forEach((sourceLesson) => {
     const course = getCourse(vault, sourceLesson.courseGroupId);
@@ -512,11 +513,18 @@ export function buildScheduleSyncLessonsForDate(
       return;
     }
 
-    vault.lessons.forEach((existingLesson) => {
-      if (existingLesson.date !== targetDate) return;
-      if (lessonTimesOverlap(existingLesson.startTime, existingLesson.endTime, sourceLesson.startTime, sourceLesson.endTime)) {
-        replaceLessonIds.add(existingLesson.id);
-      }
+    const targetTimeConflicts = vault.lessons.filter(
+      (existingLesson) =>
+        existingLesson.date === targetDate &&
+        existingLesson.status !== "cancelled" &&
+        lessonTimesOverlap(existingLesson.startTime, existingLesson.endTime, sourceLesson.startTime, sourceLesson.endTime)
+    );
+    if (targetTimeConflicts.some((existingLesson) => existingLesson.courseGroupId !== sourceLesson.courseGroupId)) {
+      conflictSkippedCount += 1;
+      return;
+    }
+    targetTimeConflicts.forEach((existingLesson) => {
+      replaceLessonIds.add(existingLesson.id);
     });
 
     lessons.push(
@@ -533,7 +541,7 @@ export function buildScheduleSyncLessonsForDate(
     );
   });
 
-  return { lessons, replaceLessonIds: [...replaceLessonIds], skippedCount };
+  return { lessons, replaceLessonIds: [...replaceLessonIds], skippedCount, conflictSkippedCount };
 }
 
 export function linkSyncedLessonsToPreviousLessons(vault: TeacherVault, lessons: Lesson[], replaceLessonIds: string[] = []): Lesson[] {
