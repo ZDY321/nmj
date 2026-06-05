@@ -62,6 +62,7 @@ import {
   lessonStatusSurfaceClass,
   lessonStatusVariant,
   lessonStudentIds,
+  linkSyncedLessonsToPreviousLessons,
   makeupNeededStudentIds,
   monthShift,
   orderedWeekdayLabels,
@@ -998,8 +999,12 @@ export function ScheduleView({
       ...buildScheduleSyncLessonsForDate(vault, batch.sourceLessons, batch.targetDate, batch.targetStartDate),
       targetDate: batch.targetDate
     }));
-    const lessonsToAdd = syncBuilds.flatMap((build) => build.lessons);
     const replaceLessonIds = Array.from(new Set(syncBuilds.flatMap((build) => build.replaceLessonIds)));
+    const lessonsToAdd = linkSyncedLessonsToPreviousLessons(
+      vault,
+      syncBuilds.flatMap((build) => build.lessons),
+      replaceLessonIds
+    );
     const skippedCount = syncBuilds.reduce((sum, build) => sum + build.skippedCount, 0);
 
     if (replaceLessonIds.length > 0 && !options.force) {
@@ -1781,7 +1786,7 @@ export function ScheduleView({
                         "创建班课或多人课时，请写清最少人数、基础费用、每增加1人费用；最少人数不是当前关联学生人数。",
                         "修改学生档案时，请写清原姓名或学生ID，以及新姓名、年级、校区、学校或备注。",
                         "涉及修改或删除时，请写清原课程日期、时间、科目和学生，避免 AI 匹配到相近课程。",
-                        "同步排课时，请写清来源日期/日期段、目标日期/日期段、是否覆盖已有课节、是否包含已取消课节；系统只复制课程安排，新课节的上节课内容会指向来源课节。",
+                        "同步排课时，请写清来源日期/日期段、目标日期/日期段、是否覆盖已有课节、是否包含已取消课节；系统只复制课程安排，新课节的上节课内容会按目标时间线指向前面最近一节同课程课。",
                         "AI 只生成建议，点击确认写入前请核对摘要、操作建议和风险提醒。"
                       ].map((text) => (
                         <div key={text} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
@@ -2488,7 +2493,7 @@ export function ScheduleView({
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="text-sm font-extrabold text-[#061226]">同步课程</div>
-                  <div className="mt-1 text-xs font-semibold text-[#64748b]">支持单日勾选同步，也支持日期段一一对应同步；同步后新课节的上节课内容会指向来源课节。</div>
+                  <div className="mt-1 text-xs font-semibold text-[#64748b]">支持单日勾选同步，也支持日期段一一对应同步；同步后按目标时间线自动衔接上一节内容和作业。</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="w-fit">{selectedSyncLessons.length} / {syncSourceLessons.length} 节</Badge>
@@ -2595,26 +2600,29 @@ export function ScheduleView({
                         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <div className="text-sm font-extrabold text-[#061226]">同步日期段</div>
-                            <div className="mt-1 text-xs font-semibold text-[#64748b]">来源第 1 天同步到目标第 1 天，来源第 2 天同步到目标第 2 天，以此类推。</div>
+                            <div className="mt-1 text-xs font-semibold text-[#64748b]">来源日期段用于复制排课；同步后按目标课节时间线自动衔接上一节内容和作业。</div>
                           </div>
                           <Badge variant="sky" className="w-fit">{syncRangeActiveLessons.length} / {syncRangeSourceLessons.length} 节</Badge>
                         </div>
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] xl:items-end">
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
                             <div className="space-y-2">
                               <label className="text-sm font-medium">来源开始</label>
                               <Input type="date" value={syncRangeSourceStart} onChange={(event) => setSyncRangeSourceStart(event.target.value)} className={!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
                             </div>
+                            <div className="pb-2 text-center text-lg font-extrabold text-[#1557c2]">~</div>
                             <div className="space-y-2">
                               <label className="text-sm font-medium">来源结束</label>
                               <Input type="date" value={syncRangeSourceEnd} min={syncRangeSourceStart} onChange={(event) => setSyncRangeSourceEnd(event.target.value)} className={!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
                             </div>
                           </div>
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div className="hidden pb-2 text-center text-xl font-extrabold text-[#ff8617] xl:block">-&gt;</div>
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
                             <div className="space-y-2">
                               <label className="text-sm font-medium">目标开始</label>
                               <Input type="date" value={syncRangeTargetStart} onChange={(event) => setSyncRangeTargetStart(event.target.value)} className={!isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
                             </div>
+                            <div className="pb-2 text-center text-lg font-extrabold text-[#1557c2]">~</div>
                             <div className="space-y-2">
                               <label className="text-sm font-medium">目标结束</label>
                               <Input type="date" value={syncRangeTargetEnd} min={syncRangeTargetStart} onChange={(event) => setSyncRangeTargetEnd(event.target.value)} className={!isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />

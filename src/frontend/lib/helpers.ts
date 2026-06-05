@@ -486,14 +486,44 @@ export function buildScheduleSyncLessonsForDate(
           campusId: sourceLesson.campusId ?? course.defaultCampusId,
           status: "scheduled",
           syncTargetStartDate
-        }),
-        syncSourceLessonId: sourceLesson.id,
-        syncSourceDate: sourceLesson.date
+        })
       }
     );
   });
 
   return { lessons, replaceLessonIds: [...replaceLessonIds], skippedCount };
+}
+
+export function linkSyncedLessonsToPreviousLessons(vault: TeacherVault, lessons: Lesson[], replaceLessonIds: string[] = []): Lesson[] {
+  const replaceLessonIdSet = new Set(replaceLessonIds);
+  const timeline = vault.lessons
+    .filter((lesson) => !replaceLessonIdSet.has(lesson.id))
+    .sort(sortLessons);
+  const linkedLessons = new Map<string, Lesson>();
+
+  [...lessons].sort(sortLessons).forEach((lesson) => {
+    const lessonDateTime = `${lesson.date} ${lesson.startTime}`;
+    const sourceLesson = timeline
+      .filter(
+        (item) =>
+          item.courseGroupId === lesson.courseGroupId &&
+          item.status !== "cancelled" &&
+          `${item.date} ${item.startTime}` < lessonDateTime
+      )
+      .sort(sortLessons)
+      .at(-1);
+    const linkedLesson = sourceLesson
+      ? {
+          ...lesson,
+          syncSourceLessonId: sourceLesson.id,
+          syncSourceDate: sourceLesson.date
+        }
+      : lesson;
+    linkedLessons.set(lesson.id, linkedLesson);
+    timeline.push(linkedLesson);
+  });
+
+  return lessons.map((lesson) => linkedLessons.get(lesson.id) ?? lesson);
 }
 
 export function nextSevenDates(fromDate: string): string[] {

@@ -41,6 +41,7 @@ import {
   datesBetween,
   createLessonFromCourse,
   courseTypeLabel,
+  linkSyncedLessonsToPreviousLessons,
   lessonStudentIds,
   makeupNeededStudentIds,
   weekdayOfDateIso
@@ -1306,8 +1307,12 @@ export function App() {
         });
       }
 
-      const lessonsToAdd = syncBuilds.flatMap((build) => build.lessons);
       const replaceLessonIds = Array.from(new Set(syncBuilds.flatMap((build) => build.replaceLessonIds)));
+      const lessonsToAdd = linkSyncedLessonsToPreviousLessons(
+        nextVault,
+        syncBuilds.flatMap((build) => build.lessons),
+        replaceLessonIds
+      );
       const skippedCount = syncBuilds.reduce((sum, build) => sum + build.skippedCount, 0);
       const syncedCount = lessonsToAdd.length;
       const replacedCount = replaceLessonIds.length;
