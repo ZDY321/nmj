@@ -472,6 +472,7 @@ export function ScheduleView({
     .sort(sortLessons);
   const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
   const studentStatsGroupedLessonRows = buildStudentStatsGroupedLessonRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
+  const studentStatsStudentLessonCount = studentStatsLessons.reduce((sum, lesson) => sum + filteredStudentIdsForStats(vault, lesson, normalizedStudentStatsNameFilter).length, 0);
   const studentStatsTotalHours = studentStatsLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
   const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
@@ -3094,9 +3095,10 @@ export function ScheduleView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                 {[
-                  { label: "筛选后课次", value: `${studentStatsLessons.length} 节` },
+                  { label: "实际课节", value: `${studentStatsLessons.length} 节` },
+                  { label: "学生课次", value: `${studentStatsStudentLessonCount} 人次` },
                   { label: "涉及学生", value: `${studentStatsRows.length} 人` },
                   { label: "已完成", value: `${studentStatsCompletedCount} 节` },
                   { label: "课时费合计", value: formatPrivateMoney(studentStatsTotalFee, amountsVisible) }
@@ -3156,7 +3158,7 @@ export function ScheduleView({
                       </div>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
                         {[
-                          { label: "学生", value: `${row.studentCount} 人` },
+                          { label: "学生课次", value: `${row.studentCount} 人次` },
                           { label: "课时", value: `${row.hours.toFixed(1)} 小时` },
                           { label: "课时费", value: formatPrivateMoney(row.amount, amountsVisible) },
                           { label: "明细", value: isExpanded ? "收起" : "展开" }
@@ -4179,6 +4181,12 @@ function aiFieldLabel(key: string): string {
     pauseSource: "暂停原课程",
     date: "日期",
     dates: "日期",
+    dateStart: "开始日期",
+    dateEnd: "结束日期",
+    startDate: "开始日期",
+    endDate: "结束日期",
+    fromDate: "开始日期",
+    toDate: "结束日期",
     weekday: "星期",
     weekdays: "星期",
     startTime: "开始时间",
@@ -4195,6 +4203,9 @@ function aiFieldLabel(key: string): string {
     includeCancelled: "包含已取消课节",
     lessonId: "课节",
     lessonIds: "课节",
+    scheduledOnly: "仅删除待上课",
+    includeCompleted: "包含已完成课",
+    deleteCompleted: "删除已完成课",
     note: "备注",
     reason: "原因",
     confidence: "置信度"

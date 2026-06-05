@@ -1120,17 +1120,32 @@ export function App() {
     };
 
     const deleteLessonFromAi = (data: Record<string, unknown>) => {
-      const lessonId = stringValue(data.lessonId ?? data.id);
-      const lessonDate = stringValue(data.date);
+      const lessonIds = Array.from(new Set([
+        ...arrayValueLocal(data.lessonIds).map(stringValue),
+        stringValue(data.lessonId ?? data.id)
+      ].filter(Boolean)));
+      const lessonIdSet = new Set(lessonIds);
+      const lessonDates = dateListFromAi(data.dates, data.date, data.dateStart ?? data.startDate ?? data.fromDate, data.dateEnd ?? data.endDate ?? data.toDate);
+      const lessonDateSet = new Set(lessonDates);
       const startTime = stringValue(data.startTime);
       const endTime = stringValue(data.endTime);
       const courseName = stringValue(data.courseName ?? data.name);
       const subject = stringValue(data.subject);
       const courseId = stringValue(data.courseId);
-      const matchedLesson = nextVault.lessons.find((lesson) => {
-        if (lessonId && lesson.id === lessonId) return true;
+      const deleteScheduledOnly = data.scheduledOnly !== false && data.includeCompleted !== true && data.deleteCompleted !== true;
+      const hasDateRange = lessonDates.length > 0;
+      const hasSpecificTime = Boolean(startTime || endTime);
+      const hasCourseFilter = Boolean(courseId || courseName || subject);
+      const hasSpecificIds = lessonIds.length > 0;
+      if (!hasSpecificIds && !hasDateRange) {
+        blockers.push("删除课节缺少明确日期或课节ID，已拒绝执行，避免误删历史课程。");
+        return;
+      }
+      const matchedLessons = nextVault.lessons.filter((lesson) => {
+        if (hasSpecificIds && !lessonIdSet.has(lesson.id)) return false;
+        if (hasDateRange && !lessonDateSet.has(lesson.date)) return false;
+        if (deleteScheduledOnly && lesson.status !== "scheduled" && lesson.status !== "draft" && lesson.status !== "makeup_pending") return false;
         if (courseId && lesson.courseGroupId !== courseId) return false;
-        if (lessonDate && lesson.date !== lessonDate) return false;
         if (startTime && lesson.startTime !== startTime) return false;
         if (endTime && lesson.endTime !== endTime) return false;
         if (!courseName && !subject) return true;
@@ -1140,9 +1155,24 @@ export function App() {
         if (subject && course.subject.trim().toLowerCase() !== subject.toLowerCase()) return false;
         return true;
       });
-      if (!matchedLesson) return;
-      nextVault.lessons = nextVault.lessons.filter((lesson) => lesson.id !== matchedLesson.id);
-      messages.push(`已删除课节「${matchedLesson.date} ${matchedLesson.startTime}-${matchedLesson.endTime} · ${nextVault.courseGroups.find((course) => course.id === matchedLesson.courseGroupId)?.name ?? "未知课程"}」`);
+      if (matchedLessons.length === 0) {
+        blockers.push(`没有找到符合${hasDateRange ? ` ${lessonDates[0]}${lessonDates.length > 1 ? ` 至 ${lessonDates.at(-1)}` : ""}` : ""} 条件的待上课课节。`);
+        return;
+      }
+      if (!hasDateRange && !hasSpecificIds && matchedLessons.length > 1) {
+        blockers.push(`删除课节匹配到 ${matchedLessons.length} 节，但缺少明确日期或课节ID，已拒绝执行。`);
+        return;
+      }
+      if (!hasSpecificIds && !hasSpecificTime && !hasCourseFilter && matchedLessons.length > 80) {
+        blockers.push(`删除课节将影响 ${matchedLessons.length} 节，范围过大，已拒绝执行。请缩小日期范围或指定课程。`);
+        return;
+      }
+      const matchedLessonIds = new Set(matchedLessons.map((lesson) => lesson.id));
+      nextVault.lessons = nextVault.lessons.filter((lesson) => !matchedLessonIds.has(lesson.id));
+      const preview = matchedLessons
+        .slice(0, 12)
+        .map((lesson) => `「${lesson.date} ${lesson.startTime}-${lesson.endTime} · ${nextVault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.name ?? "未知课程"}」`);
+      messages.push(`已删除 ${matchedLessons.length} 节课${hasDateRange ? `（${lessonDates[0]}${lessonDates.length > 1 ? ` 至 ${lessonDates.at(-1)}` : ""}）` : ""}${preview.length > 0 ? `：${preview.join("；")}${matchedLessons.length > preview.length ? `；另 ${matchedLessons.length - preview.length} 节` : ""}` : ""}`);
     };
 
     const addStudentsToCourse = (course: CourseGroup, studentIds: string[]) => {

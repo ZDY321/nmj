@@ -1573,7 +1573,7 @@ function scheduleAssistantSystemPrompt(): string {
     "update_course 用于修改已有课程档案名称、科目、班型、校区、关联学生或启用/暂停状态；data 里应包含 courseId 或 courseName。",
     "update_course 修改课程班型或计费规则时，默认只影响未来待上课/草稿课节；历史课、已完成课、补课课节默认保留原课型和原费用。若用户明确要求，可用 lessonUpdateScope：future_scheduled、all_unfinished、all、none。",
     "delete_course 用于删除或暂停课程；已有课时引用时除非用户明确 forceDelete，否则系统会暂停课程以保留历史课时。",
-    "delete_lesson 用于删除单节课；data 可包含 lessonId、courseId、courseName、subject、date、startTime、endTime。",
+    "delete_lesson 用于删除课节。删除单节课时 data 必须包含 lessonId，或至少包含 date 加 startTime/endTime/courseName 等能唯一定位的字段；批量删除时必须包含 dateStart/dateEnd 或 dates，并默认只删除 scheduled/draft/makeup_pending 待处理课节。不要只在 summary 里写日期范围而让 data 缺少日期字段。",
     "migrate_course 用于把已有课程迁移到新课程或目标课程；data 可包含 sourceCourseId/sourceCourseName、targetCourseId/targetCourseName、type/targetType、migrateLessons、effectiveFrom、effectiveTo、pauseSource。",
     "sync_lessons 用于复制排课：只复制课程档案、日期、时间和校区安排；复制后的课节内容、课后作业、学习清单、备注和补课关系保持为空，但系统会按目标时间线把新课节的上节课内容来源指向前面最近一节同课程课。复制后的课节状态统一为 scheduled（待上课）。已取消课节默认也要包含并同步为待上课，目标日期已有同时间课节默认覆盖。",
     "sync_lessons 复制单日时 data 写 sourceDate 和 targetDate；复制日期段时优先写 sourceDateStart、sourceDateEnd、targetDateStart、targetDateEnd，也可写一一对应的 sourceDates 和 targetDates。需要覆盖时写 overwriteExisting:true；需要包含取消课节时写 includeCancelled:true。",
