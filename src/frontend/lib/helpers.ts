@@ -81,6 +81,22 @@ export function lessonStudentIds(lesson: Pick<Lesson, "expectedStudentIds" | "at
   ]));
 }
 
+export function attendedStudentIdsForLesson(
+  lesson: Pick<Lesson, "expectedStudentIds" | "attendance" | "linkedOriginalLessonId">
+): string[] {
+  const attendedIds = lesson.attendance
+    .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
+    .map((entry) => entry.studentId);
+  if (attendedIds.length > 0 || lesson.attendance.length > 0) {
+    return Array.from(new Set(attendedIds));
+  }
+  return Array.from(new Set(lesson.expectedStudentIds));
+}
+
+export function attendedStudentNamesForLesson(vault: TeacherVault, lesson: Pick<Lesson, "expectedStudentIds" | "attendance" | "linkedOriginalLessonId">): string {
+  return studentNames(vault, attendedStudentIdsForLesson(lesson));
+}
+
 export function makeupNeededStudentIds(lesson: Pick<Lesson, "status" | "expectedStudentIds" | "attendance">): string[] {
   const attendanceStudentIds = lesson.attendance
     .filter((entry) => isMakeupAttendanceStatus(entry.status))

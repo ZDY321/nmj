@@ -2810,6 +2810,11 @@ export function StudentsView({
                     </div>
                     <span className="text-xs font-bold text-[#64748b]">当前显示 {editingCourseStudentOptions.length} 人</span>
                   </div>
+                  {editingCourse.type === "class" && (
+                    <div className="rounded-[10px] border border-[#dbe4ef] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                      调整班课档案学生只影响之后按课程档案生成的新课节；已经排好的课节会保留本节自己的学生名单。单节课排错时，可到课程详情里单独移除学生或填写备注。
+                    </div>
+                  )}
                   <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                     <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
                       <label className="relative block">

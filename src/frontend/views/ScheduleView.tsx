@@ -39,12 +39,14 @@ import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-inpu
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForLesson, calculateClassHeadcountFee, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceLabels,
   addDays,
+  attendedStudentIdsForLesson,
+  attendedStudentNamesForLesson,
   buildScheduleSyncLessonsForDate,
   calendarDates,
   campusName,
@@ -383,10 +385,10 @@ export function ScheduleView({
   const ruleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, ruleCourseSearch, ruleCourseGroupId);
   const calendarCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, calendarCourseSearch, calendarCourseGroupId);
   const activeMakeupLessons = vault.lessons
-    .filter((lesson) => Boolean(lesson.linkedOriginalLessonId) && lesson.status !== "cancelled")
+    .filter((lesson) => (Boolean(lesson.linkedOriginalLessonId) || Boolean(lesson.makeupOriginalDate)) && lesson.status !== "cancelled")
     .sort(sortLessons);
   const activeMakeupLessonsByOriginal = activeMakeupLessons.reduce<Record<string, Lesson[]>>((groups, lesson) => {
-    const originalId = lesson.linkedOriginalLessonId;
+    const originalId = lesson.linkedOriginalLessonId ?? findOriginalLessonForMakeupLesson(lesson)?.id;
     if (!originalId) return groups;
     groups[originalId] = [...(groups[originalId] ?? []), lesson];
     return groups;
@@ -481,6 +483,7 @@ export function ScheduleView({
   const selectedPreviousHomework = selectedPreviousLesson?.content.homework.trim() ?? "";
   const selectedLessonStudentCount = selected ? lessonStudentIds(selected).length : 0;
   const selectedScheduledMakeupStudentIds = selected ? activeMakeupStudentIdsForOriginal(selected.id) : new Set<string>();
+  const selectedLinkedMakeupLessons = selected && !selected.linkedOriginalLessonId ? activeMakeupLessonsByOriginal[selected.id] ?? [] : [];
   const selectedMakeupCandidateStudentIds = selected
     ? makeupNeededStudentIds(selected).filter((studentId) => !selectedScheduledMakeupStudentIds.has(studentId))
     : [];
@@ -546,6 +549,23 @@ export function ScheduleView({
     return new Set((activeMakeupLessonsByOriginal[originalLessonId] ?? []).flatMap((lesson) => lessonStudentIds(lesson)));
   }
 
+  function findOriginalLessonForMakeupLesson(makeupLesson: Lesson): Lesson | undefined {
+    if (makeupLesson.linkedOriginalLessonId) {
+      return vault.lessons.find((lesson) => lesson.id === makeupLesson.linkedOriginalLessonId);
+    }
+    if (!makeupLesson.makeupOriginalDate) return undefined;
+    const makeupStudentIds = new Set(lessonStudentIds(makeupLesson));
+    const candidates = vault.lessons.filter(
+      (lesson) =>
+        lesson.id !== makeupLesson.id &&
+        !lesson.linkedOriginalLessonId &&
+        lesson.courseGroupId === makeupLesson.courseGroupId &&
+        lesson.date === makeupLesson.makeupOriginalDate &&
+        lesson.status !== "cancelled"
+    );
+    return candidates.find((lesson) => lessonStudentIds(lesson).some((studentId) => makeupStudentIds.has(studentId))) ?? candidates[0];
+  }
+
   function scheduledMakeupLessonForStudent(originalLessonId: string, studentId: string): Lesson | undefined {
     return (activeMakeupLessonsByOriginal[originalLessonId] ?? []).find((lesson) => lessonStudentIds(lesson).includes(studentId));
   }
@@ -598,7 +618,7 @@ export function ScheduleView({
   const scheduledMakeupEntries = activeMakeupLessons
     .map((lesson) => ({
       lesson,
-      original: vault.lessons.find((item) => item.id === lesson.linkedOriginalLessonId)
+      original: findOriginalLessonForMakeupLesson(lesson)
     }))
     .filter(({ lesson, original }) => {
       if (!makeupOriginalDateFilter) return true;
@@ -724,7 +744,7 @@ export function ScheduleView({
         subject: courseSubject(vault, lesson.courseGroupId),
         campus: campusName(vault, lesson.campusId),
         status: lessonStatusLabels[lesson.status],
-        students: studentNames(vault, lessonStudentIds(lesson))
+        students: attendedStudentNamesForLesson(vault, lesson) || studentNames(vault, lessonStudentIds(lesson))
       }));
     const analyticsLessons = vault.lessons
       .filter((lesson) => lesson.date >= analyticsStart && lesson.date <= analyticsEnd)
@@ -1176,8 +1196,7 @@ export function ScheduleView({
       status,
       attendance: selected.attendance.map((entry) => ({
         ...entry,
-        status: attendanceStatus,
-        note: attendanceStatus === "attended" ? undefined : entry.note
+        status: attendanceStatus
       }))
     };
     onUpdateLesson(recalculateLessonFee(next));
@@ -1216,7 +1235,7 @@ export function ScheduleView({
     const nextLesson: Lesson = {
       ...selected,
       attendance: selected.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, status, note: status === "attended" ? undefined : entry.note } : entry
+        entry.studentId === studentId ? { ...entry, status } : entry
       )
     };
     if (singleStudentLesson) {
@@ -1361,6 +1380,16 @@ export function ScheduleView({
     onUpdateLesson(recalculateLessonFee(nextLesson));
   }
 
+  function defaultTemporaryFeeForEntry(lesson: Lesson, entry: Lesson["attendance"][number]): number | undefined {
+    const course = getCourse(vault, lesson.courseGroupId);
+    if (!course || course.feeRule.mode !== "class_headcount" || entry.trial) return undefined;
+    const presentStudentCount = presentCount(lesson);
+    const entryIsPresent = entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed");
+    if (!entryIsPresent) return 0;
+    const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
+    return calculateClassHeadcountFee(course.feeRule, presentStudentCount) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry);
+  }
+
   function updateTrialStats(patch: Pick<Partial<Lesson>, "trialStudentCount" | "trialFee">) {
     if (!selected) return;
     onUpdateLesson(recalculateLessonFee({ ...selected, ...patch }));
@@ -1390,7 +1419,7 @@ export function ScheduleView({
     setTemporaryStudentSearch("");
   }
 
-  function removeTemporaryStudent(studentId: string) {
+  function removeLessonStudent(studentId: string) {
     if (!selected) return;
     const next: Lesson = {
       ...selected,
@@ -1400,14 +1429,14 @@ export function ScheduleView({
     onUpdateLesson(recalculateLessonFee(next));
   }
 
-  function askRemoveTemporaryStudent(studentId: string) {
+  function askRemoveLessonStudent(studentId: string) {
     const student = findStudent(vault, studentId);
     confirm({
-      title: `移除学生「${student?.name ?? "未知学生"}」？`,
-      description: "移除后这名临时/试听学生的到课状态和附加费用会从本节课删除。",
+      title: `从本节课移除「${student?.name ?? "未知学生"}」？`,
+      description: "只会影响当前课节的学生名单、到课状态和费用快照，不会修改课程档案里的班级学生。",
       confirmLabel: "移除",
       tone: "danger",
-      onConfirm: () => removeTemporaryStudent(studentId)
+      onConfirm: () => removeLessonStudent(studentId)
     });
   }
 
@@ -1646,7 +1675,7 @@ export function ScheduleView({
                             {makeupMarkerForLesson(lesson) && <Badge variant="yellow" className="text-[10px]">{makeupMarkerForLesson(lesson)}</Badge>}
                           </div>
                           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                            {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
+                            {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · 实到 {attendedStudentIdsForLesson(lesson).length} 人 · {attendedStudentNamesForLesson(vault, lesson) || "暂无实到学生"}
                           </div>
                         </button>
                         <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteLesson(lesson)}>
@@ -2717,7 +2746,7 @@ export function ScheduleView({
                     </div>
                     {dayLessons.slice(0, 4).map((lesson) => (
                       <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-(--color-muted-foreground) sm:block">
-                        {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)} · {courseSubject(vault, lesson.courseGroupId)}
+                        {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)} · 实到 {attendedStudentIdsForLesson(lesson).length} 人
                         {makeupMarkerForLesson(lesson) ? ` · ${makeupMarkerForLesson(lesson)}` : ""}
                       </span>
                     ))}
@@ -2764,11 +2793,12 @@ export function ScheduleView({
                           <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
                           <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                           <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
+                          <Badge variant="sky" className="text-[10px]">实到 {attendedStudentIdsForLesson(lesson).length} 人</Badge>
                           <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
                           {makeupMarkerForLesson(lesson) && <Badge variant="yellow" className="text-[10px]">{makeupMarkerForLesson(lesson)}</Badge>}
                         </div>
                         <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                          {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)}
+                          {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {attendedStudentNamesForLesson(vault, lesson) || "暂无实到学生"}
                         </div>
                       </button>
                       <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteLesson(lesson)}>
@@ -2878,7 +2908,7 @@ export function ScheduleView({
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-extrabold text-[#061226]">
-                              {courseName(vault, lesson.courseGroupId)} · {studentNames(vault, lesson.expectedStudentIds)}
+                              {courseName(vault, lesson.courseGroupId)} · {attendedStudentNamesForLesson(vault, lesson) || studentNames(vault, lesson.expectedStudentIds)}
                             </div>
                             <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
                               {courseSubject(vault, lesson.courseGroupId)} · 原课：{optionalDateWithWeekday(original?.date ?? lesson.makeupOriginalDate)} · 补课：{optionalDateWithWeekday(lesson.makeupScheduledDate ?? lesson.date)} · {lesson.startTime}-{lesson.endTime}
@@ -3407,7 +3437,7 @@ export function ScheduleView({
                     <div className="grid grid-cols-1 gap-2 text-sm font-semibold text-[#7c2d12] sm:grid-cols-2">
                       <div>原课日期：{dateWithWeekday(selectedOriginalLesson.date)}</div>
                       <div>补课日期：{dateWithWeekday(selected.date)}</div>
-                      <div>学生：{selected.makeupStudentId ? studentNames(vault, [selected.makeupStudentId]) : studentNames(vault, selected.expectedStudentIds)}</div>
+                      <div>学生：{selected.makeupStudentId ? studentNames(vault, [selected.makeupStudentId]) : attendedStudentNamesForLesson(vault, selected) || studentNames(vault, selected.expectedStudentIds)}</div>
                       <div>原课程：{courseName(vault, selectedOriginalLesson.courseGroupId)}</div>
                       <div>原课科目：{courseSubject(vault, selectedOriginalLesson.courseGroupId)}</div>
                     </div>
@@ -3531,44 +3561,23 @@ export function ScheduleView({
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                     <UserCheck size={14} /> 到课情况
                   </div>
-                  {selected.type === "class" && (
-                    <div className="rounded-[14px] border border-[#c7d2fe] bg-[#eef0ff] p-3">
-                      <div className="mb-3 text-sm font-extrabold text-[#25324a]">班课试听统计</div>
-                      {selectedNamedTrialStudentCount > 0 && (
-                        <div className="mb-3 rounded-[12px] bg-white/75 px-3 py-2 text-xs font-semibold text-[#5161d6]">
-                          已关联试听学生档案 {selectedNamedTrialStudentCount} 人。下方“试听人数”用于补录没有选择学生档案的试听人数。
-                        </div>
-                      )}
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-[#64748b]">补录试听人数</label>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={selected.trialStudentCount ?? 0}
-                            onChange={(event) => updateTrialStats({ trialStudentCount: Math.max(Number(event.target.value), 0) })}
-                            className="bg-white"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-[#64748b]">试听费用</label>
-                          {amountsVisible ? (
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
-                              <Input
-                                type="number"
-                                min={0}
-                                value={selected.trialFee ?? 0}
-                                onChange={(event) => updateTrialStats({ trialFee: Math.max(Number(event.target.value), 0) })}
-                                className="bg-white pl-10"
-                              />
-                            </div>
-                          ) : (
-                            <div className="flex h-10 items-center rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-extrabold text-[#64748b]">
-                              ***
-                            </div>
-                          )}
-                        </div>
+                  {selectedLinkedMakeupLessons.length > 0 && (
+                    <div className="rounded-[14px] border border-[#bfdbfe] bg-[#eff6ff] p-3">
+                      <div className="mb-2 text-sm font-extrabold text-[#1557c2]">已安排补课</div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedLinkedMakeupLessons.map((makeupLesson) => (
+                          <Button
+                            key={makeupLesson.id}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-[#bfdbfe] bg-white text-[#1557c2]"
+                            onClick={() => openLessonInRecords(makeupLesson)}
+                          >
+                            <Link2 size={13} />
+                            {dateWithWeekday(makeupLesson.date)} {makeupLesson.startTime}-{makeupLesson.endTime} · {attendedStudentNamesForLesson(vault, makeupLesson) || studentNames(vault, makeupLesson.expectedStudentIds)}
+                          </Button>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -3702,6 +3711,44 @@ export function ScheduleView({
                             placeholder="搜索姓名、年级、校区、试听或到课状态"
                           />
                         </label>
+                        {selected.type === "class" && (
+                          <div className="mt-3 grid grid-cols-1 gap-2 rounded-[12px] border border-[#c7d2fe] bg-[#eef0ff] p-3 sm:grid-cols-[1fr_150px_180px] sm:items-end">
+                            <div className="text-xs font-semibold leading-5 text-[#5161d6]">
+                              <span className="font-extrabold text-[#25324a]">试听统计</span>
+                              <br />
+                              已关联试听学生档案 {selectedNamedTrialStudentCount} 人；未建档试听可补录人数，费用按本节总试听收入填写。
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-bold text-[#64748b]">补录试听人数</label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={selected.trialStudentCount ?? 0}
+                                onChange={(event) => updateTrialStats({ trialStudentCount: Math.max(Number(event.target.value), 0) })}
+                                className="bg-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-bold text-[#64748b]">试听费用</label>
+                              {amountsVisible ? (
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    value={selected.trialFee ?? 0}
+                                    onChange={(event) => updateTrialStats({ trialFee: Math.max(Number(event.target.value), 0) })}
+                                    className="bg-white pl-10"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex h-10 items-center rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-extrabold text-[#64748b]">
+                                  ***
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
                       {selectedAttendanceEntries.map((entry) => {
                         const student = findStudent(vault, entry.studentId);
@@ -3743,17 +3790,15 @@ export function ScheduleView({
                                     <option key={key} value={key}>{value}</option>
                                   ))}
                                 </Select>
-                                {isTemporary && (
-                                  <Button type="button" size="sm" variant="destructive" onClick={() => askRemoveTemporaryStudent(entry.studentId)}>
-                                    <Trash2 size={13} />
-                                  </Button>
-                                )}
+                                <Button type="button" size="sm" variant="destructive" onClick={() => askRemoveLessonStudent(entry.studentId)} title="只从本节课移除">
+                                  <Trash2 size={13} />
+                                </Button>
                               </div>
                             </div>
                             {isTemporary && !isTrialStudent && (
                               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_160px]">
                                 <div className="rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
-                                  默认已按班课人头费计入；如果这里填写金额，会用你填写的金额替换这名临时学生原本的人头增量。
+                                  默认按人头增量 {formatPrivateMoney(defaultTemporaryFeeForEntry(selected, entry) ?? 0, amountsVisible)} 计入；填写金额后会替换这名临时学生的默认增量。
                                 </div>
                                 {amountsVisible ? (
                                   <div className="relative">
@@ -3778,15 +3823,25 @@ export function ScheduleView({
                             )}
                             {isTrialStudent && (
                               <div className="mt-3 rounded-[10px] bg-white/70 px-3 py-2 text-xs font-semibold text-[#5161d6]">
-                                试听学生不计入班课新增人头费；如需记录试听收入，请在上方“班课试听统计”里填写试听费用。
+                                试听学生不计入班课新增人头费；本节总试听费用 {formatPrivateMoney(selected.trialFee ?? 0, amountsVisible)}。
                               </div>
                             )}
-                            {(entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending" || entry.note) && (
+                            {selected.type === "class" && (
+                              <div className="mt-3">
+                                <Input
+                                  className="bg-white"
+                                  value={entry.note ?? ""}
+                                  onChange={(event) => updateAttendanceNote(entry.studentId, event.target.value)}
+                                  placeholder="学生备注，例如排错移除原因、请假原因、已约补课时间"
+                                />
+                              </div>
+                            )}
+                            {selected.type !== "class" && (
                               <Input
                                 className="mt-3 bg-white"
                                 value={entry.note ?? ""}
                                 onChange={(event) => updateAttendanceNote(entry.studentId, event.target.value)}
-                                placeholder="补课/请假备注，例如原课请假原因、已约补课时间"
+                                placeholder="学生备注，例如请假原因、已约补课时间"
                               />
                             )}
                           </motion.div>

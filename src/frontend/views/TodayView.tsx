@@ -25,6 +25,7 @@ import { makeId } from "@/frontend/lib/crypto";
 import { formatAppDateLabel, getCourse } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
+  attendedStudentNamesForLesson,
   campusName,
   compareByName,
   courseName,
@@ -363,7 +364,7 @@ export function TodayView({
                           <BookOpen size={13} /> {course?.subject || "未设置科目"}
                         </span>
                         <span className="flex items-center gap-1 rounded-full bg-[#f3f7fb] px-2.5 py-1">
-                          <Users size={13} /> {studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}
+                          <Users size={13} /> {attendedStudentNamesForLesson(vault, lesson) || "暂无实到学生"}
                         </span>
                       </div>
                     </div>
