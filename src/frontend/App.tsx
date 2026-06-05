@@ -2501,8 +2501,8 @@ export function App() {
 const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
   { key: "today", label: viewTitles.today },
   { key: "calendar", label: viewTitles.calendar },
-  { key: "progress", label: viewTitles.progress },
   { key: "schedule", label: viewTitles.schedule },
+  { key: "progress", label: viewTitles.progress },
   { key: "students", label: viewTitles.students },
   { key: "grades", label: viewTitles.grades },
   { key: "payroll", label: viewTitles.payroll },

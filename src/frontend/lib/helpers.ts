@@ -44,8 +44,8 @@ export const viewTitles: Record<ViewKey, string> = {
 export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: string }> = [
   { key: "today", icon: Bell, label: "今日提醒" },
   { key: "calendar", icon: CalendarCheck, label: "日历总览" },
-  { key: "progress", icon: BookOpen, label: "进度与作业" },
   { key: "schedule", icon: CalendarDays, label: "排课与课时" },
+  { key: "progress", icon: BookOpen, label: "进度与作业" },
   { key: "students", icon: Users, label: "档案信息" },
   { key: "grades", icon: BarChart3, label: "成绩记录" },
   { key: "payroll", icon: FileCheck2, label: "工资核对" },
