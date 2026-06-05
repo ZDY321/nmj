@@ -58,6 +58,7 @@ import type {
   CourseType,
   CustomCourseType,
   CustomCourseTypeOption,
+  DeletedLessonSource,
   FeeRule,
   GradeRecord,
   Lesson,
@@ -413,7 +414,12 @@ export function App() {
     updateVault((draft) => {
       const replaceLessonIds = new Set(options.replaceLessonIds ?? []);
       if (replaceLessonIds.size > 0) {
-        draft.lessons = draft.lessons.filter((lesson) => !replaceLessonIds.has(lesson.id));
+        moveLessonsToTrash(
+          draft,
+          draft.lessons.filter((lesson) => replaceLessonIds.has(lesson.id)),
+          "sync_overwrite",
+          "同步排课覆盖旧课节"
+        );
       }
       draft.lessons.push(...lessons);
     });
@@ -436,7 +442,32 @@ export function App() {
 
   function deleteLesson(lessonId: string) {
     updateVault((draft) => {
-      draft.lessons = draft.lessons.filter((lesson) => lesson.id !== lessonId);
+      const lesson = draft.lessons.find((item) => item.id === lessonId);
+      if (lesson) {
+        moveLessonsToTrash(draft, [lesson], "manual", "手动删除课节");
+      }
+    });
+  }
+
+  function restoreDeletedLessons(deletedLessonIds: string[]) {
+    if (deletedLessonIds.length === 0) return;
+    updateVault((draft) => {
+      const idSet = new Set(deletedLessonIds);
+      const activeLessonIds = new Set(draft.lessons.map((lesson) => lesson.id));
+      const deletedLessons = draft.deletedLessons ?? [];
+      const restorables = deletedLessons
+        .filter((item) => idSet.has(item.id) && !activeLessonIds.has(item.lesson.id))
+        .map((item) => item.lesson);
+      draft.lessons.push(...restorables);
+      draft.deletedLessons = deletedLessons.filter((item) => !idSet.has(item.id));
+    });
+  }
+
+  function permanentlyDeleteDeletedLessons(deletedLessonIds: string[]) {
+    if (deletedLessonIds.length === 0) return;
+    updateVault((draft) => {
+      const idSet = new Set(deletedLessonIds);
+      draft.deletedLessons = (draft.deletedLessons ?? []).filter((item) => !idSet.has(item.id));
     });
   }
 
@@ -1066,7 +1097,12 @@ export function App() {
         return;
       }
       nextVault.courseGroups = nextVault.courseGroups.filter((item) => item.id !== course.id);
-      nextVault.lessons = nextVault.lessons.filter((lesson) => lesson.courseGroupId !== course.id);
+      moveLessonsToTrash(
+        nextVault,
+        nextVault.lessons.filter((lesson) => lesson.courseGroupId === course.id),
+        "ai",
+        `AI 强制删除课程「${course.name}」连带课节`
+      );
       messages.push(`已删除课程「${course.name}」${inUse ? "及其课时" : ""}`);
     };
 
@@ -1167,12 +1203,11 @@ export function App() {
         blockers.push(`删除课节将影响 ${matchedLessons.length} 节，范围过大，已拒绝执行。请缩小日期范围或指定课程。`);
         return;
       }
-      const matchedLessonIds = new Set(matchedLessons.map((lesson) => lesson.id));
-      nextVault.lessons = nextVault.lessons.filter((lesson) => !matchedLessonIds.has(lesson.id));
+      moveLessonsToTrash(nextVault, matchedLessons, "ai", "AI 删除课节");
       const preview = matchedLessons
         .slice(0, 12)
         .map((lesson) => `「${lesson.date} ${lesson.startTime}-${lesson.endTime} · ${nextVault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.name ?? "未知课程"}」`);
-      messages.push(`已删除 ${matchedLessons.length} 节课${hasDateRange ? `（${lessonDates[0]}${lessonDates.length > 1 ? ` 至 ${lessonDates.at(-1)}` : ""}）` : ""}${preview.length > 0 ? `：${preview.join("；")}${matchedLessons.length > preview.length ? `；另 ${matchedLessons.length - preview.length} 节` : ""}` : ""}`);
+      messages.push(`已将 ${matchedLessons.length} 节课移入回收站${hasDateRange ? `（${lessonDates[0]}${lessonDates.length > 1 ? ` 至 ${lessonDates.at(-1)}` : ""}）` : ""}${preview.length > 0 ? `：${preview.join("；")}${matchedLessons.length > preview.length ? `；另 ${matchedLessons.length - preview.length} 节` : ""}` : ""}`);
     };
 
     const addStudentsToCourse = (course: CourseGroup, studentIds: string[]) => {
@@ -1361,7 +1396,12 @@ export function App() {
 
       if (replaceLessonIds.length > 0) {
         const replaceLessonIdSet = new Set(replaceLessonIds);
-        nextVault.lessons = nextVault.lessons.filter((lesson) => !replaceLessonIdSet.has(lesson.id));
+        moveLessonsToTrash(
+          nextVault,
+          nextVault.lessons.filter((lesson) => replaceLessonIdSet.has(lesson.id)),
+          "sync_overwrite",
+          "AI 同步排课覆盖旧课节"
+        );
       }
       nextVault.lessons.push(...lessonsToAdd);
 
@@ -2415,6 +2455,8 @@ export function App() {
                 onAddLessonAndUpdateLesson={addLessonAndUpdateLesson}
                 onUpdateLesson={updateLesson}
                 onDeleteLesson={deleteLesson}
+                onRestoreDeletedLessons={restoreDeletedLessons}
+                onPermanentlyDeleteDeletedLessons={permanentlyDeleteDeletedLessons}
                 onAddCustomTimePreset={addCustomTimePreset}
                 onDeleteCustomTimePreset={deleteCustomTimePreset}
                 onGenerateDrafts={generateDrafts}
@@ -2659,6 +2701,24 @@ function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Less
       amount: calculateFee(course.feeRule, normalizedLesson)
     }
   };
+}
+
+function moveLessonsToTrash(vault: TeacherVault, lessons: Lesson[], source: DeletedLessonSource, reason?: string) {
+  if (lessons.length === 0) return;
+  const lessonIds = new Set(lessons.map((lesson) => lesson.id));
+  const trashedLessonIds = new Set((vault.deletedLessons ?? []).map((item) => item.lesson.id));
+  const deletedAt = new Date().toISOString();
+  const deletedItems = lessons
+    .filter((lesson) => !trashedLessonIds.has(lesson.id))
+    .map((lesson) => ({
+      id: makeId("deleted_lesson"),
+      lesson,
+      deletedAt,
+      source,
+      reason
+    }));
+  vault.deletedLessons = [...(vault.deletedLessons ?? []), ...deletedItems];
+  vault.lessons = vault.lessons.filter((lesson) => !lessonIds.has(lesson.id));
 }
 
 type CourseLessonSyncScope = "future_scheduled" | "all_unfinished" | "all" | "none";

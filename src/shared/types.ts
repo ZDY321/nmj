@@ -258,6 +258,17 @@ export type Lesson = {
   sourceScheduleRuleId?: string;
 };
 
+export type DeletedLessonSource = "manual" | "ai" | "sync_overwrite";
+
+export type DeletedLesson = {
+  id: string;
+  lesson: Lesson;
+  deletedAt: string;
+  deletedBy?: string;
+  source: DeletedLessonSource;
+  reason?: string;
+};
+
 export type SalaryAdjustment = {
   id: string;
   month: string;
@@ -386,6 +397,7 @@ export type TeacherVault = {
   courseGroups: CourseGroup[];
   scheduleRules: ScheduleRule[];
   lessons: Lesson[];
+  deletedLessons?: DeletedLesson[];
   salaryAdjustments: SalaryAdjustment[];
   todoItems?: TodoItem[];
   studentProgressRecords?: StudentProgressRecord[];

@@ -37,6 +37,7 @@ export function createEmptyVault(displayName = ""): TeacherVault {
     courseGroups: [],
     scheduleRules: [],
     lessons: [],
+    deletedLessons: [],
     salaryAdjustments: [],
     todoItems: [],
     studentProgressRecords: [],
@@ -191,6 +192,7 @@ export function createSampleVault(): TeacherVault {
         }
       }
     ],
+    deletedLessons: [],
     salaryAdjustments: [
       {
         id: "adjust_transport",

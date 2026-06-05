@@ -38,8 +38,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
-import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { billableHoursForLesson, calculateClassHeadcountFee, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, lessonBillableHours, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
+import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
+import { billableHoursForLesson, calculateClassHeadcountFee, calculateFee, classFeeTierForCount, extraFeeTotal, formatAppDateTime, getCourse, lessonBillableHours, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -88,7 +88,7 @@ import {
 
 type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
-type SchedulePanel = "ai" | "schedule" | "calendar" | "records" | "studentStats";
+type SchedulePanel = "ai" | "schedule" | "calendar" | "records" | "studentStats" | "trash";
 type CalendarOverviewReturnFocus = {
   selectedDate: string;
   month: string;
@@ -132,6 +132,8 @@ export function ScheduleView({
   onAddLessonAndUpdateLesson,
   onUpdateLesson,
   onDeleteLesson,
+  onRestoreDeletedLessons,
+  onPermanentlyDeleteDeletedLessons,
   onAddCustomTimePreset,
   onDeleteCustomTimePreset,
   onGenerateDrafts,
@@ -151,6 +153,8 @@ export function ScheduleView({
   onAddLessonAndUpdateLesson: (lessonToAdd: Lesson, lessonToUpdate: Lesson) => void;
   onUpdateLesson: (lesson: Lesson) => void;
   onDeleteLesson: (lessonId: string) => void;
+  onRestoreDeletedLessons: (deletedLessonIds: string[]) => void;
+  onPermanentlyDeleteDeletedLessons: (deletedLessonIds: string[]) => void;
   onAddCustomTimePreset: (preset: TimePreset) => void;
   onDeleteCustomTimePreset: (presetId: string) => void;
   onGenerateDrafts: (
@@ -247,6 +251,12 @@ export function ScheduleView({
   const [temporaryStudentSearch, setTemporaryStudentSearch] = useState("");
   const [attendanceStudentFilter, setAttendanceStudentFilter] = useState("");
   const [attendancePanelOpen, setAttendancePanelOpen] = useState(false);
+  const [trashDateStart, setTrashDateStart] = useState("");
+  const [trashDateEnd, setTrashDateEnd] = useState("");
+  const [trashCampusFilter, setTrashCampusFilter] = useState("all");
+  const [trashSourceFilter, setTrashSourceFilter] = useState<"all" | DeletedLesson["source"]>("all");
+  const [trashSearch, setTrashSearch] = useState("");
+  const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
   const [makeupOriginalDateFilter, setMakeupOriginalDateFilter] = useState("");
   const [makeupDate, setMakeupDate] = useState(todayIso());
   const [makeupStartTime, setMakeupStartTime] = useState("19:00");
@@ -380,6 +390,11 @@ export function ScheduleView({
     setAttendancePanelOpen(false);
   }, [selectedId]);
 
+  useEffect(() => {
+    const availableTrashIds = new Set((vault.deletedLessons ?? []).map((item) => item.id));
+    setSelectedTrashIds((current) => current.filter((id) => availableTrashIds.has(id)));
+  }, [vault.deletedLessons]);
+
   const visibleWeekdays = orderedWeekdays(weekStartPreference);
   const visibleWeekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
   const customTimePresets = vault.preferences?.customTimePresets ?? [];
@@ -476,6 +491,34 @@ export function ScheduleView({
   const studentStatsTotalHours = studentStatsLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
   const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
+  const deletedLessons = [...(vault.deletedLessons ?? [])].sort((a, b) =>
+    `${b.deletedAt} ${b.lesson.date} ${b.lesson.startTime}`.localeCompare(`${a.deletedAt} ${a.lesson.date} ${a.lesson.startTime}`)
+  );
+  const normalizedTrashSearch = trashSearch.trim().toLowerCase();
+  const trashLessons = deletedLessons.filter((item) => {
+    const lesson = item.lesson;
+    const course = getCourse(vault, lesson.courseGroupId);
+    const campusId = lesson.campusId ?? course?.defaultCampusId;
+    const matchesDate =
+      (!trashDateStart || lesson.date >= trashDateStart) &&
+      (!trashDateEnd || lesson.date <= trashDateEnd) &&
+      (!trashDateStart || !trashDateEnd || trashDateStart <= trashDateEnd);
+    const matchesCampus = trashCampusFilter === "all" || campusId === trashCampusFilter;
+    const matchesSource = trashSourceFilter === "all" || item.source === trashSourceFilter;
+    const searchText = deletedLessonSearchText(vault, item);
+    const matchesSearch =
+      !normalizedTrashSearch ||
+      normalizedTrashSearch.split(/\s+/).filter(Boolean).every((term) => searchText.includes(term));
+    return matchesDate && matchesCampus && matchesSource && matchesSearch;
+  });
+  const selectedTrashIdSet = new Set(selectedTrashIds);
+  const selectedVisibleTrashIds = trashLessons.filter((item) => selectedTrashIdSet.has(item.id)).map((item) => item.id);
+  const allVisibleTrashSelected = trashLessons.length > 0 && trashLessons.every((item) => selectedTrashIdSet.has(item.id));
+  const activeLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
+  const selectedTrashRestoreCount = selectedVisibleTrashIds.filter((id) => {
+    const item = trashLessons.find((deletedLesson) => deletedLesson.id === id);
+    return item ? canRestoreDeletedLesson(vault, activeLessonIds, item) : false;
+  }).length;
   const selected = vault.lessons.find((lesson) => lesson.id === selectedId) ?? lessons[0];
   const selectedCourse = selected ? getCourse(vault, selected.courseGroupId) : undefined;
   const selectedOriginalLesson = selected?.linkedOriginalLessonId
@@ -1608,11 +1651,67 @@ export function ScheduleView({
 
   function askDeleteLesson(lesson: Lesson) {
     confirm({
-      title: "删除这条课时记录？",
-      description: `${dateWithWeekday(lesson.date)} ${lesson.startTime}-${lesson.endTime} · ${courseName(vault, lesson.courseGroupId)}`,
-      confirmLabel: "删除",
+      title: "移入回收站？",
+      description: `${dateWithWeekday(lesson.date)} ${lesson.startTime}-${lesson.endTime} · ${courseName(vault, lesson.courseGroupId)}。移入后可在回收站恢复。`,
+      confirmLabel: "移入回收站",
       tone: "danger",
       onConfirm: () => onDeleteLesson(lesson.id)
+    });
+  }
+
+  function toggleTrashSelection(id: string) {
+    setSelectedTrashIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  }
+
+  function toggleAllVisibleTrashSelection() {
+    setSelectedTrashIds((current) => {
+      const visibleIds = trashLessons.map((item) => item.id);
+      if (visibleIds.length === 0) return current;
+      if (visibleIds.every((id) => current.includes(id))) {
+        return current.filter((id) => !visibleIds.includes(id));
+      }
+      return Array.from(new Set([...current, ...visibleIds]));
+    });
+  }
+
+  function restoreTrashItems(ids: string[]) {
+    const restorables = ids.filter((id) => {
+      const item = deletedLessons.find((deletedLesson) => deletedLesson.id === id);
+      return item && canRestoreDeletedLesson(vault, activeLessonIds, item);
+    });
+    if (restorables.length === 0) {
+      showScheduleError("选中的课节当前无法恢复，可能已有同 ID 课节或课程档案已不存在。");
+      return;
+    }
+    onRestoreDeletedLessons(restorables);
+    setSelectedTrashIds((current) => current.filter((id) => !restorables.includes(id)));
+  }
+
+  function askRestoreTrashItems(ids: string[]) {
+    const count = ids.length;
+    if (count === 0) return;
+    confirm({
+      title: count === 1 ? "恢复这节课？" : `恢复选中的 ${count} 节课？`,
+      description: "恢复后课节会回到课程记录和日历中，原来的课程内容、作业、学生出勤和费用快照会一并恢复。",
+      confirmLabel: "恢复",
+      onConfirm: () => restoreTrashItems(ids)
+    });
+  }
+
+  function askPermanentDeleteTrashItems(ids: string[]) {
+    const count = ids.length;
+    if (count === 0) return;
+    confirm({
+      title: count === 1 ? "彻底删除这条回收站记录？" : `彻底删除选中的 ${count} 条回收站记录？`,
+      description: "彻底删除后将无法从系统内恢复，请确认这些课节不再需要找回。",
+      confirmLabel: "彻底删除",
+      tone: "danger",
+      onConfirm: () => {
+        onPermanentlyDeleteDeletedLessons(ids);
+        setSelectedTrashIds((current) => current.filter((id) => !ids.includes(id)));
+      }
     });
   }
 
@@ -1749,7 +1848,8 @@ export function ScheduleView({
           { key: "schedule" as SchedulePanel, label: "排课" },
           { key: "calendar" as SchedulePanel, label: "日历查看" },
           { key: "records" as SchedulePanel, label: "课程记录" },
-          { key: "studentStats" as SchedulePanel, label: "学生课次统计" }
+          { key: "studentStats" as SchedulePanel, label: "学生课次统计" },
+          { key: "trash" as SchedulePanel, label: `回收站${deletedLessons.length > 0 ? ` ${deletedLessons.length}` : ""}` }
         ].map((item, index, items) => (
           <Fragment key={item.key}>
           <button
@@ -3297,6 +3397,175 @@ export function ScheduleView({
         </div>
       )}
 
+      {schedulePanel === "trash" && (
+        <div className="space-y-6">
+          <Card className="overflow-hidden border-2 border-[#fecaca]">
+            <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#b91c1c]">
+                  <Trash2 size={14} /> 课节回收站
+                </div>
+                <CardTitle>误删课节恢复</CardTitle>
+                <CardDescription>手动删除、AI 删除和同步覆盖移除的课节会先保存在这里，可筛选后单个或批量恢复。</CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">{deletedLessons.length} 条回收记录</Badge>
+                <Badge variant="sky">当前筛选 {trashLessons.length} 条</Badge>
+                <Badge variant={selectedVisibleTrashIds.length > 0 ? "amber" : "secondary"}>已选 {selectedVisibleTrashIds.length} 条</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">课程开始日期</label>
+                  <Input type="date" value={trashDateStart} onChange={(event) => setTrashDateStart(event.target.value)} className={!isOrderedDateRange(trashDateStart, trashDateEnd) && trashDateStart && trashDateEnd ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">课程结束日期</label>
+                  <Input type="date" value={trashDateEnd} min={trashDateStart} onChange={(event) => setTrashDateEnd(event.target.value)} className={!isOrderedDateRange(trashDateStart, trashDateEnd) && trashDateStart && trashDateEnd ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">校区</label>
+                  <Select value={trashCampusFilter} onChange={(event) => setTrashCampusFilter(event.target.value)}>
+                    <option value="all">全部校区</option>
+                    {campusOptions.map((campus) => (
+                      <option key={campus.id} value={campus.id}>{campus.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">删除来源</label>
+                  <Select value={trashSourceFilter} onChange={(event) => setTrashSourceFilter(event.target.value as "all" | DeletedLesson["source"])}>
+                    <option value="all">全部来源</option>
+                    <option value="manual">手动删除</option>
+                    <option value="ai">AI 删除</option>
+                    <option value="sync_overwrite">同步覆盖</option>
+                  </Select>
+                </div>
+                <div className="space-y-2 xl:col-span-2">
+                  <label className="text-sm font-medium">搜索</label>
+                  <label className="relative block">
+                    <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                    <Input className="pl-9" value={trashSearch} onChange={(event) => setTrashSearch(event.target.value)} placeholder="搜索课程、学生、科目、校区、备注或删除原因" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-3 lg:flex-row lg:items-center lg:justify-between">
+                <label className="flex items-center gap-3 text-sm font-bold text-[#25324a]">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleTrashSelected}
+                    onChange={toggleAllVisibleTrashSelection}
+                    className="h-4 w-4 accent-[#ff8617]"
+                  />
+                  全选当前筛选结果
+                </label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button type="button" variant="outline" onClick={() => askRestoreTrashItems(selectedVisibleTrashIds)} disabled={selectedTrashRestoreCount === 0}>
+                    <RotateCcw size={15} /> 恢复选中 {selectedTrashRestoreCount > 0 ? selectedTrashRestoreCount : ""}
+                  </Button>
+                  <Button type="button" variant="destructive" onClick={() => askPermanentDeleteTrashItems(selectedVisibleTrashIds)} disabled={selectedVisibleTrashIds.length === 0}>
+                    <Trash2 size={15} /> 彻底删除选中
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {trashLessons.map((item) => {
+                  const lesson = item.lesson;
+                  const course = getCourse(vault, lesson.courseGroupId);
+                  const checked = selectedTrashIdSet.has(item.id);
+                  const hasActiveConflict = activeLessonIds.has(lesson.id);
+                  const missingCourse = !course;
+                  const canRestore = canRestoreDeletedLesson(vault, activeLessonIds, item);
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`rounded-[14px] border p-4 ${checked ? "border-[#f59e0b] bg-[#fff7ed]" : "border-[#dbe4ef] bg-white"}`}
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleTrashSelection(item.id)}
+                              className="h-4 w-4 accent-[#ff8617]"
+                            />
+                            <span className="truncate text-base font-extrabold text-[#061226]">{course?.name ?? "未知课程"}</span>
+                            <Badge variant="secondary" className="text-[10px]">{course?.subject ?? "未知科目"}</Badge>
+                            <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
+                            <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
+                            <Badge variant={deletedLessonSourceVariant(item.source)} className="text-[10px]">{deletedLessonSourceLabel(item.source)}</Badge>
+                            {hasActiveConflict && <Badge variant="destructive" className="text-[10px]">恢复冲突</Badge>}
+                            {missingCourse && <Badge variant="destructive" className="text-[10px]">课程档案缺失</Badge>}
+                          </div>
+                          <div className="mt-2 grid grid-cols-1 gap-2 text-sm font-semibold text-[#64748b] md:grid-cols-2">
+                            <div>{dateWithWeekday(lesson.date)} · {lesson.startTime}-{lesson.endTime}</div>
+                            <div>{campusName(vault, lesson.campusId ?? course?.defaultCampusId)} · {lessonStudentDisplay(vault, lesson)}</div>
+                            <div>删除时间：{formatAppDateTime(item.deletedAt)}</div>
+                            <div>删除原因：{item.reason ?? "未记录"}</div>
+                          </div>
+                          {(lesson.content.taught || lesson.content.homework || lesson.note) && (
+                            <div className="mt-3 grid grid-cols-1 gap-2 text-xs font-semibold leading-5 text-[#25324a] lg:grid-cols-3">
+                              {lesson.content.taught && (
+                                <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
+                                  <div className="mb-1 font-extrabold text-[#1557c2]">本次课内容</div>
+                                  <div className="line-clamp-3 whitespace-pre-wrap">{lesson.content.taught}</div>
+                                </div>
+                              )}
+                              {lesson.content.homework && (
+                                <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
+                                  <div className="mb-1 font-extrabold text-[#ff8617]">课后作业</div>
+                                  <div className="line-clamp-3 whitespace-pre-wrap">{lesson.content.homework}</div>
+                                </div>
+                              )}
+                              {lesson.note && (
+                                <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
+                                  <div className="mb-1 font-extrabold text-[#64748b]">备注</div>
+                                  <div className="line-clamp-3 whitespace-pre-wrap">{lesson.note}</div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {hasActiveConflict && (
+                            <div className="mt-3 rounded-[10px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-xs font-bold text-[#b91c1c]">
+                              当前系统里已有同 ID 课节。为避免覆盖现有数据，这条记录暂不能直接恢复。
+                            </div>
+                          )}
+                          {missingCourse && (
+                            <div className="mt-3 rounded-[10px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-xs font-bold text-[#b91c1c]">
+                              这节课对应的课程档案已不存在。请先重建或恢复课程档案，再恢复这节课。
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
+                          <Button type="button" size="sm" onClick={() => askRestoreTrashItems([item.id])} disabled={!canRestore}>
+                            <RotateCcw size={14} /> 恢复
+                          </Button>
+                          <Button type="button" size="sm" variant="destructive" onClick={() => askPermanentDeleteTrashItems([item.id])}>
+                            <Trash2 size={14} /> 彻底删除
+                          </Button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+                {trashLessons.length === 0 && (
+                  <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-10 text-center">
+                    <div className="text-base font-extrabold text-[#061226]">当前筛选下没有回收站记录</div>
+                    <div className="mt-2 text-sm font-semibold text-[#64748b]">删除课节后会先保存在这里，确认不需要时再彻底删除。</div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {schedulePanel === "records" && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
         <Card className="h-fit overflow-hidden">
@@ -4249,6 +4518,38 @@ function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {
     lesson.note ?? "",
     ...studentFields
   ].join(" ").toLowerCase();
+}
+
+function deletedLessonSearchText(vault: TeacherVault, item: DeletedLesson): string {
+  const lesson = item.lesson;
+  const course = getCourse(vault, lesson.courseGroupId);
+  return [
+    deletedLessonSourceLabel(item.source),
+    item.reason ?? "",
+    formatAppDateTime(item.deletedAt),
+    lessonSearchText(vault, lesson),
+    lesson.content.taught,
+    lesson.content.homework,
+    lesson.content.performance ?? "",
+    lesson.content.nextLessonReminder,
+    lesson.content.internalNote ?? ""
+  ].join(" ").toLowerCase();
+}
+
+function canRestoreDeletedLesson(vault: TeacherVault, activeLessonIds: Set<string>, item: DeletedLesson): boolean {
+  return !activeLessonIds.has(item.lesson.id) && Boolean(getCourse(vault, item.lesson.courseGroupId));
+}
+
+function deletedLessonSourceLabel(source: DeletedLesson["source"]): string {
+  if (source === "ai") return "AI 删除";
+  if (source === "sync_overwrite") return "同步覆盖";
+  return "手动删除";
+}
+
+function deletedLessonSourceVariant(source: DeletedLesson["source"]): "amber" | "sky" | "secondary" {
+  if (source === "ai") return "amber";
+  if (source === "sync_overwrite") return "sky";
+  return "secondary";
 }
 
 function filterScheduleCourseOptions(vault: TeacherVault, courses: CourseGroup[], query: string, currentCourseId: string): CourseGroup[] {
