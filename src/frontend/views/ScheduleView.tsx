@@ -59,10 +59,12 @@ import {
   findStudent,
   formatDateIso,
   formatPrivateMoney,
+  isMakeupNeededAttendanceEntry,
   isMakeupAttendanceStatus,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
+  lessonStudentDisplay,
   lessonStudentIds,
   linkSyncedLessonsToPreviousLessons,
   makeupNeededStudentIds,
@@ -435,8 +437,8 @@ export function ScheduleView({
         normalizedStudentFilter.split(/\s+/).filter(Boolean).every((term) => searchText.includes(term));
       const matchesMakeup =
         !showOnlyMakeup ||
-        lesson.status === "makeup_pending" ||
-        lesson.attendance.some((entry) => isMakeupAttendanceStatus(entry.status)) ||
+        makeupNeededStudentIds(lesson).length > 0 ||
+        (lesson.status === "makeup_pending" && lesson.attendance.length === 0) ||
         Boolean(lesson.linkedOriginalLessonId);
       return matchesScope && matchesCampus && matchesType && matchesStudent && matchesMakeup;
     })
@@ -482,6 +484,8 @@ export function ScheduleView({
   const selectedPreviousTaught = selectedPreviousLesson?.content.taught.trim() ?? "";
   const selectedPreviousHomework = selectedPreviousLesson?.content.homework.trim() ?? "";
   const selectedLessonStudentCount = selected ? lessonStudentIds(selected).length : 0;
+  const selectedExpectedStudentCount = selected ? new Set(selected.expectedStudentIds).size : 0;
+  const selectedAttendedStudentCount = selected ? attendedStudentIdsForLesson(selected).length : 0;
   const selectedScheduledMakeupStudentIds = selected ? activeMakeupStudentIdsForOriginal(selected.id) : new Set<string>();
   const selectedLinkedMakeupLessons = selected && !selected.linkedOriginalLessonId ? activeMakeupLessonsByOriginal[selected.id] ?? [] : [];
   const selectedMakeupCandidateStudentIds = selected
@@ -583,7 +587,7 @@ export function ScheduleView({
     .map((lesson) => {
       const scheduledStudentIds = activeMakeupStudentIdsForOriginal(lesson.id);
       const rawEntries = lesson.attendance
-        .filter((entry) => isMakeupAttendanceStatus(entry.status))
+        .filter((entry) => isMakeupNeededAttendanceEntry(entry))
         .sort((a, b) => {
           const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
           const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
@@ -1235,11 +1239,35 @@ export function ScheduleView({
     const nextLesson: Lesson = {
       ...selected,
       attendance: selected.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, status } : entry
+        entry.studentId === studentId ? { ...entry, status, makeupExempt: isMakeupAttendanceStatus(status) ? entry.makeupExempt : undefined } : entry
       )
     };
     if (singleStudentLesson) {
       nextLesson.status = lessonStatusForAttendanceStatus(status);
+    }
+    onUpdateLesson(recalculateLessonFee(nextLesson));
+  }
+
+  function statusAfterNoMakeupNeeded(lesson: Lesson): Lesson["status"] {
+    if (lesson.attendance.length > 0 && lesson.attendance.every((entry) => entry.status === "cancelled")) return "cancelled";
+    if (lesson.attendance.length > 0 && lesson.attendance.every((entry) => entry.status === "makeup_completed")) return "makeup_completed";
+    return "completed";
+  }
+
+  function updateAttendanceMakeupExempt(studentId: string, makeupExempt: boolean) {
+    if (!selected) return;
+    const nextLesson: Lesson = {
+      ...selected,
+      attendance: selected.attendance.map((entry) =>
+        entry.studentId === studentId ? { ...entry, makeupExempt: makeupExempt ? true : undefined } : entry
+      )
+    };
+    const neededStudentIds = makeupNeededStudentIds(nextLesson);
+    if (makeupExempt && nextLesson.status === "makeup_pending" && neededStudentIds.length === 0) {
+      nextLesson.status = statusAfterNoMakeupNeeded(nextLesson);
+    }
+    if (!makeupExempt && selectedLessonStudentCount <= 1 && neededStudentIds.includes(studentId)) {
+      nextLesson.status = "makeup_pending";
     }
     onUpdateLesson(recalculateLessonFee(nextLesson));
   }
@@ -1357,7 +1385,7 @@ export function ScheduleView({
       return completedMakeupCount === linkedMakeupLessons.length ? "已补课" : "部分已补";
     }
     if (linkedMakeupLessons.length > 0) return "已安排补课";
-    if (lesson.status === "makeup_pending" || lesson.attendance.some((entry) => isMakeupAttendanceStatus(entry.status))) {
+    if (makeupNeededStudentIds(lesson).length > 0 || (lesson.status === "makeup_pending" && lesson.attendance.length === 0)) {
       return "待补课";
     }
     return null;
@@ -1675,7 +1703,7 @@ export function ScheduleView({
                             {makeupMarkerForLesson(lesson) && <Badge variant="yellow" className="text-[10px]">{makeupMarkerForLesson(lesson)}</Badge>}
                           </div>
                           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                            {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · 实到 {attendedStudentIdsForLesson(lesson).length} 人 · {attendedStudentNamesForLesson(vault, lesson) || "暂无实到学生"}
+                            {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
                           </div>
                         </button>
                         <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteLesson(lesson)}>
@@ -2746,7 +2774,7 @@ export function ScheduleView({
                     </div>
                     {dayLessons.slice(0, 4).map((lesson) => (
                       <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-(--color-muted-foreground) sm:block">
-                        {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)} · 实到 {attendedStudentIdsForLesson(lesson).length} 人
+                        {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
                         {makeupMarkerForLesson(lesson) ? ` · ${makeupMarkerForLesson(lesson)}` : ""}
                       </span>
                     ))}
@@ -2793,12 +2821,12 @@ export function ScheduleView({
                           <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
                           <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                           <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
-                          <Badge variant="sky" className="text-[10px]">实到 {attendedStudentIdsForLesson(lesson).length} 人</Badge>
+                          <Badge variant="sky" className="text-[10px]">{lessonStudentDisplay(vault, lesson)}</Badge>
                           <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
                           {makeupMarkerForLesson(lesson) && <Badge variant="yellow" className="text-[10px]">{makeupMarkerForLesson(lesson)}</Badge>}
                         </div>
                         <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                          {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {attendedStudentNamesForLesson(vault, lesson) || "暂无实到学生"}
+                          {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
                         </div>
                       </button>
                       <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteLesson(lesson)}>
@@ -3610,9 +3638,9 @@ export function ScheduleView({
                             const student = findStudent(vault, studentId);
                             const checked = selectedDetailMakeupStudentIds.includes(studentId);
                             return (
-                              <label
+                              <div
                                 key={studentId}
-                                className={`flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2 text-sm ${
+                                className={`flex flex-col gap-2 rounded-[12px] border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between ${
                                   checked ? "border-[#f59e0b] bg-white text-[#7c2d12]" : "border-[#fde68a] bg-white text-[#061226]"
                                 }`}
                               >
@@ -3627,10 +3655,21 @@ export function ScheduleView({
                                   )}
                                   <span className="truncate font-semibold">{student?.name ?? "未知学生"}</span>
                                 </span>
-                                <Badge variant={checked ? "default" : "secondary"} className="w-fit">
-                                  {checked ? "已选" : "待补"}
-                                </Badge>
-                              </label>
+                                <span className="flex shrink-0 items-center gap-2">
+                                  <Badge variant={checked ? "default" : "secondary"} className="w-fit">
+                                    {checked ? "已选" : "待补"}
+                                  </Badge>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="shrink-0 border-[#fde68a] bg-white text-[#854d0e]"
+                                    onClick={() => updateAttendanceMakeupExempt(studentId, true)}
+                                  >
+                                    本次不补
+                                  </Button>
+                                </span>
+                              </div>
                             );
                           })
                         ) : (
@@ -3696,7 +3735,8 @@ export function ScheduleView({
                     >
                       <div className="text-sm font-extrabold text-[#061226]">关联学生</div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{selectedAttendanceEntries.length} / {selected.attendance.length} 人</Badge>
+                        <Badge variant="secondary">显示 {selectedAttendanceEntries.length} 人</Badge>
+                        <Badge variant="sky">实到 {selectedAttendedStudentCount} / 应到 {selectedExpectedStudentCount} 人</Badge>
                         {attendancePanelOpen ? <ChevronUp size={16} className="text-[#64748b]" /> : <ChevronDown size={16} className="text-[#64748b]" />}
                       </div>
                     </button>
@@ -3754,6 +3794,7 @@ export function ScheduleView({
                         const student = findStudent(vault, entry.studentId);
                         const isTrialStudent = Boolean(entry.trial ?? student?.temporaryTrial);
                         const isTemporary = Boolean(entry.temporary || !selectedCourse?.studentIds.includes(entry.studentId));
+                        const canToggleMakeupNeed = isMakeupAttendanceStatus(entry.status);
                         const scheduledMakeupLesson = selected && !selected.linkedOriginalLessonId
                           ? scheduledMakeupLessonForStudent(selected.id, entry.studentId)
                           : undefined;
@@ -3772,6 +3813,7 @@ export function ScheduleView({
                                 <span className="truncate text-sm font-medium">{student?.name ?? "未知学生"}</span>
                                 {isTrialStudent && <Badge variant="plum" className="shrink-0">试听学生</Badge>}
                                 {isTemporary && <Badge variant="secondary" className="shrink-0">临时加入</Badge>}
+                                {entry.makeupExempt && <Badge variant="secondary" className="shrink-0">不需补课</Badge>}
                               </div>
                               <div className="flex items-center gap-2">
                                 {scheduledMakeupLesson && (
@@ -3790,6 +3832,17 @@ export function ScheduleView({
                                     <option key={key} value={key}>{value}</option>
                                   ))}
                                 </Select>
+                                {canToggleMakeupNeed && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className={entry.makeupExempt ? "border-[#facc15] bg-white text-[#854d0e]" : "border-[#bfdbfe] bg-white text-[#1557c2]"}
+                                    onClick={() => updateAttendanceMakeupExempt(entry.studentId, !entry.makeupExempt)}
+                                  >
+                                    {entry.makeupExempt ? "恢复需补" : "不需补课"}
+                                  </Button>
+                                )}
                                 <Button type="button" size="sm" variant="destructive" onClick={() => askRemoveLessonStudent(entry.studentId)} title="只从本节课移除">
                                   <Trash2 size={13} />
                                 </Button>

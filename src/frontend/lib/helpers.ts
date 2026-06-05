@@ -10,6 +10,7 @@ import {
   WalletCards
 } from "lucide-react";
 import type {
+  AttendanceEntry,
   AttendanceStatus,
   BuiltInCourseType,
   Campus,
@@ -74,6 +75,10 @@ export function isMakeupAttendanceStatus(status: AttendanceStatus): boolean {
   return status === "leave_requested" || status === "absent" || status === "makeup_pending";
 }
 
+export function isMakeupNeededAttendanceEntry(entry: Pick<AttendanceEntry, "status" | "makeupExempt">): boolean {
+  return isMakeupAttendanceStatus(entry.status) && !entry.makeupExempt;
+}
+
 export function lessonStudentIds(lesson: Pick<Lesson, "expectedStudentIds" | "attendance">): string[] {
   return Array.from(new Set([
     ...lesson.expectedStudentIds,
@@ -99,7 +104,7 @@ export function attendedStudentNamesForLesson(vault: TeacherVault, lesson: Pick<
 
 export function makeupNeededStudentIds(lesson: Pick<Lesson, "status" | "expectedStudentIds" | "attendance">): string[] {
   const attendanceStudentIds = lesson.attendance
-    .filter((entry) => isMakeupAttendanceStatus(entry.status))
+    .filter((entry) => isMakeupNeededAttendanceEntry(entry))
     .map((entry) => entry.studentId);
   if (attendanceStudentIds.length > 0 || lesson.attendance.length > 0) {
     return Array.from(new Set(attendanceStudentIds));
@@ -356,6 +361,27 @@ export function studentNames(vault: TeacherVault, studentIds: string[]): string 
     .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id))
     .map((item) => item.name)
     .join("、");
+}
+
+export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "type" | "expectedStudentIds" | "attendance" | "linkedOriginalLessonId">): string {
+  const expectedStudentCount = new Set(lesson.expectedStudentIds).size;
+  const attendedIds = attendedStudentIdsForLesson(lesson);
+  const attendedCount = attendedIds.length;
+  const attendedNames = studentNames(vault, attendedIds);
+
+  if (lesson.type === "class" && expectedStudentCount > 10) {
+    return `${attendedCount}/${expectedStudentCount} 人`;
+  }
+
+  if (attendedNames) {
+    return `「${attendedNames}」`;
+  }
+
+  if (lesson.type === "class") {
+    return `${attendedCount}/${expectedStudentCount} 人`;
+  }
+
+  return "暂无实到学生";
 }
 
 export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | undefined {

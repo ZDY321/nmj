@@ -201,6 +201,7 @@ export type AttendanceEntry = {
   studentId: string;
   status: AttendanceStatus;
   note?: string;
+  makeupExempt?: boolean;
   temporary?: boolean;
   trial?: boolean;
   temporaryFee?: number;
