@@ -5,7 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { CourseGroup, CourseType, Lesson, ScheduleImportReviewRecord, ScheduleImportVaultState, TeacherVault } from "@/shared/types";
+import type {
+  CourseGroup,
+  CourseType,
+  Lesson,
+  ScheduleImportResolution,
+  ScheduleImportResolutionMap,
+  ScheduleImportResolutionStatus,
+  ScheduleImportReviewRecord,
+  ScheduleImportVaultState,
+  TeacherVault
+} from "@/shared/types";
 import { todayIso } from "@/frontend/lib/calculations";
 import {
   calendarDates,
@@ -36,6 +46,7 @@ type StatusFilter = "all" | ImportMatchStatus;
 type SavedScheduleImportWorkspace = {
   rawLessons: ImportedScheduleLesson[];
   mapping: ScheduleImportMapping;
+  resolutions: ScheduleImportResolutionMap;
   fileCampusOverrides: ScheduleImportMapping;
   selectedMonth: string;
   selectedDate: string;
@@ -48,6 +59,7 @@ type SavedScheduleImportWorkspace = {
 const legacyMappingStorageKey = "teacher-schedule-import-mapping-v1";
 const workspaceStorageKey = "teacher-schedule-import-workspace-v1";
 const statusFilters: StatusFilter[] = ["all", "matched", "attendance_mismatch", "time_mismatch", "course_mismatch", "system_missing", "import_missing", "needs_mapping"];
+const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "excel_error", "cloud_error", "fixed", "accepted"];
 
 export function ScheduleImportPanel({
   vault,
@@ -62,9 +74,12 @@ export function ScheduleImportPanel({
 }) {
   const savedWorkspace = useMemo(() => readSavedWorkspace(storageScope), [storageScope]);
   const cloudMapping = vault.scheduleImport?.mappings ?? {};
+  const cloudResolutions = vault.scheduleImport?.resolutions ?? {};
   const savedMapping = useMemo(() => ({ ...readSavedMapping(storageScope), ...cloudMapping, ...savedWorkspace.mapping }), [cloudMapping, savedWorkspace.mapping, storageScope]);
+  const savedResolutions = useMemo(() => ({ ...cloudResolutions, ...savedWorkspace.resolutions }), [cloudResolutions, savedWorkspace.resolutions]);
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>(savedWorkspace.rawLessons);
   const [mapping, setMapping] = useState<ScheduleImportMapping>(savedMapping);
+  const [resolutions, setResolutions] = useState<ScheduleImportResolutionMap>(savedResolutions);
   const [fileCampusOverrides, setFileCampusOverrides] = useState<ScheduleImportMapping>(savedWorkspace.fileCampusOverrides);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -110,11 +125,13 @@ export function ScheduleImportPanel({
   const days = calendarDates(displayMonth, weekStartPreference);
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference);
   const needsAttention = summary.attendanceMismatch + summary.timeMismatch + summary.courseMismatch + summary.systemMissing + summary.importMissing + summary.needsMapping;
+  const reviewedCount = rows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
   const savedReviews = vault.scheduleImport?.reviews ?? [];
   const selectedReview = savedReviews.find((review) => review.id === selectedReviewId) ?? savedReviews[0];
 
   useEffect(() => {
     setMapping((current) => ({ ...cloudMapping, ...current }));
+    setResolutions((current) => ({ ...cloudResolutions, ...current }));
   }, [vault.scheduleImport?.updatedAt]);
 
   useEffect(() => {
@@ -141,6 +158,7 @@ export function ScheduleImportPanel({
     writeSavedWorkspace(storageScope, {
       rawLessons,
       mapping,
+      resolutions,
       fileCampusOverrides,
       selectedMonth,
       selectedDate,
@@ -149,7 +167,7 @@ export function ScheduleImportPanel({
       search,
       savedAt: new Date().toISOString()
     });
-  }, [campusFilter, fileCampusOverrides, mapping, rawLessons, search, selectedDate, selectedMonth, statusFilter, storageScope]);
+  }, [campusFilter, fileCampusOverrides, mapping, rawLessons, resolutions, search, selectedDate, selectedMonth, statusFilter, storageScope]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -209,11 +227,31 @@ export function ScheduleImportPanel({
     setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
   }
 
+  function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note">>) {
+    const key = resolutionKey(row);
+    setResolutions((current) => {
+      const previous = current[key] ?? { status: "unreviewed" as ScheduleImportResolutionStatus, updatedAt: new Date().toISOString() };
+      const next: ScheduleImportResolution = {
+        ...previous,
+        ...patch,
+        note: patch.note !== undefined ? patch.note : previous.note,
+        updatedAt: new Date().toISOString()
+      };
+      if (next.status === "unreviewed" && !next.note?.trim()) {
+        const rest = { ...current };
+        delete rest[key];
+        return rest;
+      }
+      return { ...current, [key]: next };
+    });
+  }
+
   function saveMapping() {
     const savedMappingOk = writeSavedMapping(storageScope, mapping);
     const savedWorkspaceOk = writeSavedWorkspace(storageScope, {
       rawLessons,
       mapping,
+      resolutions,
       fileCampusOverrides,
       selectedMonth,
       selectedDate,
@@ -225,6 +263,7 @@ export function ScheduleImportPanel({
     const nextScheduleImport = buildNextScheduleImportState(vault, {
       rawLessons,
       mapping,
+      resolutions,
       fileCampusOverrides,
       selectedMonth: displayMonth,
       selectedDate,
@@ -265,6 +304,7 @@ export function ScheduleImportPanel({
           <Badge variant="sky">教务 Excel {rawLessons.length} 节</Badge>
           <Badge variant="sage">已对应 {summary.matched} 节</Badge>
           <Badge variant={needsAttention > 0 ? "amber" : "secondary"}>待核对 {needsAttention} 节</Badge>
+          {reviewedCount > 0 && <Badge variant="secondary">已标注 {reviewedCount} 条</Badge>}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -519,7 +559,9 @@ export function ScheduleImportPanel({
                   row={row}
                   vault={vault}
                   courses={courseOptions}
+                  resolution={resolutions[resolutionKey(row)]}
                   onMap={(courseId) => updateCourseMapping(row, courseId)}
+                  onResolutionChange={(patch) => updateResolution(row, patch)}
                   onOpenLesson={onOpenLesson}
                 />
               ))}
@@ -540,28 +582,30 @@ function ReconciliationRow({
   row,
   vault,
   courses,
+  resolution,
   onMap,
+  onResolutionChange,
   onOpenLesson
 }: {
   row: ImportPreviewLesson;
   vault: TeacherVault;
   courses: CourseGroup[];
+  resolution?: ScheduleImportResolution;
   onMap: (courseId: string) => void;
+  onResolutionChange: (patch: Partial<Pick<ScheduleImportResolution, "status" | "note">>) => void;
   onOpenLesson?: (lesson: Lesson) => void;
 }) {
   const systemLesson = row.systemLessonId ? vault.lessons.find((lesson) => lesson.id === row.systemLessonId) : undefined;
+  const resolutionStatus = resolution?.status ?? "unreviewed";
   return (
     <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(row.status)}`}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Badge variant={statusVariant(row.status)}>{statusLabel(row.status)}</Badge>
-        <Badge variant="secondary">{row.campusName || "未识别校区"}</Badge>
-        <Badge variant="secondary">{row.startTime}-{row.endTime}</Badge>
-        {row.presentCount !== undefined && row.expectedCount !== undefined && (
-          <Badge variant={row.presentCount < row.expectedCount ? "amber" : "secondary"}>{row.presentCount}/{row.expectedCount}</Badge>
-        )}
+        <Badge variant="secondary">{row.date}</Badge>
+        {isReviewedResolution(resolution) && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
           <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
             <FileSpreadsheet size={13} /> 教务 Excel
@@ -572,10 +616,18 @@ function ReconciliationRow({
             <>
               <div className="text-sm font-extrabold leading-5 text-[#061226]">{row.title}</div>
               <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
+                {row.startTime}-{row.endTime} · {row.campusName || "未识别校区"} · {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
                 {row.teacher ? ` · 教师：${row.teacher}` : ""}
                 {row.room ? ` · 教室：${row.room}` : ""}
               </div>
+              {row.presentCount !== undefined && row.expectedCount !== undefined && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Badge variant={row.presentCount < row.expectedCount ? "amber" : "secondary"} className="text-[10px]">教务实到/应到 {row.presentCount}/{row.expectedCount}</Badge>
+                  {row.warnings.map((warning) => (
+                    <Badge key={warning} variant="secondary" className="text-[10px]">教务标记：{warning}</Badge>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -601,8 +653,17 @@ function ReconciliationRow({
               <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
                 {systemLesson.startTime}-{systemLesson.endTime} · {courseSubject(vault, systemLesson.courseGroupId)} · {courseTypeLabel(vault, systemLesson.type)} · {campusName(vault, systemLesson.campusId)}
               </div>
-              <div className="mt-1 truncate text-xs font-semibold text-[#64748b]">
-                {studentNames(vault, systemLesson.expectedStudentIds) || "未设置学生"}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {row.systemPresentCount !== undefined && row.systemExpectedCount !== undefined && (
+                  <Badge variant={row.status === "attendance_mismatch" ? "amber" : "secondary"} className="text-[10px]">云端实到/应到 {row.systemPresentCount}/{row.systemExpectedCount}</Badge>
+                )}
+                <Badge variant="secondary" className="text-[10px]">课程档案 {systemLesson.expectedStudentIds.length} 人</Badge>
+              </div>
+              <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
+                实到：{row.systemPresentStudentNames || "未记录实到学生"}
+              </div>
+              <div className="mt-1 text-xs font-semibold leading-5 text-[#94a3b8]">
+                应到：{row.systemExpectedStudentNames || studentNames(vault, systemLesson.expectedStudentIds) || "未设置学生"}
               </div>
             </div>
           ) : (
@@ -621,10 +682,30 @@ function ReconciliationRow({
       </div>
 
       {row.issues.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {row.issues.map((issue) => (
-            <Badge key={issue} variant={row.status === "matched" ? "secondary" : "amber"} className="text-[10px]">{issue}</Badge>
-          ))}
+        <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-white/70 p-3">
+          <div className="mb-2 text-xs font-extrabold text-[#9a3412]">对账差异</div>
+          <div className="flex flex-wrap gap-1.5">
+            {row.issues.map((issue) => (
+              <Badge key={issue} variant={row.status === "matched" ? "secondary" : "amber"} className="text-[10px]">{issue}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {row.status !== "matched" && (
+        <div className="mt-3 grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
+            <Select value={resolutionStatus} onChange={(event) => onResolutionChange({ status: event.target.value as ScheduleImportResolutionStatus })}>
+              {resolutionStatuses.map((status) => (
+                <option key={status} value={status}>{resolutionStatusLabel(status)}</option>
+              ))}
+            </Select>
+            <Input
+              value={resolution?.note ?? ""}
+              onChange={(event) => onResolutionChange({ note: event.target.value })}
+              placeholder="记录最终判断，例如：教务表人数错、云端已改、确认无需处理"
+            />
+          </div>
         </div>
       )}
     </div>
@@ -708,6 +789,7 @@ function buildNextScheduleImportState(
   context: {
     rawLessons: ImportedScheduleLesson[];
     mapping: ScheduleImportMapping;
+    resolutions: ScheduleImportResolutionMap;
     fileCampusOverrides: ScheduleImportMapping;
     selectedMonth: string;
     selectedDate: string;
@@ -723,6 +805,10 @@ function buildNextScheduleImportState(
       ...(previous?.mappings ?? {}),
       ...context.mapping
     },
+    resolutions: {
+      ...(previous?.resolutions ?? {}),
+      ...context.resolutions
+    },
     reviews: [
       review,
       ...(previous?.reviews ?? []).filter((item) => item.id !== review.id)
@@ -735,6 +821,7 @@ function buildReviewRecord(
   context: {
     rawLessons: ImportedScheduleLesson[];
     mapping: ScheduleImportMapping;
+    resolutions: ScheduleImportResolutionMap;
     fileCampusOverrides: ScheduleImportMapping;
     selectedMonth: string;
     selectedDate: string;
@@ -753,6 +840,7 @@ function buildReviewRecord(
     fileNames,
     mapping: context.mapping,
     fileCampusOverrides: context.fileCampusOverrides,
+    resolutions: context.resolutions,
     summary: {
       total: context.summary.total,
       matched: context.summary.matched,
@@ -763,7 +851,9 @@ function buildReviewRecord(
       importMissing: context.summary.importMissing,
       needsMapping: context.summary.needsMapping
     },
-    rows: context.rows.map((row) => ({
+    rows: context.rows.map((row) => {
+      const resolution = context.resolutions[resolutionKey(row)];
+      return {
       id: row.id,
       fileName: row.fileName,
       campusName: row.campusName,
@@ -787,8 +877,16 @@ function buildReviewRecord(
       status: row.status,
       systemLessonId: row.systemLessonId,
       systemLessonLabel: row.systemLessonLabel,
-      issues: row.issues
-    }))
+      systemPresentCount: row.systemPresentCount,
+      systemExpectedCount: row.systemExpectedCount,
+      systemPresentStudentNames: row.systemPresentStudentNames,
+      systemExpectedStudentNames: row.systemExpectedStudentNames,
+      issues: row.issues,
+      resolutionStatus: resolution?.status,
+      resolutionNote: resolution?.note,
+      resolutionUpdatedAt: resolution?.updatedAt
+    };
+    })
   };
 }
 
@@ -825,6 +923,13 @@ function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPreviewLess
     .map((lesson): ImportPreviewLesson => {
       const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
       const campusId = lessonCampusId(vault, lesson);
+      const systemPresentStudentIds = lesson.attendance.length > 0
+        ? lesson.attendance
+          .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
+          .map((entry) => entry.studentId)
+        : lesson.expectedStudentIds;
+      const systemPresentCount = Array.from(new Set(systemPresentStudentIds)).length;
+      const systemExpectedCount = Array.from(new Set(lesson.expectedStudentIds)).length;
       return {
         id: `local-only-${lesson.id}`,
         fileName: "云端课表",
@@ -837,14 +942,18 @@ function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPreviewLess
         subjectHint: course?.subject ?? "",
         courseTypeHint: lesson.type,
         studentNameHint: studentNames(vault, lesson.expectedStudentIds),
-        presentCount: lesson.attendance.length,
-        expectedCount: lesson.expectedStudentIds.length,
+        presentCount: systemPresentCount,
+        expectedCount: systemExpectedCount,
         rawText: "",
         warnings: [],
         matchedCourseId: lesson.courseGroupId,
         status: "import_missing",
         systemLessonId: lesson.id,
         systemLessonLabel: `${lesson.date} ${lesson.startTime}-${lesson.endTime} ${course?.name ?? "未知课程"}`,
+        systemPresentCount,
+        systemExpectedCount,
+        systemPresentStudentNames: studentNames(vault, Array.from(new Set(systemPresentStudentIds))),
+        systemExpectedStudentNames: studentNames(vault, Array.from(new Set(lesson.expectedStudentIds))),
         issues: ["教务 Excel 没有对应云端课节"]
       };
     });
@@ -892,6 +1001,8 @@ function matchesImportRowFilters(
     row.room ?? "",
     row.systemLessonLabel ?? "",
     row.matchedCourseId ? localCourseName(filters.vault, row.matchedCourseId) : "",
+    row.systemPresentStudentNames ?? "",
+    row.systemExpectedStudentNames ?? "",
     ...row.issues
   ].join(" ").toLowerCase();
   return terms.every((term) => haystack.includes(term));
@@ -901,6 +1012,7 @@ function emptySavedWorkspace(): SavedScheduleImportWorkspace {
   return {
     rawLessons: [],
     mapping: {},
+    resolutions: {},
     fileCampusOverrides: {},
     selectedMonth: todayIso().slice(0, 7),
     selectedDate: todayIso(),
@@ -926,6 +1038,22 @@ function normalizeMapping(value: unknown): ScheduleImportMapping {
   );
 }
 
+function normalizeResolutions(value: unknown): ScheduleImportResolutionMap {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, rawResolution]) => {
+      if (!isRecord(rawResolution)) return [];
+      const status = rawResolution.status;
+      if (typeof status !== "string" || !resolutionStatuses.includes(status as ScheduleImportResolutionStatus)) return [];
+      return [[key, {
+        status: status as ScheduleImportResolutionStatus,
+        note: typeof rawResolution.note === "string" ? rawResolution.note : undefined,
+        updatedAt: typeof rawResolution.updatedAt === "string" ? rawResolution.updatedAt : new Date().toISOString()
+      } satisfies ScheduleImportResolution]];
+    })
+  );
+}
+
 function normalizeRawLessons(value: unknown): ImportedScheduleLesson[] {
   if (!Array.isArray(value)) return [];
   return value.filter((lesson): lesson is ImportedScheduleLesson => isRecord(lesson) && typeof lesson.id === "string" && typeof lesson.fileName === "string" && typeof lesson.date === "string" && typeof lesson.startTime === "string" && typeof lesson.endTime === "string" && typeof lesson.title === "string" && typeof lesson.subjectHint === "string" && typeof lesson.courseTypeHint === "string" && typeof lesson.rawText === "string" && Array.isArray(lesson.warnings));
@@ -944,6 +1072,7 @@ function readSavedWorkspace(scope?: string): SavedScheduleImportWorkspace {
     return {
       rawLessons: normalizeRawLessons(parsed.rawLessons),
       mapping: normalizeMapping(parsed.mapping),
+      resolutions: normalizeResolutions(parsed.resolutions),
       fileCampusOverrides: normalizeMapping(parsed.fileCampusOverrides),
       selectedMonth: typeof parsed.selectedMonth === "string" ? parsed.selectedMonth : todayIso().slice(0, 7),
       selectedDate: typeof parsed.selectedDate === "string" ? parsed.selectedDate : todayIso(),
@@ -996,6 +1125,33 @@ function lessonCampusId(vault: TeacherVault, lesson: Lesson): string | undefined
 
 function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {
   return type === "unknown" ? "未知班型" : courseTypeLabel(vault, type);
+}
+
+function resolutionKey(row: ImportPreviewLesson): string {
+  return [
+    row.systemLessonId || row.id,
+    row.fileName,
+    row.date,
+    row.startTime,
+    row.endTime,
+    row.matchedCourseId ?? "",
+    row.title
+  ].join("|");
+}
+
+function isReviewedResolution(resolution: ScheduleImportResolution | undefined): boolean {
+  return Boolean(resolution && (resolution.status !== "unreviewed" || resolution.note?.trim()));
+}
+
+function resolutionStatusLabel(status: ScheduleImportResolutionStatus): string {
+  const labels: Record<ScheduleImportResolutionStatus, string> = {
+    unreviewed: "未处理",
+    excel_error: "教务表错误",
+    cloud_error: "云端需修正",
+    fixed: "已修正",
+    accepted: "确认无误"
+  };
+  return labels[status];
 }
 
 function statusLabel(status: ImportMatchStatus): string {

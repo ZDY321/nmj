@@ -37,6 +37,10 @@ export type ImportPreviewLesson = ImportedScheduleLesson & {
   status: ImportMatchStatus;
   systemLessonId?: string;
   systemLessonLabel?: string;
+  systemPresentCount?: number;
+  systemExpectedCount?: number;
+  systemPresentStudentNames?: string;
+  systemExpectedStudentNames?: string;
   issues: string[];
 };
 
@@ -196,10 +200,14 @@ export function buildImportPreview(
       ? findSameTimeDifferentCourseLesson(vault, lesson, matchedCourse?.id, campus?.id)
       : undefined;
     const systemLesson = exactLesson ?? sameCourseDifferentTime ?? sameTimeDifferentCourse;
+    const systemAttendance = systemLesson ? systemLessonAttendanceSnapshot(vault, systemLesson) : undefined;
+    const attendanceIssue = systemAttendance && lesson.presentCount !== undefined && lesson.expectedCount !== undefined
+      ? importAttendanceIssue(lesson, systemAttendance)
+      : "";
     const issues = [
-      ...lesson.warnings,
       campus ? "" : "校区未匹配",
       matchedCourse ? "" : "课程未匹配",
+      attendanceIssue,
       exactLesson ? "" : sameCourseDifferentTime ? `云端同课程时间不一致：${systemLessonLabel(vault, sameCourseDifferentTime)}` : "",
       exactLesson || sameCourseDifferentTime ? "" : sameTimeDifferentCourse ? `同一时间云端是其他课程：${systemLessonLabel(vault, sameTimeDifferentCourse)}` : "",
       campus && matchedCourse && !systemLesson ? "云端课表缺少这节教务 Excel 课节" : ""
@@ -207,7 +215,7 @@ export function buildImportPreview(
     const status: ImportMatchStatus = !campus || !matchedCourse
       ? "needs_mapping"
       : exactLesson
-        ? lesson.warnings.length > 0 ? "attendance_mismatch" : "matched"
+        ? attendanceIssue ? "attendance_mismatch" : "matched"
         : sameCourseDifferentTime
           ? "time_mismatch"
           : sameTimeDifferentCourse
@@ -222,6 +230,10 @@ export function buildImportPreview(
       status,
       systemLessonId: systemLesson?.id,
       systemLessonLabel: systemLesson ? systemLessonLabel(vault, systemLesson) : undefined,
+      systemPresentCount: systemAttendance?.presentCount,
+      systemExpectedCount: systemAttendance?.expectedCount,
+      systemPresentStudentNames: systemAttendance?.presentStudentNames,
+      systemExpectedStudentNames: systemAttendance?.expectedStudentNames,
       issues
     };
   });
@@ -390,6 +402,42 @@ function findSameTimeDifferentCourseLesson(vault: TeacherVault, lesson: Imported
     item.startTime === lesson.startTime &&
     item.endTime === lesson.endTime
   );
+}
+
+function systemLessonAttendanceSnapshot(vault: TeacherVault, lesson: Lesson): {
+  presentCount: number;
+  expectedCount: number;
+  presentStudentNames: string;
+  expectedStudentNames: string;
+} {
+  const presentStudentIds = lesson.attendance
+    .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
+    .map((entry) => entry.studentId);
+  const effectivePresentStudentIds = lesson.attendance.length > 0
+    ? Array.from(new Set(presentStudentIds))
+    : Array.from(new Set(lesson.expectedStudentIds));
+  const expectedStudentIds = Array.from(new Set(lesson.expectedStudentIds));
+  return {
+    presentCount: effectivePresentStudentIds.length,
+    expectedCount: expectedStudentIds.length,
+    presentStudentNames: studentNamesForIds(vault, effectivePresentStudentIds),
+    expectedStudentNames: studentNamesForIds(vault, expectedStudentIds)
+  };
+}
+
+function importAttendanceIssue(
+  lesson: Pick<ImportedScheduleLesson, "presentCount" | "expectedCount">,
+  systemAttendance: { presentCount: number; expectedCount: number }
+): string {
+  if (lesson.presentCount === systemAttendance.presentCount && lesson.expectedCount === systemAttendance.expectedCount) return "";
+  return `到课人数不一致：教务 ${lesson.presentCount}/${lesson.expectedCount}，云端 ${systemAttendance.presentCount}/${systemAttendance.expectedCount}`;
+}
+
+function studentNamesForIds(vault: TeacherVault, studentIds: string[]): string {
+  return studentIds
+    .map((studentId) => vault.students.find((student) => student.id === studentId)?.name ?? "")
+    .filter(Boolean)
+    .join("、");
 }
 
 function systemLessonLabel(vault: TeacherVault, lesson: Lesson): string {

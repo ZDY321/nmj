@@ -389,6 +389,21 @@ export type ScheduleImportMatchStatus =
 
 export type ScheduleImportMapping = Record<string, string>;
 
+export type ScheduleImportResolutionStatus =
+  | "unreviewed"
+  | "excel_error"
+  | "cloud_error"
+  | "fixed"
+  | "accepted";
+
+export type ScheduleImportResolution = {
+  status: ScheduleImportResolutionStatus;
+  note?: string;
+  updatedAt: string;
+};
+
+export type ScheduleImportResolutionMap = Record<string, ScheduleImportResolution>;
+
 export type ScheduleImportSavedSummary = {
   total: number;
   matched: number;
@@ -424,7 +439,14 @@ export type ScheduleImportSavedRow = {
   status: ScheduleImportMatchStatus;
   systemLessonId?: string;
   systemLessonLabel?: string;
+  systemPresentCount?: number;
+  systemExpectedCount?: number;
+  systemPresentStudentNames?: string;
+  systemExpectedStudentNames?: string;
   issues: string[];
+  resolutionStatus?: ScheduleImportResolutionStatus;
+  resolutionNote?: string;
+  resolutionUpdatedAt?: string;
 };
 
 export type ScheduleImportReviewRecord = {
@@ -436,12 +458,14 @@ export type ScheduleImportReviewRecord = {
   fileNames: string[];
   mapping: ScheduleImportMapping;
   fileCampusOverrides: ScheduleImportMapping;
+  resolutions?: ScheduleImportResolutionMap;
   summary: ScheduleImportSavedSummary;
   rows: ScheduleImportSavedRow[];
 };
 
 export type ScheduleImportVaultState = {
   mappings: ScheduleImportMapping;
+  resolutions?: ScheduleImportResolutionMap;
   reviews: ScheduleImportReviewRecord[];
   updatedAt: string;
 };
