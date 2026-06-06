@@ -705,6 +705,7 @@ export function ScheduleView({
   const aiDraftWarnings = arrayValue(aiDraftRecord?.warnings);
   const aiDraftSummary = textValue(aiDraftRecord?.summary, aiDraft ? "AI 已生成建议，请按下方内容核对。" : "");
   const aiDraftAnswer = textValue(aiDraftRecord?.answer ?? aiDraftRecord?.result ?? aiDraftRecord?.analysis, "");
+  const aiRawResultText = aiDraft ? JSON.stringify(aiDraft.draft ?? aiDraft.text, null, 2) : "";
   const aiDraftCanApply = !aiLoading && !aiApplying && aiApplyResult?.ok !== true && aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
   const selectedAiUsage = selectedAiProvider
     ? {
@@ -746,6 +747,32 @@ export function ScheduleView({
           : provider
       )
     );
+  }
+
+  async function copyAiRawResult() {
+    if (!aiRawResultText) {
+      patchAiSession({ message: "暂无可复制的原始返回内容。" });
+      return;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(aiRawResultText);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = aiRawResultText;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (!copied) throw new Error("copy failed");
+      }
+      patchAiSession({ message: "原始返回内容已复制。" });
+    } catch {
+      patchAiSession({ message: "复制失败，请手动选中原始内容复制。" });
+    }
   }
 
   function addSingleLesson(status: "scheduled" | "completed") {
@@ -2194,14 +2221,25 @@ export function ScheduleView({
                       </div>
                     )}
 
-                    <details className="rounded-[12px] border border-[#e8eef6] bg-white">
-                      <summary className="cursor-pointer px-4 py-3 text-sm font-extrabold text-[#25324a]">
-                        查看原始返回内容
-                      </summary>
-                      <pre className="max-h-[260px] overflow-auto border-t border-[#e8eef6] bg-[#f8fbff] p-4 text-xs font-semibold leading-6 text-[#25324a]">
-{JSON.stringify(aiDraft.draft ?? aiDraft.text, null, 2)}
-                      </pre>
-                    </details>
+                    <div className="relative rounded-[12px] border border-[#e8eef6] bg-white">
+                      <details>
+                        <summary className="cursor-pointer px-4 py-3 pr-32 text-sm font-extrabold text-[#25324a]">
+                          查看原始返回内容
+                        </summary>
+                        <pre className="max-h-[260px] overflow-auto border-t border-[#e8eef6] bg-[#f8fbff] p-4 text-xs font-semibold leading-6 text-[#25324a]">
+{aiRawResultText}
+                        </pre>
+                      </details>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="absolute right-3 top-2"
+                        onClick={() => void copyAiRawResult()}
+                      >
+                        <Copy size={14} /> 复制结果
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="mt-4 rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5">
