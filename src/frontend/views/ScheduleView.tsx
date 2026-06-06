@@ -706,6 +706,7 @@ export function ScheduleView({
   const aiDraftSummary = textValue(aiDraftRecord?.summary, aiDraft ? "AI 已生成建议，请按下方内容核对。" : "");
   const aiDraftAnswer = textValue(aiDraftRecord?.answer ?? aiDraftRecord?.result ?? aiDraftRecord?.analysis, "");
   const aiRawResultText = aiDraft ? JSON.stringify(aiDraft.draft ?? aiDraft.text, null, 2) : "";
+  const canClearAiWork = Boolean(aiInstruction || aiFollowupAnswer || aiDraft || aiMessage || aiApplyResult);
   const aiDraftCanApply = !aiLoading && !aiApplying && aiApplyResult?.ok !== true && aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
   const selectedAiUsage = selectedAiProvider
     ? {
@@ -773,6 +774,11 @@ export function ScheduleView({
     } catch {
       patchAiSession({ message: "复制失败，请手动选中原始内容复制。" });
     }
+  }
+
+  function clearAiWork() {
+    setAiApplyResult(null);
+    patchAiSession({ instruction: "", followupAnswer: "", draft: null, message: "" });
   }
 
   function addSingleLesson(status: "scheduled" | "completed") {
@@ -977,8 +983,9 @@ export function ScheduleView({
       draft: aiDraft,
       message: aiMessage
     });
-    setAiApplyResult(result);
-    patchAiSession({ message: result.message });
+    const displayResult = result.ok ? result : { ...result, message: `AI 建议写入失败：${result.message}` };
+    setAiApplyResult(displayResult);
+    patchAiSession({ message: displayResult.message });
     window.setTimeout(() => setAiApplying(false), 250);
   }
 
@@ -2000,6 +2007,9 @@ export function ScheduleView({
                       会发送当前可用学生、课程、校区、科目和近 14 天到未来 45 天课程，用于识别重复和时间关系。
                     </div>
                     <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                      <Button type="button" variant="outline" disabled={aiLoading || !canClearAiWork} onClick={clearAiWork}>
+                        <Trash2 size={15} /> 清空
+                      </Button>
                       <Button type="button" variant="outline" disabled={aiLoading} onClick={() => void refreshAiProviders()}>
                         <RefreshCw size={15} /> 刷新配置
                       </Button>

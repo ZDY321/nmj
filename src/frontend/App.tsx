@@ -1243,43 +1243,134 @@ export function App() {
       }
     };
 
-    const createLessonsForCourse = (course: CourseGroup, data: Record<string, unknown>) => {
-      const startTime = stringValue(data.startTime) || "19:00";
-      const endTime = stringValue(data.endTime) || "21:00";
-      const dates = arrayValueLocal(data.dates).map(stringValue).filter(Boolean);
-      if (data.date) dates.push(stringValue(data.date));
-      const lessonItems = arrayValueLocal(data.lessons).filter(isPlainRecordLocal);
-      const lessonRequests = lessonItems.length > 0
-        ? lessonItems
-            .map((item) => ({
-              date: stringValue(item.date),
-              startTime: stringValue(item.startTime) || startTime,
-              endTime: stringValue(item.endTime) || endTime
-            }))
-            .filter((item) => item.date)
-        : Array.from(new Set(dates)).map((date) => ({ date, startTime, endTime }));
-      if (lessonRequests.length === 0) return;
+    const normalizeAiDate = (value: unknown): string | null => {
+      const raw = stringValue(value).replace(/[./]/g, "-");
+      const match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (!match) return null;
+      const normalized = `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+      return datesBetween(normalized, normalized)[0] === normalized ? normalized : null;
+    };
+
+    const normalizeAiTime = (value: unknown): string | null => {
+      const raw = stringValue(value).replace(/[：.]/g, ":");
+      if (!raw) return null;
+      let hourText = "";
+      let minuteText = "";
+      const colonMatch = raw.match(/^(\d{1,2}):(\d{1,2})$/);
+      if (colonMatch) {
+        hourText = colonMatch[1];
+        minuteText = colonMatch[2];
+      } else if (/^\d{3,4}$/.test(raw)) {
+        hourText = raw.slice(0, -2);
+        minuteText = raw.slice(-2);
+      } else if (/^\d{1,2}$/.test(raw)) {
+        hourText = raw;
+        minuteText = "00";
+      } else {
+        return null;
+      }
+      const hour = Number(hourText);
+      const minute = Number(minuteText);
+      if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+      return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    };
+
+    const createScheduledLessonsFromAi = (
+      lessonItems: Array<Record<string, unknown>>,
+      defaults: Record<string, unknown>,
+      defaultCourse: CourseGroup | null
+    ) => {
+      if (lessonItems.length === 0) return;
       let createdCount = 0;
-      lessonRequests.forEach((request) => {
-        const exists = nextVault.lessons.some((lesson) =>
+      const skippedReasons: string[] = [];
+      const createdByCourse = new Map<string, number>();
+      const fallbackStartTime = normalizeAiTime(defaults.startTime) ?? "19:00";
+      const fallbackEndTime = normalizeAiTime(defaults.endTime) ?? "21:00";
+
+      lessonItems.forEach((item, index) => {
+        const merged = { ...defaults, ...item };
+        const course =
+          courseByIdOrName(merged.courseId ?? merged.courseGroupId ?? merged.courseName ?? merged.name) ??
+          defaultCourse ??
+          ensureCourse({ ...merged, lessons: undefined });
+        const requestedLabel = `第 ${index + 1} 节`;
+        if (!course) {
+          skippedReasons.push(`${requestedLabel}缺少可匹配课程`);
+          return;
+        }
+
+        const date = normalizeAiDate(merged.date);
+        if (!date) {
+          skippedReasons.push(`${requestedLabel}（${course.name}）日期无效`);
+          return;
+        }
+        const startTime = merged.startTime === undefined ? fallbackStartTime : normalizeAiTime(merged.startTime);
+        const endTime = merged.endTime === undefined ? fallbackEndTime : normalizeAiTime(merged.endTime);
+        if (!startTime || !endTime || timeToMinutes(startTime) >= timeToMinutes(endTime)) {
+          skippedReasons.push(`${date} ${course.name} 时间无效`);
+          return;
+        }
+
+        const duplicate = nextVault.lessons.some((lesson) =>
+          lesson.status !== "cancelled" &&
           lesson.courseGroupId === course.id &&
-          lesson.date === request.date &&
-          lesson.startTime === request.startTime &&
-          lesson.endTime === request.endTime
+          lesson.date === date &&
+          lesson.startTime === startTime &&
+          lesson.endTime === endTime
         );
-        if (exists) return;
+        if (duplicate) {
+          skippedReasons.push(`${date} ${startTime}-${endTime}「${course.name}」已存在`);
+          return;
+        }
+
+        const conflict = nextVault.lessons.find((lesson) =>
+          lesson.status !== "cancelled" &&
+          lesson.date === date &&
+          timesOverlap(lesson.startTime, lesson.endTime, startTime, endTime)
+        );
+        if (conflict) {
+          const conflictCourse = nextVault.courseGroups.find((courseItem) => courseItem.id === conflict.courseGroupId);
+          skippedReasons.push(`${date} ${startTime}-${endTime}「${course.name}」与「${conflictCourse?.name ?? "未知课程"} ${conflict.startTime}-${conflict.endTime}」冲突`);
+          return;
+        }
+
+        const campus = campusByName(merged.campus ?? merged.campusName);
         nextVault.lessons.push(createLessonFromCourse(nextVault, course, {
-          date: request.date,
-          startTime: request.startTime,
-          endTime: request.endTime,
-          campusId: course.defaultCampusId,
+          date,
+          startTime,
+          endTime,
+          campusId: campus?.id ?? course.defaultCampusId,
           status: "scheduled"
         }));
         createdCount += 1;
+        createdByCourse.set(course.name, (createdByCourse.get(course.name) ?? 0) + 1);
       });
+
       if (createdCount > 0) {
-        messages.push(`已为课程「${course.name}」新增 ${createdCount} 节课`);
+        const courseSummary = Array.from(createdByCourse.entries())
+          .map(([name, count]) => `${name} ${count} 节`)
+          .join("、");
+        messages.push(`已新增 ${createdCount} 节排课${courseSummary ? `：${courseSummary}` : ""}`);
+        if (skippedReasons.length > 0) {
+          messages.push(`另有 ${skippedReasons.length} 节未新增：${skippedReasons.slice(0, 6).join("；")}${skippedReasons.length > 6 ? `；另 ${skippedReasons.length - 6} 节` : ""}`);
+        }
+        return;
       }
+
+      if (skippedReasons.length > 0) {
+        blockers.push(`AI 排课建议已识别，但没有新增课节：${skippedReasons.slice(0, 8).join("；")}${skippedReasons.length > 8 ? `；另 ${skippedReasons.length - 8} 节` : ""}`);
+      }
+    };
+
+    const createLessonsForCourse = (course: CourseGroup, data: Record<string, unknown>) => {
+      const dates = arrayValueLocal(data.dates).map(normalizeAiDate).filter((date): date is string => Boolean(date));
+      const singleDate = normalizeAiDate(data.date);
+      if (singleDate) dates.push(singleDate);
+      const lessonItems = arrayValueLocal(data.lessons).filter(isPlainRecordLocal);
+      const lessonRequests = lessonItems.length > 0
+        ? lessonItems
+        : Array.from(new Set(dates)).map((date) => ({ date }));
+      createScheduledLessonsFromAi(lessonRequests, data, course);
     };
 
     const falseyAiValue = (value: unknown): boolean => {
@@ -1454,6 +1545,12 @@ export function App() {
         return;
       }
       if (type === "schedule_lessons") {
+        const lessonItems = arrayValueLocal(data.lessons).filter(isPlainRecordLocal);
+        if (lessonItems.length > 0) {
+          const course = courseByIdOrName(data.courseId ?? data.courseGroupId ?? data.courseName ?? data.name) ?? null;
+          createScheduledLessonsFromAi(lessonItems, data, course);
+          return;
+        }
         const course = ensureCourse(data);
         if (course) createLessonsForCourse(course, data);
         return;
