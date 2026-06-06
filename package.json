@@ -21,7 +21,8 @@
     "react-dom": "^19.2.0",
     "tailwind-merge": "^3.5.0",
     "typescript": "^5.9.3",
-    "vite": "^7.1.12"
+    "vite": "^7.1.12",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260508.0",

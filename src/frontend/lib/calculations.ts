@@ -194,7 +194,7 @@ export function calculateClassHeadcountFee(rule: FeeRule, studentCount: number):
 }
 
 export function calculateFee(rule: FeeRule, lesson: Lesson): number {
-  if (isOriginalFullyMadeUp(lesson)) {
+  if (isOriginalFullyMadeUp(lesson) || isLessonFullyMissedAndMakeupExempt(lesson)) {
     return 0;
   }
   const extraFee = extraFeeTotal(lesson, rule);
@@ -246,7 +246,7 @@ export function completedAmount(lesson: Lesson): number {
   if (lesson.status !== "completed" && lesson.status !== "makeup_completed") {
     return 0;
   }
-  if (isOriginalFullyMadeUp(lesson)) {
+  if (isOriginalFullyMadeUp(lesson) || isLessonFullyMissedAndMakeupExempt(lesson)) {
     return 0;
   }
   return lesson.feeSnapshot.amount;
@@ -256,10 +256,21 @@ function completedHours(lesson: Lesson): number {
   if (lesson.status !== "completed" && lesson.status !== "makeup_completed") {
     return 0;
   }
-  if (isOriginalFullyMadeUp(lesson)) {
+  if (isOriginalFullyMadeUp(lesson) || isLessonFullyMissedAndMakeupExempt(lesson)) {
     return 0;
   }
   return lessonBillableHours(lesson);
+}
+
+function isLessonFullyMissedAndMakeupExempt(lesson: Lesson): boolean {
+  if (lesson.linkedOriginalLessonId || lesson.attendance.length === 0) return false;
+  const billableEntries = lesson.attendance.filter((entry) => !entry.trial);
+  if (billableEntries.length === 0) return false;
+  return billableEntries.every((entry) => isMakeupExemptMissedEntry(entry));
+}
+
+function isMakeupExemptMissedEntry(entry: Lesson["attendance"][number]): boolean {
+  return Boolean(entry.makeupExempt) && (entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending");
 }
 
 function isOriginalFullyMadeUp(lesson: Lesson): boolean {

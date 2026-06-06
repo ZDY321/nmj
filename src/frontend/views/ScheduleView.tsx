@@ -38,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
+import { ScheduleImportPanel } from "@/frontend/components/ScheduleImportPanel";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { billableHoursForLesson, calculateClassHeadcountFee, calculateFee, classFeeTierForCount, extraFeeTotal, formatAppDateTime, getCourse, lessonBillableHours, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
@@ -88,7 +89,7 @@ import {
 
 type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
-type SchedulePanel = "ai" | "schedule" | "calendar" | "records" | "studentStats" | "trash";
+type SchedulePanel = "ai" | "import" | "schedule" | "calendar" | "records" | "studentStats" | "trash";
 type CalendarOverviewReturnFocus = {
   selectedDate: string;
   month: string;
@@ -262,6 +263,7 @@ export function ScheduleView({
   const [makeupStartTime, setMakeupStartTime] = useState("19:00");
   const [makeupEndTime, setMakeupEndTime] = useState("21:00");
   const [detailMakeupStudentIds, setDetailMakeupStudentIds] = useState<string[]>([]);
+  const [makeupArrangementOpen, setMakeupArrangementOpen] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
   const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
   const aiProviderId = aiSession?.providerId ?? "";
@@ -357,6 +359,11 @@ export function ScheduleView({
       return selectableSyncLessons.map((lesson) => lesson.id);
     });
   }, [selectableSyncLessonIds]);
+
+  useEffect(() => {
+    setMakeupArrangementOpen(false);
+    setDetailMakeupStudentIds([]);
+  }, [selectedId]);
 
   useEffect(() => {
     if (!calendarFocus?.date) return;
@@ -1392,6 +1399,8 @@ export function ScheduleView({
     switch (panel) {
       case "ai":
         return { kind: "panel", panel, label: "返回 AI 排课助手" };
+      case "import":
+        return { kind: "panel", panel, label: "返回教务导入" };
       case "schedule":
         return { kind: "panel", panel, label: "返回排课" };
       case "calendar":
@@ -1879,6 +1888,7 @@ export function ScheduleView({
         <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
         {[
           { key: "ai" as SchedulePanel, label: "AI 排课助手" },
+          { key: "import" as SchedulePanel, label: "教务导入" },
           { key: "schedule" as SchedulePanel, label: "排课" },
           { key: "calendar" as SchedulePanel, label: "日历查看" },
           { key: "records" as SchedulePanel, label: "课程记录" },
@@ -2285,6 +2295,14 @@ export function ScheduleView({
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {schedulePanel === "import" && (
+        <ScheduleImportPanel
+          vault={vault}
+          onAddLessons={onAddLessons}
+          onOpenLesson={(lesson) => openLessonInRecords(lesson, { returnTarget: buildPanelReturnTarget("import") })}
+        />
       )}
 
       {schedulePanel === "schedule" && (
@@ -3954,17 +3972,26 @@ export function ScheduleView({
                   )}
                   {!selected.linkedOriginalLessonId && selectedMakeupAssignableStudentIds.length > 0 && (
                     <div className="space-y-3 rounded-[14px] border border-[#facc15] bg-[#fefce8] p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setMakeupArrangementOpen((open) => !open)}
+                        className="flex w-full flex-col gap-2 text-left sm:flex-row sm:items-start sm:justify-between"
+                      >
                         <div>
                           <div className="text-sm font-extrabold text-[#061226]">补课安排</div>
                           <div className="mt-1 text-xs font-semibold text-[#854d0e]">
                             {selectedWholeLessonPending ? "这节课整体待补课，直接安排补课即可。" : "勾选可一起补课的学生，分批安排不同时间。"}
                           </div>
                         </div>
-                        <Badge variant="amber" className="w-fit">
-                          {selectedWholeLessonPending ? "整节待补" : `${selectedMakeupCandidateStudentIds.length} 人待补`}
-                        </Badge>
-                      </div>
+                        <span className="flex items-center gap-2">
+                          <Badge variant="amber" className="w-fit">
+                            {selectedWholeLessonPending ? "整节待补" : `${selectedMakeupCandidateStudentIds.length} 人待补`}
+                          </Badge>
+                          {makeupArrangementOpen ? <ChevronUp size={16} className="text-[#854d0e]" /> : <ChevronDown size={16} className="text-[#854d0e]" />}
+                        </span>
+                      </button>
+                      {makeupArrangementOpen && (
+                        <>
                       {!selectedWholeLessonPending && selectedMakeupCandidateStudentIds.length > 0 && (
                         <div className="flex flex-wrap gap-2">
                           <Button type="button" size="sm" variant="outline" onClick={() => setDetailMakeupStudentIds(selectedMakeupCandidateStudentIds)}>
@@ -4043,6 +4070,8 @@ export function ScheduleView({
                       >
                         <Plus size={14} /> {selectedWholeLessonPending ? "安排补课" : "安排选中学生补课"}
                       </Button>
+                        </>
+                      )}
                     </div>
                   )}
                   <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
