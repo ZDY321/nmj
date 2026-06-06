@@ -605,7 +605,7 @@ function ReconciliationRow({
         {isReviewedResolution(resolution) && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3">
         <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
           <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
             <FileSpreadsheet size={13} /> 教务 Excel
