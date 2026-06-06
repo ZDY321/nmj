@@ -181,7 +181,11 @@ export function buildImportPreview(
     const normalizedLesson = campus ? { ...lesson, campusName: campus.name } : lesson;
     const mappedCourseId = mapping[importMappingKey(normalizedLesson)] ?? mapping[importMappingKey(lesson)];
     const mappedCourse = mappedCourseId ? vault.courseGroups.find((course) => course.id === mappedCourseId) : undefined;
-    const matchedCourse = mappedCourse ?? matchCourse(vault, normalizedLesson, campus?.id);
+    const autoMatchedCourse = matchCourse(vault, normalizedLesson, campus?.id);
+    const sameTimeMatchedCourse = !mappedCourse
+      ? findSameTimeCourseThatLooksLikeImportedLesson(vault, normalizedLesson, campus?.id, autoMatchedCourse?.id)
+      : undefined;
+    const matchedCourse = mappedCourse ?? sameTimeMatchedCourse ?? autoMatchedCourse;
     const exactLesson = matchedCourse
       ? findExactSystemLesson(vault, lesson, matchedCourse.id, campus?.id)
       : undefined;
@@ -197,7 +201,7 @@ export function buildImportPreview(
       campus ? "" : "校区未匹配",
       matchedCourse ? "" : "课程未匹配",
       exactLesson ? "" : sameCourseDifferentTime ? `云端同课程时间不一致：${systemLessonLabel(vault, sameCourseDifferentTime)}` : "",
-      exactLesson || sameCourseDifferentTime ? "" : sameTimeDifferentCourse ? `云端同时间课程不一致：${systemLessonLabel(vault, sameTimeDifferentCourse)}` : "",
+      exactLesson || sameCourseDifferentTime ? "" : sameTimeDifferentCourse ? `同一时间云端是其他课程：${systemLessonLabel(vault, sameTimeDifferentCourse)}` : "",
       campus && matchedCourse && !systemLesson ? "云端课表缺少这节教务 Excel 课节" : ""
     ].filter(Boolean);
     const status: ImportMatchStatus = !campus || !matchedCourse
@@ -276,6 +280,43 @@ function matchCourse(vault: TeacherVault, lesson: ImportedScheduleLesson, campus
     if (byStudent) return byStudent;
   }
   return candidates.find((course) => normalizedTitle.includes(normalizeText(course.name)) || normalizeText(course.name).includes(normalizedTitle));
+}
+
+function findSameTimeCourseThatLooksLikeImportedLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, campusId?: string, fallbackCourseId?: string): CourseGroup | undefined {
+  const sameTimeLessons = activeSystemLessonsForDate(vault, lesson.date, campusId)
+    .filter((item) => item.startTime === lesson.startTime && item.endTime === lesson.endTime);
+  const bestLesson = sameTimeLessons.find((item) => courseLooksLikeImportedLesson(vault, item.courseGroupId, lesson))
+    ?? sameTimeLessons.find((item) => item.courseGroupId === fallbackCourseId);
+  return bestLesson ? vault.courseGroups.find((course) => course.id === bestLesson.courseGroupId) : undefined;
+}
+
+function courseLooksLikeImportedLesson(vault: TeacherVault, courseId: string, lesson: ImportedScheduleLesson): boolean {
+  const course = vault.courseGroups.find((item) => item.id === courseId);
+  if (!course) return false;
+
+  const title = normalizeText(lesson.title);
+  const courseName = normalizeText(course.name);
+  const lessonSubject = normalizeText(lesson.subjectHint);
+  const courseSubject = normalizeText(course.subject);
+  const subjectMatches = Boolean(lessonSubject && courseSubject && lessonSubject === courseSubject);
+  const typeMatches = lesson.courseTypeHint === "unknown" || lesson.courseTypeHint === course.type;
+  const studentMatches = course.studentIds.some((studentId) => {
+    const studentName = normalizeText(vault.students.find((student) => student.id === studentId)?.name ?? "");
+    const studentHint = normalizeText(lesson.studentNameHint ?? "");
+    return Boolean(
+      studentName &&
+      (
+        title.includes(studentName) ||
+        (studentHint && (studentName === studentHint || studentName.includes(studentHint) || studentHint.includes(studentName)))
+      )
+    );
+  });
+  const courseNameIsOnlySubject = Boolean(courseSubject && courseName === courseSubject);
+  const courseNameMatchesTitle = Boolean(courseName && !courseNameIsOnlySubject && (title.includes(courseName) || courseName.includes(title)));
+
+  if (courseNameMatchesTitle && (typeMatches || subjectMatches || studentMatches)) return true;
+  if (studentMatches && (subjectMatches || Boolean(courseSubject && title.includes(courseSubject)))) return true;
+  return false;
 }
 
 function inferStudentNameHint(title: string, courseType: CourseType | "unknown"): string | undefined {

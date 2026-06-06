@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ScheduleImportPanel } from "@/frontend/components/ScheduleImportPanel";
-import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
+import type { CourseType, Lesson, ScheduleImportVaultState, TeacherVault } from "@/shared/types";
 import { completedAmount, estimatedMonthlyIncome, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import {
   campusName,
@@ -41,12 +41,14 @@ export function PayrollReviewView({
   amountsVisible,
   panelFocus,
   storageScope,
+  onSaveScheduleImport,
   onOpenLessonInCalendar
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
   panelFocus?: { panel: PayrollPanel; nonce: number } | null;
   storageScope?: string;
+  onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
   onOpenLessonInCalendar?: (lesson: Lesson) => void;
 }) {
   const campusOptions = useMemo(
@@ -221,7 +223,12 @@ export function PayrollReviewView({
       </div>
 
       {payrollPanel === "reconcile" ? (
-        <ScheduleImportPanel vault={vault} storageScope={storageScope} onOpenLesson={onOpenLessonInCalendar} />
+        <ScheduleImportPanel
+          vault={vault}
+          storageScope={storageScope}
+          onSaveScheduleImport={onSaveScheduleImport}
+          onOpenLesson={onOpenLessonInCalendar}
+        />
       ) : (
       <>
       <Card className="overflow-hidden">

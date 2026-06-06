@@ -378,6 +378,74 @@ export type CustomCourseTypeOption = {
   label: string;
 };
 
+export type ScheduleImportMatchStatus =
+  | "matched"
+  | "attendance_mismatch"
+  | "time_mismatch"
+  | "course_mismatch"
+  | "system_missing"
+  | "import_missing"
+  | "needs_mapping";
+
+export type ScheduleImportMapping = Record<string, string>;
+
+export type ScheduleImportSavedSummary = {
+  total: number;
+  matched: number;
+  attendanceMismatch: number;
+  timeMismatch: number;
+  courseMismatch: number;
+  systemMissing: number;
+  importMissing: number;
+  needsMapping: number;
+};
+
+export type ScheduleImportSavedRow = {
+  id: string;
+  fileName: string;
+  campusName: string;
+  campusId?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  subjectHint: string;
+  courseTypeHint: CourseType | "unknown";
+  studentNameHint?: string;
+  teacher?: string;
+  assistant?: string;
+  room?: string;
+  presentCount?: number;
+  expectedCount?: number;
+  rawText?: string;
+  warnings: string[];
+  matchedCourseId?: string;
+  mappedCourseId?: string;
+  status: ScheduleImportMatchStatus;
+  systemLessonId?: string;
+  systemLessonLabel?: string;
+  issues: string[];
+};
+
+export type ScheduleImportReviewRecord = {
+  id: string;
+  savedAt: string;
+  month: string;
+  selectedDate: string;
+  rawLessonCount: number;
+  fileNames: string[];
+  mapping: ScheduleImportMapping;
+  fileCampusOverrides: ScheduleImportMapping;
+  summary: ScheduleImportSavedSummary;
+  rows: ScheduleImportSavedRow[];
+};
+
+export type ScheduleImportVaultState = {
+  mappings: ScheduleImportMapping;
+  reviews: ScheduleImportReviewRecord[];
+  updatedAt: string;
+};
+
 export type AppPreferences = {
   weekStartsOn: WeekStart;
   customTimePresets?: TimePreset[];
@@ -404,6 +472,7 @@ export type TeacherVault = {
   progressChecklistTemplates?: ProgressChecklistTemplate[];
   progressChecklistCompletions?: ProgressChecklistCompletion[];
   gradeRecords?: GradeRecord[];
+  scheduleImport?: ScheduleImportVaultState;
   notice: Notice;
 };
 

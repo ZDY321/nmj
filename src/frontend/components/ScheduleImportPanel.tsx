@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { CourseGroup, CourseType, Lesson, TeacherVault } from "@/shared/types";
+import type { CourseGroup, CourseType, Lesson, ScheduleImportReviewRecord, ScheduleImportVaultState, TeacherVault } from "@/shared/types";
 import { todayIso } from "@/frontend/lib/calculations";
 import {
   calendarDates,
@@ -52,14 +52,17 @@ const statusFilters: StatusFilter[] = ["all", "matched", "attendance_mismatch", 
 export function ScheduleImportPanel({
   vault,
   onOpenLesson,
+  onSaveScheduleImport,
   storageScope
 }: {
   vault: TeacherVault;
   onOpenLesson?: (lesson: Lesson) => void;
+  onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
   storageScope?: string;
 }) {
   const savedWorkspace = useMemo(() => readSavedWorkspace(storageScope), [storageScope]);
-  const savedMapping = useMemo(() => ({ ...readSavedMapping(storageScope), ...savedWorkspace.mapping }), [savedWorkspace.mapping, storageScope]);
+  const cloudMapping = vault.scheduleImport?.mappings ?? {};
+  const savedMapping = useMemo(() => ({ ...readSavedMapping(storageScope), ...cloudMapping, ...savedWorkspace.mapping }), [cloudMapping, savedWorkspace.mapping, storageScope]);
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>(savedWorkspace.rawLessons);
   const [mapping, setMapping] = useState<ScheduleImportMapping>(savedMapping);
   const [fileCampusOverrides, setFileCampusOverrides] = useState<ScheduleImportMapping>(savedWorkspace.fileCampusOverrides);
@@ -70,6 +73,7 @@ export function ScheduleImportPanel({
   const [campusFilter, setCampusFilter] = useState(savedWorkspace.campusFilter || "all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(savedWorkspace.statusFilter);
   const [search, setSearch] = useState(savedWorkspace.search);
+  const [selectedReviewId, setSelectedReviewId] = useState(vault.scheduleImport?.reviews[0]?.id ?? "");
 
   const campusOptions = useMemo(
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
@@ -106,6 +110,18 @@ export function ScheduleImportPanel({
   const days = calendarDates(displayMonth, weekStartPreference);
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference);
   const needsAttention = summary.attendanceMismatch + summary.timeMismatch + summary.courseMismatch + summary.systemMissing + summary.importMissing + summary.needsMapping;
+  const savedReviews = vault.scheduleImport?.reviews ?? [];
+  const selectedReview = savedReviews.find((review) => review.id === selectedReviewId) ?? savedReviews[0];
+
+  useEffect(() => {
+    setMapping((current) => ({ ...cloudMapping, ...current }));
+  }, [vault.scheduleImport?.updatedAt]);
+
+  useEffect(() => {
+    if (!selectedReviewId && savedReviews[0]) {
+      setSelectedReviewId(savedReviews[0].id);
+    }
+  }, [savedReviews, selectedReviewId]);
 
   useEffect(() => {
     if (monthOptions.length === 0) return;
@@ -206,9 +222,22 @@ export function ScheduleImportPanel({
       search,
       savedAt: new Date().toISOString()
     });
+    const nextScheduleImport = buildNextScheduleImportState(vault, {
+      rawLessons,
+      mapping,
+      fileCampusOverrides,
+      selectedMonth: displayMonth,
+      selectedDate,
+      rows,
+      summary
+    });
+    onSaveScheduleImport?.(nextScheduleImport);
+    setSelectedReviewId(nextScheduleImport.reviews[0]?.id ?? "");
     setMessage(
-      savedMappingOk && savedWorkspaceOk
-        ? "课程映射和当前对账现场已保存到本机浏览器，下次导入同类教务课会自动复用。"
+      savedMappingOk && savedWorkspaceOk && onSaveScheduleImport
+        ? "课程映射和本次对账结果已保存到云端加密档案，换浏览器登录后也会复用。"
+        : savedMappingOk && savedWorkspaceOk
+          ? "课程映射和当前对账现场已保存到本机浏览器。"
         : "保存失败：浏览器本地存储空间可能不足，请减少导入文件后再试。"
     );
   }
@@ -315,6 +344,58 @@ export function ScheduleImportPanel({
 
         {message && (
           <div className="rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-bold text-[#25324a]">{message}</div>
+        )}
+
+        {savedReviews.length > 0 && (
+          <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="text-sm font-extrabold text-[#061226]">已保存对账</div>
+                <div className="mt-1 text-xs font-semibold text-[#64748b]">最近保留 {savedReviews.length} 次，点击可查看当时保存的结果。</div>
+              </div>
+              <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
+                {savedReviews.slice(0, 8).map((review) => (
+                  <button
+                    key={review.id}
+                    type="button"
+                    onClick={() => setSelectedReviewId(review.id)}
+                    className={`shrink-0 rounded-[10px] border px-3 py-2 text-left text-xs font-bold transition-colors ${
+                      selectedReview?.id === review.id ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e8eef6] bg-[#f8fbff] text-[#25324a] hover:bg-white"
+                    }`}
+                  >
+                    <span className="block">{review.month}</span>
+                    <span className="mt-0.5 block text-[10px] text-[#64748b]">{formatSavedAt(review.savedAt)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {selectedReview && (
+              <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="sky">{selectedReview.month}</Badge>
+                  <Badge variant="secondary">{selectedReview.rawLessonCount} 节教务</Badge>
+                  <Badge variant="sage">已对应 {selectedReview.summary.matched}</Badge>
+                  <Badge variant={savedReviewNeedsAttention(selectedReview) > 0 ? "amber" : "secondary"}>待核对 {savedReviewNeedsAttention(selectedReview)}</Badge>
+                </div>
+                <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
+                  {selectedReview.rows.slice(0, 80).map((row) => (
+                    <div key={row.id} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={statusVariant(row.status)} className="text-[10px]">{statusLabel(row.status)}</Badge>
+                        <span className="text-xs font-extrabold text-[#061226]">{row.date} {row.startTime}-{row.endTime}</span>
+                        <span className="text-xs font-semibold text-[#64748b]">{row.title}</span>
+                      </div>
+                      {row.systemLessonLabel && <div className="mt-1 text-[11px] font-semibold text-[#64748b]">云端：{row.systemLessonLabel}</div>}
+                      {row.issues.length > 0 && <div className="mt-1 text-[11px] font-semibold text-[#9a3412]">{row.issues.join("；")}</div>}
+                    </div>
+                  ))}
+                  {selectedReview.rows.length > 80 && (
+                    <div className="text-center text-xs font-bold text-[#64748b]">仅预览前 80 条，共 {selectedReview.rows.length} 条。</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
@@ -530,19 +611,12 @@ function ReconciliationRow({
         </div>
 
         {row.status !== "import_missing" && (
-          <div>
-            <Select value={row.matchedCourseId ?? ""} onChange={(event) => onMap(event.target.value)}>
-              <option value="">手动映射课程档案</option>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}
-                </option>
-              ))}
-            </Select>
-            <div className="mt-1 text-xs font-semibold text-[#64748b]">
-              {row.mappedCourseId ? "已使用保存映射" : row.matchedCourseId ? `自动匹配：${localCourseName(vault, row.matchedCourseId)}` : "需要手动映射后再核对"}
-            </div>
-          </div>
+          <CourseMappingSelect
+            row={row}
+            vault={vault}
+            courses={courses}
+            onMap={onMap}
+          />
         )}
       </div>
 
@@ -555,6 +629,182 @@ function ReconciliationRow({
       )}
     </div>
   );
+}
+
+function CourseMappingSelect({
+  row,
+  vault,
+  courses,
+  onMap
+}: {
+  row: ImportPreviewLesson;
+  vault: TeacherVault;
+  courses: CourseGroup[];
+  onMap: (courseId: string) => void;
+}) {
+  const [courseSearch, setCourseSearch] = useState("");
+  const filteredCourses = useMemo(
+    () => filterMappingCourses(vault, courses, courseSearch, row.matchedCourseId),
+    [courseSearch, courses, row.matchedCourseId, vault]
+  );
+  return (
+    <div className="space-y-2">
+      <label className="relative block">
+        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+        <Input
+          className="h-10 pl-9 text-sm"
+          value={courseSearch}
+          onChange={(event) => setCourseSearch(event.target.value)}
+          placeholder="搜索课程、学生或科目"
+        />
+      </label>
+      <Select value={row.matchedCourseId ?? ""} onChange={(event) => onMap(event.target.value)}>
+        <option value="">手动映射课程档案</option>
+        {filteredCourses.map((course) => (
+          <option key={course.id} value={course.id}>{mappingCourseOptionLabel(vault, course)}</option>
+        ))}
+        {filteredCourses.length === 0 && <option disabled>没有匹配的课程档案</option>}
+      </Select>
+      <div className="text-xs font-semibold text-[#64748b]">
+        {row.mappedCourseId ? "已使用保存映射" : row.matchedCourseId ? `自动匹配：${localCourseName(vault, row.matchedCourseId)}` : "需要手动映射后再核对"}
+        {courseSearch.trim() && ` · 当前显示 ${filteredCourses.length} 项`}
+      </div>
+    </div>
+  );
+}
+
+function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query: string, selectedCourseId?: string): CourseGroup[] {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const selectedCourse = selectedCourseId ? vault.courseGroups.find((course) => course.id === selectedCourseId) : undefined;
+  const matched = terms.length === 0
+    ? courses
+    : courses.filter((course) => {
+      const haystack = [
+        course.name,
+        course.subject,
+        courseTypeLabel(vault, course.type),
+        studentNames(vault, course.studentIds),
+        course.note ?? ""
+      ].join(" ").toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  const withSelected = selectedCourse && !matched.some((course) => course.id === selectedCourse.id)
+    ? [selectedCourse, ...matched]
+    : matched;
+  return withSelected.slice(0, 80);
+}
+
+function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): string {
+  return [
+    course.name,
+    course.subject,
+    courseTypeLabel(vault, course.type),
+    studentNames(vault, course.studentIds) || "未设置学生"
+  ].join(" · ");
+}
+
+function buildNextScheduleImportState(
+  vault: TeacherVault,
+  context: {
+    rawLessons: ImportedScheduleLesson[];
+    mapping: ScheduleImportMapping;
+    fileCampusOverrides: ScheduleImportMapping;
+    selectedMonth: string;
+    selectedDate: string;
+    rows: ImportPreviewLesson[];
+    summary: ReturnType<typeof summarizeImportPreview>;
+  }
+): ScheduleImportVaultState {
+  const now = new Date().toISOString();
+  const review = buildReviewRecord(context, now);
+  const previous = vault.scheduleImport;
+  return {
+    mappings: {
+      ...(previous?.mappings ?? {}),
+      ...context.mapping
+    },
+    reviews: [
+      review,
+      ...(previous?.reviews ?? []).filter((item) => item.id !== review.id)
+    ].slice(0, 20),
+    updatedAt: now
+  };
+}
+
+function buildReviewRecord(
+  context: {
+    rawLessons: ImportedScheduleLesson[];
+    mapping: ScheduleImportMapping;
+    fileCampusOverrides: ScheduleImportMapping;
+    selectedMonth: string;
+    selectedDate: string;
+    rows: ImportPreviewLesson[];
+    summary: ReturnType<typeof summarizeImportPreview>;
+  },
+  savedAt: string
+): ScheduleImportReviewRecord {
+  const fileNames = Array.from(new Set(context.rawLessons.map((lesson) => lesson.fileName))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  return {
+    id: `schedule-import-${savedAt}`,
+    savedAt,
+    month: context.selectedMonth,
+    selectedDate: context.selectedDate,
+    rawLessonCount: context.rawLessons.length,
+    fileNames,
+    mapping: context.mapping,
+    fileCampusOverrides: context.fileCampusOverrides,
+    summary: {
+      total: context.summary.total,
+      matched: context.summary.matched,
+      attendanceMismatch: context.summary.attendanceMismatch,
+      timeMismatch: context.summary.timeMismatch,
+      courseMismatch: context.summary.courseMismatch,
+      systemMissing: context.summary.systemMissing,
+      importMissing: context.summary.importMissing,
+      needsMapping: context.summary.needsMapping
+    },
+    rows: context.rows.map((row) => ({
+      id: row.id,
+      fileName: row.fileName,
+      campusName: row.campusName,
+      campusId: row.campusId,
+      date: row.date,
+      startTime: row.startTime,
+      endTime: row.endTime,
+      title: row.title,
+      subjectHint: row.subjectHint,
+      courseTypeHint: row.courseTypeHint,
+      studentNameHint: row.studentNameHint,
+      teacher: row.teacher,
+      assistant: row.assistant,
+      room: row.room,
+      presentCount: row.presentCount,
+      expectedCount: row.expectedCount,
+      rawText: row.rawText ? row.rawText.slice(0, 600) : "",
+      warnings: row.warnings,
+      matchedCourseId: row.matchedCourseId,
+      mappedCourseId: row.mappedCourseId,
+      status: row.status,
+      systemLessonId: row.systemLessonId,
+      systemLessonLabel: row.systemLessonLabel,
+      issues: row.issues
+    }))
+  };
+}
+
+function savedReviewNeedsAttention(review: ScheduleImportReviewRecord): number {
+  return review.summary.attendanceMismatch + review.summary.timeMismatch + review.summary.courseMismatch + review.summary.systemMissing + review.summary.importMissing + review.summary.needsMapping;
+}
+
+function formatSavedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPreviewLesson[], rawLessons: ImportedScheduleLesson[]): ImportPreviewLesson[] {

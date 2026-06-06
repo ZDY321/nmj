@@ -2650,6 +2650,11 @@ export function App() {
                 amountsVisible={amountsVisible}
                 panelFocus={payrollReviewFocus}
                 storageScope={username}
+                onSaveScheduleImport={(state) =>
+                  updateVault((draft) => {
+                    draft.scheduleImport = state;
+                  })
+                }
                 onOpenLessonInCalendar={openPayrollReconcileLessonInScheduleRecords}
               />
             )}
