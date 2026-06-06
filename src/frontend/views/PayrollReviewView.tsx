@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Banknote, BookOpen, CalendarDays, FileCheck2, MapPin, SlidersHorizontal, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -39,10 +39,14 @@ type CampusAmountDetail = {
 export function PayrollReviewView({
   vault,
   amountsVisible,
+  panelFocus,
+  storageScope,
   onOpenLessonInCalendar
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
+  panelFocus?: { panel: PayrollPanel; nonce: number } | null;
+  storageScope?: string;
   onOpenLessonInCalendar?: (lesson: Lesson) => void;
 }) {
   const campusOptions = useMemo(
@@ -60,9 +64,15 @@ export function PayrollReviewView({
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailStatusFilter, setDetailStatusFilter] = useState<LessonStatusFilter>("all");
-  const [payrollPanel, setPayrollPanel] = useState<PayrollPanel>("review");
+  const [payrollPanel, setPayrollPanel] = useState<PayrollPanel>(() => panelFocus?.panel ?? "review");
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[])).sort(compareByName);
   const effectiveObligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId;
+
+  useEffect(() => {
+    if (panelFocus?.panel) {
+      setPayrollPanel(panelFocus.panel);
+    }
+  }, [panelFocus?.nonce]);
 
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
   function lessonCampusId(lesson: Lesson): string | undefined {
@@ -211,7 +221,7 @@ export function PayrollReviewView({
       </div>
 
       {payrollPanel === "reconcile" ? (
-        <ScheduleImportPanel vault={vault} onOpenLesson={onOpenLessonInCalendar} />
+        <ScheduleImportPanel vault={vault} storageScope={storageScope} onOpenLesson={onOpenLessonInCalendar} />
       ) : (
       <>
       <Card className="overflow-hidden">

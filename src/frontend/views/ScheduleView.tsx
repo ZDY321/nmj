@@ -103,6 +103,7 @@ type ExternalLessonReturnTarget = {
   view: ViewKey;
   label: string;
   calendarFocus?: CalendarOverviewReturnFocus;
+  payrollPanel?: "review" | "reconcile";
 };
 type InternalLessonReturnTarget = {
   kind: "panel";

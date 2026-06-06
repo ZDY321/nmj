@@ -178,10 +178,10 @@ export function buildImportPreview(
     const campus = campusOverrides[lesson.fileName]
       ? vault.campuses.find((item) => item.id === campusOverrides[lesson.fileName])
       : matchCampus(vault, lesson.campusName);
-    const mappedCourseId = mapping[importMappingKey(lesson)];
-    const matchedCourse = mappedCourseId
-      ? vault.courseGroups.find((course) => course.id === mappedCourseId)
-      : matchCourse(vault, lesson, campus?.id);
+    const normalizedLesson = campus ? { ...lesson, campusName: campus.name } : lesson;
+    const mappedCourseId = mapping[importMappingKey(normalizedLesson)] ?? mapping[importMappingKey(lesson)];
+    const mappedCourse = mappedCourseId ? vault.courseGroups.find((course) => course.id === mappedCourseId) : undefined;
+    const matchedCourse = mappedCourse ?? matchCourse(vault, normalizedLesson, campus?.id);
     const exactLesson = matchedCourse
       ? findExactSystemLesson(vault, lesson, matchedCourse.id, campus?.id)
       : undefined;

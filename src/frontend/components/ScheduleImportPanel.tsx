@@ -33,25 +33,43 @@ import {
 
 type StatusFilter = "all" | ImportMatchStatus;
 
-const mappingStorageKey = "teacher-schedule-import-mapping-v1";
+type SavedScheduleImportWorkspace = {
+  rawLessons: ImportedScheduleLesson[];
+  mapping: ScheduleImportMapping;
+  fileCampusOverrides: ScheduleImportMapping;
+  selectedMonth: string;
+  selectedDate: string;
+  campusFilter: string;
+  statusFilter: StatusFilter;
+  search: string;
+  savedAt?: string;
+};
+
+const legacyMappingStorageKey = "teacher-schedule-import-mapping-v1";
+const workspaceStorageKey = "teacher-schedule-import-workspace-v1";
+const statusFilters: StatusFilter[] = ["all", "matched", "attendance_mismatch", "time_mismatch", "course_mismatch", "system_missing", "import_missing", "needs_mapping"];
 
 export function ScheduleImportPanel({
   vault,
-  onOpenLesson
+  onOpenLesson,
+  storageScope
 }: {
   vault: TeacherVault;
   onOpenLesson?: (lesson: Lesson) => void;
+  storageScope?: string;
 }) {
-  const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>([]);
-  const [mapping, setMapping] = useState<ScheduleImportMapping>(() => readSavedMapping());
-  const [fileCampusOverrides, setFileCampusOverrides] = useState<ScheduleImportMapping>({});
+  const savedWorkspace = useMemo(() => readSavedWorkspace(storageScope), [storageScope]);
+  const savedMapping = useMemo(() => ({ ...readSavedMapping(storageScope), ...savedWorkspace.mapping }), [savedWorkspace.mapping, storageScope]);
+  const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>(savedWorkspace.rawLessons);
+  const [mapping, setMapping] = useState<ScheduleImportMapping>(savedMapping);
+  const [fileCampusOverrides, setFileCampusOverrides] = useState<ScheduleImportMapping>(savedWorkspace.fileCampusOverrides);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
-  const [selectedDate, setSelectedDate] = useState(todayIso());
-  const [campusFilter, setCampusFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [search, setSearch] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(savedWorkspace.selectedMonth || todayIso().slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState(savedWorkspace.selectedDate || todayIso());
+  const [campusFilter, setCampusFilter] = useState(savedWorkspace.campusFilter || "all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(savedWorkspace.statusFilter);
+  const [search, setSearch] = useState(savedWorkspace.search);
 
   const campusOptions = useMemo(
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
@@ -76,27 +94,13 @@ export function ScheduleImportPanel({
     [rows]
   );
   const displayMonth = selectedMonth || monthOptions[0] || todayIso().slice(0, 7);
-  const filteredRows = useMemo(() => rows.filter((row) => {
-    if (displayMonth && !row.date.startsWith(displayMonth)) return false;
-    if (campusFilter !== "all" && row.campusId !== campusFilter) return false;
-    if (statusFilter !== "all" && row.status !== statusFilter) return false;
-    const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (terms.length > 0) {
-      const haystack = [
-        row.title,
-        row.studentNameHint ?? "",
-        row.campusName,
-        row.subjectHint,
-        row.teacher ?? "",
-        row.room ?? "",
-        row.systemLessonLabel ?? "",
-        row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : "",
-        ...row.issues
-      ].join(" ").toLowerCase();
-      if (!terms.every((term) => haystack.includes(term))) return false;
-    }
-    return true;
-  }), [campusFilter, displayMonth, rows, search, statusFilter, vault]);
+  const filteredRows = useMemo(() => rows.filter((row) => matchesImportRowFilters(row, {
+    campusFilter,
+    month: displayMonth,
+    search,
+    statusFilter,
+    vault
+  })), [campusFilter, displayMonth, rows, search, statusFilter, vault]);
   const selectedDateRows = filteredRows.filter((row) => row.date === selectedDate);
   const weekStartPreference = weekStartsOn(vault);
   const days = calendarDates(displayMonth, weekStartPreference);
@@ -115,6 +119,21 @@ export function ScheduleImportPanel({
       setSelectedDate(`${displayMonth}-01`);
     }
   }, [displayMonth, selectedDate]);
+
+  useEffect(() => {
+    writeSavedMapping(storageScope, mapping);
+    writeSavedWorkspace(storageScope, {
+      rawLessons,
+      mapping,
+      fileCampusOverrides,
+      selectedMonth,
+      selectedDate,
+      campusFilter,
+      statusFilter,
+      search,
+      savedAt: new Date().toISOString()
+    });
+  }, [campusFilter, fileCampusOverrides, mapping, rawLessons, search, selectedDate, selectedMonth, statusFilter, storageScope]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -154,13 +173,44 @@ export function ScheduleImportPanel({
     setMapping(nextMapping);
   }
 
+  function applyStatusFilter(nextStatus: Exclude<StatusFilter, "all">) {
+    const effectiveStatus: StatusFilter = statusFilter === nextStatus ? "all" : nextStatus;
+    setStatusFilter(effectiveStatus);
+    const currentDateStillHasRows = rows.some((row) =>
+      row.date === selectedDate &&
+      matchesImportRowFilters(row, { campusFilter, month: displayMonth, search, statusFilter: effectiveStatus, vault })
+    );
+    if (currentDateStillHasRows) return;
+    const firstRow = rows.find((row) =>
+      matchesImportRowFilters(row, { campusFilter, month: displayMonth, search, statusFilter: effectiveStatus, vault })
+    );
+    if (firstRow) {
+      setSelectedDate(firstRow.date);
+    }
+  }
+
   function updateFileCampus(fileName: string, campusId: string) {
     setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
   }
 
   function saveMapping() {
-    localStorage.setItem(mappingStorageKey, JSON.stringify(mapping));
-    setMessage("课程映射已保存到本机浏览器。");
+    const savedMappingOk = writeSavedMapping(storageScope, mapping);
+    const savedWorkspaceOk = writeSavedWorkspace(storageScope, {
+      rawLessons,
+      mapping,
+      fileCampusOverrides,
+      selectedMonth,
+      selectedDate,
+      campusFilter,
+      statusFilter,
+      search,
+      savedAt: new Date().toISOString()
+    });
+    setMessage(
+      savedMappingOk && savedWorkspaceOk
+        ? "课程映射和当前对账现场已保存到本机浏览器，下次导入同类教务课会自动复用。"
+        : "保存失败：浏览器本地存储空间可能不足，请减少导入文件后再试。"
+    );
   }
 
   function clearImport() {
@@ -210,7 +260,7 @@ export function ScheduleImportPanel({
                 />
               </label>
               <Button type="button" variant="outline" disabled={rows.length === 0} onClick={saveMapping}>
-                <Save size={15} /> 保存映射
+                <Save size={15} /> 保存对账
               </Button>
               <Button type="button" variant="outline" disabled={rawLessons.length === 0} onClick={clearImport}>
                 <X size={15} /> 清空
@@ -269,18 +319,26 @@ export function ScheduleImportPanel({
 
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
           {[
-            ["已对应", summary.matched, "sage"],
-            ["到课异常", summary.attendanceMismatch, "amber"],
-            ["时间不一致", summary.timeMismatch, "yellow"],
-            ["课程不一致", summary.courseMismatch, "destructive"],
-            ["云端缺少", summary.systemMissing, "amber"],
-            ["教务缺少", summary.importMissing, "plum"],
-            ["待映射", summary.needsMapping, "secondary"]
-          ].map(([label, value, variant]) => (
-            <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
-              <Badge variant={variant as "sage"} className="text-[10px]">{label}</Badge>
-              <div className="mt-2 text-xl font-extrabold text-[#061226]">{value}</div>
-            </div>
+            { label: "已对应", value: summary.matched, variant: "sage", status: "matched" },
+            { label: "到课异常", value: summary.attendanceMismatch, variant: "amber", status: "attendance_mismatch" },
+            { label: "时间不一致", value: summary.timeMismatch, variant: "yellow", status: "time_mismatch" },
+            { label: "课程不一致", value: summary.courseMismatch, variant: "destructive", status: "course_mismatch" },
+            { label: "云端缺少", value: summary.systemMissing, variant: "amber", status: "system_missing" },
+            { label: "教务缺少", value: summary.importMissing, variant: "plum", status: "import_missing" },
+            { label: "待映射", value: summary.needsMapping, variant: "secondary", status: "needs_mapping" }
+          ].map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              aria-pressed={statusFilter === item.status}
+              onClick={() => applyStatusFilter(item.status as Exclude<StatusFilter, "all">)}
+              className={`rounded-[12px] border px-3 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-[#93c5fd] hover:bg-[#f8fbff] hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
+                statusFilter === item.status ? "border-[#1557c2] bg-[#eaf2ff] ring-2 ring-[#bfdbfe]" : "border-[#e8eef6] bg-white"
+              }`}
+            >
+              <Badge variant={item.variant as "sage"} className="text-[10px]">{item.label}</Badge>
+              <div className="mt-2 text-xl font-extrabold text-[#061226]">{item.value}</div>
+            </button>
           ))}
         </div>
 
@@ -566,12 +624,113 @@ function buildDefaultCampusOverrides(vault: TeacherVault, lessons: ImportedSched
   return next;
 }
 
-function readSavedMapping(): ScheduleImportMapping {
+function matchesImportRowFilters(
+  row: ImportPreviewLesson,
+  filters: { month: string; campusFilter: string; statusFilter: StatusFilter; search: string; vault: TeacherVault }
+): boolean {
+  if (filters.month && !row.date.startsWith(filters.month)) return false;
+  if (filters.campusFilter !== "all" && row.campusId !== filters.campusFilter) return false;
+  if (filters.statusFilter !== "all" && row.status !== filters.statusFilter) return false;
+  const terms = filters.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const haystack = [
+    row.title,
+    row.studentNameHint ?? "",
+    row.campusName,
+    row.subjectHint,
+    row.teacher ?? "",
+    row.room ?? "",
+    row.systemLessonLabel ?? "",
+    row.matchedCourseId ? localCourseName(filters.vault, row.matchedCourseId) : "",
+    ...row.issues
+  ].join(" ").toLowerCase();
+  return terms.every((term) => haystack.includes(term));
+}
+
+function emptySavedWorkspace(): SavedScheduleImportWorkspace {
+  return {
+    rawLessons: [],
+    mapping: {},
+    fileCampusOverrides: {},
+    selectedMonth: todayIso().slice(0, 7),
+    selectedDate: todayIso(),
+    campusFilter: "all",
+    statusFilter: "all",
+    search: ""
+  };
+}
+
+function scopedStorageKey(baseKey: string, scope?: string): string {
+  const normalizedScope = scope?.trim();
+  return normalizedScope ? `${baseKey}:${encodeURIComponent(normalizedScope)}` : baseKey;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeMapping(value: unknown): ScheduleImportMapping {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  );
+}
+
+function normalizeRawLessons(value: unknown): ImportedScheduleLesson[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((lesson): lesson is ImportedScheduleLesson => isRecord(lesson) && typeof lesson.id === "string" && typeof lesson.fileName === "string" && typeof lesson.date === "string" && typeof lesson.startTime === "string" && typeof lesson.endTime === "string" && typeof lesson.title === "string" && typeof lesson.subjectHint === "string" && typeof lesson.courseTypeHint === "string" && typeof lesson.rawText === "string" && Array.isArray(lesson.warnings));
+}
+
+function normalizeStatusFilter(value: unknown): StatusFilter {
+  return typeof value === "string" && statusFilters.includes(value as StatusFilter) ? value as StatusFilter : "all";
+}
+
+function readSavedWorkspace(scope?: string): SavedScheduleImportWorkspace {
   try {
-    const raw = localStorage.getItem(mappingStorageKey);
-    return raw ? JSON.parse(raw) as ScheduleImportMapping : {};
+    const raw = localStorage.getItem(scopedStorageKey(workspaceStorageKey, scope));
+    if (!raw) return emptySavedWorkspace();
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return emptySavedWorkspace();
+    return {
+      rawLessons: normalizeRawLessons(parsed.rawLessons),
+      mapping: normalizeMapping(parsed.mapping),
+      fileCampusOverrides: normalizeMapping(parsed.fileCampusOverrides),
+      selectedMonth: typeof parsed.selectedMonth === "string" ? parsed.selectedMonth : todayIso().slice(0, 7),
+      selectedDate: typeof parsed.selectedDate === "string" ? parsed.selectedDate : todayIso(),
+      campusFilter: typeof parsed.campusFilter === "string" ? parsed.campusFilter : "all",
+      statusFilter: normalizeStatusFilter(parsed.statusFilter),
+      search: typeof parsed.search === "string" ? parsed.search : "",
+      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : undefined
+    };
+  } catch {
+    return emptySavedWorkspace();
+  }
+}
+
+function writeSavedWorkspace(scope: string | undefined, workspace: SavedScheduleImportWorkspace): boolean {
+  try {
+    localStorage.setItem(scopedStorageKey(workspaceStorageKey, scope), JSON.stringify(workspace));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readSavedMapping(scope?: string): ScheduleImportMapping {
+  try {
+    const raw = localStorage.getItem(scopedStorageKey(legacyMappingStorageKey, scope)) ?? localStorage.getItem(legacyMappingStorageKey);
+    return raw ? normalizeMapping(JSON.parse(raw)) : {};
   } catch {
     return {};
+  }
+}
+
+function writeSavedMapping(scope: string | undefined, mapping: ScheduleImportMapping): boolean {
+  try {
+    localStorage.setItem(scopedStorageKey(legacyMappingStorageKey, scope), JSON.stringify(mapping));
+    return true;
+  } catch {
+    return false;
   }
 }
 

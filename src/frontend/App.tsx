@@ -104,6 +104,8 @@ type CalendarOverviewFocusState = {
   weekStudentFilter: string;
 };
 
+type PayrollPanelFocus = "review" | "reconcile";
+
 type ScheduleCalendarFocus = {
   date: string;
   lessonId?: string;
@@ -114,6 +116,7 @@ type ScheduleCalendarFocus = {
     view: ViewKey;
     label: string;
     calendarFocus?: CalendarOverviewFocusState;
+    payrollPanel?: PayrollPanelFocus;
   } | null;
 };
 
@@ -152,6 +155,7 @@ export function App() {
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
   const [calendarOverviewFocus, setCalendarOverviewFocus] = useState<(CalendarOverviewFocusState & { nonce: number }) | null>(null);
+  const [payrollReviewFocus, setPayrollReviewFocus] = useState<{ panel: PayrollPanelFocus; nonce: number } | null>(null);
   const [aiScheduleSession, setAiScheduleSession] = useState<AiScheduleSession | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
   const cloudVersionRef = useRef("");
@@ -2092,6 +2096,15 @@ export function App() {
     openLessonInScheduleRecords(lesson, { kind: "view", view: "progress", label: "返回进度与作业" });
   }
 
+  function openPayrollReconcileLessonInScheduleRecords(lesson: Lesson) {
+    openLessonInScheduleRecords(lesson, {
+      kind: "view",
+      view: "payroll",
+      label: "返回教务课表对账",
+      payrollPanel: "reconcile"
+    });
+  }
+
   function returnToViewFromSchedule(target: NonNullable<ScheduleCalendarFocus["returnTarget"]>) {
     setNoticeModalOpen(false);
     setFeedbackModalOpen(false);
@@ -2099,6 +2112,9 @@ export function App() {
     setOnboardingVisible(false);
     if (target.view === "calendar" && target.calendarFocus) {
       setCalendarOverviewFocus({ ...target.calendarFocus, nonce: Date.now() });
+    }
+    if (target.view === "payroll" && target.payrollPanel) {
+      setPayrollReviewFocus({ panel: target.payrollPanel, nonce: Date.now() });
     }
     setView(target.view);
   }
@@ -2629,7 +2645,13 @@ export function App() {
               />
             )}
             {!onboardingVisible && view === "payroll" && (
-              <PayrollReviewView vault={vault} amountsVisible={amountsVisible} onOpenLessonInCalendar={openLessonInCalendar} />
+              <PayrollReviewView
+                vault={vault}
+                amountsVisible={amountsVisible}
+                panelFocus={payrollReviewFocus}
+                storageScope={username}
+                onOpenLessonInCalendar={openPayrollReconcileLessonInScheduleRecords}
+              />
             )}
             {!onboardingVisible && view === "salary" && (
               <SalaryView
