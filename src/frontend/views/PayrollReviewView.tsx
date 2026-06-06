@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { ScheduleImportPanel } from "@/frontend/components/ScheduleImportPanel";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
 import { completedAmount, estimatedMonthlyIncome, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import {
@@ -493,6 +494,8 @@ export function PayrollReviewView({
           )}
         </CardContent>
       </Card>
+
+      <ScheduleImportPanel vault={vault} onOpenLesson={onOpenLessonInCalendar} />
     </div>
   );
 }

@@ -38,7 +38,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
-import { ScheduleImportPanel } from "@/frontend/components/ScheduleImportPanel";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { billableHoursForLesson, calculateClassHeadcountFee, calculateFee, classFeeTierForCount, extraFeeTotal, formatAppDateTime, getCourse, lessonBillableHours, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
@@ -89,7 +88,7 @@ import {
 
 type LessonScope = "month" | "day" | "range" | "week";
 type CourseTypeFilter = "all" | CourseType;
-type SchedulePanel = "ai" | "import" | "schedule" | "calendar" | "records" | "studentStats" | "trash";
+type SchedulePanel = "ai" | "schedule" | "calendar" | "records" | "studentStats" | "trash";
 type CalendarOverviewReturnFocus = {
   selectedDate: string;
   month: string;
@@ -1399,8 +1398,6 @@ export function ScheduleView({
     switch (panel) {
       case "ai":
         return { kind: "panel", panel, label: "返回 AI 排课助手" };
-      case "import":
-        return { kind: "panel", panel, label: "返回教务导入" };
       case "schedule":
         return { kind: "panel", panel, label: "返回排课" };
       case "calendar":
@@ -1888,7 +1885,6 @@ export function ScheduleView({
         <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
         {[
           { key: "ai" as SchedulePanel, label: "AI 排课助手" },
-          { key: "import" as SchedulePanel, label: "教务导入" },
           { key: "schedule" as SchedulePanel, label: "排课" },
           { key: "calendar" as SchedulePanel, label: "日历查看" },
           { key: "records" as SchedulePanel, label: "课程记录" },
@@ -2295,14 +2291,6 @@ export function ScheduleView({
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {schedulePanel === "import" && (
-        <ScheduleImportPanel
-          vault={vault}
-          onAddLessons={onAddLessons}
-          onOpenLesson={(lesson) => openLessonInRecords(lesson, { returnTarget: buildPanelReturnTarget("import") })}
-        />
       )}
 
       {schedulePanel === "schedule" && (

@@ -1,15 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowDownUp, CheckCircle2, FileSpreadsheet, RefreshCw, Save, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { ArrowDownUp, CalendarDays, FileSpreadsheet, Link2, MapPin, RefreshCw, Save, Search, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
-import { courseTypeLabel, createLessonFromCourse, sortCoursesByName } from "@/frontend/lib/helpers";
+import type { CourseGroup, CourseType, Lesson, TeacherVault } from "@/shared/types";
+import { todayIso } from "@/frontend/lib/calculations";
+import {
+  calendarDates,
+  campusName,
+  courseName as localCourseName,
+  courseSubject,
+  courseTypeLabel,
+  orderedWeekdayLabels,
+  sortCampusesForProfile,
+  sortCoursesByName,
+  sortLessons,
+  studentNames,
+  weekStartsOn
+} from "@/frontend/lib/helpers";
 import {
   buildImportPreview,
-  buildLessonsFromImportPreview,
   importMappingKey,
   parseScheduleWorkbookFiles,
   summarizeImportPreview,
@@ -19,53 +31,55 @@ import {
   type ScheduleImportMapping
 } from "@/frontend/lib/scheduleImport";
 
-type ViewMode = "merged" | "table" | "system";
 type StatusFilter = "all" | ImportMatchStatus;
 
 const mappingStorageKey = "teacher-schedule-import-mapping-v1";
 
 export function ScheduleImportPanel({
   vault,
-  onAddLessons,
   onOpenLesson
 }: {
   vault: TeacherVault;
-  onAddLessons: (lessons: Lesson[], options?: { replaceLessonIds?: string[] }) => void;
-  onOpenLesson: (lesson: Lesson) => void;
+  onOpenLesson?: (lesson: Lesson) => void;
 }) {
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>([]);
-  const [rows, setRows] = useState<ImportPreviewLesson[]>([]);
   const [mapping, setMapping] = useState<ScheduleImportMapping>(() => readSavedMapping());
+  const [fileCampusOverrides, setFileCampusOverrides] = useState<ScheduleImportMapping>({});
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("merged");
+  const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState(todayIso());
   const [campusFilter, setCampusFilter] = useState("all");
-  const [subjectFilter, setSubjectFilter] = useState("all");
-  const [courseTypeFilter, setCourseTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
 
-  useEffect(() => {
-    if (rawLessons.length === 0) {
-      setRows([]);
-      return;
-    }
-    const selectedIds = new Set(rows.filter((row) => row.selected).map((row) => row.id));
-    setRows(buildImportPreview(vault, rawLessons, mapping, selectedIds));
-  }, [mapping, rawLessons, vault]);
-
+  const campusOptions = useMemo(
+    () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
+    [vault.campuses, vault.profile.homeCampusId]
+  );
+  const courseOptions = useMemo(
+    () => sortCoursesByName(vault.courseGroups).filter((course) => course.status === "active"),
+    [vault.courseGroups]
+  );
+  const importedRows = useMemo(
+    () => buildImportPreview(vault, rawLessons, mapping, fileCampusOverrides),
+    [fileCampusOverrides, mapping, rawLessons, vault]
+  );
+  const rows = useMemo(
+    () => [...importedRows, ...buildLocalOnlyRows(vault, importedRows, rawLessons)],
+    [importedRows, rawLessons, vault]
+  );
   const summary = useMemo(() => summarizeImportPreview(rows), [rows]);
-  const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups).filter((course) => course.status === "active"), [vault.courseGroups]);
-  const campusOptions = useMemo(() => Array.from(new Set(rows.map((row) => row.campusName || "未识别校区"))).sort(), [rows]);
-  const subjectOptions = useMemo(() => Array.from(new Set(rows.map((row) => row.subjectHint || "未知科目"))).sort(), [rows]);
-  const courseTypeOptions = useMemo(() => Array.from(new Set(rows.map((row) => row.courseTypeHint))).sort(), [rows]);
-  const filteredRows = rows.filter((row) => {
-    if (campusFilter !== "all" && (row.campusName || "未识别校区") !== campusFilter) return false;
-    if (subjectFilter !== "all" && (row.subjectHint || "未知科目") !== subjectFilter) return false;
-    if (courseTypeFilter !== "all" && row.courseTypeHint !== courseTypeFilter) return false;
+  const fileSummaries = useMemo(() => summarizeFiles(rawLessons), [rawLessons]);
+  const monthOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.date.slice(0, 7)))).sort(),
+    [rows]
+  );
+  const displayMonth = selectedMonth || monthOptions[0] || todayIso().slice(0, 7);
+  const filteredRows = useMemo(() => rows.filter((row) => {
+    if (displayMonth && !row.date.startsWith(displayMonth)) return false;
+    if (campusFilter !== "all" && row.campusId !== campusFilter) return false;
     if (statusFilter !== "all" && row.status !== statusFilter) return false;
-    if (selectedDate && row.date !== selectedDate) return false;
     const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (terms.length > 0) {
       const haystack = [
@@ -76,15 +90,31 @@ export function ScheduleImportPanel({
         row.teacher ?? "",
         row.room ?? "",
         row.systemLessonLabel ?? "",
-        courseName(row.matchedCourseId, courseOptions)
+        row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : "",
+        ...row.issues
       ].join(" ").toLowerCase();
       if (!terms.every((term) => haystack.includes(term))) return false;
     }
     return true;
-  });
-  const systemRows = filteredRows.filter((row) => row.systemLessonId);
-  const visibleRows = viewMode === "system" ? systemRows : filteredRows;
-  const importableRows = rows.filter((row) => row.selected && row.campusId && row.matchedCourseId && row.status !== "duplicate" && row.status !== "conflict");
+  }), [campusFilter, displayMonth, rows, search, statusFilter, vault]);
+  const selectedDateRows = filteredRows.filter((row) => row.date === selectedDate);
+  const weekStartPreference = weekStartsOn(vault);
+  const days = calendarDates(displayMonth, weekStartPreference);
+  const weekdayLabels = orderedWeekdayLabels(weekStartPreference);
+  const needsAttention = summary.attendanceMismatch + summary.timeMismatch + summary.courseMismatch + summary.systemMissing + summary.importMissing + summary.needsMapping;
+
+  useEffect(() => {
+    if (monthOptions.length === 0) return;
+    if (!monthOptions.includes(selectedMonth)) {
+      setSelectedMonth(monthOptions[0]);
+    }
+  }, [monthOptions, selectedMonth]);
+
+  useEffect(() => {
+    if (!selectedDate.startsWith(displayMonth)) {
+      setSelectedDate(`${displayMonth}-01`);
+    }
+  }, [displayMonth, selectedDate]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -92,20 +122,20 @@ export function ScheduleImportPanel({
     setMessage("正在解析教务课表...");
     try {
       const parsed = await parseScheduleWorkbookFiles(files);
+      const nextOverrides = buildDefaultCampusOverrides(vault, parsed, fileCampusOverrides);
       setRawLessons(parsed);
-      setRows(buildImportPreview(vault, parsed, mapping));
-      setMessage(parsed.length > 0 ? `已解析 ${parsed.length} 节课，请先核对筛选和映射。` : "没有从文件中解析到课节，请确认是否为校宝导出的 .xls/.xlsx。");
+      setFileCampusOverrides(nextOverrides);
+      if (parsed[0]?.date) {
+        setSelectedMonth(parsed[0].date.slice(0, 7));
+        setSelectedDate(parsed[0].date);
+      }
+      setMessage(parsed.length > 0 ? `已解析 ${parsed.length} 节教务课，请核对日历差异。` : "没有从文件中解析到课节，请确认是否为校宝导出的 .xls/.xlsx。");
     } catch (error) {
       setRawLessons([]);
-      setRows([]);
       setMessage(error instanceof Error ? error.message : "课表解析失败。");
     } finally {
       setLoading(false);
     }
-  }
-
-  function updateRowSelection(rowId: string, selected: boolean) {
-    setRows((current) => current.map((row) => (row.id === rowId ? { ...row, selected } : row)));
   }
 
   function updateCourseMapping(row: ImportPreviewLesson, courseId: string) {
@@ -119,270 +149,416 @@ export function ScheduleImportPanel({
     setMapping(nextMapping);
   }
 
+  function updateFileCampus(fileName: string, campusId: string) {
+    setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
+  }
+
   function saveMapping() {
     localStorage.setItem(mappingStorageKey, JSON.stringify(mapping));
-    setMessage("手动映射已保存到本机浏览器。");
+    setMessage("课程映射已保存到本机浏览器。");
   }
 
   function clearImport() {
     setRawLessons([]);
-    setRows([]);
+    setFileCampusOverrides({});
     setMessage("");
     setSearch("");
-    setSelectedDate("");
-    setCampusFilter("all");
-    setSubjectFilter("all");
-    setCourseTypeFilter("all");
     setStatusFilter("all");
-  }
-
-  function importSelected() {
-    const lessons = buildLessonsFromImportPreview(vault, rows);
-    if (lessons.length === 0) {
-      setMessage("没有可导入课节。请先勾选已匹配且无重复/冲突的课节。");
-      return;
-    }
-    onAddLessons(lessons);
-    setRows((current) => current.map((row) => (row.selected ? { ...row, selected: false } : row)));
-    setMessage(`已导入 ${lessons.length} 节课。重复、冲突和未匹配课节已自动保留在预览中，不会写入。`);
+    setCampusFilter("all");
   }
 
   return (
-    <div className="space-y-5">
-      <Card className="border-2 border-[#bfdbfe]">
-        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-              <FileSpreadsheet size={14} /> 教务课表导入
+    <Card className="overflow-hidden border-2 border-[#bfdbfe]">
+      <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+            <FileSpreadsheet size={14} /> 教务课表对账
+          </div>
+          <CardTitle>Excel 教务课表核对</CardTitle>
+          <CardDescription>教务文件只作为外部对账来源，不会写入本地排课。</CardDescription>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="sky">Excel {rawLessons.length} 节</Badge>
+          <Badge variant="sage">已对应 {summary.matched} 节</Badge>
+          <Badge variant={needsAttention > 0 ? "amber" : "secondary"}>待核对 {needsAttention} 节</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
+          <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+              <Upload size={16} className="text-[#1557c2]" /> 教务文件
             </div>
-            <CardTitle>校宝课表导入核对</CardTitle>
-            <CardDescription>支持校宝导出的 .xls/.xlsx，本地解析后先筛选、映射和核对，再写入系统课表。</CardDescription>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="sky">解析 {summary.total} 节</Badge>
-            <Badge variant="sage">已选 {summary.selected} 节</Badge>
-            <Badge variant={summary.needsMapping + summary.conflicts + summary.abnormal > 0 ? "amber" : "secondary"}>
-              待处理 {summary.needsMapping + summary.conflicts + summary.abnormal} 节
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4 lg:flex-row lg:items-center lg:justify-between">
-            <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-[12px] border border-[#bfdbfe] bg-white px-4 py-3 text-sm font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff]">
-              <Upload size={16} />
-              选择 .xls / .xlsx 文件
-              <input type="file" accept=".xls,.xlsx" multiple className="hidden" onChange={(event) => void handleFiles(event.target.files)} />
-            </label>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[12px] border border-[#bfdbfe] bg-white px-4 py-3 text-sm font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff]">
+                {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+                选择 .xls / .xlsx
+                <input
+                  type="file"
+                  accept=".xls,.xlsx"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    void handleFiles(event.target.files);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
               <Button type="button" variant="outline" disabled={rows.length === 0} onClick={saveMapping}>
                 <Save size={15} /> 保存映射
               </Button>
-              <Button type="button" variant="outline" disabled={rows.length === 0} onClick={clearImport}>
-                <X size={15} /> 清空导入
-              </Button>
-              <Button type="button" disabled={loading || importableRows.length === 0} onClick={importSelected}>
-                {loading ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                导入已选 {importableRows.length} 节
+              <Button type="button" variant="outline" disabled={rawLessons.length === 0} onClick={clearImport}>
+                <X size={15} /> 清空
               </Button>
             </div>
-          </div>
-          {message && (
-            <div className="rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-bold text-[#25324a]">{message}</div>
-          )}
-
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-            {[
-              ["总课节", summary.total],
-              ["可直接导入", summary.ready],
-              ["异常", summary.abnormal],
-              ["未映射", summary.needsMapping],
-              ["重复", summary.duplicates],
-              ["冲突", summary.conflicts],
-              ["已选", summary.selected]
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
-                <div className="text-xs font-semibold text-[#64748b]">{label}</div>
-                <div className="mt-1 text-lg font-extrabold text-[#061226]">{value}</div>
-              </div>
-            ))}
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              {[
+                ["文件", fileSummaries.length],
+                ["月份", monthOptions.length],
+                ["本地缺少", summary.systemMissing],
+                ["Excel 缺少", summary.importMissing]
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
+                  <div className="text-xs font-semibold text-[#64748b]">{label}</div>
+                  <div className="mt-1 text-lg font-extrabold text-[#061226]">{value}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-white p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={viewMode === "merged" ? "sky" : "secondary"} className="cursor-pointer" onClick={() => setViewMode("merged")}>合并视图</Badge>
-                <Badge variant={viewMode === "table" ? "sky" : "secondary"} className="cursor-pointer" onClick={() => setViewMode("table")}>表格视图</Badge>
-                <Badge variant={viewMode === "system" ? "sky" : "secondary"} className="cursor-pointer" onClick={() => setViewMode("system")}>系统对比</Badge>
-              </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-6">
-                <label className="relative md:col-span-2">
-                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                  <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="人名 / 班级 / 课程 / 教室" />
-                </label>
-                <Input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
-                <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
-                  <option value="all">全部校区</option>
-                  {campusOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-                </Select>
-                <Select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)}>
-                  <option value="all">全部科目</option>
-                  {subjectOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-                </Select>
-                <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
-                  <option value="all">全部状态</option>
-                  <option value="ready">可导入</option>
-                  <option value="abnormal">异常</option>
-                  <option value="needs_mapping">待映射</option>
-                  <option value="duplicate">重复</option>
-                  <option value="conflict">冲突</option>
-                </Select>
-              </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
-                <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value)}>
-                  <option value="all">全部班型</option>
-                  {courseTypeOptions.map((item) => <option key={item} value={item}>{courseTypeLabelSafe(vault, item)}</option>)}
-                </Select>
-                <Button type="button" variant="outline" onClick={() => setRows((current) => current.map((row) => ({ ...row, selected: filteredRows.some((item) => item.id === row.id) && row.status !== "duplicate" && row.status !== "conflict" && Boolean(row.matchedCourseId) })))}>
-                  <SlidersHorizontal size={15} /> 选择当前筛选
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setRows((current) => current.map((row) => filteredRows.some((item) => item.id === row.id) ? { ...row, selected: false } : row))}>
-                  <X size={15} /> 取消当前筛选
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {visibleRows.map((row) => (
-                  <ImportRow
-                    key={row.id}
-                    row={row}
-                    vault={vault}
-                    courses={courseOptions}
-                    viewMode={viewMode}
-                    onToggle={(selected) => updateRowSelection(row.id, selected)}
-                    onMap={(courseId) => updateCourseMapping(row, courseId)}
-                    onOpenLesson={onOpenLesson}
-                  />
-                ))}
-                {visibleRows.length === 0 && (
-                  <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
-                    {rows.length === 0 ? "请先选择教务课表文件。" : "当前筛选没有课节。"}
+          <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+              <MapPin size={16} className="text-[#1557c2]" /> 文件对应校区
+            </div>
+            <div className="space-y-2">
+              {fileSummaries.map((file) => (
+                <div key={file.fileName} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[minmax(0,1fr)_240px]">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-extrabold text-[#061226]">{file.fileName}</div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
+                      <Badge variant="secondary" className="text-[10px]">{file.count} 节</Badge>
+                      <Badge variant="secondary" className="text-[10px]">{file.months.join("、") || "未知月份"}</Badge>
+                      <Badge variant={file.sourceCampus ? "sky" : "amber"} className="text-[10px]">{file.sourceCampus || "文件名未识别校区"}</Badge>
+                    </div>
                   </div>
-                )}
+                  <Select value={fileCampusOverrides[file.fileName] ?? ""} onChange={(event) => updateFileCampus(file.fileName, event.target.value)}>
+                    <option value="">选择校区</option>
+                    {campusOptions.map((campus) => (
+                      <option key={campus.id} value={campus.id}>{campus.name}</option>
+                    ))}
+                  </Select>
+                </div>
+              ))}
+              {fileSummaries.length === 0 && (
+                <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+                  暂无教务文件
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {message && (
+          <div className="rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-bold text-[#25324a]">{message}</div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+          {[
+            ["已对应", summary.matched, "sage"],
+            ["到课异常", summary.attendanceMismatch, "amber"],
+            ["时间不一致", summary.timeMismatch, "yellow"],
+            ["课程不一致", summary.courseMismatch, "destructive"],
+            ["本地缺少", summary.systemMissing, "amber"],
+            ["Excel 缺少", summary.importMissing, "plum"],
+            ["待映射", summary.needsMapping, "secondary"]
+          ].map(([label, value, variant]) => (
+            <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
+              <Badge variant={variant as "sage"} className="text-[10px]">{label}</Badge>
+              <div className="mt-2 text-xl font-extrabold text-[#061226]">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-[160px_220px_220px_minmax(0,1fr)]">
+          <Input type="month" value={displayMonth} onChange={(event) => setSelectedMonth(event.target.value)} />
+          <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
+            <option value="all">全部校区</option>
+            {campusOptions.map((campus) => (
+              <option key={campus.id} value={campus.id}>{campus.name}</option>
+            ))}
+          </Select>
+          <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+            <option value="all">全部状态</option>
+            <option value="matched">已对应</option>
+            <option value="attendance_mismatch">到课异常</option>
+            <option value="time_mismatch">时间不一致</option>
+            <option value="course_mismatch">课程不一致</option>
+            <option value="system_missing">本地缺少</option>
+            <option value="import_missing">Excel 缺少</option>
+            <option value="needs_mapping">待映射</option>
+          </Select>
+          <label className="relative block">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+            <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索课程、学生、教室或差异" />
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="overflow-hidden rounded-[14px] border border-[#dbe4ef] bg-white">
+            <div className="grid grid-cols-7 border-b border-[#e8eef6] bg-[#f8fbff]">
+              {weekdayLabels.map((label) => (
+                <div key={label} className="px-2 py-2 text-center text-xs font-extrabold text-[#64748b]">{label}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {days.map((date) => {
+                const dayRows = filteredRows.filter((row) => row.date === date);
+                const isSelected = selectedDate === date;
+                const isCurrentMonth = date.startsWith(displayMonth);
+                const hasProblems = dayRows.some((row) => row.status !== "matched");
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    onClick={() => setSelectedDate(date)}
+                    className={`min-h-[132px] border-b border-r border-[#e8eef6] p-2 text-left transition-colors last:border-r-0 ${
+                      isSelected
+                        ? "bg-[#eaf2ff] ring-2 ring-inset ring-[#1557c2]"
+                        : !isCurrentMonth
+                          ? "bg-[#f8fbff] opacity-45"
+                          : hasProblems
+                            ? "bg-[#fff7ed] hover:bg-[#fff3e4]"
+                            : dayRows.length > 0
+                              ? "bg-[#f0fdf4] hover:bg-[#e8f8ef]"
+                              : "bg-white hover:bg-[#f8fbff]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-extrabold text-[#061226]">{Number(date.slice(8))}</span>
+                      {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="text-[10px]">{dayRows.length}</Badge>}
+                    </div>
+                    <div className="mt-2 flex flex-col gap-1">
+                      {dayRows.slice(0, 3).map((row) => (
+                        <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(row.status)}`}>
+                          {row.startTime} {row.status === "import_missing" ? "本地" : "Excel"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
+                        </span>
+                      ))}
+                      {dayRows.length > 3 && (
+                        <span className="text-[10px] font-bold text-[#64748b]">+{dayRows.length - 3} 条</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+                    <CalendarDays size={16} className="text-[#1557c2]" /> {selectedDate}
+                  </div>
+                  <div className="mt-1 text-xs font-semibold text-[#64748b]">当前筛选 {selectedDateRows.length} 条</div>
+                </div>
+                <Badge variant={selectedDateRows.some((row) => row.status !== "matched") ? "amber" : "sage"}>
+                  {selectedDateRows.some((row) => row.status !== "matched") ? "有差异" : "已对应"}
+                </Badge>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <SummaryCard title="校区（人数）" items={summary.byCampus} />
-              <SummaryCard title="每日详情" items={summary.byDate.slice(0, 12)} />
-              <SummaryCard title="课程与科目" items={[...summary.bySubject, ...summary.byCourseType.map((item) => ({ ...item, key: courseTypeLabelSafe(vault, item.key) }))]} />
-              <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-4">
-                <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#9a3412]">
-                  <AlertTriangle size={15} /> 导入说明
+            <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
+              {selectedDateRows.map((row) => (
+                <ReconciliationRow
+                  key={row.id}
+                  row={row}
+                  vault={vault}
+                  courses={courseOptions}
+                  onMap={(courseId) => updateCourseMapping(row, courseId)}
+                  onOpenLesson={onOpenLesson}
+                />
+              ))}
+              {selectedDateRows.length === 0 && (
+                <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
+                  这一天没有符合筛选的对账项
                 </div>
-                <div className="space-y-1 text-xs font-semibold leading-5 text-[#9a3412]">
-                  <div>一对一 0/1 会标记为待确认补课，不直接猜请假或缺席。</div>
-                  <div>班课通常只有人数，无法自动确认具体学生到课。</div>
-                  <div>重复和冲突课节默认不写入；可在系统对比视图追溯查看。</div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
-function ImportRow({
+function ReconciliationRow({
   row,
   vault,
   courses,
-  viewMode,
-  onToggle,
   onMap,
   onOpenLesson
 }: {
   row: ImportPreviewLesson;
   vault: TeacherVault;
   courses: CourseGroup[];
-  viewMode: ViewMode;
-  onToggle: (selected: boolean) => void;
   onMap: (courseId: string) => void;
-  onOpenLesson: (lesson: Lesson) => void;
+  onOpenLesson?: (lesson: Lesson) => void;
 }) {
   const systemLesson = row.systemLessonId ? vault.lessons.find((lesson) => lesson.id === row.systemLessonId) : undefined;
   return (
-    <div className={`rounded-[12px] border p-3 ${statusClass(row.status, row.selected)}`}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="checkbox"
-              checked={row.selected}
-              disabled={row.status === "duplicate" || row.status === "conflict" || !row.matchedCourseId}
-              onChange={(event) => onToggle(event.target.checked)}
-              className="h-4 w-4 accent-[#1557c2]"
-            />
-            <span className="font-extrabold text-[#061226]">{row.date} {row.startTime}-{row.endTime}</span>
-            <Badge variant={statusVariant(row.status)} className="text-[10px]">{statusLabel(row.status)}</Badge>
-            <Badge variant="secondary" className="text-[10px]">{row.campusName || "未识别校区"}</Badge>
-            <Badge variant="secondary" className="text-[10px]">{row.presentCount ?? "?"}/{row.expectedCount ?? "?"}</Badge>
-          </div>
-          <div className="mt-2 text-sm font-semibold leading-6 text-[#25324a]">{row.title}</div>
-          {viewMode !== "table" && (
-            <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-              {row.studentNameHint ? `学生：${row.studentNameHint} · ` : ""}{row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)} · {row.teacher ? `教师：${row.teacher} · ` : ""}{row.room ? `教室：${row.room}` : ""}
-            </div>
-          )}
-          {viewMode !== "table" && row.issues.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {row.issues.map((issue) => <Badge key={issue} variant="amber" className="text-[10px]">{issue}</Badge>)}
-            </div>
-          )}
-          {viewMode === "system" && row.systemLessonLabel && (
-            <button
-              type="button"
-              disabled={!systemLesson}
-              onClick={() => systemLesson && onOpenLesson(systemLesson)}
-              className="mt-2 inline-flex items-center gap-2 rounded-[10px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-bold text-[#1557c2] disabled:text-[#64748b]"
-            >
-              <ArrowDownUp size={13} /> {row.systemLessonLabel}
-            </button>
-          )}
-        </div>
-        <div className="w-full lg:w-[280px]">
-          <Select value={row.matchedCourseId ?? ""} onChange={(event) => onMap(event.target.value)}>
-            <option value="">手动映射课程</option>
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}
-              </option>
-            ))}
-          </Select>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">
-            {row.mappedCourseId ? "已使用保存映射" : row.matchedCourseId ? `自动匹配：${courseName(row.matchedCourseId, courses)}` : "需要手动映射"}
-          </div>
-        </div>
+    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(row.status)}`}>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Badge variant={statusVariant(row.status)}>{statusLabel(row.status)}</Badge>
+        <Badge variant="secondary">{row.campusName || "未识别校区"}</Badge>
+        <Badge variant="secondary">{row.startTime}-{row.endTime}</Badge>
+        {row.presentCount !== undefined && row.expectedCount !== undefined && (
+          <Badge variant={row.presentCount < row.expectedCount ? "amber" : "secondary"}>{row.presentCount}/{row.expectedCount}</Badge>
+        )}
       </div>
+
+      <div className="grid grid-cols-1 gap-3">
+        <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
+          <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
+            <FileSpreadsheet size={13} /> Excel
+          </div>
+          {row.status === "import_missing" ? (
+            <div className="text-sm font-bold text-[#64748b]">Excel 表没有对应课节</div>
+          ) : (
+            <>
+              <div className="text-sm font-extrabold leading-5 text-[#061226]">{row.title}</div>
+              <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
+                {row.teacher ? ` · 教师：${row.teacher}` : ""}
+                {row.room ? ` · 教室：${row.room}` : ""}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
+              <Link2 size={13} /> 本地课表
+            </div>
+            {systemLesson && (
+              <button
+                type="button"
+                onClick={() => onOpenLesson?.(systemLesson)}
+                className="inline-flex items-center gap-1 rounded-[9px] border border-[#bfdbfe] bg-white px-2 py-1 text-[11px] font-bold text-[#1557c2]"
+              >
+                <ArrowDownUp size={12} /> 打开
+              </button>
+            )}
+          </div>
+          {systemLesson ? (
+            <div>
+              <div className="text-sm font-extrabold leading-5 text-[#061226]">{localCourseName(vault, systemLesson.courseGroupId)}</div>
+              <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                {systemLesson.startTime}-{systemLesson.endTime} · {courseSubject(vault, systemLesson.courseGroupId)} · {courseTypeLabel(vault, systemLesson.type)} · {campusName(vault, systemLesson.campusId)}
+              </div>
+              <div className="mt-1 truncate text-xs font-semibold text-[#64748b]">
+                {studentNames(vault, systemLesson.expectedStudentIds) || "未设置学生"}
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm font-bold text-[#b45309]">本地课表没有对应课节</div>
+          )}
+        </div>
+
+        {row.status !== "import_missing" && (
+          <div>
+            <Select value={row.matchedCourseId ?? ""} onChange={(event) => onMap(event.target.value)}>
+              <option value="">手动映射课程档案</option>
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}
+                </option>
+              ))}
+            </Select>
+            <div className="mt-1 text-xs font-semibold text-[#64748b]">
+              {row.mappedCourseId ? "已使用保存映射" : row.matchedCourseId ? `自动匹配：${localCourseName(vault, row.matchedCourseId)}` : "需要手动映射后再核对"}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {row.issues.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {row.issues.map((issue) => (
+            <Badge key={issue} variant={row.status === "matched" ? "secondary" : "amber"} className="text-[10px]">{issue}</Badge>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function SummaryCard({ title, items }: { title: string; items: Array<{ key: string; count: number; selected: number }> }) {
-  return (
-    <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
-      <div className="mb-3 text-sm font-extrabold text-[#061226]">{title}</div>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <div key={item.key} className="flex items-center justify-between gap-2 rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-sm">
-            <span className="min-w-0 truncate font-semibold text-[#25324a]">{item.key}</span>
-            <span className="shrink-0 font-extrabold text-[#1557c2]">{item.selected}/{item.count}</span>
-          </div>
-        ))}
-        {items.length === 0 && <div className="text-sm font-semibold text-[#64748b]">暂无数据</div>}
-      </div>
-    </div>
-  );
+function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPreviewLesson[], rawLessons: ImportedScheduleLesson[]): ImportPreviewLesson[] {
+  if (rawLessons.length === 0) return [];
+  const months = new Set(rawLessons.map((lesson) => lesson.date.slice(0, 7)));
+  const campusIds = new Set(importedRows.map((row) => row.campusId).filter((campusId): campusId is string => Boolean(campusId)));
+  const usedSystemLessonIds = new Set(importedRows.map((row) => row.systemLessonId).filter((lessonId): lessonId is string => Boolean(lessonId)));
+  if (months.size === 0 || campusIds.size === 0) return [];
+
+  return vault.lessons
+    .filter((lesson) =>
+      lesson.status !== "cancelled" &&
+      months.has(lesson.date.slice(0, 7)) &&
+      campusIds.has(lessonCampusId(vault, lesson) ?? "") &&
+      !usedSystemLessonIds.has(lesson.id)
+    )
+    .sort(sortLessons)
+    .map((lesson): ImportPreviewLesson => {
+      const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
+      const campusId = lessonCampusId(vault, lesson);
+      return {
+        id: `local-only-${lesson.id}`,
+        fileName: "本地课表",
+        campusName: campusName(vault, campusId),
+        campusId,
+        date: lesson.date,
+        startTime: lesson.startTime,
+        endTime: lesson.endTime,
+        title: course?.name ?? "未知课程",
+        subjectHint: course?.subject ?? "",
+        courseTypeHint: lesson.type,
+        studentNameHint: studentNames(vault, lesson.expectedStudentIds),
+        presentCount: lesson.attendance.length,
+        expectedCount: lesson.expectedStudentIds.length,
+        rawText: "",
+        warnings: [],
+        matchedCourseId: lesson.courseGroupId,
+        status: "import_missing",
+        systemLessonId: lesson.id,
+        systemLessonLabel: `${lesson.date} ${lesson.startTime}-${lesson.endTime} ${course?.name ?? "未知课程"}`,
+        issues: ["Excel 表没有对应本地课节"]
+      };
+    });
+}
+
+function summarizeFiles(lessons: ImportedScheduleLesson[]): Array<{ fileName: string; sourceCampus: string; count: number; months: string[] }> {
+  const map = new Map<string, { fileName: string; sourceCampus: string; count: number; months: Set<string> }>();
+  lessons.forEach((lesson) => {
+    const item = map.get(lesson.fileName) ?? { fileName: lesson.fileName, sourceCampus: lesson.campusName, count: 0, months: new Set<string>() };
+    item.count += 1;
+    item.months.add(lesson.date.slice(0, 7));
+    if (!item.sourceCampus && lesson.campusName) item.sourceCampus = lesson.campusName;
+    map.set(lesson.fileName, item);
+  });
+  return Array.from(map.values())
+    .map((item) => ({ ...item, months: Array.from(item.months).sort() }))
+    .sort((a, b) => a.fileName.localeCompare(b.fileName, "zh-Hans-CN"));
+}
+
+function buildDefaultCampusOverrides(vault: TeacherVault, lessons: ImportedScheduleLesson[], current: ScheduleImportMapping): ScheduleImportMapping {
+  const next = { ...current };
+  summarizeFiles(lessons).forEach((file) => {
+    if (next[file.fileName]) return;
+    const campus = findCampusByName(vault, file.sourceCampus);
+    if (campus) next[file.fileName] = campus.id;
+  });
+  return next;
 }
 
 function readSavedMapping(): ScheduleImportMapping {
@@ -394,36 +570,58 @@ function readSavedMapping(): ScheduleImportMapping {
   }
 }
 
-function courseName(courseId: string | undefined, courses: CourseGroup[]): string {
-  return courses.find((course) => course.id === courseId)?.name ?? "";
+function findCampusByName(vault: TeacherVault, name: string) {
+  const normalized = normalizeText(name);
+  if (!normalized) return undefined;
+  return vault.campuses.find((campus) => normalizeText(campus.name) === normalized || normalizeText(campus.id) === normalized);
 }
 
-function courseTypeLabelSafe(vault: TeacherVault, type: string): string {
-  return type === "unknown" ? "未知班型" : courseTypeLabel(vault, type as CourseGroup["type"]);
+function lessonCampusId(vault: TeacherVault, lesson: Lesson): string | undefined {
+  return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
+}
+
+function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {
+  return type === "unknown" ? "未知班型" : courseTypeLabel(vault, type);
 }
 
 function statusLabel(status: ImportMatchStatus): string {
   const labels: Record<ImportMatchStatus, string> = {
-    ready: "可导入",
-    abnormal: "异常",
-    needs_mapping: "待映射",
-    duplicate: "重复",
-    conflict: "冲突"
+    matched: "已对应",
+    attendance_mismatch: "到课异常",
+    time_mismatch: "时间不一致",
+    course_mismatch: "课程不一致",
+    system_missing: "本地缺少",
+    import_missing: "Excel 缺少",
+    needs_mapping: "待映射"
   };
   return labels[status];
 }
 
-function statusVariant(status: ImportMatchStatus): "sage" | "amber" | "secondary" | "destructive" | "sky" {
-  if (status === "ready") return "sage";
-  if (status === "duplicate") return "secondary";
-  if (status === "conflict") return "destructive";
+function statusVariant(status: ImportMatchStatus): "sage" | "amber" | "secondary" | "destructive" | "sky" | "yellow" | "plum" {
+  if (status === "matched") return "sage";
+  if (status === "time_mismatch") return "yellow";
+  if (status === "course_mismatch" || status === "system_missing") return "destructive";
+  if (status === "import_missing") return "plum";
+  if (status === "needs_mapping") return "secondary";
   return "amber";
 }
 
-function statusClass(status: ImportMatchStatus, selected: boolean): string {
-  if (selected) return "border-[#bfdbfe] bg-[#eff6ff]";
-  if (status === "conflict") return "border-[#fecaca] bg-[#fff1f2]";
-  if (status === "abnormal" || status === "needs_mapping") return "border-[#fed7aa] bg-[#fff7ed]";
-  if (status === "duplicate") return "border-[#dbe4ef] bg-[#f8fbff]";
-  return "border-[#e8eef6] bg-white";
+function statusSurfaceClass(status: ImportMatchStatus): string {
+  if (status === "matched") return "border-[#bbf7d0] bg-[#f0fdf4]";
+  if (status === "time_mismatch" || status === "attendance_mismatch") return "border-[#fed7aa] bg-[#fff7ed]";
+  if (status === "course_mismatch" || status === "system_missing") return "border-[#fecaca] bg-[#fff1f2]";
+  if (status === "import_missing") return "border-[#c7d2fe] bg-[#eef0ff]";
+  return "border-[#dbe4ef] bg-[#f8fbff]";
+}
+
+function statusPillClass(status: ImportMatchStatus): string {
+  if (status === "matched") return "bg-[#e8f8ef] text-[#15803d]";
+  if (status === "time_mismatch" || status === "attendance_mismatch") return "bg-[#fff3e4] text-[#9a3412]";
+  if (status === "course_mismatch" || status === "system_missing") return "bg-[#fee2e2] text-[#b91c1c]";
+  if (status === "import_missing") return "bg-[#eef0ff] text-[#5161d6]";
+  return "bg-[#eef4fb] text-[#25324a]";
+}
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
 }

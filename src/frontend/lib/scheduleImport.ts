@@ -1,6 +1,5 @@
 import * as XLSX from "xlsx";
 import type { CourseGroup, CourseType, Lesson, TeacherVault } from "@/shared/types";
-import { createLessonFromCourse } from "@/frontend/lib/helpers";
 
 export type ImportedScheduleLesson = {
   id: string;
@@ -22,13 +21,19 @@ export type ImportedScheduleLesson = {
   warnings: string[];
 };
 
-export type ImportMatchStatus = "ready" | "duplicate" | "conflict" | "needs_mapping" | "abnormal";
+export type ImportMatchStatus =
+  | "matched"
+  | "attendance_mismatch"
+  | "time_mismatch"
+  | "course_mismatch"
+  | "system_missing"
+  | "import_missing"
+  | "needs_mapping";
 
 export type ImportPreviewLesson = ImportedScheduleLesson & {
   campusId?: string;
   matchedCourseId?: string;
   mappedCourseId?: string;
-  selected: boolean;
   status: ImportMatchStatus;
   systemLessonId?: string;
   systemLessonLabel?: string;
@@ -39,11 +44,12 @@ export type ScheduleImportMapping = Record<string, string>;
 
 export type ScheduleImportSummary = {
   total: number;
-  selected: number;
-  ready: number;
-  duplicates: number;
-  conflicts: number;
-  abnormal: number;
+  matched: number;
+  attendanceMismatch: number;
+  timeMismatch: number;
+  courseMismatch: number;
+  systemMissing: number;
+  importMissing: number;
   needsMapping: number;
   byCampus: ImportSummaryGroup[];
   byDate: ImportSummaryGroup[];
@@ -166,96 +172,66 @@ export function buildImportPreview(
   vault: TeacherVault,
   lessons: ImportedScheduleLesson[],
   mapping: ScheduleImportMapping,
-  previousSelectedIds = new Set<string>()
+  campusOverrides: ScheduleImportMapping = {}
 ): ImportPreviewLesson[] {
   return lessons.map((lesson) => {
-    const campus = matchCampus(vault, lesson.campusName);
+    const campus = campusOverrides[lesson.fileName]
+      ? vault.campuses.find((item) => item.id === campusOverrides[lesson.fileName])
+      : matchCampus(vault, lesson.campusName);
     const mappedCourseId = mapping[importMappingKey(lesson)];
     const matchedCourse = mappedCourseId
       ? vault.courseGroups.find((course) => course.id === mappedCourseId)
       : matchCourse(vault, lesson, campus?.id);
-    const systemLesson = matchedCourse
-      ? vault.lessons.find((item) =>
-          item.status !== "cancelled" &&
-          item.courseGroupId === matchedCourse.id &&
-          item.date === lesson.date &&
-          item.startTime === lesson.startTime &&
-          item.endTime === lesson.endTime
-        )
+    const exactLesson = matchedCourse
+      ? findExactSystemLesson(vault, lesson, matchedCourse.id, campus?.id)
       : undefined;
-    const conflict = vault.lessons.find((item) =>
-      item.status !== "cancelled" &&
-      item.date === lesson.date &&
-      timeOverlaps(item.startTime, item.endTime, lesson.startTime, lesson.endTime) &&
-      (!matchedCourse || item.courseGroupId !== matchedCourse.id)
-    );
+    const sameCourseDifferentTime = matchedCourse && !exactLesson
+      ? findSameCourseDifferentTimeLesson(vault, lesson, matchedCourse.id, campus?.id)
+      : undefined;
+    const sameTimeDifferentCourse = !exactLesson && !sameCourseDifferentTime
+      ? findSameTimeDifferentCourseLesson(vault, lesson, matchedCourse?.id, campus?.id)
+      : undefined;
+    const systemLesson = exactLesson ?? sameCourseDifferentTime ?? sameTimeDifferentCourse;
     const issues = [
       ...lesson.warnings,
       campus ? "" : "校区未匹配",
       matchedCourse ? "" : "课程未匹配",
-      systemLesson ? "系统已有同课程同时间课节" : "",
-      conflict ? `与系统课节冲突：${systemLessonLabel(vault, conflict)}` : ""
+      exactLesson ? "" : sameCourseDifferentTime ? `本地同课程时间不一致：${systemLessonLabel(vault, sameCourseDifferentTime)}` : "",
+      exactLesson || sameCourseDifferentTime ? "" : sameTimeDifferentCourse ? `本地同时间课程不一致：${systemLessonLabel(vault, sameTimeDifferentCourse)}` : "",
+      campus && matchedCourse && !systemLesson ? "本地课表缺少这节教务课" : ""
     ].filter(Boolean);
     const status: ImportMatchStatus = !campus || !matchedCourse
       ? "needs_mapping"
-      : systemLesson
-        ? "duplicate"
-        : conflict
-          ? "conflict"
-          : lesson.warnings.length > 0
-            ? "abnormal"
-            : "ready";
+      : exactLesson
+        ? lesson.warnings.length > 0 ? "attendance_mismatch" : "matched"
+        : sameCourseDifferentTime
+          ? "time_mismatch"
+          : sameTimeDifferentCourse
+            ? "course_mismatch"
+            : "system_missing";
     return {
       ...lesson,
+      campusName: campus?.name ?? lesson.campusName,
       campusId: campus?.id,
       matchedCourseId: matchedCourse?.id,
       mappedCourseId,
-      selected: previousSelectedIds.has(lesson.id) || status === "ready",
       status,
-      systemLessonId: systemLesson?.id ?? conflict?.id,
-      systemLessonLabel: systemLesson ? systemLessonLabel(vault, systemLesson) : conflict ? systemLessonLabel(vault, conflict) : undefined,
+      systemLessonId: systemLesson?.id,
+      systemLessonLabel: systemLesson ? systemLessonLabel(vault, systemLesson) : undefined,
       issues
     };
   });
 }
 
-export function buildLessonsFromImportPreview(vault: TeacherVault, rows: ImportPreviewLesson[]): Lesson[] {
-  const lessons: Lesson[] = [];
-  rows
-    .filter((row) => row.selected && row.campusId && row.matchedCourseId && row.status !== "duplicate" && row.status !== "conflict")
-    .forEach((row) => {
-      const course = vault.courseGroups.find((item) => item.id === row.matchedCourseId);
-      if (!course) return;
-      const lesson = createLessonFromCourse(vault, course, {
-        date: row.date,
-        startTime: row.startTime,
-        endTime: row.endTime,
-        campusId: row.campusId,
-        status: row.presentCount === 0 ? "makeup_pending" : "scheduled"
-      });
-      lessons.push({
-        ...lesson,
-        attendance: normalizeImportedAttendance(lesson, row),
-        note: [
-          `教务导入：${row.title}`,
-          row.teacher ? `教师：${row.teacher}` : "",
-          row.room ? `教室：${row.room}` : "",
-          row.presentCount !== undefined && row.expectedCount !== undefined ? `实到/应到：${row.presentCount}/${row.expectedCount}` : ""
-        ].filter(Boolean).join("；")
-      });
-    });
-  return lessons;
-}
-
 export function summarizeImportPreview(rows: ImportPreviewLesson[]): ScheduleImportSummary {
-  const selected = rows.filter((row) => row.selected);
   return {
     total: rows.length,
-    selected: selected.length,
-    ready: rows.filter((row) => row.status === "ready").length,
-    duplicates: rows.filter((row) => row.status === "duplicate").length,
-    conflicts: rows.filter((row) => row.status === "conflict").length,
-    abnormal: rows.filter((row) => row.status === "abnormal").length,
+    matched: rows.filter((row) => row.status === "matched").length,
+    attendanceMismatch: rows.filter((row) => row.status === "attendance_mismatch").length,
+    timeMismatch: rows.filter((row) => row.status === "time_mismatch").length,
+    courseMismatch: rows.filter((row) => row.status === "course_mismatch").length,
+    systemMissing: rows.filter((row) => row.status === "system_missing").length,
+    importMissing: rows.filter((row) => row.status === "import_missing").length,
     needsMapping: rows.filter((row) => row.status === "needs_mapping").length,
     byCampus: groupedSummary(rows, (row) => row.campusName || "未识别校区"),
     byDate: groupedSummary(rows, (row) => row.date),
@@ -270,20 +246,10 @@ function groupedSummary(rows: ImportPreviewLesson[], keyFor: (row: ImportPreview
     const key = keyFor(row);
     const item = map.get(key) ?? { key, count: 0, selected: 0 };
     item.count += 1;
-    if (row.selected) item.selected += 1;
+    if (row.status === "matched") item.selected += 1;
     map.set(key, item);
   });
   return Array.from(map.values()).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, "zh-Hans-CN"));
-}
-
-function normalizeImportedAttendance(lesson: Lesson, row: ImportPreviewLesson): Lesson["attendance"] {
-  if (row.courseTypeHint !== "one_on_one" || row.presentCount === undefined || row.expectedCount === undefined) {
-    return lesson.attendance;
-  }
-  if (row.presentCount >= row.expectedCount) {
-    return lesson.attendance.map((entry) => ({ ...entry, status: "attended" }));
-  }
-  return lesson.attendance.map((entry) => ({ ...entry, status: "makeup_pending", note: "教务导入：未正常到课，原因待确认" }));
 }
 
 function matchCampus(vault: TeacherVault, campusName: string) {
@@ -350,6 +316,39 @@ function timeToMinutes(value: string): number {
 
 function timeOverlaps(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
   return timeToMinutes(aStart) < timeToMinutes(bEnd) && timeToMinutes(bStart) < timeToMinutes(aEnd);
+}
+
+function systemLessonCampusId(vault: TeacherVault, lesson: Lesson): string | undefined {
+  return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
+}
+
+function activeSystemLessonsForDate(vault: TeacherVault, date: string, campusId?: string): Lesson[] {
+  return vault.lessons.filter((lesson) =>
+    lesson.status !== "cancelled" &&
+    lesson.date === date &&
+    (!campusId || systemLessonCampusId(vault, lesson) === campusId)
+  );
+}
+
+function findExactSystemLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, courseId: string, campusId?: string): Lesson | undefined {
+  return activeSystemLessonsForDate(vault, lesson.date, campusId).find((item) =>
+    item.courseGroupId === courseId &&
+    item.startTime === lesson.startTime &&
+    item.endTime === lesson.endTime
+  );
+}
+
+function findSameCourseDifferentTimeLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, courseId: string, campusId?: string): Lesson | undefined {
+  const candidates = activeSystemLessonsForDate(vault, lesson.date, campusId).filter((item) => item.courseGroupId === courseId);
+  return candidates.find((item) => timeOverlaps(item.startTime, item.endTime, lesson.startTime, lesson.endTime)) ?? candidates[0];
+}
+
+function findSameTimeDifferentCourseLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, courseId?: string, campusId?: string): Lesson | undefined {
+  return activeSystemLessonsForDate(vault, lesson.date, campusId).find((item) =>
+    item.courseGroupId !== courseId &&
+    item.startTime === lesson.startTime &&
+    item.endTime === lesson.endTime
+  );
 }
 
 function systemLessonLabel(vault: TeacherVault, lesson: Lesson): string {
