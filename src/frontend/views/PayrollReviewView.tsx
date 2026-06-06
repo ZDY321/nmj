@@ -27,6 +27,7 @@ import {
 
 type TypeFilter = "all" | CourseType;
 type LessonStatusFilter = "all" | Lesson["status"];
+type PayrollPanel = "review" | "reconcile";
 type OverviewCampusKey = "oneOnOne" | "classLessons" | "fullTime" | "makeup";
 type CampusAmountDetail = {
   key: string;
@@ -59,6 +60,7 @@ export function PayrollReviewView({
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailStatusFilter, setDetailStatusFilter] = useState<LessonStatusFilter>("all");
+  const [payrollPanel, setPayrollPanel] = useState<PayrollPanel>("review");
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[])).sort(compareByName);
   const effectiveObligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId;
 
@@ -188,6 +190,30 @@ export function PayrollReviewView({
 
   return (
     <div className="space-y-6">
+      <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
+        <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
+          {[
+            { key: "review" as PayrollPanel, label: "工资核对" },
+            { key: "reconcile" as PayrollPanel, label: "教务课表对账" }
+          ].map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setPayrollPanel(item.key)}
+              className={`min-w-[140px] flex-1 rounded-[12px] px-4 py-2 text-sm font-extrabold transition-colors ${
+                payrollPanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {payrollPanel === "reconcile" ? (
+        <ScheduleImportPanel vault={vault} onOpenLesson={onOpenLessonInCalendar} />
+      ) : (
+      <>
       <Card className="overflow-hidden">
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -495,7 +521,8 @@ export function PayrollReviewView({
         </CardContent>
       </Card>
 
-      <ScheduleImportPanel vault={vault} onOpenLesson={onOpenLessonInCalendar} />
+      </>
+      )}
     </div>
   );
 }

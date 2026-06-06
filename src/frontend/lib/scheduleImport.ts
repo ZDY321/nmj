@@ -196,9 +196,9 @@ export function buildImportPreview(
       ...lesson.warnings,
       campus ? "" : "校区未匹配",
       matchedCourse ? "" : "课程未匹配",
-      exactLesson ? "" : sameCourseDifferentTime ? `本地同课程时间不一致：${systemLessonLabel(vault, sameCourseDifferentTime)}` : "",
-      exactLesson || sameCourseDifferentTime ? "" : sameTimeDifferentCourse ? `本地同时间课程不一致：${systemLessonLabel(vault, sameTimeDifferentCourse)}` : "",
-      campus && matchedCourse && !systemLesson ? "本地课表缺少这节教务课" : ""
+      exactLesson ? "" : sameCourseDifferentTime ? `云端同课程时间不一致：${systemLessonLabel(vault, sameCourseDifferentTime)}` : "",
+      exactLesson || sameCourseDifferentTime ? "" : sameTimeDifferentCourse ? `云端同时间课程不一致：${systemLessonLabel(vault, sameTimeDifferentCourse)}` : "",
+      campus && matchedCourse && !systemLesson ? "云端课表缺少这节教务 Excel 课节" : ""
     ].filter(Boolean);
     const status: ImportMatchStatus = !campus || !matchedCourse
       ? "needs_mapping"

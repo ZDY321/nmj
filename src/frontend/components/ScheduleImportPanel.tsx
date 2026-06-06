@@ -119,17 +119,22 @@ export function ScheduleImportPanel({
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     setLoading(true);
-    setMessage("正在解析教务课表...");
+    setMessage("正在解析教务 Excel...");
     try {
       const parsed = await parseScheduleWorkbookFiles(files);
-      const nextOverrides = buildDefaultCampusOverrides(vault, parsed, fileCampusOverrides);
-      setRawLessons(parsed);
+      const parsedFileNames = new Set(parsed.map((lesson) => lesson.fileName));
+      const nextRawLessons = [
+        ...rawLessons.filter((lesson) => !parsedFileNames.has(lesson.fileName)),
+        ...parsed
+      ].sort((a, b) => `${a.date} ${a.startTime} ${a.campusName}`.localeCompare(`${b.date} ${b.startTime} ${b.campusName}`));
+      const nextOverrides = buildDefaultCampusOverrides(vault, nextRawLessons, fileCampusOverrides);
+      setRawLessons(nextRawLessons);
       setFileCampusOverrides(nextOverrides);
       if (parsed[0]?.date) {
         setSelectedMonth(parsed[0].date.slice(0, 7));
         setSelectedDate(parsed[0].date);
       }
-      setMessage(parsed.length > 0 ? `已解析 ${parsed.length} 节教务课，请核对日历差异。` : "没有从文件中解析到课节，请确认是否为校宝导出的 .xls/.xlsx。");
+      setMessage(parsed.length > 0 ? `已加入 ${parsedFileNames.size} 个文件、${parsed.length} 节教务 Excel 课节；当前共 ${nextRawLessons.length} 节。` : "没有从文件中解析到课节，请确认是否为校宝导出的 .xls/.xlsx。");
     } catch (error) {
       setRawLessons([]);
       setMessage(error instanceof Error ? error.message : "课表解析失败。");
@@ -174,11 +179,11 @@ export function ScheduleImportPanel({
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <FileSpreadsheet size={14} /> 教务课表对账
           </div>
-          <CardTitle>Excel 教务课表核对</CardTitle>
-          <CardDescription>教务文件只作为外部对账来源，不会写入本地排课。</CardDescription>
+          <CardTitle>教务 Excel 与云端课表核对</CardTitle>
+          <CardDescription>教务 Excel 只作为外部对账来源，不会写入云端课表。</CardDescription>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="sky">Excel {rawLessons.length} 节</Badge>
+          <Badge variant="sky">教务 Excel {rawLessons.length} 节</Badge>
           <Badge variant="sage">已对应 {summary.matched} 节</Badge>
           <Badge variant={needsAttention > 0 ? "amber" : "secondary"}>待核对 {needsAttention} 节</Badge>
         </div>
@@ -187,12 +192,12 @@ export function ScheduleImportPanel({
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
           <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
-              <Upload size={16} className="text-[#1557c2]" /> 教务文件
+              <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[12px] border border-[#bfdbfe] bg-white px-4 py-3 text-sm font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff]">
                 {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-                选择 .xls / .xlsx
+                选择一个或多个 .xls / .xlsx
                 <input
                   type="file"
                   accept=".xls,.xlsx"
@@ -215,8 +220,8 @@ export function ScheduleImportPanel({
               {[
                 ["文件", fileSummaries.length],
                 ["月份", monthOptions.length],
-                ["本地缺少", summary.systemMissing],
-                ["Excel 缺少", summary.importMissing]
+                ["云端缺少", summary.systemMissing],
+                ["教务缺少", summary.importMissing]
               ].map(([label, value]) => (
                 <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
                   <div className="text-xs font-semibold text-[#64748b]">{label}</div>
@@ -251,7 +256,7 @@ export function ScheduleImportPanel({
               ))}
               {fileSummaries.length === 0 && (
                 <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                  暂无教务文件
+                  暂无教务 Excel 文件
                 </div>
               )}
             </div>
@@ -268,8 +273,8 @@ export function ScheduleImportPanel({
             ["到课异常", summary.attendanceMismatch, "amber"],
             ["时间不一致", summary.timeMismatch, "yellow"],
             ["课程不一致", summary.courseMismatch, "destructive"],
-            ["本地缺少", summary.systemMissing, "amber"],
-            ["Excel 缺少", summary.importMissing, "plum"],
+            ["云端缺少", summary.systemMissing, "amber"],
+            ["教务缺少", summary.importMissing, "plum"],
             ["待映射", summary.needsMapping, "secondary"]
           ].map(([label, value, variant]) => (
             <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
@@ -293,8 +298,8 @@ export function ScheduleImportPanel({
             <option value="attendance_mismatch">到课异常</option>
             <option value="time_mismatch">时间不一致</option>
             <option value="course_mismatch">课程不一致</option>
-            <option value="system_missing">本地缺少</option>
-            <option value="import_missing">Excel 缺少</option>
+            <option value="system_missing">云端缺少</option>
+            <option value="import_missing">教务缺少</option>
             <option value="needs_mapping">待映射</option>
           </Select>
           <label className="relative block">
@@ -304,13 +309,13 @@ export function ScheduleImportPanel({
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="overflow-hidden rounded-[14px] border border-[#dbe4ef] bg-white">
-            <div className="grid grid-cols-7 border-b border-[#e8eef6] bg-[#f8fbff]">
+          <div className="rounded-[16px] border border-[#dbe4ef] bg-white p-3">
+            <div className="mb-2 grid grid-cols-7 gap-2">
               {weekdayLabels.map((label) => (
-                <div key={label} className="px-2 py-2 text-center text-xs font-extrabold text-[#64748b]">{label}</div>
+                <div key={label} className="rounded-[10px] bg-[#f8fbff] px-2 py-2 text-center text-xs font-extrabold text-[#64748b]">{label}</div>
               ))}
             </div>
-            <div className="grid grid-cols-7">
+            <div className="grid grid-cols-7 gap-2">
               {days.map((date) => {
                 const dayRows = filteredRows.filter((row) => row.date === date);
                 const isSelected = selectedDate === date;
@@ -321,16 +326,16 @@ export function ScheduleImportPanel({
                     key={date}
                     type="button"
                     onClick={() => setSelectedDate(date)}
-                    className={`min-h-[132px] border-b border-r border-[#e8eef6] p-2 text-left transition-colors last:border-r-0 ${
+                    className={`min-h-[126px] rounded-[14px] border p-2 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
                       isSelected
-                        ? "bg-[#eaf2ff] ring-2 ring-inset ring-[#1557c2]"
+                        ? "border-[#1557c2] bg-[#eaf2ff] shadow-[0_10px_24px_rgba(21,87,194,0.12)] ring-2 ring-[#bfdbfe]"
                         : !isCurrentMonth
-                          ? "bg-[#f8fbff] opacity-45"
+                          ? "border-transparent bg-[#f8fbff] opacity-45"
                           : hasProblems
-                            ? "bg-[#fff7ed] hover:bg-[#fff3e4]"
+                            ? "border-[#fed7aa] bg-[#fff7ed]"
                             : dayRows.length > 0
-                              ? "bg-[#f0fdf4] hover:bg-[#e8f8ef]"
-                              : "bg-white hover:bg-[#f8fbff]"
+                              ? "border-[#bbf7d0] bg-[#f0fdf4]"
+                              : "border-[#e8eef6] bg-white"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -340,7 +345,7 @@ export function ScheduleImportPanel({
                     <div className="mt-2 flex flex-col gap-1">
                       {dayRows.slice(0, 3).map((row) => (
                         <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(row.status)}`}>
-                          {row.startTime} {row.status === "import_missing" ? "本地" : "Excel"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
+                          {row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
                         </span>
                       ))}
                       {dayRows.length > 3 && (
@@ -420,10 +425,10 @@ function ReconciliationRow({
       <div className="grid grid-cols-1 gap-3">
         <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
           <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
-            <FileSpreadsheet size={13} /> Excel
+            <FileSpreadsheet size={13} /> 教务 Excel
           </div>
           {row.status === "import_missing" ? (
-            <div className="text-sm font-bold text-[#64748b]">Excel 表没有对应课节</div>
+            <div className="text-sm font-bold text-[#64748b]">教务 Excel 没有对应课节</div>
           ) : (
             <>
               <div className="text-sm font-extrabold leading-5 text-[#061226]">{row.title}</div>
@@ -439,7 +444,7 @@ function ReconciliationRow({
         <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
-              <Link2 size={13} /> 本地课表
+              <Link2 size={13} /> 云端课表
             </div>
             {systemLesson && (
               <button
@@ -462,7 +467,7 @@ function ReconciliationRow({
               </div>
             </div>
           ) : (
-            <div className="text-sm font-bold text-[#b45309]">本地课表没有对应课节</div>
+            <div className="text-sm font-bold text-[#b45309]">云端课表没有对应课节</div>
           )}
         </div>
 
@@ -514,7 +519,7 @@ function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPreviewLess
       const campusId = lessonCampusId(vault, lesson);
       return {
         id: `local-only-${lesson.id}`,
-        fileName: "本地课表",
+        fileName: "云端课表",
         campusName: campusName(vault, campusId),
         campusId,
         date: lesson.date,
@@ -532,7 +537,7 @@ function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPreviewLess
         status: "import_missing",
         systemLessonId: lesson.id,
         systemLessonLabel: `${lesson.date} ${lesson.startTime}-${lesson.endTime} ${course?.name ?? "未知课程"}`,
-        issues: ["Excel 表没有对应本地课节"]
+        issues: ["教务 Excel 没有对应云端课节"]
       };
     });
 }
@@ -590,8 +595,8 @@ function statusLabel(status: ImportMatchStatus): string {
     attendance_mismatch: "到课异常",
     time_mismatch: "时间不一致",
     course_mismatch: "课程不一致",
-    system_missing: "本地缺少",
-    import_missing: "Excel 缺少",
+    system_missing: "云端缺少",
+    import_missing: "教务缺少",
     needs_mapping: "待映射"
   };
   return labels[status];
