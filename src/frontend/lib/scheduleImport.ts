@@ -193,13 +193,13 @@ export function buildImportPreview(
     const exactLesson = matchedCourse
       ? findExactSystemLesson(vault, lesson, matchedCourse.id, campus?.id)
       : undefined;
-    const sameCourseDifferentTime = matchedCourse && !exactLesson
-      ? findSameCourseDifferentTimeLesson(vault, lesson, matchedCourse.id, campus?.id)
-      : undefined;
-    const sameTimeDifferentCourse = !exactLesson && !sameCourseDifferentTime
+    const sameTimeDifferentCourse = !exactLesson
       ? findSameTimeDifferentCourseLesson(vault, lesson, matchedCourse?.id, campus?.id)
       : undefined;
-    const systemLesson = exactLesson ?? sameCourseDifferentTime ?? sameTimeDifferentCourse;
+    const sameCourseDifferentTime = matchedCourse && !exactLesson && !sameTimeDifferentCourse
+      ? findSameCourseDifferentTimeLesson(vault, lesson, matchedCourse.id, campus?.id)
+      : undefined;
+    const systemLesson = exactLesson ?? sameTimeDifferentCourse ?? sameCourseDifferentTime;
     const systemAttendance = systemLesson ? systemLessonAttendanceSnapshot(vault, systemLesson) : undefined;
     const attendanceIssue = systemAttendance && lesson.presentCount !== undefined && lesson.expectedCount !== undefined
       ? importAttendanceIssue(lesson, systemAttendance)
@@ -208,18 +208,18 @@ export function buildImportPreview(
       campus ? "" : "校区未匹配",
       matchedCourse ? "" : "课程未匹配",
       attendanceIssue,
-      exactLesson ? "" : sameCourseDifferentTime ? `云端同课程时间不一致：${systemLessonLabel(vault, sameCourseDifferentTime)}` : "",
-      exactLesson || sameCourseDifferentTime ? "" : sameTimeDifferentCourse ? `同一时间云端是其他课程：${systemLessonLabel(vault, sameTimeDifferentCourse)}` : "",
+      exactLesson ? "" : sameTimeDifferentCourse ? `同一时间云端课程不一致：${systemLessonLabel(vault, sameTimeDifferentCourse)}，请检查课程映射或云端课表` : "",
+      exactLesson || sameTimeDifferentCourse ? "" : sameCourseDifferentTime ? `云端同课程时间不一致：教务 ${lesson.date} ${lesson.startTime}-${lesson.endTime}，云端 ${systemLessonLabel(vault, sameCourseDifferentTime)}` : "",
       campus && matchedCourse && !systemLesson ? "云端课表缺少这节教务 Excel 课节" : ""
     ].filter(Boolean);
     const status: ImportMatchStatus = !campus || !matchedCourse
       ? "needs_mapping"
       : exactLesson
         ? attendanceIssue ? "attendance_mismatch" : "matched"
-        : sameCourseDifferentTime
-          ? "time_mismatch"
-          : sameTimeDifferentCourse
-            ? "course_mismatch"
+        : sameTimeDifferentCourse
+          ? "course_mismatch"
+          : sameCourseDifferentTime
+            ? "time_mismatch"
             : "system_missing";
     return {
       ...lesson,

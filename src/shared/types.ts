@@ -413,6 +413,9 @@ export type ScheduleImportSavedSummary = {
   systemMissing: number;
   importMissing: number;
   needsMapping: number;
+  systemLessonCount?: number;
+  systemCompletedLessonCount?: number;
+  systemCompletedAmount?: number;
 };
 
 export type ScheduleImportSavedRow = {

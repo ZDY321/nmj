@@ -225,6 +225,7 @@ export function PayrollReviewView({
       {payrollPanel === "reconcile" ? (
         <ScheduleImportPanel
           vault={vault}
+          amountsVisible={amountsVisible}
           storageScope={storageScope}
           onSaveScheduleImport={onSaveScheduleImport}
           onOpenLesson={onOpenLessonInCalendar}

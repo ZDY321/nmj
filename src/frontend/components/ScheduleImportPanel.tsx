@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, CalendarDays, FileSpreadsheet, Link2, MapPin, RefreshCw, Save, Search, Upload, X } from "lucide-react";
+import { ArrowDownUp, CalendarDays, ChevronDown, FileSpreadsheet, Link2, MapPin, RefreshCw, Save, Search, Trash2, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,13 +16,14 @@ import type {
   ScheduleImportVaultState,
   TeacherVault
 } from "@/shared/types";
-import { todayIso } from "@/frontend/lib/calculations";
+import { completedAmount, todayIso } from "@/frontend/lib/calculations";
 import {
   calendarDates,
   campusName,
   courseName as localCourseName,
   courseSubject,
   courseTypeLabel,
+  formatPrivateMoney,
   orderedWeekdayLabels,
   sortCampusesForProfile,
   sortCoursesByName,
@@ -63,11 +64,13 @@ const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "exc
 
 export function ScheduleImportPanel({
   vault,
+  amountsVisible = false,
   onOpenLesson,
   onSaveScheduleImport,
   storageScope
 }: {
   vault: TeacherVault;
+  amountsVisible?: boolean;
   onOpenLesson?: (lesson: Lesson) => void;
   onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
   storageScope?: string;
@@ -89,6 +92,7 @@ export function ScheduleImportPanel({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(savedWorkspace.statusFilter);
   const [search, setSearch] = useState(savedWorkspace.search);
   const [selectedReviewId, setSelectedReviewId] = useState(vault.scheduleImport?.reviews[0]?.id ?? "");
+  const [savedReviewsExpanded, setSavedReviewsExpanded] = useState(false);
 
   const campusOptions = useMemo(
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
@@ -205,6 +209,25 @@ export function ScheduleImportPanel({
       delete nextMapping[key];
     }
     setMapping(nextMapping);
+    const savedMappingOk = writeSavedMapping(storageScope, nextMapping);
+    writeSavedWorkspace(storageScope, {
+      rawLessons,
+      mapping: nextMapping,
+      resolutions,
+      fileCampusOverrides,
+      selectedMonth,
+      selectedDate,
+      campusFilter,
+      statusFilter,
+      search,
+      savedAt: new Date().toISOString()
+    });
+    if (onSaveScheduleImport) {
+      onSaveScheduleImport(buildScheduleImportStateWithoutReview(vault, nextMapping, resolutions));
+      setMessage(courseId ? "课程映射已自动保存到云端加密档案，下次导入会直接复用。" : "课程映射已清除并同步到云端加密档案。");
+    } else if (savedMappingOk) {
+      setMessage(courseId ? "课程映射已自动保存到本机浏览器。" : "课程映射已清除。");
+    }
   }
 
   function applyStatusFilter(nextStatus: Exclude<StatusFilter, "all">) {
@@ -281,6 +304,20 @@ export function ScheduleImportPanel({
     );
   }
 
+  function deleteSavedReview(reviewId: string) {
+    const previous = vault.scheduleImport;
+    if (!previous) return;
+    const nextReviews = previous.reviews.filter((review) => review.id !== reviewId);
+    onSaveScheduleImport?.({
+      mappings: { ...(previous.mappings ?? {}) },
+      resolutions: { ...(previous.resolutions ?? {}) },
+      reviews: nextReviews,
+      updatedAt: new Date().toISOString()
+    });
+    setSelectedReviewId((current) => current === reviewId ? nextReviews[0]?.id ?? "" : current);
+    setMessage("已删除这条保存的对账结果，课程映射和差异标注仍保留。");
+  }
+
   function clearImport() {
     setRawLessons([]);
     setFileCampusOverrides({});
@@ -298,13 +335,14 @@ export function ScheduleImportPanel({
             <FileSpreadsheet size={14} /> 教务课表对账
           </div>
           <CardTitle>教务 Excel 与云端课表核对</CardTitle>
-          <CardDescription>教务 Excel 只作为外部对账来源，不会写入云端课表。</CardDescription>
+          <CardDescription>教务 Excel 只作为外部对账来源；Excel 节数与对账行数分开统计。</CardDescription>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="sky">教务 Excel {rawLessons.length} 节</Badge>
-          <Badge variant="sage">已对应 {summary.matched} 节</Badge>
-          <Badge variant={needsAttention > 0 ? "amber" : "secondary"}>待核对 {needsAttention} 节</Badge>
-          {reviewedCount > 0 && <Badge variant="secondary">已标注 {reviewedCount} 条</Badge>}
+          <Badge variant="sky">Excel {rawLessons.length} 节</Badge>
+          <Badge variant="secondary">对账行 {summary.total} 条</Badge>
+          <Badge variant="sage">已对应 {summary.matched} 条</Badge>
+          <Badge variant={needsAttention > 0 ? "amber" : "secondary"}>待核对 {needsAttention} 条</Badge>
+          {reviewedCount > 0 && <Badge variant="sky">已标注 {reviewedCount} 条</Badge>}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -390,48 +428,79 @@ export function ScheduleImportPanel({
           <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-3">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <div className="text-sm font-extrabold text-[#061226]">已保存对账</div>
-                <div className="mt-1 text-xs font-semibold text-[#64748b]">最近保留 {savedReviews.length} 次，点击可查看当时保存的结果。</div>
+                <button
+                  type="button"
+                  onClick={() => setSavedReviewsExpanded((current) => !current)}
+                  className="inline-flex items-center gap-2 text-sm font-extrabold text-[#061226]"
+                >
+                  <ChevronDown size={16} className={`text-[#64748b] transition-transform ${savedReviewsExpanded ? "rotate-180" : ""}`} />
+                  已保存对账
+                </button>
+                <div className="mt-1 text-xs font-semibold text-[#64748b]">最近保留 {savedReviews.length} 次；保存结果可展开查看或删除。</div>
               </div>
               <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
                 {savedReviews.slice(0, 8).map((review) => (
-                  <button
+                  <div
                     key={review.id}
-                    type="button"
-                    onClick={() => setSelectedReviewId(review.id)}
-                    className={`shrink-0 rounded-[10px] border px-3 py-2 text-left text-xs font-bold transition-colors ${
-                      selectedReview?.id === review.id ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e8eef6] bg-[#f8fbff] text-[#25324a] hover:bg-white"
+                    className={`flex shrink-0 items-stretch overflow-hidden rounded-[10px] border text-left text-xs font-bold transition-colors ${
+                      selectedReview?.id === review.id ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e8eef6] bg-[#f8fbff] text-[#25324a]"
                     }`}
                   >
-                    <span className="block">{review.month}</span>
-                    <span className="mt-0.5 block text-[10px] text-[#64748b]">{formatSavedAt(review.savedAt)}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedReviewId(review.id);
+                        setSavedReviewsExpanded(true);
+                      }}
+                      className="px-3 py-2 text-left hover:bg-white/70"
+                    >
+                      <span className="block">{savedReviewTitle(review)}</span>
+                      <span className="mt-0.5 block text-[10px] text-[#64748b]">{review.rawLessonCount} 节教务 · 待核对 {savedReviewNeedsAttention(review)}</span>
+                    </button>
+                    <button
+                      type="button"
+                      title="删除保存的对账结果"
+                      aria-label={`删除${savedReviewTitle(review)}`}
+                      onClick={() => {
+                        if (window.confirm("删除这条保存的对账结果？课程映射和差异标注会保留。")) {
+                          deleteSavedReview(review.id);
+                        }
+                      }}
+                      className="border-l border-[#dbe4ef] px-2 text-[#b91c1c] hover:bg-[#fee2e2]"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
-            {selectedReview && (
+            {savedReviewsExpanded && selectedReview && (
               <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="sky">{selectedReview.month}</Badge>
                   <Badge variant="secondary">{selectedReview.rawLessonCount} 节教务</Badge>
+                  <Badge variant="secondary">云端 {formatSavedReviewNumber(selectedReview.summary.systemLessonCount)} 节</Badge>
+                  <Badge variant="sage">已完成 {formatSavedReviewNumber(selectedReview.summary.systemCompletedLessonCount)} 节</Badge>
+                  <Badge variant="secondary">课时费 {formatSavedReviewAmount(selectedReview.summary.systemCompletedAmount, amountsVisible)}</Badge>
                   <Badge variant="sage">已对应 {selectedReview.summary.matched}</Badge>
                   <Badge variant={savedReviewNeedsAttention(selectedReview) > 0 ? "amber" : "secondary"}>待核对 {savedReviewNeedsAttention(selectedReview)}</Badge>
                 </div>
                 <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
-                  {selectedReview.rows.slice(0, 80).map((row) => (
-                    <div key={row.id} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
+                  {selectedReview.rows.map((row) => (
+                    <div key={row.id} className={`rounded-[10px] border bg-white px-3 py-2 ${row.resolutionStatus && row.resolutionStatus !== "unreviewed" ? "border-[#93c5fd] ring-1 ring-[#bfdbfe]" : "border-[#e8eef6]"}`}>
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={statusVariant(row.status)} className="text-[10px]">{statusLabel(row.status)}</Badge>
+                        {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && (
+                          <Badge variant="sky" className="text-[10px]">{resolutionStatusLabel(row.resolutionStatus)}</Badge>
+                        )}
                         <span className="text-xs font-extrabold text-[#061226]">{row.date} {row.startTime}-{row.endTime}</span>
                         <span className="text-xs font-semibold text-[#64748b]">{row.title}</span>
                       </div>
                       {row.systemLessonLabel && <div className="mt-1 text-[11px] font-semibold text-[#64748b]">云端：{row.systemLessonLabel}</div>}
                       {row.issues.length > 0 && <div className="mt-1 text-[11px] font-semibold text-[#9a3412]">{row.issues.join("；")}</div>}
+                      {row.resolutionNote && <div className="mt-1 text-[11px] font-semibold text-[#1557c2]">标注：{row.resolutionNote}</div>}
                     </div>
                   ))}
-                  {selectedReview.rows.length > 80 && (
-                    <div className="text-center text-xs font-bold text-[#64748b]">仅预览前 80 条，共 {selectedReview.rows.length} 条。</div>
-                  )}
                 </div>
               </div>
             )}
@@ -500,6 +569,7 @@ export function ScheduleImportPanel({
                 const isSelected = selectedDate === date;
                 const isCurrentMonth = date.startsWith(displayMonth);
                 const hasProblems = dayRows.some((row) => row.status !== "matched");
+                const reviewedDayCount = dayRows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
                 return (
                   <button
                     key={date}
@@ -510,6 +580,8 @@ export function ScheduleImportPanel({
                         ? "border-[#1557c2] bg-[#eaf2ff] shadow-[0_10px_24px_rgba(21,87,194,0.12)] ring-2 ring-[#bfdbfe]"
                         : !isCurrentMonth
                           ? "border-transparent bg-[#f8fbff] opacity-45"
+                          : reviewedDayCount > 0
+                            ? "border-[#93c5fd] bg-[#eaf2ff] ring-1 ring-[#bfdbfe]"
                           : hasProblems
                             ? "border-[#fed7aa] bg-[#fff7ed]"
                             : dayRows.length > 0
@@ -519,14 +591,20 @@ export function ScheduleImportPanel({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-extrabold text-[#061226]">{Number(date.slice(8))}</span>
-                      {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="text-[10px]">{dayRows.length}</Badge>}
+                      <div className="flex items-center gap-1">
+                        {reviewedDayCount > 0 && <Badge variant="sky" className="text-[10px]">已标 {reviewedDayCount}</Badge>}
+                        {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="text-[10px]">{dayRows.length}</Badge>}
+                      </div>
                     </div>
                     <div className="mt-2 flex flex-col gap-1">
-                      {dayRows.slice(0, 3).map((row) => (
-                        <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(row.status)}`}>
-                          {row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
-                        </span>
-                      ))}
+                      {dayRows.slice(0, 3).map((row) => {
+                        const rowReviewed = isReviewedResolution(resolutions[resolutionKey(row)]);
+                        return (
+                          <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(row.status, rowReviewed)}`}>
+                            {rowReviewed ? "已标 · " : ""}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
+                          </span>
+                        );
+                      })}
                       {dayRows.length > 3 && (
                         <span className="text-[10px] font-bold text-[#64748b]">+{dayRows.length - 3} 条</span>
                       )}
@@ -597,12 +675,13 @@ function ReconciliationRow({
 }) {
   const systemLesson = row.systemLessonId ? vault.lessons.find((lesson) => lesson.id === row.systemLessonId) : undefined;
   const resolutionStatus = resolution?.status ?? "unreviewed";
+  const reviewed = isReviewedResolution(resolution);
   return (
-    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(row.status)}`}>
+    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(row.status, reviewed)}`}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Badge variant={statusVariant(row.status)}>{statusLabel(row.status)}</Badge>
         <Badge variant="secondary">{row.date}</Badge>
-        {isReviewedResolution(resolution) && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
+        {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
       </div>
 
       <div className="grid grid-cols-1 gap-3">
@@ -798,17 +877,11 @@ function buildNextScheduleImportState(
   }
 ): ScheduleImportVaultState {
   const now = new Date().toISOString();
-  const review = buildReviewRecord(context, now);
+  const review = buildReviewRecord(vault, context, now);
   const previous = vault.scheduleImport;
   return {
-    mappings: {
-      ...(previous?.mappings ?? {}),
-      ...context.mapping
-    },
-    resolutions: {
-      ...(previous?.resolutions ?? {}),
-      ...context.resolutions
-    },
+    mappings: { ...context.mapping },
+    resolutions: { ...context.resolutions },
     reviews: [
       review,
       ...(previous?.reviews ?? []).filter((item) => item.id !== review.id)
@@ -818,6 +891,7 @@ function buildNextScheduleImportState(
 }
 
 function buildReviewRecord(
+  vault: TeacherVault,
   context: {
     rawLessons: ImportedScheduleLesson[];
     mapping: ScheduleImportMapping;
@@ -831,6 +905,7 @@ function buildReviewRecord(
   savedAt: string
 ): ScheduleImportReviewRecord {
   const fileNames = Array.from(new Set(context.rawLessons.map((lesson) => lesson.fileName))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  const systemLessonSummary = summarizeSystemLessonsForReview(vault, context.rows);
   return {
     id: `schedule-import-${savedAt}`,
     savedAt,
@@ -849,7 +924,10 @@ function buildReviewRecord(
       courseMismatch: context.summary.courseMismatch,
       systemMissing: context.summary.systemMissing,
       importMissing: context.summary.importMissing,
-      needsMapping: context.summary.needsMapping
+      needsMapping: context.summary.needsMapping,
+      systemLessonCount: systemLessonSummary.lessonCount,
+      systemCompletedLessonCount: systemLessonSummary.completedLessonCount,
+      systemCompletedAmount: systemLessonSummary.completedAmount
     },
     rows: context.rows.map((row) => {
       const resolution = context.resolutions[resolutionKey(row)];
@@ -890,8 +968,46 @@ function buildReviewRecord(
   };
 }
 
+function buildScheduleImportStateWithoutReview(
+  vault: TeacherVault,
+  mapping: ScheduleImportMapping,
+  resolutions: ScheduleImportResolutionMap
+): ScheduleImportVaultState {
+  return {
+    mappings: { ...mapping },
+    resolutions: { ...resolutions },
+    reviews: vault.scheduleImport?.reviews ?? [],
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function summarizeSystemLessonsForReview(vault: TeacherVault, rows: ImportPreviewLesson[]): { lessonCount: number; completedLessonCount: number; completedAmount: number } {
+  const lessonIds = Array.from(new Set(rows.map((row) => row.systemLessonId).filter((lessonId): lessonId is string => Boolean(lessonId))));
+  const lessons = lessonIds
+    .map((lessonId) => vault.lessons.find((lesson) => lesson.id === lessonId))
+    .filter((lesson): lesson is Lesson => Boolean(lesson));
+  const completedLessons = lessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
+  return {
+    lessonCount: lessons.length,
+    completedLessonCount: completedLessons.length,
+    completedAmount: completedLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0)
+  };
+}
+
 function savedReviewNeedsAttention(review: ScheduleImportReviewRecord): number {
   return review.summary.attendanceMismatch + review.summary.timeMismatch + review.summary.courseMismatch + review.summary.systemMissing + review.summary.importMissing + review.summary.needsMapping;
+}
+
+function savedReviewTitle(review: ScheduleImportReviewRecord): string {
+  return `${review.month} 对账 · ${formatSavedAt(review.savedAt)}`;
+}
+
+function formatSavedReviewNumber(value: number | undefined): string {
+  return value === undefined ? "-" : String(value);
+}
+
+function formatSavedReviewAmount(value: number | undefined, visible: boolean): string {
+  return value === undefined ? "-" : formatPrivateMoney(value, visible);
 }
 
 function formatSavedAt(value: string): string {
@@ -1176,7 +1292,8 @@ function statusVariant(status: ImportMatchStatus): "sage" | "amber" | "secondary
   return "amber";
 }
 
-function statusSurfaceClass(status: ImportMatchStatus): string {
+function statusSurfaceClass(status: ImportMatchStatus, reviewed = false): string {
+  if (reviewed) return "border-[#93c5fd] bg-[#eaf2ff] ring-1 ring-[#bfdbfe]";
   if (status === "matched") return "border-[#bbf7d0] bg-[#f0fdf4]";
   if (status === "time_mismatch" || status === "attendance_mismatch") return "border-[#fed7aa] bg-[#fff7ed]";
   if (status === "course_mismatch" || status === "system_missing") return "border-[#fecaca] bg-[#fff1f2]";
@@ -1184,7 +1301,8 @@ function statusSurfaceClass(status: ImportMatchStatus): string {
   return "border-[#dbe4ef] bg-[#f8fbff]";
 }
 
-function statusPillClass(status: ImportMatchStatus): string {
+function statusPillClass(status: ImportMatchStatus, reviewed = false): string {
+  if (reviewed) return "bg-[#dbeafe] text-[#1557c2] ring-1 ring-[#93c5fd]";
   if (status === "matched") return "bg-[#e8f8ef] text-[#15803d]";
   if (status === "time_mismatch" || status === "attendance_mismatch") return "bg-[#fff3e4] text-[#9a3412]";
   if (status === "course_mismatch" || status === "system_missing") return "bg-[#fee2e2] text-[#b91c1c]";
