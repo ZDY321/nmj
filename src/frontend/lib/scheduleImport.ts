@@ -302,11 +302,11 @@ export function downloadMergedScheduleWorkbook(lessons: ImportedScheduleLesson[]
     { wch: 34 },
     { wch: 10 },
     { wch: 12 },
-    { wch: 12 },
+    { wch: 8 },
+    { wch: 8 },
     { wch: 12 },
     { wch: 14 },
-    { wch: 8 },
-    { wch: 8 },
+    { wch: 12 },
     { wch: 12 },
     { wch: 14 },
     { wch: 24 },
@@ -346,7 +346,13 @@ function buildMergedDailyRows(
   summary: MergedScheduleExportSummary
 ): Array<Array<string | number>> {
   return [
-    ["来源文件数", summary.fileCount, "日期天数", summary.dayCount, "总课节", summary.lessonCount, "实际开课", summary.actualLessonCount, "有学生未到", summary.absentLessonCount],
+    [
+      `来源文件数：${summary.fileCount}`,
+      `日期天数：${summary.dayCount}`,
+      `总课节：${summary.lessonCount}`,
+      `实际开课：${summary.actualLessonCount}`,
+      `有学生未到：${summary.absentLessonCount}`
+    ],
     [],
     ["日期", "星期", "总课节", "实际开课", "有学生未到", "应到总人次", "实到总人次", "同日课程合并"],
     ...dayGroups.map(({ date, lessons }) => {
@@ -370,7 +376,7 @@ function buildMergedDailyRows(
 
 function buildMergedDetailRows(lessons: ImportedScheduleLesson[]): Array<Array<string | number>> {
   return [
-    ["日期", "星期", "开始", "结束", "校区", "课程", "科目", "班型", "教师", "助教", "教室", "实到", "应到", "实际开课", "有学生未到", "来源文件", "原始内容"],
+    ["日期", "星期", "开始", "结束", "校区", "课程", "科目", "班型", "实到", "应到", "实际开课", "有学生未到", "教师", "助教", "教室", "来源文件", "原始内容"],
     ...lessons.map((lesson) => [
       lesson.date,
       weekdayLabel(lesson.date),
@@ -380,13 +386,13 @@ function buildMergedDetailRows(lessons: ImportedScheduleLesson[]): Array<Array<s
       lesson.title,
       lesson.subjectHint || "未知科目",
       importedCourseTypeLabel(lesson.courseTypeHint),
-      lesson.teacher ?? "",
-      lesson.assistant ?? "",
-      lesson.room ?? "",
       lesson.presentCount ?? "",
       lesson.expectedCount ?? "",
       isActualImportedLesson(lesson) ? "是" : "否",
       hasAbsentImportedStudent(lesson) ? "是" : "否",
+      lesson.teacher ?? "",
+      lesson.assistant ?? "",
+      lesson.room ?? "",
       lesson.fileName,
       lesson.rawText
     ])
