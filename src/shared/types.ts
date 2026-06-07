@@ -116,6 +116,23 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export type WeekStart = 0 | 1;
 
+export type SalaryGradeStage =
+  | "primary"
+  | "junior_1_2"
+  | "junior_3"
+  | "senior_1"
+  | "senior_2"
+  | "senior_3";
+
+export type SalaryGradeLevel =
+  | "beginner"
+  | "intermediate"
+  | "advanced_1"
+  | "advanced_2"
+  | "reserve";
+
+export type SalaryGradeId = `${SalaryGradeStage}:${SalaryGradeLevel}`;
+
 export type ClassFeeTier = {
   id: string;
   minStudents: number;
@@ -155,12 +172,14 @@ export type Student = {
 };
 
 export type FeeRule = {
-  mode: "hourly" | "fixed" | "class_headcount";
+  mode: "hourly" | "fixed" | "class_headcount" | "salary_grade";
   hourlyRate?: number;
   fixedFee?: number;
   baseFee?: number;
   perPresentStudentFee?: number;
   classFeeTiers?: ClassFeeTier[];
+  salaryGradeSource?: "teacher_default" | "specific";
+  salaryGradeId?: SalaryGradeId;
   makeupFeeMode?: "sameAsOriginal" | "perStudentFee" | "custom";
 };
 
@@ -211,8 +230,16 @@ export type FeeSnapshot = {
   baseFee?: number;
   hourlyRate?: number;
   fixedFee?: number;
+  oneOnOneFee?: number;
   perPresentStudentFee?: number;
   classFeeTierId?: string;
+  salaryGradeId?: SalaryGradeId;
+  salaryGradeLabel?: string;
+  headcountBaseStudentCount?: number;
+  headcountIncrementFee?: number;
+  lessonUnitHours?: number;
+  durationMultiplier?: number;
+  unitAmount?: number;
   presentStudentCount?: number;
   trialStudentCount?: number;
   trialFee?: number;
@@ -281,6 +308,7 @@ export type TeacherProfile = {
   displayName: string;
   baseSalary: number;
   currency: "CNY";
+  defaultSalaryGradeId?: SalaryGradeId;
   phone?: string;
   email?: string;
   homeCampusId?: string;

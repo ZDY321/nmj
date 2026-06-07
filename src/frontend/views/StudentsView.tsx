@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, CustomCourseTypeOption, FeeRule, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
+import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, CustomCourseTypeOption, FeeRule, SalaryGradeId, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
-import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, todayIso } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRuleById, salaryGradeRules, salaryGradeAmountForCount, todayIso } from "@/frontend/lib/calculations";
 import { builtInCourseTypeOptions, campusName, compareByName, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
@@ -71,6 +71,7 @@ export function StudentsView({
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseTypeOptions = courseTypeOptionsForVault(vault);
   const subjectOptions = subjectOptionsForVault(vault);
+  const selectedProfileSalaryGrade = salaryGradeRuleById(vault.profile.defaultSalaryGradeId);
   const studentOptions = sortStudentsByName(vault.students);
   const activeStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status !== "paused"));
   const archivedStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "paused"));
@@ -557,7 +558,105 @@ export function StudentsView({
   }
 
   function courseTypeDefaultFeeRule(type: CourseType): FeeRule {
+    if (supportsSalaryGradeFee(type) && vault.profile.defaultSalaryGradeId) {
+      return {
+        mode: "salary_grade",
+        salaryGradeSource: "teacher_default",
+        salaryGradeId: vault.profile.defaultSalaryGradeId
+      };
+    }
     return feeRuleForCourseType(vault, type);
+  }
+
+  function customFeeRuleForCourseType(type: CourseType): FeeRule {
+    if (type === "trial") return defaultFeeRuleForCourseType("trial");
+    if (supportsSalaryGradeFee(type)) {
+      const minStudents = classHeadcountBaseStudentCount(type);
+      const tier = {
+        id: "tier_1_plus",
+        minStudents,
+        baseFee: 0,
+        perStudentFee: 0
+      };
+      return {
+        mode: "class_headcount",
+        baseFee: tier.baseFee,
+        perPresentStudentFee: tier.perStudentFee,
+        classFeeTiers: [tier],
+        makeupFeeMode: "perStudentFee"
+      };
+    }
+    return { mode: "hourly", hourlyRate: 0 };
+  }
+
+  function salaryGradeDefaultFeeRule(): FeeRule {
+    return {
+      mode: "salary_grade",
+      salaryGradeSource: "teacher_default",
+      salaryGradeId: vault.profile.defaultSalaryGradeId
+    };
+  }
+
+  function salaryGradeSpecificFeeRule(id?: SalaryGradeId): FeeRule {
+    return {
+      mode: "salary_grade",
+      salaryGradeSource: "specific",
+      salaryGradeId: id ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule().id
+    };
+  }
+
+  function supportsSalaryGradeFee(type: CourseType): boolean {
+    return type !== "trial" && type !== "full_time";
+  }
+
+  function feeModeValue(rule: FeeRule): "salary_default" | "salary_specific" | "custom" {
+    if (rule.mode !== "salary_grade") return "custom";
+    return rule.salaryGradeSource === "specific" ? "salary_specific" : "salary_default";
+  }
+
+  function changeNewCourseFeeMode(mode: "salary_default" | "salary_specific" | "custom") {
+    if (mode === "salary_default") {
+      setCourseFeeRule(salaryGradeDefaultFeeRule());
+      return;
+    }
+    if (mode === "salary_specific") {
+      setCourseFeeRule(salaryGradeSpecificFeeRule());
+      return;
+    }
+    setCourseFeeRule(customFeeRuleForCourseType(courseType));
+  }
+
+  function changeNewCourseSalaryGrade(salaryGradeId: string) {
+    setCourseFeeRule(salaryGradeSpecificFeeRule(salaryGradeId as SalaryGradeId));
+  }
+
+  function changeEditingCourseFeeMode(mode: "salary_default" | "salary_specific" | "custom") {
+    setEditingCourse((current) => {
+      if (!current) return current;
+      if (mode === "salary_default") {
+        return { ...current, feeRule: salaryGradeDefaultFeeRule() };
+      }
+      if (mode === "salary_specific") {
+        const currentGradeId = current.feeRule.mode === "salary_grade" ? current.feeRule.salaryGradeId : undefined;
+        return { ...current, feeRule: salaryGradeSpecificFeeRule(currentGradeId) };
+      }
+      return { ...current, feeRule: customFeeRuleForCourseType(current.type) };
+    });
+  }
+
+  function changeEditingCourseSalaryGrade(salaryGradeId: string) {
+    setEditingCourse((current) =>
+      current ? { ...current, feeRule: salaryGradeSpecificFeeRule(salaryGradeId as SalaryGradeId) } : current
+    );
+  }
+
+  function updateDefaultSalaryGrade(salaryGradeId: string) {
+    const rule = salaryGradeRuleById(salaryGradeId as SalaryGradeId);
+    if (!rule) return;
+    updateProfile({
+      defaultSalaryGradeId: rule.id,
+      baseSalary: rule.baseSalary
+    });
   }
 
   function buildSuggestedCourseName(type: CourseType, studentIds: string[]): string {
@@ -719,7 +818,7 @@ export function StudentsView({
     const nextRule = type === "trial"
       ? defaultFeeRuleForCourseType("trial")
       : current.mode === "class_headcount"
-        ? defaultFeeRuleForCourseType("class")
+        ? customFeeRuleForCourseType(type)
         : { mode: "hourly" as const, hourlyRate: 0 };
     onUpdateCourseTypeFeeRule(type, nextRule);
     if (courseType === type) {
@@ -728,8 +827,15 @@ export function StudentsView({
   }
 
   function courseFeeSummary(course: CourseGroup): string {
+    if (course.feeRule.mode === "salary_grade") {
+      const rule = resolveSalaryGradeRule(vault, course.feeRule);
+      if (!rule) return "岗位薪资：未设置默认等级";
+      const amount = salaryGradeAmountForCount(rule, course.type, course.studentIds.length);
+      const source = course.feeRule.salaryGradeSource === "specific" ? "指定岗位" : "跟随默认岗位";
+      return `${source}：${salaryGradeLabel(rule)}，当前 ${course.studentIds.length} 人 2小时标准课预估 ${formatPrivateMoney(amount, amountsVisible)}`;
+    }
     if (course.feeRule.mode === "class_headcount") {
-      return `当前 ${course.studentIds.length} 人单节预估：${formatPrivateMoney(calculateClassHeadcountFee(course.feeRule, course.studentIds.length), amountsVisible)}`;
+      return `当前 ${course.studentIds.length} 人 2小时标准课预估：${formatPrivateMoney(calculateClassHeadcountFee(course.feeRule, course.studentIds.length), amountsVisible)}`;
     }
     if (course.feeRule.mode === "fixed") {
       return `单节固定费用：${formatPrivateMoney(course.feeRule.fixedFee ?? 0, amountsVisible)}`;
@@ -1197,6 +1303,17 @@ export function StudentsView({
                   </SensitiveAmountField>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-medium">默认岗位薪资等级</label>
+                  <Select value={vault.profile.defaultSalaryGradeId ?? ""} onChange={(event) => updateDefaultSalaryGrade(event.target.value)}>
+                    <option value="">未设置</option>
+                    {salaryGradeRules.map((rule) => (
+                      <option key={rule.id} value={rule.id}>
+                        {salaryGradeLabel(rule)} · 底薪 {rule.baseSalary}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-medium">基本工资</label>
                   <SensitiveAmountField visible={amountsVisible}>
                     <div className="relative">
@@ -1213,6 +1330,14 @@ export function StudentsView({
                       />
                     </div>
                   </SensitiveAmountField>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">岗位课时规则</label>
+                  <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
+                    {selectedProfileSalaryGrade
+                      ? `保底 5 节/月，每节 2 小时；一对一 ${formatPrivateMoney(selectedProfileSalaryGrade.oneOnOneFee, amountsVisible)}；班课底费 ${formatPrivateMoney(selectedProfileSalaryGrade.classBaseFee, amountsVisible)}；人头加价 ${formatPrivateMoney(selectedProfileSalaryGrade.headcountIncrementFee, amountsVisible)}。`
+                      : "未设置默认岗位薪资等级，新课程不会自动套用岗位课时费。"}
+                  </div>
                 </div>
                 <div className="space-y-2 lg:col-span-3">
                   <label className="text-sm font-medium">个人备注</label>
@@ -1830,7 +1955,7 @@ export function StudentsView({
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm font-extrabold text-[#061226]">默认人数计费</div>
-                      <div className="text-xs font-semibold text-[#64748b]">按单节课计费，不按小时相乘；添加课程档案后可单独微调。</div>
+                      <div className="text-xs font-semibold text-[#64748b]">按 2 小时为 1 节设置标准课金额；实际课时费按上课时长 / 2 折算。</div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <div className="space-y-1">
@@ -2221,12 +2346,49 @@ export function StudentsView({
                 </Select>
               </div>
 
-              {courseFeeRule.mode === "class_headcount" ? (
+              {supportsSalaryGradeFee(courseType) && (
+                <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-white p-3">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm font-extrabold text-[#061226]">课时费来源</div>
+                    <div className="text-xs font-semibold text-[#64748b]">
+                      岗位薪资按 2 小时为 1 节设置标准课金额；实际课时费按上课时长 / 2 折算。
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Select value={feeModeValue(courseFeeRule)} onChange={(event) => changeNewCourseFeeMode(event.target.value as "salary_default" | "salary_specific" | "custom")}>
+                      <option value="salary_default">跟随老师默认岗位薪资</option>
+                      <option value="salary_specific">指定岗位薪资等级</option>
+                      <option value="custom">自定义课时费</option>
+                    </Select>
+                    {courseFeeRule.mode === "salary_grade" && courseFeeRule.salaryGradeSource === "specific" && (
+                      <Select value={courseFeeRule.salaryGradeId ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule().id} onChange={(event) => changeNewCourseSalaryGrade(event.target.value)}>
+                        {salaryGradeRules.map((rule) => (
+                          <option key={rule.id} value={rule.id}>{salaryGradeLabel(rule)}</option>
+                        ))}
+                      </Select>
+                    )}
+                  </div>
+                  {courseFeeRule.mode === "salary_grade" && (
+                    <div className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
+                      {resolveSalaryGradeRule(vault, courseFeeRule)
+                        ? (() => {
+                            const rule = resolveSalaryGradeRule(vault, courseFeeRule);
+                            return rule
+                              ? `${salaryGradeLabel(rule)}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rule.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rule.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rule.headcountIncrementFee, amountsVisible)}。`
+                              : "";
+                          })()
+                        : "还没有设置老师默认岗位薪资等级，请先在老师个人信息里设置，或改为指定岗位薪资等级。"}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {courseFeeRule.mode !== "salary_grade" && (courseFeeRule.mode === "class_headcount" ? (
                 <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-white p-3">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                     <div className="text-xs font-semibold text-[#64748b]">
-                      当前关联 {courseStudentIds.length} 人，单节预计 {formatPrivateMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length), amountsVisible)}，不按小时相乘；课时统计按就近半小时归一
+                      当前关联 {courseStudentIds.length} 人，2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length), amountsVisible)}，实际按上课时长 / 2 折算
                     </div>
                   </div>
                   {normalizedClassFeeTiers(courseFeeRule).slice(0, 1).map((tier) => (
@@ -2291,7 +2453,7 @@ export function StudentsView({
                 <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-end">
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">课程费用</div>
-                    <div className="mt-1 text-xs font-semibold text-[#64748b]">按开始和结束时间自动折算课时费。</div>
+                    <div className="mt-1 text-xs font-semibold text-[#64748b]">全日制按开始和结束时间自动折算课时费。</div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold text-[#64748b]">每小时费用</label>
@@ -2306,7 +2468,7 @@ export function StudentsView({
                     </SensitiveAmountField>
                   </div>
                 </div>
-              )}
+              ))}
 
               <div className="space-y-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -2687,9 +2849,12 @@ export function StudentsView({
                     onChange={(event) => {
                       const nextType = event.target.value as CourseType;
                       const nextStudentIds = normalizeCourseStudentIds(nextType, editingCourse.studentIds);
+                      const nextFeeRule = supportsSalaryGradeFee(nextType) && editingCourse.feeRule.mode === "salary_grade"
+                        ? editingCourse.feeRule
+                        : courseTypeDefaultFeeRule(nextType);
                       updateEditingCourse({
                         type: nextType,
-                        feeRule: courseTypeDefaultFeeRule(nextType),
+                        feeRule: nextFeeRule,
                         studentIds: nextStudentIds,
                         defaultCampusId: firstCourseStudentCampus(nextStudentIds) ?? editingCourse.defaultCampusId
                       });
@@ -2718,12 +2883,49 @@ export function StudentsView({
                   </Select>
                 </div>
 
-                {editingCourse.feeRule.mode === "class_headcount" ? (
+                {supportsSalaryGradeFee(editingCourse.type) && (
+                  <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+                    <div>
+                      <div className="text-sm font-extrabold text-[#061226]">课时费来源</div>
+                      <div className="mt-1 text-xs font-semibold text-[#64748b]">
+                        保存后只会同步未来待上课课节；已完成课时保留原金额快照。
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Select value={feeModeValue(editingCourse.feeRule)} onChange={(event) => changeEditingCourseFeeMode(event.target.value as "salary_default" | "salary_specific" | "custom")}>
+                        <option value="salary_default">跟随老师默认岗位薪资</option>
+                        <option value="salary_specific">指定岗位薪资等级</option>
+                        <option value="custom">自定义课时费</option>
+                      </Select>
+                      {editingCourse.feeRule.mode === "salary_grade" && editingCourse.feeRule.salaryGradeSource === "specific" && (
+                        <Select value={editingCourse.feeRule.salaryGradeId ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule().id} onChange={(event) => changeEditingCourseSalaryGrade(event.target.value)}>
+                          {salaryGradeRules.map((rule) => (
+                            <option key={rule.id} value={rule.id}>{salaryGradeLabel(rule)}</option>
+                          ))}
+                        </Select>
+                      )}
+                    </div>
+                    {editingCourse.feeRule.mode === "salary_grade" && (
+                      <div className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
+                        {resolveSalaryGradeRule(vault, editingCourse.feeRule)
+                          ? (() => {
+                              const rule = resolveSalaryGradeRule(vault, editingCourse.feeRule);
+                              return rule
+                                ? `${salaryGradeLabel(rule)}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rule.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rule.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rule.headcountIncrementFee, amountsVisible)}。`
+                                : "";
+                            })()
+                          : "还没有设置老师默认岗位薪资等级，请先在老师个人信息里设置，或改为指定岗位薪资等级。"}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {editingCourse.feeRule.mode !== "salary_grade" && (editingCourse.feeRule.mode === "class_headcount" ? (
                   <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                     <div>
                       <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                       <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        当前关联 {editingCourse.studentIds.length} 人，单节预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length), amountsVisible)}，不按小时相乘；课时统计按就近半小时归一。
+                        当前关联 {editingCourse.studentIds.length} 人，2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length), amountsVisible)}，实际按上课时长 / 2 折算。
                       </div>
                     </div>
                     {normalizedClassFeeTiers(editingCourse.feeRule).slice(0, 1).map((tier) => (
@@ -2779,7 +2981,7 @@ export function StudentsView({
                       />
                     </SensitiveAmountField>
                   </div>
-                ) : (
+                ) : editingCourse.feeRule.mode === "hourly" ? (
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-[#64748b]">每小时费用</label>
                     <SensitiveAmountField visible={amountsVisible}>
@@ -2791,7 +2993,7 @@ export function StudentsView({
                       />
                     </SensitiveAmountField>
                   </div>
-                )}
+                ) : null)}
 
                 <div className="space-y-2">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -2976,6 +3178,10 @@ function normalizeStudentDuplicateValue(value: string): string {
   return value.trim().replace(/\s+/g, "").toLowerCase();
 }
 
+function classHeadcountBaseStudentCount(type: CourseType): number {
+  return type === "class" ? 5 : 1;
+}
+
 function defaultFeeRuleForCustomTemplate(
   template: "class" | "hourly",
   minStudents = 1,
@@ -3008,11 +3214,26 @@ function normalizeCourseFeeRuleForType(type: CourseType, feeRule: FeeRule): FeeR
       fixedFee: fixedFeeForRule(feeRule)
     };
   }
+  if (feeRule.mode === "salary_grade") {
+    return {
+      mode: "salary_grade",
+      salaryGradeSource: feeRule.salaryGradeSource ?? "teacher_default",
+      salaryGradeId: feeRule.salaryGradeId
+    };
+  }
   if (feeRule.mode === "class_headcount") {
+    const tier = normalizedClassFeeTiers(feeRule)[0] ?? defaultClassFeeTiers(feeRule)[0];
+    const normalizedTier = {
+      ...tier,
+      minStudents: Number.isFinite(tier.minStudents) ? Math.max(Math.round(tier.minStudents), 0) : classHeadcountBaseStudentCount(type),
+      maxStudents: undefined
+    };
     return {
       ...feeRule,
       mode: "class_headcount",
-      classFeeTiers: [{ ...(normalizedClassFeeTiers(feeRule)[0] ?? defaultClassFeeTiers(feeRule)[0]), maxStudents: undefined }]
+      baseFee: normalizedTier.baseFee,
+      perPresentStudentFee: normalizedTier.perStudentFee,
+      classFeeTiers: [normalizedTier]
     };
   }
   return feeRule;

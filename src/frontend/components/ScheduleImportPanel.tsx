@@ -9,6 +9,7 @@ import type {
   CourseGroup,
   CourseType,
   Lesson,
+  ScheduleImportSavedRow,
   ScheduleImportResolution,
   ScheduleImportResolutionMap,
   ScheduleImportResolutionStatus,
@@ -111,7 +112,8 @@ export function ScheduleImportPanel({
     () => [...importedRows, ...buildLocalOnlyRows(vault, importedRows, rawLessons)],
     [importedRows, rawLessons, vault]
   );
-  const summary = useMemo(() => summarizeImportPreview(rows), [rows]);
+  const effectiveRows = useMemo(() => rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)])), [resolutions, rows]);
+  const summary = useMemo(() => summarizeImportPreview(effectiveRows), [effectiveRows]);
   const fileSummaries = useMemo(() => summarizeFiles(rawLessons), [rawLessons]);
   const monthOptions = useMemo(
     () => Array.from(new Set(rows.map((row) => row.date.slice(0, 7)))).sort(),
@@ -121,10 +123,11 @@ export function ScheduleImportPanel({
   const filteredRows = useMemo(() => rows.filter((row) => matchesImportRowFilters(row, {
     campusFilter,
     month: displayMonth,
+    resolutions,
     search,
     statusFilter,
     vault
-  })), [campusFilter, displayMonth, rows, search, statusFilter, vault]);
+  })), [campusFilter, displayMonth, resolutions, rows, search, statusFilter, vault]);
   const selectedDateRows = filteredRows.filter((row) => row.date === selectedDate);
   const weekStartPreference = weekStartsOn(vault);
   const days = calendarDates(displayMonth, weekStartPreference);
@@ -133,6 +136,7 @@ export function ScheduleImportPanel({
   const reviewedCount = rows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
   const savedReviews = vault.scheduleImport?.reviews ?? [];
   const selectedReview = savedReviews.find((review) => review.id === selectedReviewId) ?? savedReviews[0];
+  const selectedReviewCounts = selectedReview ? savedReviewEffectiveCounts(selectedReview) : undefined;
 
   useEffect(() => {
     setMapping((current) => ({ ...cloudMapping, ...current }));
@@ -236,11 +240,11 @@ export function ScheduleImportPanel({
     setStatusFilter(effectiveStatus);
     const currentDateStillHasRows = rows.some((row) =>
       row.date === selectedDate &&
-      matchesImportRowFilters(row, { campusFilter, month: displayMonth, search, statusFilter: effectiveStatus, vault })
+      matchesImportRowFilters(row, { campusFilter, month: displayMonth, resolutions, search, statusFilter: effectiveStatus, vault })
     );
     if (currentDateStillHasRows) return;
     const firstRow = rows.find((row) =>
-      matchesImportRowFilters(row, { campusFilter, month: displayMonth, search, statusFilter: effectiveStatus, vault })
+      matchesImportRowFilters(row, { campusFilter, month: displayMonth, resolutions, search, statusFilter: effectiveStatus, vault })
     );
     if (firstRow) {
       setSelectedDate(firstRow.date);
@@ -400,6 +404,9 @@ export function ScheduleImportPanel({
                 </div>
               ))}
             </div>
+            <div className="mt-3 rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2]">
+              文件名里的括号内容会被自动识别为校区，例如“2026-05-课表（城南校区）.xlsx”会识别“城南校区”；未识别或名称不完全一致时，在右侧手动选择校区即可。
+            </div>
           </div>
 
           <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
@@ -496,26 +503,10 @@ export function ScheduleImportPanel({
                   <Badge variant="secondary">云端 {formatSavedReviewNumber(selectedReview.summary.systemLessonCount)} 节</Badge>
                   <Badge variant="sage">已完成 {formatSavedReviewNumber(selectedReview.summary.systemCompletedLessonCount)} 节</Badge>
                   <Badge variant="secondary">课时费 {formatSavedReviewAmount(selectedReview.summary.systemCompletedAmount, amountsVisible)}</Badge>
-                  <Badge variant="sage">已对应 {selectedReview.summary.matched}</Badge>
+                  <Badge variant="sage">已对应 {selectedReviewCounts?.matched ?? selectedReview.summary.matched}</Badge>
                   <Badge variant={savedReviewNeedsAttention(selectedReview) > 0 ? "amber" : "secondary"}>待核对 {savedReviewNeedsAttention(selectedReview)}</Badge>
                 </div>
-                <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
-                  {selectedReview.rows.map((row) => (
-                    <div key={row.id} className={`rounded-[10px] border bg-white px-3 py-2 ${row.resolutionStatus && row.resolutionStatus !== "unreviewed" ? "border-[#93c5fd] ring-1 ring-[#bfdbfe]" : "border-[#e8eef6]"}`}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={statusVariant(row.status)} className="text-[10px]">{statusLabel(row.status)}</Badge>
-                        {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && (
-                          <Badge variant="sky" className="text-[10px]">{resolutionStatusLabel(row.resolutionStatus)}</Badge>
-                        )}
-                        <span className="text-xs font-extrabold text-[#061226]">{row.date} {row.startTime}-{row.endTime}</span>
-                        <span className="text-xs font-semibold text-[#64748b]">{row.title}</span>
-                      </div>
-                      {row.systemLessonLabel && <div className="mt-1 text-[11px] font-semibold text-[#64748b]">云端：{row.systemLessonLabel}</div>}
-                      {row.issues.length > 0 && <IssueList issues={row.issues} compact />}
-                      {row.resolutionNote && <div className="mt-1 text-[11px] font-semibold text-[#1557c2]">标注：{row.resolutionNote}</div>}
-                    </div>
-                  ))}
-                </div>
+                <SavedReviewRows review={selectedReview} vault={vault} />
               </div>
             )}
           </div>
@@ -582,7 +573,7 @@ export function ScheduleImportPanel({
                 const dayRows = filteredRows.filter((row) => row.date === date);
                 const isSelected = selectedDate === date;
                 const isCurrentMonth = date.startsWith(displayMonth);
-                const hasProblems = dayRows.some((row) => row.status !== "matched");
+                const hasProblems = dayRows.some((row) => effectiveRowStatus(row, resolutions[resolutionKey(row)]) !== "matched");
                 const reviewedDayCount = dayRows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
                 return (
                   <button
@@ -613,8 +604,9 @@ export function ScheduleImportPanel({
                     <div className="mt-2 flex flex-col gap-1">
                       {dayRows.slice(0, 3).map((row) => {
                         const rowReviewed = isReviewedResolution(resolutions[resolutionKey(row)]);
+                        const rowStatus = effectiveRowStatus(row, resolutions[resolutionKey(row)]);
                         return (
-                          <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(row.status, rowReviewed)}`}>
+                          <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(rowStatus, rowReviewed)}`}>
                             {rowReviewed ? "已标 · " : ""}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
                           </span>
                         );
@@ -638,8 +630,8 @@ export function ScheduleImportPanel({
                   </div>
                   <div className="mt-1 text-xs font-semibold text-[#64748b]">当前筛选 {selectedDateRows.length} 条</div>
                 </div>
-                <Badge variant={selectedDateRows.some((row) => row.status !== "matched") ? "amber" : "sage"}>
-                  {selectedDateRows.some((row) => row.status !== "matched") ? "有差异" : "已对应"}
+                <Badge variant={selectedDateRows.some((row) => effectiveRowStatus(row, resolutions[resolutionKey(row)]) !== "matched") ? "amber" : "sage"}>
+                  {selectedDateRows.some((row) => effectiveRowStatus(row, resolutions[resolutionKey(row)]) !== "matched") ? "有差异" : "已对应"}
                 </Badge>
               </div>
             </div>
@@ -690,6 +682,7 @@ function ReconciliationRow({
   const systemLesson = row.systemLessonId ? vault.lessons.find((lesson) => lesson.id === row.systemLessonId) : undefined;
   const resolutionStatus = resolution?.status ?? "unreviewed";
   const reviewed = isReviewedResolution(resolution);
+  const displayStatus = effectiveRowStatus(row, resolution);
   const isMatched = row.status === "matched";
   const [detailsExpanded, setDetailsExpanded] = useState(() => row.status !== "matched");
 
@@ -700,11 +693,11 @@ function ReconciliationRow({
   }, [row.status]);
 
   return (
-    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(row.status, reviewed)}`}>
+    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(displayStatus, reviewed)}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge variant={statusVariant(row.status)}>{statusLabel(row.status)}</Badge>
+            <Badge variant={statusVariant(displayStatus)}>{statusLabel(displayStatus)}</Badge>
             <Badge variant="secondary">{row.date}</Badge>
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
           </div>
@@ -941,12 +934,100 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
 }
 
 function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): string {
-  return [
-    course.name,
-    course.subject,
-    courseTypeLabel(vault, course.type),
-    studentNames(vault, course.studentIds) || "未设置学生"
-  ].join(" · ");
+  return localCourseName(vault, course.id);
+}
+
+function SavedReviewRows({ review, vault }: { review: ScheduleImportReviewRecord; vault: TeacherVault }) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const filteredRows = useMemo(() => review.rows.filter((row) => matchesSavedReviewRowFilters(row, {
+    search,
+    statusFilter,
+    vault
+  })), [review.rows, search, statusFilter, vault]);
+
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+        <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+          <option value="all">全部状态</option>
+          <option value="matched">已对应</option>
+          <option value="attendance_mismatch">到课异常</option>
+          <option value="time_mismatch">时间不一致</option>
+          <option value="course_mismatch">课程不一致</option>
+          <option value="system_missing">云端缺少</option>
+          <option value="import_missing">教务缺少</option>
+          <option value="needs_mapping">待映射</option>
+        </Select>
+        <label className="relative block">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+          <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索保存明细里的课程、学生、教室或差异" />
+        </label>
+      </div>
+
+      <div className="max-h-[520px] overflow-auto rounded-[12px] border border-[#dbe4ef] bg-white">
+        <table className="min-w-[980px] w-full text-left text-xs">
+          <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#64748b]">
+            <tr>
+              <th className="px-3 py-2 font-extrabold">状态</th>
+              <th className="px-3 py-2 font-extrabold">日期时间</th>
+              <th className="px-3 py-2 font-extrabold">教务 Excel</th>
+              <th className="px-3 py-2 font-extrabold">云端课表</th>
+              <th className="px-3 py-2 font-extrabold">到课</th>
+              <th className="px-3 py-2 font-extrabold">差异与标注</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRows.map((row) => {
+              const rowStatus = effectiveSavedRowStatus(row);
+              return (
+                <tr key={row.id} className="border-t border-[#e8eef6] align-top">
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col items-start gap-1">
+                      <Badge variant={statusVariant(rowStatus)} className="text-[10px]">{statusLabel(rowStatus)}</Badge>
+                      {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && (
+                        <Badge variant="sky" className="text-[10px]">{resolutionStatusLabel(row.resolutionStatus)}</Badge>
+                      )}
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 font-bold text-[#061226]">
+                    {row.date}<br />
+                    <span className="text-[#64748b]">{row.startTime}-{row.endTime}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="font-extrabold text-[#061226]">{row.status === "import_missing" ? "教务 Excel 缺少" : row.title}</div>
+                    <div className="mt-1 leading-5 text-[#64748b]">
+                      {row.campusName || "未识别校区"} · {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
+                      {row.room ? ` · 教室：${row.room}` : ""}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="font-extrabold text-[#061226]">{row.systemLessonLabel || "云端课表缺少"}</div>
+                    {row.matchedCourseId && (
+                      <div className="mt-1 leading-5 text-[#64748b]">课程档案：{localCourseName(vault, row.matchedCourseId)}</div>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 font-bold text-[#64748b]">
+                    教务 {formatSavedReviewCount(row.presentCount)}/{formatSavedReviewCount(row.expectedCount)}<br />
+                    云端 {formatSavedReviewCount(row.systemPresentCount)}/{formatSavedReviewCount(row.systemExpectedCount)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {row.issues.length > 0 ? <IssueList issues={row.issues} compact /> : <span className="font-semibold text-[#64748b]">无差异</span>}
+                    {row.resolutionNote && <div className="mt-2 rounded-[9px] border border-[#bfdbfe] bg-[#eaf2ff] px-2 py-1 font-semibold text-[#1557c2]">标注：{row.resolutionNote}</div>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filteredRows.length === 0 && (
+          <div className="p-8 text-center text-sm font-semibold text-[#64748b]">
+            这条保存对账里没有符合筛选的明细
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function buildNextScheduleImportState(
@@ -1067,6 +1148,16 @@ function buildScheduleImportStateWithoutReview(
   };
 }
 
+function effectiveRowStatus(row: ImportPreviewLesson, resolution?: ScheduleImportResolution): ImportMatchStatus {
+  if (row.status === "matched") return "matched";
+  if (resolutionMarksRowResolved(resolution?.status)) return "matched";
+  return row.status;
+}
+
+function applyResolutionToRow(row: ImportPreviewLesson, resolution?: ScheduleImportResolution): ImportPreviewLesson {
+  return { ...row, status: effectiveRowStatus(row, resolution) };
+}
+
 function summarizeSystemLessonsForReview(vault: TeacherVault, rows: ImportPreviewLesson[]): { lessonCount: number; completedLessonCount: number; completedAmount: number } {
   const lessonIds = Array.from(new Set(rows.map((row) => row.systemLessonId).filter((lessonId): lessonId is string => Boolean(lessonId))));
   const lessons = lessonIds
@@ -1081,7 +1172,54 @@ function summarizeSystemLessonsForReview(vault: TeacherVault, rows: ImportPrevie
 }
 
 function savedReviewNeedsAttention(review: ScheduleImportReviewRecord): number {
-  return review.summary.attendanceMismatch + review.summary.timeMismatch + review.summary.courseMismatch + review.summary.systemMissing + review.summary.importMissing + review.summary.needsMapping;
+  const counts = savedReviewEffectiveCounts(review);
+  return counts.attendanceMismatch + counts.timeMismatch + counts.courseMismatch + counts.systemMissing + counts.importMissing + counts.needsMapping;
+}
+
+function savedReviewEffectiveCounts(review: ScheduleImportReviewRecord): Pick<ScheduleImportReviewRecord["summary"], "matched" | "attendanceMismatch" | "timeMismatch" | "courseMismatch" | "systemMissing" | "importMissing" | "needsMapping"> {
+  if (review.rows.length === 0) {
+    return {
+      matched: review.summary.matched,
+      attendanceMismatch: review.summary.attendanceMismatch,
+      timeMismatch: review.summary.timeMismatch,
+      courseMismatch: review.summary.courseMismatch,
+      systemMissing: review.summary.systemMissing,
+      importMissing: review.summary.importMissing,
+      needsMapping: review.summary.needsMapping
+    };
+  }
+  return review.rows.reduce(
+    (counts, row) => {
+      const status = effectiveSavedRowStatus(row);
+      if (status === "matched") counts.matched += 1;
+      if (status === "attendance_mismatch") counts.attendanceMismatch += 1;
+      if (status === "time_mismatch") counts.timeMismatch += 1;
+      if (status === "course_mismatch") counts.courseMismatch += 1;
+      if (status === "system_missing") counts.systemMissing += 1;
+      if (status === "import_missing") counts.importMissing += 1;
+      if (status === "needs_mapping") counts.needsMapping += 1;
+      return counts;
+    },
+    {
+      matched: 0,
+      attendanceMismatch: 0,
+      timeMismatch: 0,
+      courseMismatch: 0,
+      systemMissing: 0,
+      importMissing: 0,
+      needsMapping: 0
+    }
+  );
+}
+
+function effectiveSavedRowStatus(row: ScheduleImportSavedRow): ImportMatchStatus {
+  if (row.status === "matched") return "matched";
+  if (resolutionMarksRowResolved(row.resolutionStatus)) return "matched";
+  return row.status;
+}
+
+function resolutionMarksRowResolved(status?: ScheduleImportResolutionStatus): boolean {
+  return status === "accepted" || status === "fixed" || status === "excel_error";
 }
 
 function parseTimeComparisonIssue(issue: string): { label: string; importDate: string; importTime: string; systemDate: string; systemTime: string; systemTitle?: string } | null {
@@ -1111,6 +1249,10 @@ function formatSavedReviewNumber(value: number | undefined): string {
 
 function formatSavedReviewAmount(value: number | undefined, visible: boolean): string {
   return value === undefined ? "-" : formatPrivateMoney(value, visible);
+}
+
+function formatSavedReviewCount(value: number | undefined): string {
+  return value === undefined ? "-" : String(value);
 }
 
 function formatSavedAt(value: string): string {
@@ -1216,11 +1358,11 @@ function applyCampusOverridesToLessons(
 
 function matchesImportRowFilters(
   row: ImportPreviewLesson,
-  filters: { month: string; campusFilter: string; statusFilter: StatusFilter; search: string; vault: TeacherVault }
+  filters: { month: string; campusFilter: string; statusFilter: StatusFilter; search: string; vault: TeacherVault; resolutions: ScheduleImportResolutionMap }
 ): boolean {
   if (filters.month && !row.date.startsWith(filters.month)) return false;
   if (filters.campusFilter !== "all" && row.campusId !== filters.campusFilter) return false;
-  if (filters.statusFilter !== "all" && row.status !== filters.statusFilter) return false;
+  if (filters.statusFilter !== "all" && effectiveRowStatus(row, filters.resolutions[resolutionKey(row)]) !== filters.statusFilter) return false;
   const terms = filters.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
   const haystack = [
@@ -1234,6 +1376,30 @@ function matchesImportRowFilters(
     row.matchedCourseId ? localCourseName(filters.vault, row.matchedCourseId) : "",
     row.systemPresentStudentNames ?? "",
     row.systemExpectedStudentNames ?? "",
+    ...row.issues
+  ].join(" ").toLowerCase();
+  return terms.every((term) => haystack.includes(term));
+}
+
+function matchesSavedReviewRowFilters(
+  row: ScheduleImportSavedRow,
+  filters: { statusFilter: StatusFilter; search: string; vault: TeacherVault }
+): boolean {
+  if (filters.statusFilter !== "all" && effectiveSavedRowStatus(row) !== filters.statusFilter) return false;
+  const terms = filters.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const haystack = [
+    row.title,
+    row.studentNameHint ?? "",
+    row.campusName,
+    row.subjectHint,
+    row.teacher ?? "",
+    row.room ?? "",
+    row.systemLessonLabel ?? "",
+    row.matchedCourseId ? localCourseName(filters.vault, row.matchedCourseId) : "",
+    row.systemPresentStudentNames ?? "",
+    row.systemExpectedStudentNames ?? "",
+    row.resolutionNote ?? "",
     ...row.issues
   ].join(" ").toLowerCase();
   return terms.every((term) => haystack.includes(term));

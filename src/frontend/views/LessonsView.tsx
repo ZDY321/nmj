@@ -11,7 +11,7 @@ import { TimeTextInput } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
 import type { AttendanceStatus, CourseType, Lesson, TeacherVault } from "@/shared/types";
-import { calculateFee, getCourse, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
   addDays,
@@ -237,11 +237,7 @@ export function LessonsView({
       )
     };
     if (course) {
-      nextLesson.feeSnapshot = {
-        ...nextLesson.feeSnapshot,
-        presentStudentCount: presentCount(nextLesson),
-        amount: calculateFee(course.feeRule, nextLesson)
-      };
+      nextLesson.feeSnapshot = buildFeeSnapshot(vault, course, nextLesson);
       if (nextLesson.attendance.some((e) => e.status === "leave_requested" || e.status === "absent")) {
         nextLesson.status = "makeup_pending";
       }

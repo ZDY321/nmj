@@ -31,7 +31,7 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
-import { billableHoursForLesson, calculateFee, classFeeTierForCount, currentAppHour, defaultFeeRuleForCourseType, extraFeeTotal, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, currentAppHour, defaultFeeRuleForCourseType, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   buildScheduleSyncLessonsForDate,
@@ -65,6 +65,7 @@ import type {
   ProgressChecklistCompletion,
   ProgressChecklistTemplate,
   SalaryAdjustment,
+  SalaryGradeId,
   Student,
   StudentCourseTransition,
   StudentProgressRecord,
@@ -808,6 +809,7 @@ export function App() {
     const aiDataFeeMode = (data: Record<string, unknown>): FeeRule["mode"] | null => {
       const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
       const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
+      if (mode === "salary_grade" || mode === "salary" || mode === "岗位薪资" || mode === "岗位薪资等级") return "salary_grade";
       if (mode === "class_headcount" || mode === "class") return "class_headcount";
       if (mode === "fixed") return "fixed";
       if (mode === "hourly") return "hourly";
@@ -837,7 +839,7 @@ export function App() {
     ): boolean => {
       const requestedMode = aiDataFeeMode(data);
       if (!requestedMode) return true;
-      const templateMode = feeRuleForCourseType(nextVault, type).mode;
+      const templateMode = defaultFeeRuleForVaultCourseType(nextVault, type).mode;
       if (requestedMode === templateMode) return true;
       blockers.push(
         `未写入课程「${courseLabel}」：AI 试图把班型「${courseTypeLabel(nextVault, type)}」从「${feeModeLabel(templateMode)}」改成「${feeModeLabel(requestedMode)}」。课程档案需沿用后台班型计费模式；请先在后台修改班型计费，或改选按人数计费的班型。`
@@ -853,7 +855,7 @@ export function App() {
       forceCheck = false
     ): string | null => {
       const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
-      const templateRule = fallback ?? feeRuleForCourseType(nextVault, type);
+      const templateRule = fallback ?? defaultFeeRuleForVaultCourseType(nextVault, type);
       const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
       const hasExplicitClassFeeSignal =
         mode === "class_headcount" ||
@@ -917,7 +919,7 @@ export function App() {
       const campus = campusByName(data.campus);
       const studentIds = studentIdsFromAiData(data);
       if (!enforceAiFeeModeMatchesCourseType(data, type, name)) return null;
-      const feeConfirmation = needsClassFeeConfirmation(data, type, studentIds.length, undefined, feeRuleForCourseType(nextVault, type).mode === "class_headcount");
+      const feeConfirmation = needsClassFeeConfirmation(data, type, studentIds.length, undefined, defaultFeeRuleForVaultCourseType(nextVault, type).mode === "class_headcount");
       if (feeConfirmation) {
         blockers.push(`未新增课程「${name}」：${feeConfirmation}`);
         return null;
@@ -2804,25 +2806,10 @@ function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Less
       trial: entry.trial ?? Boolean(vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
     }))
   };
-  const presentStudentCount = presentCount(normalizedLesson);
-  const classFeeTier = course.feeRule.mode === "class_headcount"
-    ? classFeeTierForCount(course.feeRule, presentStudentCount)
-    : undefined;
   return {
     ...normalizedLesson,
     feeSnapshot: {
-      ...normalizedLesson.feeSnapshot,
-      baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
-      hourlyRate: course.feeRule.hourlyRate,
-      fixedFee: course.feeRule.fixedFee,
-      perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
-      classFeeTierId: classFeeTier?.id,
-      presentStudentCount,
-      trialStudentCount: namedTrialStudentCount(normalizedLesson) + (normalizedLesson.trialStudentCount ?? 0),
-      trialFee: normalizedLesson.trialFee ?? 0,
-      hours: billableHoursForLesson(normalizedLesson, course.feeRule),
-      manualAdjustment: extraFeeTotal(normalizedLesson, course.feeRule),
-      amount: calculateFee(course.feeRule, normalizedLesson)
+      ...buildFeeSnapshot(vault, course, normalizedLesson)
     }
   };
 }
@@ -3050,9 +3037,21 @@ function numberValue(value: unknown): number | undefined {
 }
 
 function feeModeLabel(mode: FeeRule["mode"]): string {
+  if (mode === "salary_grade") return "岗位薪资等级计费";
   if (mode === "class_headcount") return "按人数班课计费";
   if (mode === "fixed") return "按单节固定计费";
   return "按小时计费";
+}
+
+function defaultFeeRuleForVaultCourseType(vault: TeacherVault, type: CourseType): FeeRule {
+  if (type !== "trial" && type !== "full_time" && vault.profile.defaultSalaryGradeId) {
+    return {
+      mode: "salary_grade",
+      salaryGradeSource: "teacher_default",
+      salaryGradeId: vault.profile.defaultSalaryGradeId
+    };
+  }
+  return feeRuleForCourseType(vault, type);
 }
 
 function defaultFeeRuleForCustomTemplate(
@@ -3082,8 +3081,17 @@ function defaultFeeRuleForCustomTemplate(
 
 function feeRuleFromAiData(data: Record<string, unknown>, vault: TeacherVault, type: CourseType, fallback?: FeeRule): FeeRule {
   const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
-  const courseTypeRule = feeRuleForCourseType(vault, type);
+  const courseTypeRule = defaultFeeRuleForVaultCourseType(vault, type);
   const templateRule = fallback?.mode === courseTypeRule.mode ? fallback : courseTypeRule;
+  const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
+  const salaryGradeId = stringValue(source.salaryGradeId ?? source.gradeId ?? source.positionGradeId);
+  if (mode === "salary_grade" || mode === "salary" || mode === "岗位薪资" || mode === "岗位薪资等级") {
+    return {
+      mode: "salary_grade",
+      salaryGradeSource: salaryGradeId ? "specific" : "teacher_default",
+      salaryGradeId: (salaryGradeId || vault.profile.defaultSalaryGradeId) as SalaryGradeId | undefined
+    };
+  }
   const baseFee = numberValue(source.baseFee ?? source.classBaseFee ?? source.minimumFee);
   const perStudentFee = numberValue(source.perPresentStudentFee ?? source.perStudentFee ?? source.extraStudentFee ?? source.headcountFee);
   const minStudents = numberValue(source.minStudents ?? source.minimumStudents ?? source.includedStudents);

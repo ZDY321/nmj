@@ -5,9 +5,13 @@ import type {
   CourseGroup,
   CourseType,
   FeeRule,
+  FeeSnapshot,
   Lesson,
   SalaryAdjustment,
   SalaryBreakdown,
+  SalaryGradeId,
+  SalaryGradeLevel,
+  SalaryGradeStage,
   TeacherVault
 } from "../../shared/types";
 
@@ -110,6 +114,128 @@ export function namedTrialStudentCount(lesson: Lesson): number {
   return lesson.attendance.filter((entry) => isPresentAttendanceEntry(lesson, entry) && entry.trial).length;
 }
 
+export const salaryGradeStageLabels: Record<SalaryGradeStage, string> = {
+  primary: "小学",
+  junior_1_2: "初一初二",
+  junior_3: "初三",
+  senior_1: "高一",
+  senior_2: "高二",
+  senior_3: "高三"
+};
+
+export const salaryGradeLevelLabels: Record<SalaryGradeLevel, string> = {
+  beginner: "初级",
+  intermediate: "中级",
+  advanced_1: "高级1",
+  advanced_2: "高级2",
+  reserve: "储备"
+};
+
+export type SalaryGradeRule = {
+  id: SalaryGradeId;
+  stage: SalaryGradeStage;
+  level: SalaryGradeLevel;
+  baseSalary: number;
+  guaranteedLessonCount: 5;
+  lessonHours: 2;
+  oneOnOneFee: number;
+  classBaseFee: number;
+  headcountIncrementFee: number;
+};
+
+function salaryGradeId(stage: SalaryGradeStage, level: SalaryGradeLevel): SalaryGradeId {
+  return `${stage}:${level}`;
+}
+
+function salaryGradeRule(
+  stage: SalaryGradeStage,
+  level: SalaryGradeLevel,
+  baseSalary: number,
+  oneOnOneFee: number,
+  classBaseFee: number,
+  headcountIncrementFee: number
+): SalaryGradeRule {
+  return {
+    id: salaryGradeId(stage, level),
+    stage,
+    level,
+    baseSalary,
+    guaranteedLessonCount: 5,
+    lessonHours: 2,
+    oneOnOneFee,
+    classBaseFee,
+    headcountIncrementFee
+  };
+}
+
+export const salaryGradeRules: SalaryGradeRule[] = [
+  salaryGradeRule("primary", "beginner", 2800, 55, 40, 10),
+  salaryGradeRule("primary", "intermediate", 3000, 65, 50, 10),
+  salaryGradeRule("primary", "advanced_1", 3200, 70, 55, 10),
+  salaryGradeRule("primary", "advanced_2", 3300, 73, 58, 10),
+  salaryGradeRule("primary", "reserve", 3500, 75, 60, 10),
+  salaryGradeRule("junior_1_2", "beginner", 2800, 65, 50, 10),
+  salaryGradeRule("junior_1_2", "intermediate", 3000, 70, 55, 12),
+  salaryGradeRule("junior_1_2", "advanced_1", 3200, 75, 60, 15),
+  salaryGradeRule("junior_1_2", "advanced_2", 3300, 80, 65, 18),
+  salaryGradeRule("junior_1_2", "reserve", 3500, 85, 70, 20),
+  salaryGradeRule("junior_3", "beginner", 2800, 75, 60, 10),
+  salaryGradeRule("junior_3", "intermediate", 3000, 80, 65, 12),
+  salaryGradeRule("junior_3", "advanced_1", 3200, 85, 70, 15),
+  salaryGradeRule("junior_3", "advanced_2", 3300, 90, 75, 18),
+  salaryGradeRule("junior_3", "reserve", 3500, 95, 80, 20),
+  salaryGradeRule("senior_1", "intermediate", 3000, 100, 100, 25),
+  salaryGradeRule("senior_1", "advanced_1", 3200, 105, 105, 30),
+  salaryGradeRule("senior_1", "advanced_2", 3300, 105, 105, 30),
+  salaryGradeRule("senior_1", "reserve", 3500, 110, 110, 35),
+  salaryGradeRule("senior_2", "intermediate", 3000, 110, 110, 25),
+  salaryGradeRule("senior_2", "advanced_1", 3200, 115, 115, 30),
+  salaryGradeRule("senior_2", "advanced_2", 3300, 115, 115, 30),
+  salaryGradeRule("senior_2", "reserve", 3500, 120, 120, 35),
+  salaryGradeRule("senior_3", "intermediate", 3000, 120, 120, 25),
+  salaryGradeRule("senior_3", "advanced_1", 3200, 125, 125, 30),
+  salaryGradeRule("senior_3", "advanced_2", 3300, 125, 125, 30),
+  salaryGradeRule("senior_3", "reserve", 3500, 130, 130, 35)
+];
+
+export function salaryGradeLabel(ruleOrId: SalaryGradeRule | SalaryGradeId): string {
+  const rule = typeof ruleOrId === "string" ? salaryGradeRuleById(ruleOrId) : ruleOrId;
+  if (!rule) return "未设置岗位薪资";
+  return `${salaryGradeStageLabels[rule.stage]} · ${salaryGradeLevelLabels[rule.level]}`;
+}
+
+export function salaryGradeRuleById(id?: SalaryGradeId): SalaryGradeRule | undefined {
+  return id ? salaryGradeRules.find((rule) => rule.id === id) : undefined;
+}
+
+export function defaultSalaryGradeRule(): SalaryGradeRule {
+  return salaryGradeRules[0];
+}
+
+export function resolveSalaryGradeRule(vault: TeacherVault, rule?: FeeRule): SalaryGradeRule | undefined {
+  if (rule?.mode !== "salary_grade") return undefined;
+  const id = rule.salaryGradeSource === "specific" ? rule.salaryGradeId : vault.profile.defaultSalaryGradeId;
+  return salaryGradeRuleById(id) ?? salaryGradeRuleById(rule.salaryGradeId) ?? salaryGradeRuleById(vault.profile.defaultSalaryGradeId);
+}
+
+export function salaryGradeAmountForCount(rule: SalaryGradeRule, courseType: CourseType, presentStudentCount: number): number {
+  const count = nonNegativeInteger(presentStudentCount);
+  if (courseType === "class") {
+    return rule.classBaseFee + Math.max(count - 5, 0) * rule.headcountIncrementFee;
+  }
+  return rule.oneOnOneFee + Math.max(count - 1, 0) * rule.headcountIncrementFee;
+}
+
+export const lessonFeeUnitHours = 2;
+
+export function lessonDurationMultiplier(lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
+  return billableHoursForLesson(lesson, rule) / lessonFeeUnitHours;
+}
+
+export function proratedLessonUnitAmount(unitAmount: number, lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
+  return nonNegativeNumber(unitAmount) * lessonDurationMultiplier(lesson, rule);
+}
+
 function nonNegativeNumber(value: number | undefined, fallback = 0): number {
   return Number.isFinite(value) ? Math.max(value ?? fallback, 0) : fallback;
 }
@@ -124,6 +250,7 @@ function hasCustomTemporaryFee(entry: Lesson["attendance"][number]): boolean {
 
 function temporaryFeeOverrideDelta(rule: FeeRule, lesson: Lesson): number {
   const presentStudentCount = presentCount(lesson);
+  const multiplier = lessonDurationMultiplier(lesson, rule);
   return lesson.attendance.reduce((sum, entry) => {
     if (!entry.temporary || entry.trial || !hasCustomTemporaryFee(entry)) return sum;
     const customFee = nonNegativeNumber(entry.temporaryFee);
@@ -131,14 +258,40 @@ function temporaryFeeOverrideDelta(rule: FeeRule, lesson: Lesson): number {
       return sum + customFee;
     }
     const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
-    const defaultIncrement = calculateClassHeadcountFee(rule, presentStudentCount) - calculateClassHeadcountFee(rule, countWithoutEntry);
+    const defaultIncrement = (
+      calculateClassHeadcountFee(rule, presentStudentCount) -
+      calculateClassHeadcountFee(rule, countWithoutEntry)
+    ) * multiplier;
     return sum + customFee - defaultIncrement;
   }, 0);
 }
 
-export function temporaryFeeTotal(lesson: Lesson, rule?: FeeRule): number {
+function salaryGradeTemporaryFeeOverrideDelta(rule: SalaryGradeRule, lesson: Lesson): number {
+  const presentStudentCount = presentCount(lesson);
+  const multiplier = lessonDurationMultiplier(lesson);
+  return lesson.attendance.reduce((sum, entry) => {
+    if (!entry.temporary || entry.trial || !hasCustomTemporaryFee(entry)) return sum;
+    const customFee = nonNegativeNumber(entry.temporaryFee);
+    if (!isPresentAttendanceEntry(lesson, entry)) {
+      return sum + customFee;
+    }
+    const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
+    const defaultIncrement =
+      (
+        salaryGradeAmountForCount(rule, lesson.type, presentStudentCount) -
+        salaryGradeAmountForCount(rule, lesson.type, countWithoutEntry)
+      ) * multiplier;
+    return sum + customFee - defaultIncrement;
+  }, 0);
+}
+
+export function temporaryFeeTotal(lesson: Lesson, rule?: FeeRule, vault?: TeacherVault): number {
   if (rule?.mode === "class_headcount") {
     return temporaryFeeOverrideDelta(rule, lesson);
+  }
+  if (rule?.mode === "salary_grade" && vault) {
+    const gradeRule = resolveSalaryGradeRule(vault, rule);
+    if (gradeRule) return salaryGradeTemporaryFeeOverrideDelta(gradeRule, lesson);
   }
   return lesson.attendance.reduce((sum, entry) => sum + nonNegativeNumber(entry.temporaryFee), 0);
 }
@@ -147,8 +300,8 @@ export function trialFeeTotal(lesson: Lesson): number {
   return nonNegativeNumber(lesson.trialFee);
 }
 
-export function extraFeeTotal(lesson: Lesson, rule?: FeeRule): number {
-  return temporaryFeeTotal(lesson, rule) + trialFeeTotal(lesson);
+export function extraFeeTotal(lesson: Lesson, rule?: FeeRule, vault?: TeacherVault): number {
+  return temporaryFeeTotal(lesson, rule, vault) + trialFeeTotal(lesson);
 }
 
 export function defaultClassFeeTiers(rule?: FeeRule): ClassFeeTier[] {
@@ -184,7 +337,7 @@ export function classFeeTierForCount(rule: FeeRule, studentCount: number): Class
 
 export function calculateClassHeadcountFee(rule: FeeRule, studentCount: number): number {
   const count = nonNegativeInteger(studentCount);
-  const tier = classFeeTierForCount(rule, count);
+  const tier = classFeeTierForCount(rule, count) ?? normalizedClassFeeTiers(rule)[0];
   if (tier) {
     const includedStudents = nonNegativeInteger(tier.minStudents);
     const extraStudents = Math.max(count - includedStudents, 0);
@@ -194,10 +347,14 @@ export function calculateClassHeadcountFee(rule: FeeRule, studentCount: number):
 }
 
 export function calculateFee(rule: FeeRule, lesson: Lesson): number {
+  return calculateFeeWithVault(undefined, rule, lesson);
+}
+
+export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: FeeRule, lesson: Lesson): number {
   if (isOriginalFullyMadeUp(lesson) || isLessonFullyMissedAndMakeupExempt(lesson)) {
     return 0;
   }
-  const extraFee = extraFeeTotal(lesson, rule);
+  const extraFee = extraFeeTotal(lesson, rule, vault);
   if (lesson.type === "trial") {
     return Math.round(fixedFeeForRule(rule) + extraFee);
   }
@@ -209,21 +366,29 @@ export function calculateFee(rule: FeeRule, lesson: Lesson): number {
     return Math.round(fixedFeeForRule(rule) + extraFee);
   }
 
-  return Math.round(calculateClassHeadcountFee(rule, presentCount(lesson)) + extraFee);
+  if (rule.mode === "salary_grade") {
+    const gradeRule = vault ? resolveSalaryGradeRule(vault, rule) : salaryGradeRuleById(rule.salaryGradeId);
+    if (!gradeRule) return Math.round(extraFee);
+    const unitAmount = salaryGradeAmountForCount(gradeRule, lesson.type, presentCount(lesson));
+    return Math.round(proratedLessonUnitAmount(unitAmount, lesson, rule) + extraFee);
+  }
+
+  return Math.round(proratedLessonUnitAmount(calculateClassHeadcountFee(rule, presentCount(lesson)), lesson, rule) + extraFee);
 }
 
 export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
   if (type === "trial") {
     return { mode: "fixed", fixedFee: 0 };
   }
-  if (type === "class" || type === "one_on_two" || type.startsWith("custom_")) {
+  if (type !== "full_time") {
     const baseFee = 0;
     const perPresentStudentFee = 0;
+    const minStudents = type === "class" ? 5 : 1;
     return {
       mode: "class_headcount",
       baseFee,
       perPresentStudentFee,
-      classFeeTiers: defaultClassFeeTiers({ mode: "class_headcount", baseFee, perPresentStudentFee }),
+      classFeeTiers: [{ id: "tier_1_plus", minStudents, baseFee, perStudentFee: perPresentStudentFee }],
       makeupFeeMode: "perStudentFee"
     };
   }
@@ -240,6 +405,60 @@ export function feeRuleForCourseType(vault: TeacherVault, type: CourseType): Fee
 
 export function getCourse(vault: TeacherVault, courseId: string): CourseGroup | undefined {
   return vault.courseGroups.find((course) => course.id === courseId);
+}
+
+export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesson: Lesson): FeeSnapshot {
+  const presentStudentCount = presentCount(lesson);
+  const trialStudentCount = namedTrialStudentCount(lesson) + (lesson.trialStudentCount ?? 0);
+  const hours = billableHoursForLesson(lesson, course.feeRule);
+  const durationMultiplier = hours / lessonFeeUnitHours;
+  const common = {
+    presentStudentCount,
+    trialStudentCount,
+    trialFee: lesson.trialFee ?? 0,
+    hours,
+    manualAdjustment: extraFeeTotal(lesson, course.feeRule, vault)
+  };
+
+  if (course.feeRule.mode === "salary_grade") {
+    const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
+    const unitAmount = gradeRule ? salaryGradeAmountForCount(gradeRule, course.type, presentStudentCount) : undefined;
+    return {
+      ...lesson.feeSnapshot,
+      ...common,
+      baseFee: gradeRule ? (course.type === "class" ? gradeRule.classBaseFee : gradeRule.oneOnOneFee) : undefined,
+      oneOnOneFee: gradeRule?.oneOnOneFee,
+      perPresentStudentFee: gradeRule?.headcountIncrementFee,
+      salaryGradeId: gradeRule?.id,
+      salaryGradeLabel: gradeRule ? salaryGradeLabel(gradeRule) : undefined,
+      headcountBaseStudentCount: course.type === "class" ? 5 : 1,
+      headcountIncrementFee: gradeRule?.headcountIncrementFee,
+      lessonUnitHours: lessonFeeUnitHours,
+      durationMultiplier,
+      unitAmount,
+      amount: calculateFeeWithVault(vault, course.feeRule, lesson)
+    };
+  }
+
+  const classFeeTier = course.feeRule.mode === "class_headcount"
+    ? classFeeTierForCount(course.feeRule, presentStudentCount)
+    : undefined;
+  const unitAmount = course.feeRule.mode === "class_headcount"
+    ? calculateClassHeadcountFee(course.feeRule, presentStudentCount)
+    : undefined;
+  return {
+    ...lesson.feeSnapshot,
+    ...common,
+    baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
+    hourlyRate: course.feeRule.hourlyRate,
+    fixedFee: course.feeRule.fixedFee,
+    perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
+    classFeeTierId: classFeeTier?.id,
+    lessonUnitHours: course.feeRule.mode === "class_headcount" ? lessonFeeUnitHours : undefined,
+    durationMultiplier: course.feeRule.mode === "class_headcount" ? durationMultiplier : undefined,
+    unitAmount,
+    amount: calculateFeeWithVault(vault, course.feeRule, lesson)
+  };
 }
 
 export function completedAmount(lesson: Lesson): number {

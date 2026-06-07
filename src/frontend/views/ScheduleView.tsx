@@ -39,7 +39,7 @@ import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-inpu
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { billableHoursForLesson, calculateClassHeadcountFee, calculateFee, classFeeTierForCount, extraFeeTotal, formatAppDateTime, getCourse, lessonBillableHours, namedTrialStudentCount, presentCount, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, calculateClassHeadcountFee, formatAppDateTime, getCourse, lessonBillableHours, lessonDurationMultiplier, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -1262,27 +1262,10 @@ export function ScheduleView({
         trial: entry.trial ?? Boolean(vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
       }))
     };
-    const presentStudentCount = presentCount(normalizedLesson);
-    const classFeeTier = course.feeRule.mode === "class_headcount"
-      ? classFeeTierForCount(course.feeRule, presentStudentCount)
-      : undefined;
     return {
       ...normalizedLesson,
       type: course.type,
-      feeSnapshot: {
-        ...normalizedLesson.feeSnapshot,
-        baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
-        hourlyRate: course.feeRule.hourlyRate,
-        fixedFee: course.feeRule.fixedFee,
-        perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
-        classFeeTierId: classFeeTier?.id,
-        presentStudentCount,
-        trialStudentCount: namedTrialStudentCount(normalizedLesson) + (normalizedLesson.trialStudentCount ?? 0),
-        trialFee: normalizedLesson.trialFee ?? 0,
-        hours: billableHoursForLesson(normalizedLesson, course.feeRule),
-        manualAdjustment: extraFeeTotal(normalizedLesson, course.feeRule),
-        amount: calculateFee(course.feeRule, normalizedLesson)
-      }
+      feeSnapshot: buildFeeSnapshot(vault, course, normalizedLesson)
     };
   }
 
@@ -1510,12 +1493,19 @@ export function ScheduleView({
 
   function defaultTemporaryFeeForEntry(lesson: Lesson, entry: Lesson["attendance"][number]): number | undefined {
     const course = getCourse(vault, lesson.courseGroupId);
-    if (!course || course.feeRule.mode !== "class_headcount" || entry.trial) return undefined;
+    if (!course || entry.trial) return undefined;
     const presentStudentCount = presentCount(lesson);
     const entryIsPresent = entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed");
     if (!entryIsPresent) return 0;
     const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
-    return calculateClassHeadcountFee(course.feeRule, presentStudentCount) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry);
+    const multiplier = lessonDurationMultiplier(lesson, course.feeRule);
+    if (course.feeRule.mode === "salary_grade") {
+      const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
+      if (!gradeRule) return undefined;
+      return Math.round((salaryGradeAmountForCount(gradeRule, lesson.type, presentStudentCount) - salaryGradeAmountForCount(gradeRule, lesson.type, countWithoutEntry)) * multiplier);
+    }
+    if (course.feeRule.mode !== "class_headcount") return undefined;
+    return Math.round((calculateClassHeadcountFee(course.feeRule, presentStudentCount) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry)) * multiplier);
   }
 
   function updateTrialStats(patch: Pick<Partial<Lesson>, "trialStudentCount" | "trialFee">) {

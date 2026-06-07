@@ -25,7 +25,7 @@ import type {
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { billableHoursForLesson, calculateFee, classFeeTierForCount, extraFeeTotal, getCourse, monthOf, namedTrialStudentCount, presentCount, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, getCourse, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 
 export type ViewKey = "today" | "calendar" | "schedule" | "progress" | "students" | "grades" | "payroll" | "salary" | "admin";
@@ -458,23 +458,7 @@ export function createLessonFromCourse(
     }
   };
 
-  const presentStudentCount = presentCount(lesson);
-  const classFeeTier = course.feeRule.mode === "class_headcount"
-    ? classFeeTierForCount(course.feeRule, presentStudentCount)
-    : undefined;
-  lesson.feeSnapshot = {
-    baseFee: classFeeTier?.baseFee ?? course.feeRule.baseFee,
-    hourlyRate: course.feeRule.hourlyRate,
-    fixedFee: course.feeRule.fixedFee,
-    perPresentStudentFee: classFeeTier?.perStudentFee ?? course.feeRule.perPresentStudentFee,
-    classFeeTierId: classFeeTier?.id,
-    presentStudentCount,
-    trialStudentCount: namedTrialStudentCount(lesson) + (lesson.trialStudentCount ?? 0),
-    trialFee: lesson.trialFee ?? 0,
-    hours: billableHoursForLesson(lesson, course.feeRule),
-    manualAdjustment: extraFeeTotal(lesson, course.feeRule),
-    amount: calculateFee(course.feeRule, lesson)
-  };
+  lesson.feeSnapshot = buildFeeSnapshot(vault, course, lesson);
   return lesson;
 }
 
