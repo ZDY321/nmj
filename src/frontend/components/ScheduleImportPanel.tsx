@@ -497,7 +497,7 @@ export function ScheduleImportPanel({
                         <span className="text-xs font-semibold text-[#64748b]">{row.title}</span>
                       </div>
                       {row.systemLessonLabel && <div className="mt-1 text-[11px] font-semibold text-[#64748b]">云端：{row.systemLessonLabel}</div>}
-                      {row.issues.length > 0 && <div className="mt-1 text-[11px] font-semibold text-[#9a3412]">{row.issues.join("；")}</div>}
+                      {row.issues.length > 0 && <IssueList issues={row.issues} compact />}
                       {row.resolutionNote && <div className="mt-1 text-[11px] font-semibold text-[#1557c2]">标注：{row.resolutionNote}</div>}
                     </div>
                   ))}
@@ -763,11 +763,7 @@ function ReconciliationRow({
       {row.issues.length > 0 && (
         <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-white/70 p-3">
           <div className="mb-2 text-xs font-extrabold text-[#9a3412]">对账差异</div>
-          <div className="flex flex-wrap gap-1.5">
-            {row.issues.map((issue) => (
-              <Badge key={issue} variant={row.status === "matched" ? "secondary" : "amber"} className="text-[10px]">{issue}</Badge>
-            ))}
-          </div>
+          <IssueList issues={row.issues} />
         </div>
       )}
 
@@ -787,6 +783,42 @@ function ReconciliationRow({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function IssueList({ issues, compact = false }: { issues: string[]; compact?: boolean }) {
+  return (
+    <div className={compact ? "mt-1 space-y-1.5" : "space-y-2"}>
+      {issues.map((issue) => {
+        const timeComparison = parseTimeComparisonIssue(issue);
+        if (timeComparison) {
+          return (
+            <div key={issue} className={`rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] ${compact ? "p-2" : "p-3"}`}>
+              <div className="text-[11px] font-extrabold text-[#9a3412]">{timeComparison.label}</div>
+              <div className={`mt-2 grid grid-cols-1 gap-2 ${compact ? "" : "md:grid-cols-2"}`}>
+                <div className="rounded-[9px] border border-[#e8eef6] bg-white px-2.5 py-2">
+                  <div className="text-[10px] font-extrabold text-[#1557c2]">教务 Excel</div>
+                  <div className="mt-1 text-xs font-extrabold text-[#061226]">{timeComparison.importTime}</div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-[#64748b]">{timeComparison.importDate}</div>
+                </div>
+                <div className="rounded-[9px] border border-[#e8eef6] bg-white px-2.5 py-2">
+                  <div className="text-[10px] font-extrabold text-[#1557c2]">云端课表</div>
+                  <div className="mt-1 text-xs font-extrabold text-[#061226]">{timeComparison.systemTime}</div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-[#64748b]">
+                    {timeComparison.systemDate}{timeComparison.systemTitle ? ` · ${timeComparison.systemTitle}` : ""}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <Badge key={issue} variant="amber" className="mr-1 mt-1 align-top text-[10px]">
+            {issue}
+          </Badge>
+        );
+      })}
     </div>
   );
 }
@@ -996,6 +1028,23 @@ function summarizeSystemLessonsForReview(vault: TeacherVault, rows: ImportPrevie
 
 function savedReviewNeedsAttention(review: ScheduleImportReviewRecord): number {
   return review.summary.attendanceMismatch + review.summary.timeMismatch + review.summary.courseMismatch + review.summary.systemMissing + review.summary.importMissing + review.summary.needsMapping;
+}
+
+function parseTimeComparisonIssue(issue: string): { label: string; importDate: string; importTime: string; systemDate: string; systemTime: string; systemTitle?: string } | null {
+  const match = issue.match(/^(.*时间不一致)：教务\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2})[,，]\s*云端\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2})(?:\s+(.+))?$/);
+  if (!match) return null;
+  return {
+    label: match[1],
+    importDate: match[2],
+    importTime: normalizeDisplayTimeRange(match[3]),
+    systemDate: match[4],
+    systemTime: normalizeDisplayTimeRange(match[5]),
+    systemTitle: match[6]?.trim()
+  };
+}
+
+function normalizeDisplayTimeRange(value: string): string {
+  return value.replace(/\s*-\s*/g, "-");
 }
 
 function savedReviewTitle(review: ScheduleImportReviewRecord): string {
