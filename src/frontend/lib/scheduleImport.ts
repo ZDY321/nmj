@@ -63,6 +63,14 @@ export type ScheduleImportSummary = {
 
 export type ImportSummaryGroup = { key: string; count: number; selected: number };
 
+export type MergedScheduleExportSummary = {
+  fileCount: number;
+  dayCount: number;
+  lessonCount: number;
+  actualLessonCount: number;
+  absentLessonCount: number;
+};
+
 const subjectHints = ["语文", "数学", "英语", "物理", "化学", "生物", "科学", "历史", "地理", "政治"];
 
 export function parseCampusFromFileName(fileName: string): string | undefined {
@@ -256,6 +264,59 @@ export function summarizeImportPreview(rows: ImportPreviewLesson[]): ScheduleImp
   };
 }
 
+export function downloadMergedScheduleWorkbook(lessons: ImportedScheduleLesson[]): MergedScheduleExportSummary {
+  if (lessons.length === 0) {
+    throw new Error("请先选择要合并的教务 Excel。");
+  }
+
+  const sortedLessons = [...lessons].sort(compareImportedLessons);
+  const dayGroups = groupImportedLessonsByDate(sortedLessons);
+  const summary: MergedScheduleExportSummary = {
+    fileCount: new Set(sortedLessons.map((lesson) => lesson.fileName)).size,
+    dayCount: dayGroups.length,
+    lessonCount: sortedLessons.length,
+    actualLessonCount: sortedLessons.filter(isActualImportedLesson).length,
+    absentLessonCount: sortedLessons.filter(hasAbsentImportedStudent).length
+  };
+  const workbook = XLSX.utils.book_new();
+  const dailySheet = XLSX.utils.aoa_to_sheet(buildMergedDailyRows(dayGroups, summary));
+  dailySheet["!cols"] = [
+    { wch: 12 },
+    { wch: 8 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 90 }
+  ];
+  XLSX.utils.book_append_sheet(workbook, dailySheet, "每日合并");
+
+  const detailSheet = XLSX.utils.aoa_to_sheet(buildMergedDetailRows(sortedLessons));
+  detailSheet["!cols"] = [
+    { wch: 12 },
+    { wch: 8 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 34 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 8 },
+    { wch: 8 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 24 },
+    { wch: 50 }
+  ];
+  XLSX.utils.book_append_sheet(workbook, detailSheet, "课程明细");
+  XLSX.writeFile(workbook, `教务课表合并_${mergedExportDateRange(sortedLessons)}.xlsx`);
+  return summary;
+}
+
 function groupedSummary(rows: ImportPreviewLesson[], keyFor: (row: ImportPreviewLesson) => string): ImportSummaryGroup[] {
   const map = new Map<string, ImportSummaryGroup>();
   rows.forEach((row) => {
@@ -266,6 +327,128 @@ function groupedSummary(rows: ImportPreviewLesson[], keyFor: (row: ImportPreview
     map.set(key, item);
   });
   return Array.from(map.values()).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, "zh-Hans-CN"));
+}
+
+function groupImportedLessonsByDate(lessons: ImportedScheduleLesson[]): Array<{ date: string; lessons: ImportedScheduleLesson[] }> {
+  const map = new Map<string, ImportedScheduleLesson[]>();
+  lessons.forEach((lesson) => {
+    const group = map.get(lesson.date) ?? [];
+    group.push(lesson);
+    map.set(lesson.date, group);
+  });
+  return Array.from(map.entries())
+    .map(([date, groupedLessons]) => ({ date, lessons: groupedLessons.sort(compareImportedLessons) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function buildMergedDailyRows(
+  dayGroups: Array<{ date: string; lessons: ImportedScheduleLesson[] }>,
+  summary: MergedScheduleExportSummary
+): Array<Array<string | number>> {
+  return [
+    ["来源文件数", summary.fileCount, "日期天数", summary.dayCount, "总课节", summary.lessonCount, "实际开课", summary.actualLessonCount, "有学生未到", summary.absentLessonCount],
+    [],
+    ["日期", "星期", "总课节", "实际开课", "有学生未到", "应到总人次", "实到总人次", "同日课程合并"],
+    ...dayGroups.map(({ date, lessons }) => {
+      const actualLessons = lessons.filter(isActualImportedLesson).length;
+      const absentLessons = lessons.filter(hasAbsentImportedStudent).length;
+      const expectedTotal = sumDefinedCounts(lessons, "expectedCount");
+      const presentTotal = sumDefinedCounts(lessons, "presentCount");
+      return [
+        date,
+        weekdayLabel(date),
+        lessons.length,
+        actualLessons,
+        absentLessons,
+        expectedTotal,
+        presentTotal,
+        lessons.map(formatMergedDailyLesson).join("\n")
+      ];
+    })
+  ];
+}
+
+function buildMergedDetailRows(lessons: ImportedScheduleLesson[]): Array<Array<string | number>> {
+  return [
+    ["日期", "星期", "开始", "结束", "校区", "课程", "科目", "班型", "教师", "助教", "教室", "实到", "应到", "实际开课", "有学生未到", "来源文件", "原始内容"],
+    ...lessons.map((lesson) => [
+      lesson.date,
+      weekdayLabel(lesson.date),
+      lesson.startTime,
+      lesson.endTime,
+      lesson.campusName || "未识别校区",
+      lesson.title,
+      lesson.subjectHint || "未知科目",
+      importedCourseTypeLabel(lesson.courseTypeHint),
+      lesson.teacher ?? "",
+      lesson.assistant ?? "",
+      lesson.room ?? "",
+      lesson.presentCount ?? "",
+      lesson.expectedCount ?? "",
+      isActualImportedLesson(lesson) ? "是" : "否",
+      hasAbsentImportedStudent(lesson) ? "是" : "否",
+      lesson.fileName,
+      lesson.rawText
+    ])
+  ];
+}
+
+function formatMergedDailyLesson(lesson: ImportedScheduleLesson): string {
+  return [
+    `${lesson.startTime}-${lesson.endTime}`,
+    lesson.campusName || "未识别校区",
+    lesson.title || "未命名课程",
+    `实到/应到 ${formatImportedCount(lesson.presentCount)}/${formatImportedCount(lesson.expectedCount)}`,
+    hasAbsentImportedStudent(lesson) ? "有学生未到" : "",
+    lesson.teacher ? `教师：${lesson.teacher}` : "",
+    lesson.room ? `教室：${lesson.room}` : "",
+    lesson.fileName
+  ].filter(Boolean).join(" | ");
+}
+
+function compareImportedLessons(a: ImportedScheduleLesson, b: ImportedScheduleLesson): number {
+  return `${a.date} ${a.startTime} ${a.endTime} ${a.campusName} ${a.title}`.localeCompare(`${b.date} ${b.startTime} ${b.endTime} ${b.campusName} ${b.title}`, "zh-Hans-CN");
+}
+
+function isActualImportedLesson(lesson: ImportedScheduleLesson): boolean {
+  return lesson.presentCount === undefined ? true : lesson.presentCount > 0;
+}
+
+function hasAbsentImportedStudent(lesson: ImportedScheduleLesson): boolean {
+  return lesson.presentCount !== undefined && lesson.expectedCount !== undefined && lesson.presentCount < lesson.expectedCount;
+}
+
+function sumDefinedCounts(lessons: ImportedScheduleLesson[], key: "presentCount" | "expectedCount"): number {
+  return lessons.reduce((sum, lesson) => sum + (lesson[key] ?? 0), 0);
+}
+
+function formatImportedCount(value: number | undefined): string {
+  return value === undefined ? "-" : String(value);
+}
+
+function importedCourseTypeLabel(type: CourseType | "unknown"): string {
+  const labels: Record<string, string> = {
+    one_on_one: "一对一",
+    one_on_two: "一对二",
+    class: "班课",
+    trial: "试听",
+    full_time: "全日制",
+    unknown: "未知班型"
+  };
+  return labels[type] ?? type;
+}
+
+function weekdayLabel(date: string): string {
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("zh-CN", { weekday: "short" });
+}
+
+function mergedExportDateRange(lessons: ImportedScheduleLesson[]): string {
+  const dates = lessons.map((lesson) => lesson.date).sort();
+  const firstDate = dates[0] ?? "未识别日期";
+  const lastDate = dates[dates.length - 1] ?? firstDate;
+  return firstDate === lastDate ? firstDate : `${firstDate}_${lastDate}`;
 }
 
 function matchCampus(vault: TeacherVault, campusName: string) {
