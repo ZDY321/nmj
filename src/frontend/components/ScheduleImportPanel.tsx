@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, CalendarDays, ChevronDown, Download, FileSpreadsheet, Link2, MapPin, RefreshCw, Save, Search, Trash2, Upload, X } from "lucide-react";
+import { ArrowDownUp, CalendarDays, ChevronDown, FileSpreadsheet, Link2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { ScheduleImportHeaderPanel, type ScheduleImportFileSummary } from "@/frontend/components/ScheduleImportHeaderPanel";
+import { ScheduleImportSavedReviewsPanel } from "@/frontend/components/ScheduleImportSavedReviewsPanel";
+import { ScheduleImportStatusControls } from "@/frontend/components/ScheduleImportStatusControls";
 import type {
   CourseGroup,
   CourseType,
@@ -368,265 +371,71 @@ export function ScheduleImportPanel({
 
   return (
     <Card className="overflow-hidden border-2 border-[#bfdbfe]">
-      <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-            <FileSpreadsheet size={14} /> 教务课表对账
-          </div>
-          <CardTitle>教务 Excel 与云端课表核对</CardTitle>
-          <CardDescription>教务 Excel 只作为外部对账来源；Excel 节数与对账行数分开统计。</CardDescription>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="sky">Excel {rawLessons.length} 节</Badge>
-          <Badge variant="secondary">对账行 {summary.total} 条</Badge>
-          <Badge variant="sage">已对应 {summary.matched} 条</Badge>
-          <Badge variant={needsAttention > 0 ? "amber" : "secondary"}>待核对 {needsAttention} 条</Badge>
-          {resolvedAsMatchedCount > 0 && <Badge variant="sage">人工确认 {resolvedAsMatchedCount} 条</Badge>}
-          {reviewedCount > 0 && <Badge variant="sky">已标注 {reviewedCount} 条</Badge>}
-        </div>
-      </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
-          <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
-              <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件
-            </div>
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-3 text-xs font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff] sm:px-4 sm:text-sm">
-                  {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-                  导入 Excel
-                  <input
-                    type="file"
-                    accept=".xls,.xlsx"
-                    multiple
-                    className="hidden"
-                    onChange={(event) => {
-                      void handleFiles(event.target.files);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
-                <Button type="button" variant="outline" disabled={rows.length === 0} onClick={saveMapping}>
-                  <Save size={15} /> 保存对账
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button type="button" variant="outline" disabled={rawLessons.length === 0} onClick={downloadMergedSchedule}>
-                  <Download size={15} /> 合并导出所有校区
-                </Button>
-                <Button type="button" variant="outline" disabled={rawLessons.length === 0} onClick={clearImport}>
-                  <X size={15} /> 清空
-                </Button>
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-              {[
-                ["文件", fileSummaries.length],
-                ["月份", monthOptions.length],
-                ["云端缺少", summary.systemMissing],
-                ["教务缺少", summary.importMissing]
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
-                  <div className="text-xs font-semibold text-[#64748b]">{label}</div>
-                  <div className="mt-1 text-lg font-extrabold text-[#061226]">{value}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2]">
-              <div className="font-extrabold text-[#061226]">文件名识别规则</div>
-              <div>校区名写在中文或英文括号里，并和“档案信息”的校区名称一致，例如“2026-05-课表（城南校区）.xlsx”或“校宝课表(城南校区)-2026.xlsx”。</div>
-              <div>文件名建议包含年份，例如“2026”；没有年份时会按当前年份解析。多个括号同时存在时，优先识别带“校区、中心、分校、教学点”的括号内容。</div>
-            </div>
-          </div>
+        <ScheduleImportHeaderPanel
+          rawLessonCount={rawLessons.length}
+          rowCount={rows.length}
+          loading={loading}
+          summary={summary}
+          needsAttention={needsAttention}
+          resolvedAsMatchedCount={resolvedAsMatchedCount}
+          reviewedCount={reviewedCount}
+          fileSummaries={fileSummaries}
+          monthCount={monthOptions.length}
+          campusOptions={campusOptions}
+          fileCampusOverrides={fileCampusOverrides}
+          message={message}
+          onFilesSelected={(files) => void handleFiles(files)}
+          onSave={saveMapping}
+          onExport={downloadMergedSchedule}
+          onClear={clearImport}
+          onFileCampusChange={updateFileCampus}
+        />
 
-          <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
-              <MapPin size={16} className="text-[#1557c2]" /> 文件对应校区
-            </div>
-            <div className="space-y-2">
-              {fileSummaries.map((file) => (
-                <div key={file.fileName} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[minmax(0,1fr)_240px]">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-extrabold text-[#061226]">{file.fileName}</div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
-                      <Badge variant="secondary" className="text-[10px]">{file.count} 节</Badge>
-                      <Badge variant="secondary" className="text-[10px]">{file.months.join("、") || "未知月份"}</Badge>
-                      <Badge variant={file.sourceCampus ? "sky" : "amber"} className="text-[10px]">{file.sourceCampus || "文件名未识别校区"}</Badge>
-                    </div>
-                  </div>
-                  <Select value={fileCampusOverrides[file.fileName] ?? ""} onChange={(event) => updateFileCampus(file.fileName, event.target.value)}>
-                    <option value="">选择校区</option>
-                    {campusOptions.map((campus) => (
-                      <option key={campus.id} value={campus.id}>{campus.name}</option>
-                    ))}
-                  </Select>
-                </div>
-              ))}
-              {fileSummaries.length === 0 && (
-                <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                  暂无教务 Excel 文件
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <ScheduleImportSavedReviewsPanel
+          vault={vault}
+          amountsVisible={amountsVisible}
+          reviews={savedReviews}
+          selectedReview={selectedReview}
+          expanded={savedReviewsExpanded}
+          selectedReviewMatchedCount={selectedReviewCounts?.matched}
+          reviewTitle={savedReviewTitle}
+          reviewNeedsAttention={savedReviewNeedsAttention}
+          formatReviewNumber={formatSavedReviewNumber}
+          formatReviewAmount={formatSavedReviewAmount}
+          onToggleExpanded={() => setSavedReviewsExpanded((current) => !current)}
+          onSelectReview={(reviewId) => {
+            setSelectedReviewId(reviewId);
+            setSavedReviewsExpanded(true);
+          }}
+          onDeleteReview={(review) => {
+            confirm({
+              title: "删除保存的对账结果？",
+              description: "删除后只移除这一次保存的对账快照；课程映射和差异标注会继续保留。",
+              confirmLabel: "删除",
+              cancelLabel: "取消",
+              tone: "danger",
+              onConfirm: () => deleteSavedReview(review.id)
+            });
+          }}
+          renderRows={(review, currentVault) => <SavedReviewRows review={review} vault={currentVault} />}
+        />
 
-        {message && (
-          <div className="rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-bold text-[#25324a]">{message}</div>
-        )}
-
-        {savedReviews.length > 0 && (
-          <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-3">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setSavedReviewsExpanded((current) => !current)}
-                  className="inline-flex items-center gap-2 text-sm font-extrabold text-[#061226]"
-                >
-                  <ChevronDown size={16} className={`text-[#64748b] transition-transform ${savedReviewsExpanded ? "rotate-180" : ""}`} />
-                  已保存对账
-                </button>
-                <div className="mt-1 text-xs font-semibold text-[#64748b]">最近保留 {savedReviews.length} 次；保存结果可展开查看或删除。</div>
-              </div>
-              <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-                {savedReviews.slice(0, 8).map((review) => (
-                  <div
-                    key={review.id}
-                    className={`flex shrink-0 items-stretch overflow-hidden rounded-[10px] border text-left text-xs font-bold transition-colors ${
-                      selectedReview?.id === review.id ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e8eef6] bg-[#f8fbff] text-[#25324a]"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedReviewId(review.id);
-                        setSavedReviewsExpanded(true);
-                      }}
-                      className="px-3 py-2 text-left hover:bg-white/70"
-                    >
-                      <span className="block">{savedReviewTitle(review)}</span>
-                      <span className="mt-0.5 block text-[10px] text-[#64748b]">{review.rawLessonCount} 节教务 · 待核对 {savedReviewNeedsAttention(review)}</span>
-                    </button>
-                    <button
-                      type="button"
-                      title="删除保存的对账结果"
-                      aria-label={`删除${savedReviewTitle(review)}`}
-                      onClick={() => {
-                        confirm({
-                          title: "删除保存的对账结果？",
-                          description: "删除后只移除这一次保存的对账快照；课程映射和差异标注会继续保留。",
-                          confirmLabel: "删除",
-                          cancelLabel: "取消",
-                          tone: "danger",
-                          onConfirm: () => deleteSavedReview(review.id)
-                        });
-                      }}
-                      className="border-l border-[#dbe4ef] px-2 text-[#b91c1c] hover:bg-[#fee2e2]"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {savedReviewsExpanded && selectedReview && (
-              <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="sky">{selectedReview.month}</Badge>
-                  <Badge variant="secondary">{selectedReview.rawLessonCount} 节教务</Badge>
-                  <Badge variant="secondary">云端 {formatSavedReviewNumber(selectedReview.summary.systemLessonCount)} 节</Badge>
-                  <Badge variant="sage">已完成 {formatSavedReviewNumber(selectedReview.summary.systemCompletedLessonCount)} 节</Badge>
-                  <Badge variant="secondary">课时费 {formatSavedReviewAmount(selectedReview.summary.systemCompletedAmount, amountsVisible)}</Badge>
-                  <Badge variant="sage">已对应 {selectedReviewCounts?.matched ?? selectedReview.summary.matched}</Badge>
-                  <Badge variant={savedReviewNeedsAttention(selectedReview) > 0 ? "amber" : "secondary"}>待核对 {savedReviewNeedsAttention(selectedReview)}</Badge>
-                </div>
-                <SavedReviewRows review={selectedReview} vault={vault} />
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-          {[
-            { label: "已对应", value: summary.matched, variant: "sage", status: "matched", hint: resolvedAsMatchedCount > 0 ? `含人工确认 ${resolvedAsMatchedCount}` : "" },
-            { label: "到课异常", value: summary.attendanceMismatch, variant: "amber", status: "attendance_mismatch" },
-            { label: "时间不一致", value: summary.timeMismatch, variant: "yellow", status: "time_mismatch" },
-            { label: "课程不一致", value: summary.courseMismatch, variant: "destructive", status: "course_mismatch" },
-            { label: "云端缺少", value: summary.systemMissing, variant: "amber", status: "system_missing" },
-            { label: "教务缺少", value: summary.importMissing, variant: "plum", status: "import_missing" },
-            { label: "待映射", value: summary.needsMapping, variant: "secondary", status: "needs_mapping" }
-          ].map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              aria-pressed={statusFilter === item.status}
-              onClick={() => applyStatusFilter(item.status as Exclude<StatusFilter, "all">)}
-              className={`rounded-[12px] border px-3 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-[#93c5fd] hover:bg-[#f8fbff] hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
-                statusFilter === item.status ? "border-[#1557c2] bg-[#eaf2ff] ring-2 ring-[#bfdbfe]" : "border-[#e8eef6] bg-white"
-              }`}
-            >
-              <Badge variant={item.variant as "sage"} className="text-[10px]">{item.label}</Badge>
-              <div className="mt-2 text-xl font-extrabold text-[#061226]">{item.value}</div>
-              {"hint" in item && item.hint && <div className="mt-1 text-[10px] font-bold text-[#64748b]">{item.hint}</div>}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          {[
-            { label: "确认无误", value: resolutionCounts.accepted, variant: "sky", status: "resolution:accepted" },
-            { label: "已修正", value: resolutionCounts.fixed, variant: "sage", status: "resolution:fixed" },
-            { label: "时间偏差正常", value: resolutionCounts.time_variance_ok, variant: "yellow", status: "resolution:time_variance_ok" },
-            { label: "拆分合并正常", value: resolutionCounts.split_merge_ok, variant: "plum", status: "resolution:split_merge_ok" },
-            { label: "教务表错误", value: resolutionCounts.excel_error, variant: "amber", status: "resolution:excel_error" },
-            { label: "云端需修正", value: resolutionCounts.cloud_error, variant: "destructive", status: "resolution:cloud_error" }
-          ].map((item) => (
-            <button
-              key={item.status}
-              type="button"
-              aria-pressed={statusFilter === item.status}
-              onClick={() => applyStatusFilter(item.status as Exclude<StatusFilter, "all">)}
-              className={`rounded-[12px] border px-3 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-[#93c5fd] hover:bg-[#f8fbff] hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
-                statusFilter === item.status ? "border-[#1557c2] bg-[#eaf2ff] ring-2 ring-[#bfdbfe]" : "border-[#e8eef6] bg-white"
-              }`}
-            >
-              <Badge variant={item.variant as "sage"} className="text-[10px]">{item.label}</Badge>
-              <div className="mt-2 text-xl font-extrabold text-[#061226]">{item.value}</div>
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-[160px_220px_220px_minmax(0,1fr)]">
-          <Input type="month" value={displayMonth} onChange={(event) => setSelectedMonth(event.target.value)} />
-          <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
-            <option value="all">全部校区</option>
-            {campusOptions.map((campus) => (
-              <option key={campus.id} value={campus.id}>{campus.name}</option>
-            ))}
-          </Select>
-          <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
-            <option value="all">全部状态</option>
-            <option value="matched">已对应</option>
-            <option value="attendance_mismatch">到课异常</option>
-            <option value="time_mismatch">时间不一致</option>
-            <option value="course_mismatch">课程不一致</option>
-            <option value="system_missing">云端缺少</option>
-            <option value="import_missing">教务缺少</option>
-            <option value="needs_mapping">待映射</option>
-            <option value="resolution:accepted">确认无误</option>
-            <option value="resolution:time_variance_ok">时间偏差正常</option>
-            <option value="resolution:split_merge_ok">拆分合并正常</option>
-            <option value="resolution:excel_error">教务表错误</option>
-            <option value="resolution:fixed">已修正</option>
-            <option value="resolution:cloud_error">云端需修正</option>
-          </Select>
-          <label className="relative block">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-            <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索课程、学生、教室或差异" />
-          </label>
-        </div>
+        <ScheduleImportStatusControls
+          summary={summary}
+          resolvedAsMatchedCount={resolvedAsMatchedCount}
+          resolutionCounts={resolutionCounts}
+          selectedMonth={displayMonth}
+          campusFilter={campusFilter}
+          statusFilter={statusFilter}
+          search={search}
+          campusOptions={campusOptions}
+          onStatusToggle={applyStatusFilter}
+          onMonthChange={setSelectedMonth}
+          onCampusChange={setCampusFilter}
+          onStatusChange={setStatusFilter}
+          onSearchChange={setSearch}
+        />
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="rounded-[16px] border border-[#dbe4ef] bg-white p-3">
@@ -1734,7 +1543,7 @@ function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPreviewLess
     });
 }
 
-function summarizeFiles(lessons: ImportedScheduleLesson[]): Array<{ fileName: string; sourceCampus: string; count: number; months: string[] }> {
+function summarizeFiles(lessons: ImportedScheduleLesson[]): ScheduleImportFileSummary[] {
   const map = new Map<string, { fileName: string; sourceCampus: string; count: number; months: Set<string> }>();
   lessons.forEach((lesson) => {
     const item = map.get(lesson.fileName) ?? { fileName: lesson.fileName, sourceCampus: lesson.campusName, count: 0, months: new Set<string>() };
