@@ -429,6 +429,7 @@ export type ScheduleImportResolutionStatus =
 export type ScheduleImportResolution = {
   status: ScheduleImportResolutionStatus;
   note?: string;
+  linkedSystemLessonIds?: string[];
   updatedAt: string;
 };
 
@@ -479,6 +480,7 @@ export type ScheduleImportSavedRow = {
   issues: string[];
   resolutionStatus?: ScheduleImportResolutionStatus;
   resolutionNote?: string;
+  linkedSystemLessonIds?: string[];
   resolutionUpdatedAt?: string;
 };
 
