@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import type {
   CourseGroup,
   CourseType,
@@ -111,6 +112,7 @@ export function ScheduleImportPanel({
   const [search, setSearch] = useState(savedWorkspace.search);
   const [selectedReviewId, setSelectedReviewId] = useState(vault.scheduleImport?.reviews[0]?.id ?? "");
   const [savedReviewsExpanded, setSavedReviewsExpanded] = useState(false);
+  const { confirm, dialog } = useConfirmDialog();
 
   const campusOptions = useMemo(
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
@@ -507,9 +509,14 @@ export function ScheduleImportPanel({
                       title="删除保存的对账结果"
                       aria-label={`删除${savedReviewTitle(review)}`}
                       onClick={() => {
-                        if (window.confirm("删除这条保存的对账结果？课程映射和差异标注会保留。")) {
-                          deleteSavedReview(review.id);
-                        }
+                        confirm({
+                          title: "删除保存的对账结果？",
+                          description: "删除后只移除这一次保存的对账快照；课程映射和差异标注会继续保留。",
+                          confirmLabel: "删除",
+                          cancelLabel: "取消",
+                          tone: "danger",
+                          onConfirm: () => deleteSavedReview(review.id)
+                        });
                       }}
                       className="border-l border-[#dbe4ef] px-2 text-[#b91c1c] hover:bg-[#fee2e2]"
                     >
@@ -714,6 +721,7 @@ export function ScheduleImportPanel({
           </div>
         </div>
       </CardContent>
+      {dialog}
     </Card>
   );
 }
