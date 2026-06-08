@@ -74,11 +74,17 @@ export type MergedScheduleExportSummary = {
 const subjectHints = ["语文", "数学", "英语", "物理", "化学", "生物", "科学", "历史", "地理", "政治"];
 
 export function parseCampusFromFileName(fileName: string): string | undefined {
-  return fileName.match(/[（(]([^）)]+)[）)]/)?.[1]?.trim();
+  const baseName = fileName.replace(/\.[^.]+$/, "");
+  const groups = Array.from(baseName.matchAll(/[（(]([^）)]+)[）)]/g))
+    .map((match) => match[1]?.trim())
+    .filter((value): value is string => Boolean(value));
+  if (groups.length === 0) return undefined;
+  const candidates = groups.filter((value) => !/^\d{4}(?:[-_/年]\d{1,2})?(?:[-_/月]\d{1,2}日?)?$/.test(value) && !/^(副本|copy|备份|课表|课程表)$/i.test(value));
+  return candidates.find((value) => /校区|中心|分校|教学点/.test(value)) ?? candidates[0] ?? groups[0];
 }
 
 export function parseExportYearFromFileName(fileName: string): number | undefined {
-  const year = fileName.match(/(20\d{2})-\d{2}-\d{2}/)?.[1];
+  const year = fileName.match(/(?:^|[^\d])(20\d{2})(?=[^\d]|$)/)?.[1];
   return year ? Number(year) : undefined;
 }
 

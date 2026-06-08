@@ -114,6 +114,10 @@ export function ScheduleImportPanel({
   );
   const effectiveRows = useMemo(() => rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)])), [resolutions, rows]);
   const summary = useMemo(() => summarizeImportPreview(effectiveRows), [effectiveRows]);
+  const resolvedAsMatchedCount = useMemo(
+    () => rows.filter((row) => row.status !== "matched" && resolutionMarksRowResolved(resolutions[resolutionKey(row)]?.status)).length,
+    [resolutions, rows]
+  );
   const fileSummaries = useMemo(() => summarizeFiles(rawLessons), [rawLessons]);
   const monthOptions = useMemo(
     () => Array.from(new Set(rows.map((row) => row.date.slice(0, 7)))).sort(),
@@ -257,21 +261,17 @@ export function ScheduleImportPanel({
 
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note">>) {
     const key = resolutionKey(row);
-    setResolutions((current) => {
-      const previous = current[key] ?? { status: "unreviewed" as ScheduleImportResolutionStatus, updatedAt: new Date().toISOString() };
-      const next: ScheduleImportResolution = {
-        ...previous,
-        ...patch,
-        note: patch.note !== undefined ? patch.note : previous.note,
-        updatedAt: new Date().toISOString()
-      };
-      if (next.status === "unreviewed" && !next.note?.trim()) {
-        const rest = { ...current };
-        delete rest[key];
-        return rest;
-      }
-      return { ...current, [key]: next };
-    });
+    const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
+    setResolutions(nextResolutions);
+    if (patch.status) {
+      onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(vault, mapping, nextResolutions));
+      const label = resolutionStatusLabel(patch.status);
+      setMessage(
+        resolutionMarksRowResolved(patch.status)
+          ? `已标为「${label}」，这条差异已计入已对应，顶部统计和状态筛选已更新。`
+          : `已标为「${label}」，这条差异仍保留在待核对统计中。`
+      );
+    }
   }
 
   function saveMapping() {
@@ -357,6 +357,7 @@ export function ScheduleImportPanel({
           <Badge variant="secondary">对账行 {summary.total} 条</Badge>
           <Badge variant="sage">已对应 {summary.matched} 条</Badge>
           <Badge variant={needsAttention > 0 ? "amber" : "secondary"}>待核对 {needsAttention} 条</Badge>
+          {resolvedAsMatchedCount > 0 && <Badge variant="sage">人工确认 {resolvedAsMatchedCount} 条</Badge>}
           {reviewedCount > 0 && <Badge variant="sky">已标注 {reviewedCount} 条</Badge>}
         </div>
       </CardHeader>
@@ -405,7 +406,9 @@ export function ScheduleImportPanel({
               ))}
             </div>
             <div className="mt-3 rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2]">
-              文件名里的括号内容会被自动识别为校区，例如“2026-05-课表（城南校区）.xlsx”会识别“城南校区”；未识别或名称不完全一致时，在右侧手动选择校区即可。
+              <div className="font-extrabold text-[#061226]">文件名识别规则</div>
+              <div>校区名写在中文或英文括号里，并和“档案信息”的校区名称一致，例如“2026-05-课表（城南校区）.xlsx”或“校宝课表(城南校区)-2026.xlsx”。</div>
+              <div>文件名建议包含年份，例如“2026”；没有年份时会按当前年份解析。多个括号同时存在时，优先识别带“校区、中心、分校、教学点”的括号内容。</div>
             </div>
           </div>
 
@@ -514,7 +517,7 @@ export function ScheduleImportPanel({
 
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
           {[
-            { label: "已对应", value: summary.matched, variant: "sage", status: "matched" },
+            { label: "已对应", value: summary.matched, variant: "sage", status: "matched", hint: resolvedAsMatchedCount > 0 ? `含人工确认 ${resolvedAsMatchedCount}` : "" },
             { label: "到课异常", value: summary.attendanceMismatch, variant: "amber", status: "attendance_mismatch" },
             { label: "时间不一致", value: summary.timeMismatch, variant: "yellow", status: "time_mismatch" },
             { label: "课程不一致", value: summary.courseMismatch, variant: "destructive", status: "course_mismatch" },
@@ -533,6 +536,7 @@ export function ScheduleImportPanel({
             >
               <Badge variant={item.variant as "sage"} className="text-[10px]">{item.label}</Badge>
               <div className="mt-2 text-xl font-extrabold text-[#061226]">{item.value}</div>
+              {"hint" in item && item.hint && <div className="mt-1 text-[10px] font-bold text-[#64748b]">{item.hint}</div>}
             </button>
           ))}
         </div>
@@ -585,12 +589,12 @@ export function ScheduleImportPanel({
                         ? "border-[#1557c2] bg-[#eaf2ff] shadow-[0_10px_24px_rgba(21,87,194,0.12)] ring-2 ring-[#bfdbfe]"
                         : !isCurrentMonth
                           ? "border-transparent bg-[#f8fbff] opacity-45"
-                          : reviewedDayCount > 0
-                            ? "border-[#93c5fd] bg-[#eaf2ff] ring-1 ring-[#bfdbfe]"
                           : hasProblems
                             ? "border-[#fed7aa] bg-[#fff7ed]"
                             : dayRows.length > 0
-                              ? "border-[#bbf7d0] bg-[#f0fdf4]"
+                              ? reviewedDayCount > 0
+                                ? "border-[#86efac] bg-[#f0fdf4] ring-1 ring-[#bbf7d0]"
+                                : "border-[#bbf7d0] bg-[#f0fdf4]"
                               : "border-[#e8eef6] bg-white"
                     }`}
                   >
@@ -605,9 +609,10 @@ export function ScheduleImportPanel({
                       {dayRows.slice(0, 3).map((row) => {
                         const rowReviewed = isReviewedResolution(resolutions[resolutionKey(row)]);
                         const rowStatus = effectiveRowStatus(row, resolutions[resolutionKey(row)]);
+                        const rowPrefix = rowReviewed ? rowStatus === "matched" ? "已确认 · " : "已标 · " : "";
                         return (
-                          <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(rowStatus, rowReviewed)}`}>
-                            {rowReviewed ? "已标 · " : ""}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
+                          <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(rowStatus, rowReviewed && rowStatus !== "matched")}`}>
+                            {rowPrefix}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
                           </span>
                         );
                       })}
@@ -683,23 +688,27 @@ function ReconciliationRow({
   const resolutionStatus = resolution?.status ?? "unreviewed";
   const reviewed = isReviewedResolution(resolution);
   const displayStatus = effectiveRowStatus(row, resolution);
-  const isMatched = row.status === "matched";
-  const [detailsExpanded, setDetailsExpanded] = useState(() => row.status !== "matched");
+  const isMatched = displayStatus === "matched";
+  const resolvedAsMatched = isMatched && row.status !== "matched";
+  const [detailsExpanded, setDetailsExpanded] = useState(() => displayStatus !== "matched");
 
   useEffect(() => {
-    if (row.status !== "matched") {
+    if (displayStatus !== "matched") {
       setDetailsExpanded(true);
+    } else if (row.status !== "matched") {
+      setDetailsExpanded(false);
     }
-  }, [row.status]);
+  }, [displayStatus]);
 
   return (
-    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(displayStatus, reviewed)}`}>
+    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(displayStatus, reviewed && !resolvedAsMatched)}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant={statusVariant(displayStatus)}>{statusLabel(displayStatus)}</Badge>
             <Badge variant="secondary">{row.date}</Badge>
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
+            {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
           </div>
           {isMatched && !detailsExpanded && (
             <>
@@ -816,6 +825,11 @@ function ReconciliationRow({
 
       {row.status !== "matched" && (
         <div className="mt-3 grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
+          {resolvedAsMatched && (
+            <div className="rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-xs font-bold text-[#15803d]">
+              已按人工确认结果计入“已对应”；如需重新处理，可把状态改回“未处理”或“云端需修正”。
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
             <Select value={resolutionStatus} onChange={(event) => onResolutionChange({ status: event.target.value as ScheduleImportResolutionStatus })}>
               {resolutionStatuses.map((status) => (
@@ -894,7 +908,7 @@ function CourseMappingSelect({
           className="h-10 pl-9 text-sm"
           value={courseSearch}
           onChange={(event) => setCourseSearch(event.target.value)}
-          placeholder="搜索课程、学生或科目"
+          placeholder="搜索课程档案名或科目"
         />
       </label>
       <Select value={row.matchedCourseId ?? ""} onChange={(event) => onMap(event.target.value)}>
@@ -921,8 +935,6 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
       const haystack = [
         course.name,
         course.subject,
-        courseTypeLabel(vault, course.type),
-        studentNames(vault, course.studentIds),
         course.note ?? ""
       ].join(" ").toLowerCase();
       return terms.every((term) => haystack.includes(term));
@@ -939,16 +951,32 @@ function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): str
 
 function SavedReviewRows({ review, vault }: { review: ScheduleImportReviewRecord; vault: TeacherVault }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const filteredRows = useMemo(() => review.rows.filter((row) => matchesSavedReviewRowFilters(row, {
-    search,
-    statusFilter,
-    vault
-  })), [review.rows, search, statusFilter, vault]);
+  const dateOptions = useMemo(() => Array.from(new Set(review.rows.map((row) => row.date))).sort(), [review.rows]);
+  const filteredRows = useMemo(
+    () => review.rows
+      .filter((row) => dateFilter === "all" || row.date === dateFilter)
+      .filter((row) => matchesSavedReviewRowFilters(row, { search, statusFilter, vault }))
+      .sort((a, b) => `${a.date} ${a.startTime} ${a.endTime}`.localeCompare(`${b.date} ${b.startTime} ${b.endTime}`)),
+    [dateFilter, review.rows, search, statusFilter, vault]
+  );
+
+  useEffect(() => {
+    setDateFilter("all");
+    setSearch("");
+    setStatusFilter("all");
+  }, [review.id]);
 
   return (
     <div className="mt-3 space-y-3">
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-[180px_220px_minmax(0,1fr)]">
+        <Select value={dateFilter} onChange={(event) => setDateFilter(event.target.value)}>
+          <option value="all">全部日期</option>
+          {dateOptions.map((date) => (
+            <option key={date} value={date}>{date}</option>
+          ))}
+        </Select>
         <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
           <option value="all">全部状态</option>
           <option value="matched">已对应</option>
@@ -965,67 +993,98 @@ function SavedReviewRows({ review, vault }: { review: ScheduleImportReviewRecord
         </label>
       </div>
 
-      <div className="max-h-[520px] overflow-auto rounded-[12px] border border-[#dbe4ef] bg-white">
-        <table className="min-w-[980px] w-full text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-[#f8fbff] text-[#64748b]">
-            <tr>
-              <th className="px-3 py-2 font-extrabold">状态</th>
-              <th className="px-3 py-2 font-extrabold">日期时间</th>
-              <th className="px-3 py-2 font-extrabold">教务 Excel</th>
-              <th className="px-3 py-2 font-extrabold">云端课表</th>
-              <th className="px-3 py-2 font-extrabold">到课</th>
-              <th className="px-3 py-2 font-extrabold">差异与标注</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRows.map((row) => {
-              const rowStatus = effectiveSavedRowStatus(row);
-              return (
-                <tr key={row.id} className="border-t border-[#e8eef6] align-top">
-                  <td className="px-3 py-2">
-                    <div className="flex flex-col items-start gap-1">
-                      <Badge variant={statusVariant(rowStatus)} className="text-[10px]">{statusLabel(rowStatus)}</Badge>
-                      {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && (
-                        <Badge variant="sky" className="text-[10px]">{resolutionStatusLabel(row.resolutionStatus)}</Badge>
-                      )}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 font-bold text-[#061226]">
-                    {row.date}<br />
-                    <span className="text-[#64748b]">{row.startTime}-{row.endTime}</span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="font-extrabold text-[#061226]">{row.status === "import_missing" ? "教务 Excel 缺少" : row.title}</div>
-                    <div className="mt-1 leading-5 text-[#64748b]">
-                      {row.campusName || "未识别校区"} · {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
-                      {row.room ? ` · 教室：${row.room}` : ""}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="font-extrabold text-[#061226]">{row.systemLessonLabel || "云端课表缺少"}</div>
-                    {row.matchedCourseId && (
-                      <div className="mt-1 leading-5 text-[#64748b]">课程档案：{localCourseName(vault, row.matchedCourseId)}</div>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 font-bold text-[#64748b]">
-                    教务 {formatSavedReviewCount(row.presentCount)}/{formatSavedReviewCount(row.expectedCount)}<br />
-                    云端 {formatSavedReviewCount(row.systemPresentCount)}/{formatSavedReviewCount(row.systemExpectedCount)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {row.issues.length > 0 ? <IssueList issues={row.issues} compact /> : <span className="font-semibold text-[#64748b]">无差异</span>}
-                    {row.resolutionNote && <div className="mt-2 rounded-[9px] border border-[#bfdbfe] bg-[#eaf2ff] px-2 py-1 font-semibold text-[#1557c2]">标注：{row.resolutionNote}</div>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="flex items-center justify-between gap-2 rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-bold text-[#64748b]">
+        <span>当前显示 {filteredRows.length} 条</span>
+        <span>保存明细 {review.rows.length} 条</span>
+      </div>
+
+      <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
+        {filteredRows.map((row) => (
+          <SavedReviewRowCard key={row.id} row={row} vault={vault} />
+        ))}
         {filteredRows.length === 0 && (
-          <div className="p-8 text-center text-sm font-semibold text-[#64748b]">
+          <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-white p-8 text-center text-sm font-semibold text-[#64748b]">
             这条保存对账里没有符合筛选的明细
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SavedReviewRowCard({ row, vault }: { row: ScheduleImportSavedRow; vault: TeacherVault }) {
+  const rowStatus = effectiveSavedRowStatus(row);
+  const reviewed = Boolean(row.resolutionStatus && row.resolutionStatus !== "unreviewed");
+  const resolvedAsMatched = row.status !== "matched" && rowStatus === "matched";
+  return (
+    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(rowStatus, reviewed && !resolvedAsMatched)}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Badge variant={statusVariant(rowStatus)}>{statusLabel(rowStatus)}</Badge>
+            <Badge variant="secondary">{row.date}</Badge>
+            <Badge variant="secondary">{row.startTime}-{row.endTime}</Badge>
+            {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && <Badge variant="sky">{resolutionStatusLabel(row.resolutionStatus)}</Badge>}
+            {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
+          </div>
+          <div className="truncate text-sm font-extrabold text-[#061226]">
+            {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title || row.systemLessonLabel || "未命名课程"}
+          </div>
+        </div>
+        <div className="shrink-0 rounded-[10px] border border-[#e8eef6] bg-white/80 px-3 py-2 text-xs font-bold text-[#64748b]">
+          教务 {formatSavedReviewCount(row.presentCount)}/{formatSavedReviewCount(row.expectedCount)} · 云端 {formatSavedReviewCount(row.systemPresentCount)}/{formatSavedReviewCount(row.systemExpectedCount)}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
+          <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
+            <FileSpreadsheet size={13} /> 教务 Excel
+          </div>
+          <div className="text-sm font-extrabold leading-5 text-[#061226]">{row.status === "import_missing" ? "教务 Excel 没有对应课节" : row.title}</div>
+          <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+            {row.campusName || "未识别校区"} · {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
+            {row.teacher ? ` · 教师：${row.teacher}` : ""}
+            {row.room ? ` · 教室：${row.room}` : ""}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Badge variant={row.presentCount !== undefined && row.expectedCount !== undefined && row.presentCount < row.expectedCount ? "amber" : "secondary"} className="text-[10px]">
+              实到/应到 {formatSavedReviewCount(row.presentCount)}/{formatSavedReviewCount(row.expectedCount)}
+            </Badge>
+            {row.warnings.map((warning) => (
+              <Badge key={warning} variant="secondary" className="text-[10px]">教务标记：{warning}</Badge>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
+          <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
+            <Link2 size={13} /> 云端课表
+          </div>
+          <div className="text-sm font-extrabold leading-5 text-[#061226]">{row.systemLessonLabel || "云端课表没有对应课节"}</div>
+          <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+            {row.matchedCourseId ? `课程档案：${localCourseName(vault, row.matchedCourseId)}` : "未映射课程档案"}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Badge variant={row.status === "attendance_mismatch" ? "amber" : "secondary"} className="text-[10px]">
+              实到/应到 {formatSavedReviewCount(row.systemPresentCount)}/{formatSavedReviewCount(row.systemExpectedCount)}
+            </Badge>
+          </div>
+          <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
+            实到：{row.systemPresentStudentNames || "未记录实到学生"}
+          </div>
+          <div className="mt-1 text-xs font-semibold leading-5 text-[#94a3b8]">
+            应到：{row.systemExpectedStudentNames || "未设置学生"}
+          </div>
+        </div>
+      </div>
+
+      {(row.issues.length > 0 || row.resolutionNote) && (
+        <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
+          {row.issues.length > 0 ? <IssueList issues={row.issues} compact /> : <div className="text-xs font-semibold text-[#64748b]">无差异</div>}
+          {row.resolutionNote && <div className="mt-2 rounded-[9px] border border-[#bfdbfe] bg-[#eaf2ff] px-2 py-1 text-xs font-semibold text-[#1557c2]">标注：{row.resolutionNote}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -1146,6 +1205,26 @@ function buildScheduleImportStateWithoutReview(
     reviews: vault.scheduleImport?.reviews ?? [],
     updatedAt: new Date().toISOString()
   };
+}
+
+function buildUpdatedResolutions(
+  current: ScheduleImportResolutionMap,
+  key: string,
+  patch: Partial<Pick<ScheduleImportResolution, "status" | "note">>
+): ScheduleImportResolutionMap {
+  const previous = current[key] ?? { status: "unreviewed" as ScheduleImportResolutionStatus, updatedAt: new Date().toISOString() };
+  const next: ScheduleImportResolution = {
+    ...previous,
+    ...patch,
+    note: patch.note !== undefined ? patch.note : previous.note,
+    updatedAt: new Date().toISOString()
+  };
+  if (next.status === "unreviewed" && !next.note?.trim()) {
+    const rest = { ...current };
+    delete rest[key];
+    return rest;
+  }
+  return { ...current, [key]: next };
 }
 
 function effectiveRowStatus(row: ImportPreviewLesson, resolution?: ScheduleImportResolution): ImportMatchStatus {
