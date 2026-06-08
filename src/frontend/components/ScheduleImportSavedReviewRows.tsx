@@ -1,58 +1,44 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileSpreadsheet, Link2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { Lesson, ScheduleImportSavedRow, ScheduleImportReviewRecord, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
-import type { ImportMatchStatus } from "@/frontend/lib/scheduleImport";
-import { courseName as localCourseName, courseSubject, courseTypeLabel } from "@/frontend/lib/helpers";
-
-type ResolutionFilter = `resolution:${ScheduleImportResolutionStatus}`;
-type StatusFilter = "all" | ImportMatchStatus | ResolutionFilter;
-type BadgeVariant = "sage" | "amber" | "secondary" | "destructive" | "sky" | "yellow" | "plum";
+import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIssueList";
+import type { ScheduleImportSavedRow, ScheduleImportReviewRecord, TeacherVault } from "@/shared/types";
+import { courseName as localCourseName, courseSubject } from "@/frontend/lib/helpers";
+import {
+  courseTypeLabelSafe,
+  effectiveSavedRowStatus,
+  formatSavedReviewCount,
+  lessonDurationHours,
+  linkedLessonsForSavedRow,
+  linkedSystemLessonIdsFromSavedRows,
+  matchesSavedReviewRowFilters,
+  resolutionStatusLabel,
+  statusLabel,
+  statusSurfaceClass,
+  statusVariant,
+  type StatusFilter
+} from "@/frontend/lib/scheduleImportReview";
 
 export function ScheduleImportSavedReviewRows({
   review,
-  vault,
-  linkedSystemLessonIdsFromRows,
-  matchesRowFilters,
-  effectiveRowStatus,
-  linkedLessonsForRow,
-  lessonDurationHours,
-  courseTypeLabelSafe,
-  statusSurfaceClass,
-  statusVariant,
-  statusLabel,
-  resolutionStatusLabel,
-  formatSavedReviewCount,
-  renderIssueList
+  vault
 }: {
   review: ScheduleImportReviewRecord;
   vault: TeacherVault;
-  linkedSystemLessonIdsFromRows: (rows: ScheduleImportSavedRow[]) => Set<string>;
-  matchesRowFilters: (row: ScheduleImportSavedRow, filters: { linkedSystemLessonIds: Set<string>; statusFilter: StatusFilter; search: string; vault: TeacherVault }) => boolean;
-  effectiveRowStatus: (row: ScheduleImportSavedRow, linkedSystemLessonIds?: Set<string>) => ImportMatchStatus;
-  linkedLessonsForRow: (vault: TeacherVault, row: ScheduleImportSavedRow) => Lesson[];
-  lessonDurationHours: (lesson: Pick<Lesson, "startTime" | "endTime">) => number;
-  courseTypeLabelSafe: (vault: TeacherVault, type: ScheduleImportSavedRow["courseTypeHint"]) => string;
-  statusSurfaceClass: (status: ImportMatchStatus, reviewed?: boolean) => string;
-  statusVariant: (status: ImportMatchStatus) => BadgeVariant;
-  statusLabel: (status: ImportMatchStatus) => string;
-  resolutionStatusLabel: (status: ScheduleImportResolutionStatus) => string;
-  formatSavedReviewCount: (value: number | undefined) => string;
-  renderIssueList: (issues: string[], compact?: boolean) => ReactNode;
 }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [search, setSearch] = useState("");
   const dateOptions = useMemo(() => Array.from(new Set(review.rows.map((row) => row.date))).sort(), [review.rows]);
-  const linkedSystemLessonIds = useMemo(() => linkedSystemLessonIdsFromRows(review.rows), [linkedSystemLessonIdsFromRows, review.rows]);
+  const linkedSystemLessonIds = useMemo(() => linkedSystemLessonIdsFromSavedRows(review.rows), [review.rows]);
   const filteredRows = useMemo(
     () => review.rows
       .filter((row) => dateFilter === "all" || row.date === dateFilter)
-      .filter((row) => matchesRowFilters(row, { linkedSystemLessonIds, search, statusFilter, vault }))
+      .filter((row) => matchesSavedReviewRowFilters(row, { linkedSystemLessonIds, search, statusFilter, vault }))
       .sort((a, b) => `${a.date} ${a.startTime} ${a.endTime}`.localeCompare(`${b.date} ${b.startTime} ${b.endTime}`)),
-    [dateFilter, linkedSystemLessonIds, matchesRowFilters, review.rows, search, statusFilter, vault]
+    [dateFilter, linkedSystemLessonIds, review.rows, search, statusFilter, vault]
   );
 
   useEffect(() => {
@@ -104,16 +90,6 @@ export function ScheduleImportSavedReviewRows({
             row={row}
             vault={vault}
             linkedSystemLessonIds={linkedSystemLessonIds}
-            effectiveRowStatus={effectiveRowStatus}
-            linkedLessonsForRow={linkedLessonsForRow}
-            lessonDurationHours={lessonDurationHours}
-            courseTypeLabelSafe={courseTypeLabelSafe}
-            statusSurfaceClass={statusSurfaceClass}
-            statusVariant={statusVariant}
-            statusLabel={statusLabel}
-            resolutionStatusLabel={resolutionStatusLabel}
-            formatSavedReviewCount={formatSavedReviewCount}
-            renderIssueList={renderIssueList}
           />
         ))}
         {filteredRows.length === 0 && (
@@ -129,36 +105,16 @@ export function ScheduleImportSavedReviewRows({
 function SavedReviewRowCard({
   row,
   vault,
-  linkedSystemLessonIds,
-  effectiveRowStatus,
-  linkedLessonsForRow,
-  lessonDurationHours,
-  courseTypeLabelSafe,
-  statusSurfaceClass,
-  statusVariant,
-  statusLabel,
-  resolutionStatusLabel,
-  formatSavedReviewCount,
-  renderIssueList
+  linkedSystemLessonIds
 }: {
   row: ScheduleImportSavedRow;
   vault: TeacherVault;
   linkedSystemLessonIds: Set<string>;
-  effectiveRowStatus: (row: ScheduleImportSavedRow, linkedSystemLessonIds?: Set<string>) => ImportMatchStatus;
-  linkedLessonsForRow: (vault: TeacherVault, row: ScheduleImportSavedRow) => Lesson[];
-  lessonDurationHours: (lesson: Pick<Lesson, "startTime" | "endTime">) => number;
-  courseTypeLabelSafe: (vault: TeacherVault, type: ScheduleImportSavedRow["courseTypeHint"]) => string;
-  statusSurfaceClass: (status: ImportMatchStatus, reviewed?: boolean) => string;
-  statusVariant: (status: ImportMatchStatus) => BadgeVariant;
-  statusLabel: (status: ImportMatchStatus) => string;
-  resolutionStatusLabel: (status: ScheduleImportResolutionStatus) => string;
-  formatSavedReviewCount: (value: number | undefined) => string;
-  renderIssueList: (issues: string[], compact?: boolean) => ReactNode;
 }) {
-  const rowStatus = effectiveRowStatus(row, linkedSystemLessonIds);
+  const rowStatus = effectiveSavedRowStatus(row, linkedSystemLessonIds);
   const reviewed = Boolean(row.resolutionStatus && row.resolutionStatus !== "unreviewed");
   const resolvedAsMatched = row.status !== "matched" && rowStatus === "matched";
-  const linkedLessons = linkedLessonsForRow(vault, row);
+  const linkedLessons = linkedLessonsForSavedRow(vault, row);
   return (
     <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(rowStatus, reviewed && !resolvedAsMatched)}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -240,7 +196,7 @@ function SavedReviewRowCard({
 
       {(row.issues.length > 0 || row.resolutionNote) && (
         <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
-          {row.issues.length > 0 ? renderIssueList(row.issues, true) : <div className="text-xs font-semibold text-[#64748b]">无差异</div>}
+          {row.issues.length > 0 ? <ScheduleImportIssueList issues={row.issues} compact /> : <div className="text-xs font-semibold text-[#64748b]">无差异</div>}
           {row.resolutionNote && <div className="mt-2 rounded-[9px] border border-[#bfdbfe] bg-[#eaf2ff] px-2 py-1 text-xs font-semibold text-[#1557c2]">标注：{row.resolutionNote}</div>}
         </div>
       )}
