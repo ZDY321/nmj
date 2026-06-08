@@ -113,6 +113,7 @@ export function PayrollReviewView({
     .sort(sortLessons);
 
   const breakdown = salaryBreakdown(vault, selectedMonth);
+  const lessonFeeTotal = breakdown.oneOnOne + breakdown.classLessons + breakdown.fullTime + breakdown.makeup;
   const estimatedIncome = estimatedMonthlyIncome(vault, selectedMonth);
   const currentCampusObligation = campusFilter === "all" ? obligationSummary(vault, selectedMonth) : obligationSummary(vault, selectedMonth, campusFilter);
   const campusLessonFee = filteredLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
@@ -288,10 +289,11 @@ export function PayrollReviewView({
         </CardHeader>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {[
           { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `已完成 ${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatPrivateMoney(campusLessonFee, amountsVisible), hint: "仅统计已完成/补课完成", icon: Banknote },
+          { label: "课时费总计", value: formatPrivateMoney(lessonFeeTotal, amountsVisible), hint: "本月全部已完成课时费", icon: Banknote },
           {
             label: "义务课时扣费",
             value: `-${formatPrivateMoney(campusDeduction, amountsVisible)}`,
@@ -374,6 +376,7 @@ export function PayrollReviewView({
             <div className="grid grid-cols-2 gap-3">
               {[
                 { label: "基本工资", value: breakdown.baseSalary },
+                { label: "课时费总计", value: lessonFeeTotal },
                 { label: "一对一", value: breakdown.oneOnOne, details: lessonCampusAmounts.oneOnOne },
                 { label: "班课", value: breakdown.classLessons, details: lessonCampusAmounts.classLessons },
                 { label: "全日制", value: breakdown.fullTime, details: lessonCampusAmounts.fullTime },

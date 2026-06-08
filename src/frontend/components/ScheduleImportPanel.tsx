@@ -368,7 +368,7 @@ export function ScheduleImportPanel({
               <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-[12px] border border-[#bfdbfe] bg-white px-4 py-3 text-sm font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff]">
+              <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-3 text-xs font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff] sm:px-4 sm:text-sm">
                 {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
                 选择一个或多个 .xls / .xlsx
                 <input
