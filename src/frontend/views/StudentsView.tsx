@@ -1364,46 +1364,6 @@ export function StudentsView({
                 ))}
               </div>
 
-              {!isManualObligationMode && (
-                <div className="space-y-3 rounded-[16px] border border-[#dbe4ef] bg-white p-3">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-sm font-extrabold text-[#061226]">义务课时自动抵扣明细</div>
-                      <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        {campusName(vault, obligationCampusId)} · {obligationMonth}，先扣本校区单节总课时费较低的课次；本校区不够时，再把其他校区课次合并后从低到高继续抵扣；试听不参与抵扣。
-                      </div>
-                    </div>
-                    <Badge variant="secondary">{obligation.courseBreakdown.length} 个课程</Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {obligation.courseBreakdown.map((item, index) => {
-                      const course = vault.courseGroups.find((candidate) => candidate.id === item.courseId);
-                      return (
-                        <div key={item.courseId} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant={index === 0 ? "amber" : "secondary"}>{index + 1}</Badge>
-                              <span className="truncate text-sm font-extrabold text-[#061226]">{item.courseName}</span>
-                              {course && <span className="text-xs font-semibold text-[#64748b]">{courseTypeLabel(vault, course.type)} · {course.subject} · {campusName(vault, course.defaultCampusId)}</span>}
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
-                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">本月 {item.lessonCount} 节</span>
-                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">可扣 {item.availableHours.toFixed(1)} 小时</span>
-                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">已扣 {item.deductedHours.toFixed(1)} 小时</span>
-                              <span className="rounded-full bg-[#fee2e2] px-2.5 py-1 text-[#b91c1c]">扣 {formatPrivateMoney(item.amount, amountsVisible)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {obligation.courseBreakdown.length === 0 && (
-                      <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                        本月没有可用于义务抵扣的非试听已完成课程，义务小时会全部按每小时补扣费用计算。
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
         )}
