@@ -422,7 +422,9 @@ export type ScheduleImportResolutionStatus =
   | "excel_error"
   | "cloud_error"
   | "fixed"
-  | "accepted";
+  | "accepted"
+  | "time_variance_ok"
+  | "split_merge_ok";
 
 export type ScheduleImportResolution = {
   status: ScheduleImportResolutionStatus;

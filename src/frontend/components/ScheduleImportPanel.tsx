@@ -44,7 +44,8 @@ import {
   type ScheduleImportMapping
 } from "@/frontend/lib/scheduleImport";
 
-type StatusFilter = "all" | ImportMatchStatus;
+type ResolutionFilter = `resolution:${ScheduleImportResolutionStatus}`;
+type StatusFilter = "all" | ImportMatchStatus | ResolutionFilter;
 
 type SavedScheduleImportWorkspace = {
   rawLessons: ImportedScheduleLesson[];
@@ -61,8 +62,23 @@ type SavedScheduleImportWorkspace = {
 
 const legacyMappingStorageKey = "teacher-schedule-import-mapping-v1";
 const workspaceStorageKey = "teacher-schedule-import-workspace-v1";
-const statusFilters: StatusFilter[] = ["all", "matched", "attendance_mismatch", "time_mismatch", "course_mismatch", "system_missing", "import_missing", "needs_mapping"];
-const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "excel_error", "cloud_error", "fixed", "accepted"];
+const statusFilters: StatusFilter[] = [
+  "all",
+  "matched",
+  "attendance_mismatch",
+  "time_mismatch",
+  "course_mismatch",
+  "system_missing",
+  "import_missing",
+  "needs_mapping",
+  "resolution:accepted",
+  "resolution:time_variance_ok",
+  "resolution:split_merge_ok",
+  "resolution:excel_error",
+  "resolution:fixed",
+  "resolution:cloud_error"
+];
+const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "excel_error", "cloud_error", "fixed", "accepted", "time_variance_ok", "split_merge_ok"];
 
 export function ScheduleImportPanel({
   vault,
@@ -118,6 +134,7 @@ export function ScheduleImportPanel({
     () => rows.filter((row) => row.status !== "matched" && resolutionMarksRowResolved(resolutions[resolutionKey(row)]?.status)).length,
     [resolutions, rows]
   );
+  const resolutionCounts = useMemo(() => countResolutionsForRows(rows, resolutions), [resolutions, rows]);
   const fileSummaries = useMemo(() => summarizeFiles(rawLessons), [rawLessons]);
   const monthOptions = useMemo(
     () => Array.from(new Set(rows.map((row) => row.date.slice(0, 7)))).sort(),
@@ -545,6 +562,30 @@ export function ScheduleImportPanel({
           ))}
         </div>
 
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+          {[
+            { label: "确认无误", value: resolutionCounts.accepted, variant: "sky", status: "resolution:accepted" },
+            { label: "时间偏差正常", value: resolutionCounts.time_variance_ok, variant: "yellow", status: "resolution:time_variance_ok" },
+            { label: "拆分合并正常", value: resolutionCounts.split_merge_ok, variant: "plum", status: "resolution:split_merge_ok" },
+            { label: "教务表错误", value: resolutionCounts.excel_error, variant: "amber", status: "resolution:excel_error" },
+            { label: "已修正", value: resolutionCounts.fixed, variant: "sage", status: "resolution:fixed" },
+            { label: "云端需修正", value: resolutionCounts.cloud_error, variant: "destructive", status: "resolution:cloud_error" }
+          ].map((item) => (
+            <button
+              key={item.status}
+              type="button"
+              aria-pressed={statusFilter === item.status}
+              onClick={() => applyStatusFilter(item.status as Exclude<StatusFilter, "all">)}
+              className={`rounded-[12px] border px-3 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-[#93c5fd] hover:bg-[#f8fbff] hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
+                statusFilter === item.status ? "border-[#1557c2] bg-[#eaf2ff] ring-2 ring-[#bfdbfe]" : "border-[#e8eef6] bg-white"
+              }`}
+            >
+              <Badge variant={item.variant as "sage"} className="text-[10px]">{item.label}</Badge>
+              <div className="mt-2 text-xl font-extrabold text-[#061226]">{item.value}</div>
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-[160px_220px_220px_minmax(0,1fr)]">
           <Input type="month" value={displayMonth} onChange={(event) => setSelectedMonth(event.target.value)} />
           <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
@@ -562,6 +603,12 @@ export function ScheduleImportPanel({
             <option value="system_missing">云端缺少</option>
             <option value="import_missing">教务缺少</option>
             <option value="needs_mapping">待映射</option>
+            <option value="resolution:accepted">确认无误</option>
+            <option value="resolution:time_variance_ok">时间偏差正常</option>
+            <option value="resolution:split_merge_ok">拆分合并正常</option>
+            <option value="resolution:excel_error">教务表错误</option>
+            <option value="resolution:fixed">已修正</option>
+            <option value="resolution:cloud_error">云端需修正</option>
           </Select>
           <label className="relative block">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
@@ -695,6 +742,7 @@ function ReconciliationRow({
   const isMatched = displayStatus === "matched";
   const resolvedAsMatched = isMatched && row.status !== "matched";
   const [detailsExpanded, setDetailsExpanded] = useState(() => displayStatus !== "matched");
+  const quickResolutionActions = quickResolutionActionsForRow(row);
 
   useEffect(() => {
     if (displayStatus !== "matched") {
@@ -832,6 +880,21 @@ function ReconciliationRow({
           {resolvedAsMatched && (
             <div className="rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-xs font-bold text-[#15803d]">
               已按人工确认结果计入“已对应”；如需重新处理，可把状态改回“未处理”或“云端需修正”。
+            </div>
+          )}
+          {quickResolutionActions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {quickResolutionActions.map((action) => (
+                <Button
+                  key={action.status}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onResolutionChange({ status: action.status, note: action.note })}
+                >
+                  {action.label}
+                </Button>
+              ))}
             </div>
           )}
           <div className="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
@@ -990,6 +1053,12 @@ function SavedReviewRows({ review, vault }: { review: ScheduleImportReviewRecord
           <option value="system_missing">云端缺少</option>
           <option value="import_missing">教务缺少</option>
           <option value="needs_mapping">待映射</option>
+          <option value="resolution:accepted">确认无误</option>
+          <option value="resolution:time_variance_ok">时间偏差正常</option>
+          <option value="resolution:split_merge_ok">拆分合并正常</option>
+          <option value="resolution:excel_error">教务表错误</option>
+          <option value="resolution:fixed">已修正</option>
+          <option value="resolution:cloud_error">云端需修正</option>
         </Select>
         <label className="relative block">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
@@ -1295,6 +1364,25 @@ function savedReviewEffectiveCounts(review: ScheduleImportReviewRecord): Pick<Sc
   );
 }
 
+function countResolutionsForRows(rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): Record<ScheduleImportResolutionStatus, number> {
+  return rows.reduce(
+    (counts, row) => {
+      const status = resolutions[resolutionKey(row)]?.status;
+      if (status && status !== "unreviewed") counts[status] += 1;
+      return counts;
+    },
+    {
+      unreviewed: 0,
+      excel_error: 0,
+      cloud_error: 0,
+      fixed: 0,
+      accepted: 0,
+      time_variance_ok: 0,
+      split_merge_ok: 0
+    }
+  );
+}
+
 function effectiveSavedRowStatus(row: ScheduleImportSavedRow): ImportMatchStatus {
   if (row.status === "matched") return "matched";
   if (resolutionMarksRowResolved(row.resolutionStatus)) return "matched";
@@ -1302,7 +1390,40 @@ function effectiveSavedRowStatus(row: ScheduleImportSavedRow): ImportMatchStatus
 }
 
 function resolutionMarksRowResolved(status?: ScheduleImportResolutionStatus): boolean {
-  return status === "accepted" || status === "fixed" || status === "excel_error";
+  return status === "accepted" || status === "fixed" || status === "excel_error" || status === "time_variance_ok" || status === "split_merge_ok";
+}
+
+function isResolutionFilter(statusFilter: StatusFilter): statusFilter is ResolutionFilter {
+  return statusFilter.startsWith("resolution:");
+}
+
+function resolutionStatusFromFilter(statusFilter: ResolutionFilter): ScheduleImportResolutionStatus {
+  return statusFilter.slice("resolution:".length) as ScheduleImportResolutionStatus;
+}
+
+function quickResolutionActionsForRow(row: ImportPreviewLesson): Array<{ status: ScheduleImportResolutionStatus; label: string; note: string }> {
+  const actions: Array<{ status: ScheduleImportResolutionStatus; label: string; note: string }> = [
+    {
+      status: "accepted",
+      label: "确认无误",
+      note: "人工核对确认无误。"
+    }
+  ];
+  if (row.status === "time_mismatch") {
+    actions.push({
+      status: "time_variance_ok",
+      label: "时间偏差正常",
+      note: "时间前后相差 10 分钟左右，按正常课节处理。"
+    });
+  }
+  if (row.status === "time_mismatch" || row.status === "system_missing" || row.status === "import_missing") {
+    actions.push({
+      status: "split_merge_ok",
+      label: "拆分合并正常",
+      note: "教务与云端存在拆分、合并或跨日期记录差异，人工确认按同一课程课时处理。"
+    });
+  }
+  return actions;
 }
 
 function parseTimeComparisonIssue(issue: string): { label: string; importDate: string; importTime: string; systemDate: string; systemTime: string; systemTitle?: string } | null {
@@ -1445,7 +1566,12 @@ function matchesImportRowFilters(
 ): boolean {
   if (filters.month && !row.date.startsWith(filters.month)) return false;
   if (filters.campusFilter !== "all" && row.campusId !== filters.campusFilter) return false;
-  if (filters.statusFilter !== "all" && effectiveRowStatus(row, filters.resolutions[resolutionKey(row)]) !== filters.statusFilter) return false;
+  const resolution = filters.resolutions[resolutionKey(row)];
+  if (isResolutionFilter(filters.statusFilter)) {
+    if (resolution?.status !== resolutionStatusFromFilter(filters.statusFilter)) return false;
+  } else if (filters.statusFilter !== "all" && effectiveRowStatus(row, resolution) !== filters.statusFilter) {
+    return false;
+  }
   const terms = filters.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
   const haystack = [
@@ -1459,6 +1585,8 @@ function matchesImportRowFilters(
     row.matchedCourseId ? localCourseName(filters.vault, row.matchedCourseId) : "",
     row.systemPresentStudentNames ?? "",
     row.systemExpectedStudentNames ?? "",
+    resolution?.status ? resolutionStatusLabel(resolution.status) : "",
+    resolution?.note ?? "",
     ...row.issues
   ].join(" ").toLowerCase();
   return terms.every((term) => haystack.includes(term));
@@ -1468,7 +1596,11 @@ function matchesSavedReviewRowFilters(
   row: ScheduleImportSavedRow,
   filters: { statusFilter: StatusFilter; search: string; vault: TeacherVault }
 ): boolean {
-  if (filters.statusFilter !== "all" && effectiveSavedRowStatus(row) !== filters.statusFilter) return false;
+  if (isResolutionFilter(filters.statusFilter)) {
+    if (row.resolutionStatus !== resolutionStatusFromFilter(filters.statusFilter)) return false;
+  } else if (filters.statusFilter !== "all" && effectiveSavedRowStatus(row) !== filters.statusFilter) {
+    return false;
+  }
   const terms = filters.search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
   const haystack = [
@@ -1482,6 +1614,7 @@ function matchesSavedReviewRowFilters(
     row.matchedCourseId ? localCourseName(filters.vault, row.matchedCourseId) : "",
     row.systemPresentStudentNames ?? "",
     row.systemExpectedStudentNames ?? "",
+    row.resolutionStatus ? resolutionStatusLabel(row.resolutionStatus) : "",
     row.resolutionNote ?? "",
     ...row.issues
   ].join(" ").toLowerCase();
@@ -1629,7 +1762,9 @@ function resolutionStatusLabel(status: ScheduleImportResolutionStatus): string {
     excel_error: "教务表错误",
     cloud_error: "云端需修正",
     fixed: "已修正",
-    accepted: "确认无误"
+    accepted: "确认无误",
+    time_variance_ok: "时间偏差正常",
+    split_merge_ok: "拆分合并正常"
   };
   return labels[status];
 }
