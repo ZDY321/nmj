@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -26,8 +26,7 @@ import {
   Trash2,
   UserCheck,
   UserPlus,
-  WandSparkles,
-  X
+  WandSparkles
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,10 +34,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { TimeTextInput, timeTextToMinutes } from "@/components/ui/time-text-input";
+import { TimeTextInput } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
-import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, CourseType, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
+import { ScheduleCalendarDetailDialog } from "@/frontend/components/ScheduleCalendarDetailDialog";
+import { SchedulePanelTabs } from "@/frontend/components/SchedulePanelTabs";
+import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsListCard";
+import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
+import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
+import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { buildFeeSnapshot, calculateClassHeadcountFee, formatAppDateTime, getCourse, lessonBillableHours, lessonDurationMultiplier, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
@@ -54,7 +58,6 @@ import {
   courseName,
   courseSubject,
   courseTypeLabel,
-  courseTypeOptionsForVault,
   createLessonFromCourse,
   findStudent,
   formatDateIso,
@@ -82,40 +85,40 @@ import {
   weekDatesFor,
   weekStartsOn,
   weekdayOfDateIso,
-  weekdayLabels,
-  type ViewKey
+  weekdayLabels
 } from "@/frontend/lib/helpers";
-
-type LessonScope = "month" | "day" | "range" | "week";
-type CourseTypeFilter = "all" | CourseType;
-type SchedulePanel = "ai" | "schedule" | "calendar" | "records" | "studentStats" | "trash";
-type CalendarOverviewReturnFocus = {
-  selectedDate: string;
-  month: string;
-  overviewPage: "month" | "week";
-  weekCampusFilter: string;
-  weekGradeFilter: string;
-  weekSubjectFilter: string;
-  weekStudentFilter: string;
-};
-type ExternalLessonReturnTarget = {
-  kind: "view";
-  view: ViewKey;
-  label: string;
-  calendarFocus?: CalendarOverviewReturnFocus;
-  payrollPanel?: "review" | "reconcile";
-};
-type InternalLessonReturnTarget = {
-  kind: "panel";
-  panel: Exclude<SchedulePanel, "records">;
-  label: string;
-  calendarDate?: string;
-  calendarMonth?: string;
-  calendarMode?: "schedule" | "view";
-  calendarDetailDate?: string | null;
-};
-type LessonReturnTarget = ExternalLessonReturnTarget | InternalLessonReturnTarget;
-type CalendarFocus = { date: string; lessonId?: string; targetPanel?: SchedulePanel; nonce: number; returnTarget?: ExternalLessonReturnTarget | null } | null;
+import {
+  aiActionLabel,
+  aiChatEndpoint,
+  aiFieldLabel,
+  arrayValue,
+  attendanceStatusForLessonStatus,
+  attendanceSurfaceClass,
+  buildStudentStatsGroupedLessonRows,
+  buildStudentStatsRows,
+  canRestoreDeletedLesson,
+  datesBetweenLocal,
+  datesForIsoWeekValue,
+  deletedLessonSearchText,
+  deletedLessonSourceLabel,
+  deletedLessonSourceVariant,
+  filterScheduleCourseOptions,
+  filteredStudentIdsForStats,
+  formatAiValue,
+  isCompletedLessonStatus,
+  isOrderedDateRange,
+  isOrderedTimeRange,
+  isPendingLessonStatus,
+  isPlainRecord,
+  isoWeekValue,
+  lessonSearchText,
+  lessonStatusForAttendanceStatus,
+  offsetDate,
+  textValue,
+  timeToMinutes,
+  timesOverlap
+} from "@/frontend/lib/scheduleViewHelpers";
+import type { CalendarFocus, CourseTypeFilter, ExternalLessonReturnTarget, InternalLessonReturnTarget, LessonReturnTarget, LessonScope, SchedulePanel } from "@/frontend/lib/scheduleViewTypes";
 
 function dateWithWeekday(date: string): string {
   return `${date} · ${weekdayLabels[weekdayOfDateIso(date)]}`;
@@ -495,7 +498,6 @@ export function ScheduleView({
   const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
   const studentStatsGroupedLessonRows = buildStudentStatsGroupedLessonRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
   const studentStatsStudentLessonCount = studentStatsLessons.reduce((sum, lesson) => sum + filteredStudentIdsForStats(vault, lesson, normalizedStudentStatsNameFilter).length, 0);
-  const studentStatsTotalHours = studentStatsLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
   const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const deletedLessons = [...(vault.deletedLessons ?? [])].sort((a, b) =>
@@ -1786,121 +1788,29 @@ export function ScheduleView({
   return (
     <div className="space-y-6">
       {dialog}
-      <AnimatePresence>
-        {calendarDetailDate && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/45 p-4 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              className="flex max-h-[86vh] w-full max-w-[760px] flex-col overflow-hidden rounded-[18px] border border-[#dbe4ef] bg-white shadow-[0_30px_80px_rgba(6,18,38,0.24)]"
-            >
-              <div className="flex items-start justify-between gap-4 border-b border-[#e8eef6] p-5">
-                <div className="min-w-0">
-                  <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                    <CalendarDays size={14} /> 当日课程
-                  </div>
-                  <h2 className="text-2xl font-extrabold leading-tight text-[#061226]">{dateWithWeekday(calendarDetailDate)}</h2>
-                  <p className="mt-1 text-sm font-semibold text-[#64748b]">点击课程可跳转到课程记录详情。</p>
-                </div>
-                <Button type="button" variant="ghost" size="icon" onClick={() => setCalendarDetailDate(null)} className="shrink-0 rounded-full">
-                  <X size={18} />
-                </Button>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                  {[
-                    { label: "当天课次", value: `${calendarDetailLessons.length} 节` },
-                    { label: "待上/待补", value: `${calendarDetailPendingCount} 节` },
-                    { label: "已完成", value: `${calendarDetailCompletedCount} 节` },
-                    { label: "已取消", value: `${calendarDetailCancelledCount} 节` },
-                    { label: "当天金额", value: formatPrivateMoney(calendarDetailAmount, amountsVisible) }
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
-                      <div className="text-[11px] font-semibold text-[#64748b]">{item.label}</div>
-                      <div className="mt-0.5 break-words text-sm font-extrabold text-[#061226]">{item.value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  {calendarDetailLessons.map((lesson) => (
-                    <div key={lesson.id} className={`rounded-[12px] border p-3 ${lessonStatusSurfaceClass(lesson.status)}`}>
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCalendarDetailDate(null);
-                            openLessonInRecords(lesson);
-                          }}
-                          className="min-w-0 flex-1 text-left"
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
-                            <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
-                            <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
-                            <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
-                            {makeupMarkerForLesson(lesson) && <Badge variant="yellow" className="text-[10px]">{makeupMarkerForLesson(lesson)}</Badge>}
-                          </div>
-                          <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                            {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
-                          </div>
-                        </button>
-                        <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteLesson(lesson)}>
-                          <Trash2 size={14} /> 删除
-                        </Button>
-                      </div>
-                      {lesson.note && (
-                        <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#7f1d1d]">{lesson.note}</div>
-                      )}
-                    </div>
-                  ))}
-                  {calendarDetailLessons.length === 0 && (
-                    <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
-                      这一天没有课程
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
-        <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
-        {[
-          { key: "ai" as SchedulePanel, label: "AI 排课助手" },
-          { key: "schedule" as SchedulePanel, label: "排课" },
-          { key: "calendar" as SchedulePanel, label: "日历查看" },
-          { key: "records" as SchedulePanel, label: "课程记录" },
-          { key: "studentStats" as SchedulePanel, label: "学生课次统计" },
-          { key: "trash" as SchedulePanel, label: `回收站${deletedLessons.length > 0 ? ` ${deletedLessons.length}` : ""}` }
-        ].map((item, index, items) => (
-          <Fragment key={item.key}>
-          <button
-            type="button"
-            onClick={() => switchSchedulePanel(item.key)}
-            className={`min-w-[112px] flex-1 rounded-[12px] px-3 py-2 text-sm font-extrabold transition-colors ${
-              schedulePanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
-            }`}
-          >
-            {item.label}
-          </button>
-          {index < items.length - 1 && (
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f8fbff] text-[#94a3b8] ring-1 ring-[#e8eef6]">
-              <ChevronRight size={14} />
-            </div>
-          )}
-          </Fragment>
-        ))}
-        </div>
-      </div>
+      <ScheduleCalendarDetailDialog
+        amountsVisible={amountsVisible}
+        completedCount={calendarDetailCompletedCount}
+        date={calendarDetailDate}
+        dateWithWeekday={dateWithWeekday}
+        lessons={calendarDetailLessons}
+        makeupMarkerForLesson={makeupMarkerForLesson}
+        onClose={() => setCalendarDetailDate(null)}
+        onDeleteLesson={askDeleteLesson}
+        onOpenLesson={(lesson) => {
+          setCalendarDetailDate(null);
+          openLessonInRecords(lesson);
+        }}
+        pendingCount={calendarDetailPendingCount}
+        cancelledCount={calendarDetailCancelledCount}
+        totalAmount={calendarDetailAmount}
+        vault={vault}
+      />
+      <SchedulePanelTabs
+        activePanel={schedulePanel}
+        deletedLessonCount={deletedLessons.length}
+        onChange={switchSchedulePanel}
+      />
       {scheduleError && (
         <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-4 py-3 text-sm font-extrabold text-[#b91c1c]">
           {scheduleError}
@@ -3150,608 +3060,111 @@ export function ScheduleView({
       )}
 
       {schedulePanel === "studentStats" && (
-        <div className="space-y-6">
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                <UserCheck size={14} /> 学生课次统计
-              </div>
-              <CardTitle>按学生查看课程数量</CardTitle>
-              <CardDescription>学生、课程、科目、校区、日期、时间和状态会同时生效，筛选结果为合并条件后的交集。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
-                <label className="relative block">
-                  <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                  <Input
-                    className="pl-9"
-                    value={studentStatsNameFilter}
-                    onChange={(event) => setStudentStatsNameFilter(event.target.value)}
-                    placeholder="筛选学生姓名"
-                  />
-                </label>
-                <Select value={studentStatsCourseFilter} onChange={(event) => setStudentStatsCourseFilter(event.target.value)}>
-                  <option value="all">全部课程</option>
-                  {courseGroupOptions.map((course) => (
-                    <option key={course.id} value={course.id}>{course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}</option>
-                  ))}
-                </Select>
-                <Select value={studentStatsCourseTypeFilter} onChange={(event) => setStudentStatsCourseTypeFilter(event.target.value as CourseTypeFilter)}>
-                  <option value="all">全部班型</option>
-                  {courseTypeOptionsForVault(vault).map((type) => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </Select>
-                <Select value={studentStatsSubjectFilter} onChange={(event) => setStudentStatsSubjectFilter(event.target.value)}>
-                  <option value="all">全部科目</option>
-                  {studentStatsSubjects.map((subject) => (
-                    <option key={subject} value={subject}>{subject}</option>
-                  ))}
-                </Select>
-                <Select value={studentStatsCampusFilter} onChange={(event) => setStudentStatsCampusFilter(event.target.value)}>
-                  <option value="all">全部校区</option>
-                  {campusOptions.map((campus) => (
-                    <option key={campus.id} value={campus.id}>{campus.name}</option>
-                  ))}
-                </Select>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">开始日期</label>
-                  <Input
-                    type="date"
-                    value={studentStatsDateStart}
-                    onChange={(event) => setStudentStatsDateStart(event.target.value)}
-                    className={!isStudentStatsDateRangeValid(studentStatsDateStart, studentStatsDateEnd) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">结束日期</label>
-                  <Input
-                    type="date"
-                    value={studentStatsDateEnd}
-                    min={studentStatsDateStart}
-                    onChange={(event) => setStudentStatsDateEnd(event.target.value)}
-                    className={!isStudentStatsDateRangeValid(studentStatsDateStart, studentStatsDateEnd) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">开始时间</label>
-                  <TimeTextInput
-                    value={studentStatsStartTime}
-                    onValueChange={setStudentStatsStartTime}
-                    className={!isStudentStatsTimeRangeValid(studentStatsStartTime, studentStatsEndTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">结束时间</label>
-                  <TimeTextInput
-                    value={studentStatsEndTime}
-                    onValueChange={setStudentStatsEndTime}
-                    className={!isStudentStatsTimeRangeValid(studentStatsStartTime, studentStatsEndTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">上课状态</label>
-                  <Select value={studentStatsStatusFilter} onChange={(event) => setStudentStatsStatusFilter(event.target.value as "all" | Lesson["status"])}>
-                    <option value="all">全部状态</option>
-                    {Object.entries(lessonStatusLabels).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {[
-                  { label: "实际课节", value: `${studentStatsLessons.length} 节` },
-                  { label: "学生课次", value: `${studentStatsStudentLessonCount} 人次` },
-                  { label: "涉及学生", value: `${studentStatsRows.length} 人` },
-                  { label: "已完成", value: `${studentStatsCompletedCount} 节` },
-                  { label: "课时费合计", value: formatPrivateMoney(studentStatsTotalFee, amountsVisible) }
-                ].map((item) => (
-                  <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
-                    <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
-                    <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="overflow-hidden">
-            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle>学生课程数量</CardTitle>
-                <CardDescription className="mt-1">一对一按学生展示；非一对一班型会放在同一节课里折叠，展开后查看每个学生。</CardDescription>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary" className="w-fit">{studentStatsRows.length} 人</Badge>
-                <Badge variant="sky" className="w-fit">{studentStatsGroupedLessonRows.length} 组</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {studentStatsGroupedLessonRows.map((row, index) => {
-                const isExpanded = expandedStudentStatsGroupIds.includes(row.groupId);
-                const lesson = row.kind === "grouped" ? vault.lessons.find((item) => item.id === row.lessonId) : undefined;
-                return row.kind === "grouped" ? (
-                  <motion.div
-                    key={row.groupId}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.02 }}
-                    className="rounded-[14px] border border-[#cfe0f5] bg-[#f8fbff] p-4"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => toggleExpandedStudentStatsGroup(row.groupId)}
-                      className="flex w-full flex-col gap-3 text-left lg:flex-row lg:items-start lg:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff] text-sm font-extrabold text-[#1557c2]">
-                            {row.studentCount}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="truncate text-base font-extrabold text-[#061226]">{row.courseName}</div>
-                            <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                              {row.date} · {row.startTime}-{row.endTime} · {row.campusName}
-                            </div>
-                          </div>
-                          <Badge variant="secondary" className="text-[10px]">{row.subject}</Badge>
-                          <Badge variant="sky" className="text-[10px]">{row.courseTypeLabel}</Badge>
-                          <Badge variant={lessonStatusVariant(row.status)} className="text-[10px]">{lessonStatusLabels[row.status]}</Badge>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
-                        {[
-                          { label: "学生课次", value: `${row.studentCount} 人次` },
-                          { label: "课时", value: `${row.hours.toFixed(1)} 小时` },
-                          { label: "课时费", value: formatPrivateMoney(row.amount, amountsVisible) },
-                          { label: "明细", value: isExpanded ? "收起" : "展开" }
-                        ].map((item) => (
-                          <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
-                            <div className="text-[11px] font-semibold text-[#64748b]">{item.label}</div>
-                            <div className="mt-1 text-sm font-extrabold text-[#061226]">{item.value}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </button>
-                    <AnimatePresence initial={false}>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2, ease: "easeInOut" }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-4 rounded-[12px] border border-[#e8eef6] bg-white p-3">
-                            <div className="mb-2 flex items-center justify-between gap-2">
-                              <div className="text-xs font-bold text-[#64748b]">同一节课里的学生</div>
-                              {lesson && (
-                                <Button type="button" size="sm" variant="outline" onClick={() => openLessonInRecords(lesson)}>
-                                  查看课节
-                                </Button>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                              {row.students.map((student) => (
-                                <div key={`${row.groupId}-${student.studentId}`} className="rounded-[10px] border border-[#eef2f7] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
-                                  <div className="font-extrabold text-[#061226]">{student.studentName}</div>
-                                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                    <Badge variant={student.attendanceStatus === "attended" ? "sage" : student.attendanceStatus === "cancelled" ? "destructive" : "yellow"} className="text-[10px]">
-                                      {attendanceLabels[student.attendanceStatus]}
-                                    </Badge>
-                                    {student.note && <span className="truncate">{student.note}</span>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                ) : (
-                <motion.div
-                  key={row.studentId}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.02 }}
-                  className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4"
-                >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff] text-sm font-extrabold text-[#1557c2]">
-                          {row.studentName.slice(0, 1)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate text-base font-extrabold text-[#061226]">{row.studentName}</div>
-                          <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                            {row.courseNames.length > 0 ? row.courseNames.join("、") : "未关联课程名"}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:min-w-[640px] xl:grid-cols-6">
-                      {[
-                        { label: "总课次", value: `${row.total} 节` },
-                        { label: "已完成", value: `${row.completed} 节` },
-                        { label: "待上/待补", value: `${row.pending} 节` },
-                        { label: "已取消", value: `${row.cancelled} 节` },
-                        { label: "课时", value: `${row.hours.toFixed(1)} 小时` },
-                        { label: "课时费", value: formatPrivateMoney(row.amount, amountsVisible) }
-                      ].map((item) => (
-                        <div key={item.label} className="rounded-[10px] border border-[#e8eef6] bg-white px-3 py-2">
-                          <div className="text-[11px] font-semibold text-[#64748b]">{item.label}</div>
-                          <div className="mt-1 text-sm font-extrabold text-[#061226]">{item.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mt-4 rounded-[12px] border border-[#e8eef6] bg-white p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="text-xs font-bold text-[#64748b]">符合筛选的课程明细</div>
-                      <Badge variant="secondary">{row.details.length} 节</Badge>
-                    </div>
-                    <div className="max-h-[220px] space-y-2 overflow-y-auto pr-1">
-                      {row.details.map((detail) => {
-                        const lesson = vault.lessons.find((item) => item.id === detail.lessonId);
-                        if (!lesson) return null;
-                        return (
-                          <button
-                            key={`${row.studentId}-${detail.lessonId}`}
-                            type="button"
-                            onClick={() => openLessonInRecords(lesson)}
-                            className="grid w-full grid-cols-1 gap-2 rounded-[10px] border border-[#eef2f7] bg-[#f8fbff] px-3 py-2 text-left text-xs font-semibold text-[#64748b] transition-colors hover:border-[#1557c2] hover:bg-[#eef5ff] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate font-extrabold text-[#061226]">{detail.courseName}</div>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                <span>{detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName}</span>
-                                <Badge variant="secondary" className="text-[10px]">
-                                  {detail.subject}
-                                </Badge>
-                                <Badge variant="secondary" className="text-[10px]">
-                                  {detail.courseTypeLabel}
-                                </Badge>
-                                <Badge variant={lessonStatusVariant(detail.status)} className="text-[10px]">
-                                  {lessonStatusLabels[detail.status]}
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2 md:justify-end">
-                              <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{detail.hours.toFixed(1)} 小时</span>
-                              <span className="rounded-full bg-[#eaf2ff] px-2.5 py-1 font-extrabold text-[#1557c2]">{formatPrivateMoney(detail.amount, amountsVisible)}</span>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </motion.div>
-                );
-              })}
-              {studentStatsGroupedLessonRows.length === 0 && (
-                <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
-                  没有符合当前筛选条件的学生课次
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <ScheduleStudentStatsPanel
+          amountsVisible={amountsVisible}
+          campusOptions={campusOptions}
+          completedCount={studentStatsCompletedCount}
+          courseGroupOptions={courseGroupOptions}
+          expandedGroupIds={expandedStudentStatsGroupIds}
+          groupedLessonRows={studentStatsGroupedLessonRows}
+          lessonCount={studentStatsLessons.length}
+          onOpenLesson={openLessonInRecords}
+          onToggleGroup={toggleExpandedStudentStatsGroup}
+          rows={studentStatsRows}
+          setCampusFilter={setStudentStatsCampusFilter}
+          setCourseFilter={setStudentStatsCourseFilter}
+          setCourseTypeFilter={setStudentStatsCourseTypeFilter}
+          setDateEnd={setStudentStatsDateEnd}
+          setDateStart={setStudentStatsDateStart}
+          setEndTime={setStudentStatsEndTime}
+          setNameFilter={setStudentStatsNameFilter}
+          setStartTime={setStudentStatsStartTime}
+          setStatusFilter={setStudentStatsStatusFilter}
+          setSubjectFilter={setStudentStatsSubjectFilter}
+          studentLessonCount={studentStatsStudentLessonCount}
+          subjectOptions={studentStatsSubjects}
+          totalFee={studentStatsTotalFee}
+          values={{
+            campusFilter: studentStatsCampusFilter,
+            courseFilter: studentStatsCourseFilter,
+            courseTypeFilter: studentStatsCourseTypeFilter,
+            dateEnd: studentStatsDateEnd,
+            dateStart: studentStatsDateStart,
+            endTime: studentStatsEndTime,
+            nameFilter: studentStatsNameFilter,
+            startTime: studentStatsStartTime,
+            statusFilter: studentStatsStatusFilter,
+            subjectFilter: studentStatsSubjectFilter
+          }}
+          vault={vault}
+        />
       )}
 
       {schedulePanel === "trash" && (
-        <div className="space-y-6">
-          <Card className="overflow-hidden border-2 border-[#fecaca]">
-            <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#b91c1c]">
-                  <Trash2 size={14} /> 课节回收站
-                </div>
-                <CardTitle>误删课节恢复</CardTitle>
-                <CardDescription>手动删除、AI 删除和同步覆盖移除的课节会先保存在这里，可筛选后单个或批量恢复。</CardDescription>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary">{deletedLessons.length} 条回收记录</Badge>
-                <Badge variant="sky">当前筛选 {trashLessons.length} 条</Badge>
-                <Badge variant={selectedVisibleTrashIds.length > 0 ? "amber" : "secondary"}>已选 {selectedVisibleTrashIds.length} 条</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">课程开始日期</label>
-                  <Input type="date" value={trashDateStart} onChange={(event) => setTrashDateStart(event.target.value)} className={!isOrderedDateRange(trashDateStart, trashDateEnd) && trashDateStart && trashDateEnd ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">课程结束日期</label>
-                  <Input type="date" value={trashDateEnd} min={trashDateStart} onChange={(event) => setTrashDateEnd(event.target.value)} className={!isOrderedDateRange(trashDateStart, trashDateEnd) && trashDateStart && trashDateEnd ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">校区</label>
-                  <Select value={trashCampusFilter} onChange={(event) => setTrashCampusFilter(event.target.value)}>
-                    <option value="all">全部校区</option>
-                    {campusOptions.map((campus) => (
-                      <option key={campus.id} value={campus.id}>{campus.name}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">删除来源</label>
-                  <Select value={trashSourceFilter} onChange={(event) => setTrashSourceFilter(event.target.value as "all" | DeletedLesson["source"])}>
-                    <option value="all">全部来源</option>
-                    <option value="manual">手动删除</option>
-                    <option value="ai">AI 删除</option>
-                    <option value="sync_overwrite">同步覆盖</option>
-                  </Select>
-                </div>
-                <div className="space-y-2 xl:col-span-2">
-                  <label className="text-sm font-medium">搜索</label>
-                  <label className="relative block">
-                    <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                    <Input className="pl-9" value={trashSearch} onChange={(event) => setTrashSearch(event.target.value)} placeholder="搜索课程、学生、科目、校区、备注或删除原因" />
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-3 lg:flex-row lg:items-center lg:justify-between">
-                <label className="flex items-center gap-3 text-sm font-bold text-[#25324a]">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleTrashSelected}
-                    onChange={toggleAllVisibleTrashSelection}
-                    className="h-4 w-4 accent-[#ff8617]"
-                  />
-                  全选当前筛选结果
-                </label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" variant="outline" onClick={() => askRestoreTrashItems(selectedVisibleTrashIds)} disabled={selectedTrashRestoreCount === 0}>
-                    <RotateCcw size={15} /> 恢复选中 {selectedTrashRestoreCount > 0 ? selectedTrashRestoreCount : ""}
-                  </Button>
-                  <Button type="button" variant="destructive" onClick={() => askPermanentDeleteTrashItems(selectedVisibleTrashIds)} disabled={selectedVisibleTrashIds.length === 0}>
-                    <Trash2 size={15} /> 彻底删除选中
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {trashLessons.map((item) => {
-                  const lesson = item.lesson;
-                  const course = getCourse(vault, lesson.courseGroupId);
-                  const checked = selectedTrashIdSet.has(item.id);
-                  const hasActiveConflict = activeLessonIds.has(lesson.id);
-                  const missingCourse = !course;
-                  const canRestore = canRestoreDeletedLesson(vault, activeLessonIds, item);
-                  return (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`rounded-[14px] border p-4 ${checked ? "border-[#f59e0b] bg-[#fff7ed]" : "border-[#dbe4ef] bg-white"}`}
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleTrashSelection(item.id)}
-                              className="h-4 w-4 accent-[#ff8617]"
-                            />
-                            <span className="truncate text-base font-extrabold text-[#061226]">{course?.name ?? "未知课程"}</span>
-                            <Badge variant="secondary" className="text-[10px]">{course?.subject ?? "未知科目"}</Badge>
-                            <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
-                            <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
-                            <Badge variant={deletedLessonSourceVariant(item.source)} className="text-[10px]">{deletedLessonSourceLabel(item.source)}</Badge>
-                            {hasActiveConflict && <Badge variant="destructive" className="text-[10px]">恢复冲突</Badge>}
-                            {missingCourse && <Badge variant="destructive" className="text-[10px]">课程档案缺失</Badge>}
-                          </div>
-                          <div className="mt-2 grid grid-cols-1 gap-2 text-sm font-semibold text-[#64748b] md:grid-cols-2">
-                            <div>{dateWithWeekday(lesson.date)} · {lesson.startTime}-{lesson.endTime}</div>
-                            <div>{campusName(vault, lesson.campusId ?? course?.defaultCampusId)} · {lessonStudentDisplay(vault, lesson)}</div>
-                            <div>删除时间：{formatAppDateTime(item.deletedAt)}</div>
-                            <div>删除原因：{item.reason ?? "未记录"}</div>
-                          </div>
-                          {(lesson.content.taught || lesson.content.homework || lesson.note) && (
-                            <div className="mt-3 grid grid-cols-1 gap-2 text-xs font-semibold leading-5 text-[#25324a] lg:grid-cols-3">
-                              {lesson.content.taught && (
-                                <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
-                                  <div className="mb-1 font-extrabold text-[#1557c2]">本次课内容</div>
-                                  <div className="line-clamp-3 whitespace-pre-wrap">{lesson.content.taught}</div>
-                                </div>
-                              )}
-                              {lesson.content.homework && (
-                                <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
-                                  <div className="mb-1 font-extrabold text-[#ff8617]">课后作业</div>
-                                  <div className="line-clamp-3 whitespace-pre-wrap">{lesson.content.homework}</div>
-                                </div>
-                              )}
-                              {lesson.note && (
-                                <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2">
-                                  <div className="mb-1 font-extrabold text-[#64748b]">备注</div>
-                                  <div className="line-clamp-3 whitespace-pre-wrap">{lesson.note}</div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          {hasActiveConflict && (
-                            <div className="mt-3 rounded-[10px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-xs font-bold text-[#b91c1c]">
-                              当前系统里已有同 ID 课节。为避免覆盖现有数据，这条记录暂不能直接恢复。
-                            </div>
-                          )}
-                          {missingCourse && (
-                            <div className="mt-3 rounded-[10px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-xs font-bold text-[#b91c1c]">
-                              这节课对应的课程档案已不存在。请先重建或恢复课程档案，再恢复这节课。
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
-                          <Button type="button" size="sm" onClick={() => askRestoreTrashItems([item.id])} disabled={!canRestore}>
-                            <RotateCcw size={14} /> 恢复
-                          </Button>
-                          <Button type="button" size="sm" variant="destructive" onClick={() => askPermanentDeleteTrashItems([item.id])}>
-                            <Trash2 size={14} /> 彻底删除
-                          </Button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-                {trashLessons.length === 0 && (
-                  <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-10 text-center">
-                    <div className="text-base font-extrabold text-[#061226]">当前筛选下没有回收站记录</div>
-                    <div className="mt-2 text-sm font-semibold text-[#64748b]">删除课节后会先保存在这里，确认不需要时再彻底删除。</div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <ScheduleTrashPanel
+          activeLessonIds={activeLessonIds}
+          allVisibleTrashSelected={allVisibleTrashSelected}
+          campusOptions={campusOptions}
+          dateWithWeekday={dateWithWeekday}
+          deletedLessonCount={deletedLessons.length}
+          onPermanentDelete={askPermanentDeleteTrashItems}
+          onRestore={askRestoreTrashItems}
+          onToggleAllVisible={toggleAllVisibleTrashSelection}
+          onToggleSelection={toggleTrashSelection}
+          selectedTrashIdSet={selectedTrashIdSet}
+          selectedTrashRestoreCount={selectedTrashRestoreCount}
+          selectedVisibleTrashIds={selectedVisibleTrashIds}
+          setTrashCampusFilter={setTrashCampusFilter}
+          setTrashDateEnd={setTrashDateEnd}
+          setTrashDateStart={setTrashDateStart}
+          setTrashSearch={setTrashSearch}
+          setTrashSourceFilter={setTrashSourceFilter}
+          trashCampusFilter={trashCampusFilter}
+          trashDateEnd={trashDateEnd}
+          trashDateStart={trashDateStart}
+          trashLessons={trashLessons}
+          trashSearch={trashSearch}
+          trashSourceFilter={trashSourceFilter}
+          vault={vault}
+        />
       )}
 
       {schedulePanel === "records" && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
-        <Card className="h-fit overflow-hidden">
-          <CardHeader>
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-              <Clock size={14} /> 课程记录
-            </div>
-            <CardTitle>课时列表</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 pb-4">
-            <label className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
-              <input
-                type="checkbox"
-                checked={syncRecordsWithCalendarDate}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setSyncRecordsWithCalendarDate(checked);
-                  if (!checked) {
-                    setLessonScope("day");
-                    setLessonDay(selectedCalendarDate);
-                  }
-                }}
-                className="h-4 w-4 accent-[#ff8617]"
-              />
-              同步日历查看日期（{dateWithWeekday(selectedCalendarDate)}）
-            </label>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">查看范围</label>
-                <Select value={syncRecordsWithCalendarDate ? "day" : lessonScope} onChange={(event) => setLessonScope(event.target.value as LessonScope)} disabled={syncRecordsWithCalendarDate}>
-                  <option value="month">按月查看</option>
-                  <option value="day">按日查看</option>
-                  <option value="range">按日期范围</option>
-                  <option value="week">按周查看</option>
-                </Select>
-              </div>
-              {effectiveLessonScope === "month" ? (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">月份</label>
-                  <Input type="month" value={lessonMonth} onChange={(event) => setLessonMonth(event.target.value)} className="min-w-0 text-sm" />
-                </div>
-              ) : effectiveLessonScope === "day" ? (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">日期</label>
-                  <Input
-                    type="date"
-                    value={effectiveLessonDay}
-                    onChange={(event) => setLessonDay(event.target.value)}
-                    disabled={syncRecordsWithCalendarDate}
-                    className="min-w-0 text-sm"
-                  />
-                </div>
-              ) : effectiveLessonScope === "range" ? (
-                <>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">开始日期</label>
-                    <Input type="date" value={lessonRangeStart} onChange={(event) => setLessonRangeStart(event.target.value)} className="min-w-0 text-sm" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">结束日期</label>
-                    <Input type="date" value={lessonRangeEnd} min={lessonRangeStart} onChange={(event) => setLessonRangeEnd(event.target.value)} className={!isOrderedDateRange(lessonRangeStart, lessonRangeEnd) ? "min-w-0 border-[#fca5a5] bg-[#fff1f2] text-sm" : "min-w-0 text-sm"} />
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">周</label>
-                  <Input type="week" value={lessonWeek} onChange={(event) => setLessonWeek(event.target.value)} className="min-w-0 text-sm" />
-                </div>
-              )}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">校区筛选</label>
-                <Select value={campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
-                  <option value="all">全部校区</option>
-                  {campusOptions.map((campus) => (
-                    <option key={campus.id} value={campus.id}>{campus.name}</option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">班型筛选</label>
-                <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as CourseTypeFilter)}>
-                  <option value="all">全部班型</option>
-                  {courseTypeOptionsForVault(vault).map((type) => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
-              <label className="relative block">
-                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                <Input className="pl-9" value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} placeholder="搜索姓名、年级、校区或班型" />
-              </label>
-              <Button type="button" variant={showOnlyMakeup ? "default" : "outline"} onClick={() => setShowOnlyMakeup((value) => !value)}>
-                <RotateCcw size={15} /> 只看补课
-              </Button>
-            </div>
-
-            <div className="max-h-[620px] space-y-1 overflow-y-auto pr-2">
-              {lessons.map((lesson, index) => (
-                <motion.button
-                  key={lesson.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.02 }}
-                  whileHover={{ scale: 1.01, x: 2 }}
-                  whileTap={{ scale: 0.99 }}
-                  onClick={() => openLessonInRecords(lesson)}
-                  className={`flex w-full items-center justify-between rounded-[14px] border p-3 text-left transition-all duration-200 ${
-                    selected?.id === lesson.id
-                      ? "border-[#93c5fd] bg-[#eaf2ff] shadow-[0_10px_24px_rgba(21,87,194,0.12)]"
-                      : lessonStatusSurfaceClass(lesson.status)
-                  }`}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white">
-                      <GraduationCap size={14} className="text-(--color-muted-foreground)" />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{courseName(vault, lesson.courseGroupId)}</span>
-                      <span className="text-xs text-(--color-muted-foreground)">
-                        {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {dateWithWeekday(lesson.date)} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="hidden text-sm font-semibold sm:inline">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</span>
-                    <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">
-                      {lessonStatusLabels[lesson.status]}
-                    </Badge>
-                  </div>
-                </motion.button>
-              ))}
-              {lessons.length === 0 && (
-                <p className="py-8 text-center text-sm text-(--color-muted-foreground)">没有符合筛选条件的课程记录</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <ScheduleRecordsListCard
+          amountsVisible={amountsVisible}
+          campusFilter={campusFilter}
+          campusOptions={campusOptions}
+          courseTypeFilter={courseTypeFilter}
+          dateWithWeekday={dateWithWeekday}
+          effectiveLessonDay={effectiveLessonDay}
+          effectiveLessonScope={effectiveLessonScope}
+          lessonDay={lessonDay}
+          lessonMonth={lessonMonth}
+          lessonRangeEnd={lessonRangeEnd}
+          lessonRangeStart={lessonRangeStart}
+          lessonScope={lessonScope}
+          lessonWeek={lessonWeek}
+          lessons={lessons}
+          onOpenLesson={openLessonInRecords}
+          selectedLessonId={selected?.id}
+          selectedCalendarDate={selectedCalendarDate}
+          setCampusFilter={setCampusFilter}
+          setCourseTypeFilter={setCourseTypeFilter}
+          setLessonDay={setLessonDay}
+          setLessonMonth={setLessonMonth}
+          setLessonRangeEnd={setLessonRangeEnd}
+          setLessonRangeStart={setLessonRangeStart}
+          setLessonScope={setLessonScope}
+          setLessonWeek={setLessonWeek}
+          setShowOnlyMakeup={setShowOnlyMakeup}
+          setStudentFilter={setStudentFilter}
+          setSyncRecordsWithCalendarDate={setSyncRecordsWithCalendarDate}
+          showOnlyMakeup={showOnlyMakeup}
+          studentFilter={studentFilter}
+          syncRecordsWithCalendarDate={syncRecordsWithCalendarDate}
+          vault={vault}
+        />
 
         {selected && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
@@ -4292,513 +3705,4 @@ export function ScheduleView({
       )}
     </div>
   );
-}
-
-function offsetDate(offset: number): string {
-  return addDays(todayIso(), offset);
-}
-
-function isoWeekValue(dateIso: string): string {
-  const date = parseDateOnlyUtc(dateIso);
-  const day = date.getUTCDay() || 7;
-  const thursday = new Date(date);
-  thursday.setUTCDate(date.getUTCDate() + 4 - day);
-  const year = thursday.getUTCFullYear();
-  const firstThursday = parseDateOnlyUtc(`${year}-01-04`);
-  const firstDay = firstThursday.getUTCDay() || 7;
-  firstThursday.setUTCDate(firstThursday.getUTCDate() + 4 - firstDay);
-  const week = Math.floor((thursday.getTime() - firstThursday.getTime()) / 604_800_000) + 1;
-  return `${year}-W${String(week).padStart(2, "0")}`;
-}
-
-function datesForIsoWeekValue(value: string): string[] {
-  const match = /^(\d{4})-W(\d{2})$/.exec(value);
-  if (!match) return [];
-  const year = Number(match[1]);
-  const week = Number(match[2]);
-  const jan4 = parseDateOnlyUtc(`${year}-01-04`);
-  const jan4Day = jan4.getUTCDay() || 7;
-  const monday = new Date(jan4);
-  monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1 + (week - 1) * 7);
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(monday);
-    date.setUTCDate(monday.getUTCDate() + index);
-    return formatDateIso(date);
-  });
-}
-
-function datesBetweenLocal(startDate: string, endDate: string): string[] {
-  const start = parseDateOnlyUtc(startDate);
-  const end = parseDateOnlyUtc(endDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
-  const dates: string[] = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    dates.push(formatDateIso(cursor));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return dates;
-}
-
-function parseDateOnlyUtc(dateIso: string): Date {
-  const [year, month, day] = dateIso.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
-  const aStartMinutes = timeToMinutes(aStart);
-  const aEndMinutes = timeToMinutes(aEnd);
-  const bStartMinutes = timeToMinutes(bStart);
-  const bEndMinutes = timeToMinutes(bEnd);
-  if (![aStartMinutes, aEndMinutes, bStartMinutes, bEndMinutes].every(Number.isFinite)) return false;
-  return aStartMinutes < bEndMinutes && bStartMinutes < aEndMinutes;
-}
-
-function isOrderedTimeRange(startTime: string, endTime: string): boolean {
-  if (!startTime || !endTime) return false;
-  const startMinutes = timeToMinutes(startTime);
-  const endMinutes = timeToMinutes(endTime);
-  return Number.isFinite(startMinutes) && Number.isFinite(endMinutes) && startMinutes < endMinutes;
-}
-
-function isOrderedDateRange(startDate: string, endDate: string): boolean {
-  return Boolean(startDate && endDate && startDate <= endDate);
-}
-
-function isCompletedLessonStatus(status: string): boolean {
-  return status === "completed" || status === "makeup_completed";
-}
-
-function isPendingLessonStatus(status: string): boolean {
-  return status === "draft" || status === "scheduled" || status === "makeup_pending";
-}
-
-function attendanceStatusForLessonStatus(status: Lesson["status"]): AttendanceStatus {
-  if (status === "cancelled") return "cancelled";
-  if (status === "makeup_pending") return "makeup_pending";
-  if (status === "makeup_completed") return "makeup_completed";
-  return "attended";
-}
-
-function lessonStatusForAttendanceStatus(status: AttendanceStatus): Lesson["status"] {
-  if (status === "cancelled") return "cancelled";
-  if (status === "makeup_completed") return "makeup_completed";
-  if (isMakeupAttendanceStatus(status)) return "makeup_pending";
-  return "completed";
-}
-
-function aiChatEndpoint(baseUrl: string, provider?: AiProviderConfig): string {
-  const normalized = baseUrl
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/\/+$/, "")
-    .replace(/\/v1\/chat\/completions$/i, "")
-    .replace(/\/chat\/completions$/i, "")
-    .replace(/\/v1\/responses$/i, "")
-    .replace(/\/responses$/i, "")
-    .replace(/\/v1\/messages$/i, "")
-    .replace(/\/messages$/i, "");
-  if (!normalized) return "";
-  const path = provider?.provider === "openai_response"
-    ? "responses"
-    : provider?.provider === "anthropic"
-      ? "messages"
-      : "chat/completions";
-  return /\/v1$/i.test(normalized) ? `${normalized}/${path}` : `${normalized}/v1/${path}`;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function arrayValue(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function textValue(value: unknown, fallback = "未填写"): string {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed || fallback;
-  }
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return fallback;
-}
-
-function formatAiValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "未填写";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "无";
-    return value.map((item) => formatAiValue(item)).join("、");
-  }
-  if (isPlainRecord(value)) {
-    return Object.entries(value)
-      .map(([key, item]) => `${aiFieldLabel(key)}：${formatAiValue(item)}`)
-      .join("\n");
-  }
-  return String(value);
-}
-
-function aiActionLabel(type: string): string {
-  const labels: Record<string, string> = {
-    create_student: "新增学生",
-    update_student: "修改学生档案",
-    modify_student: "修改学生档案",
-    rename_student: "修改学生姓名",
-    create_course: "添加课程档案",
-    create_course_type: "新增班型",
-    create_custom_course_type: "新增班型",
-    update_course: "修改课程",
-    modify_course: "修改课程",
-    delete_course: "删除/暂停课程",
-    pause_course: "暂停课程",
-    migrate_course: "迁移课程",
-    move_course_lessons: "迁移课节",
-    delete_lesson: "删除课节",
-    remove_lesson: "删除课节",
-    cancel_lesson: "删除课节",
-    schedule_lessons: "新增排课",
-    sync_lessons: "同步排课",
-    ask_clarification: "需要补充信息"
-  };
-  return labels[type] ?? type;
-}
-
-function aiFieldLabel(key: string): string {
-  const labels: Record<string, string> = {
-    studentId: "学生ID",
-    studentName: "学生姓名",
-    currentName: "当前姓名",
-    oldName: "原姓名",
-    sourceStudentName: "原学生姓名",
-    sourceName: "原姓名",
-    newStudentName: "新学生姓名",
-    targetName: "新姓名",
-    studentNames: "学生",
-    name: "名称",
-    newName: "新名称",
-    courseName: "课程档案名称",
-    courseId: "课程",
-    sourceCourseId: "原课程",
-    sourceCourseName: "原课程",
-    targetCourseId: "目标课程",
-    targetCourseName: "目标课程",
-    newCourseName: "新课程档案名称",
-    type: "班型",
-    targetType: "目标班型",
-    subject: "科目",
-    campus: "校区",
-    defaultCampusId: "默认校区",
-    grade: "年级",
-    school: "学校",
-    status: "状态",
-    temporaryTrial: "试听标记",
-    mode: "处理方式",
-    deleteMode: "删除方式",
-    forceDelete: "强制删除",
-    lessonUpdateScope: "课节同步范围",
-    applyToLessons: "课节同步范围",
-    updateLessons: "课节同步范围",
-    migrateLessons: "迁移课节",
-    moveLessons: "迁移课节",
-    effectiveFrom: "生效开始日期",
-    effectiveTo: "生效结束日期",
-    pauseSource: "暂停原课程",
-    date: "日期",
-    dates: "日期",
-    dateStart: "开始日期",
-    dateEnd: "结束日期",
-    startDate: "开始日期",
-    endDate: "结束日期",
-    fromDate: "开始日期",
-    toDate: "结束日期",
-    weekday: "星期",
-    weekdays: "星期",
-    startTime: "开始时间",
-    endTime: "结束时间",
-    sourceDate: "来源日期",
-    targetDate: "目标日期",
-    sourceDateStart: "来源开始日期",
-    sourceDateEnd: "来源结束日期",
-    targetDateStart: "目标开始日期",
-    targetDateEnd: "目标结束日期",
-    sourceDates: "来源日期",
-    targetDates: "目标日期",
-    overwriteExisting: "覆盖已有课节",
-    includeCancelled: "包含已取消课节",
-    lessonId: "课节",
-    lessonIds: "课节",
-    scheduledOnly: "仅删除待上课",
-    includeCompleted: "包含已完成课",
-    deleteCompleted: "删除已完成课",
-    note: "备注",
-    reason: "原因",
-    confidence: "置信度"
-  };
-  return labels[key] ?? key;
-}
-
-function isStudentStatsDateRangeValid(startDate: string, endDate: string): boolean {
-  return !startDate || !endDate || startDate <= endDate;
-}
-
-function isStudentStatsTimeRangeValid(startTime: string, endTime: string): boolean {
-  if (!startTime && !endTime) return true;
-  if (startTime && !Number.isFinite(timeToMinutes(startTime))) return false;
-  if (endTime && !Number.isFinite(timeToMinutes(endTime))) return false;
-  return !startTime || !endTime || timeToMinutes(startTime) <= timeToMinutes(endTime);
-}
-
-function timeToMinutes(value: string): number {
-  return timeTextToMinutes(value);
-}
-
-function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {
-  const course = getCourse(vault, lesson.courseGroupId);
-  const studentFields = lessonStudentIds(lesson).flatMap((studentId) => {
-    const student = findStudent(vault, studentId);
-    return [
-      student?.name ?? "",
-      student?.grade ?? "",
-      campusName(vault, student?.defaultCampusId),
-      student?.note ?? ""
-    ];
-  });
-  return [
-    course?.name ?? "",
-    course?.subject ?? "",
-    courseTypeLabel(vault, lesson.type),
-    campusName(vault, lesson.campusId ?? course?.defaultCampusId),
-    lessonStatusLabels[lesson.status],
-    studentNames(vault, lesson.expectedStudentIds),
-    lesson.note ?? "",
-    ...studentFields
-  ].join(" ").toLowerCase();
-}
-
-function deletedLessonSearchText(vault: TeacherVault, item: DeletedLesson): string {
-  const lesson = item.lesson;
-  const course = getCourse(vault, lesson.courseGroupId);
-  return [
-    deletedLessonSourceLabel(item.source),
-    item.reason ?? "",
-    formatAppDateTime(item.deletedAt),
-    lessonSearchText(vault, lesson),
-    lesson.content.taught,
-    lesson.content.homework,
-    lesson.content.performance ?? "",
-    lesson.content.nextLessonReminder,
-    lesson.content.internalNote ?? ""
-  ].join(" ").toLowerCase();
-}
-
-function canRestoreDeletedLesson(vault: TeacherVault, activeLessonIds: Set<string>, item: DeletedLesson): boolean {
-  return !activeLessonIds.has(item.lesson.id) && Boolean(getCourse(vault, item.lesson.courseGroupId));
-}
-
-function deletedLessonSourceLabel(source: DeletedLesson["source"]): string {
-  if (source === "ai") return "AI 删除";
-  if (source === "sync_overwrite") return "同步覆盖";
-  return "手动删除";
-}
-
-function deletedLessonSourceVariant(source: DeletedLesson["source"]): "amber" | "sky" | "secondary" {
-  if (source === "ai") return "amber";
-  if (source === "sync_overwrite") return "sky";
-  return "secondary";
-}
-
-function filterScheduleCourseOptions(vault: TeacherVault, courses: CourseGroup[], query: string, currentCourseId: string): CourseGroup[] {
-  const normalizedQuery = query.trim().toLowerCase();
-  const filtered = normalizedQuery
-    ? courses.filter((course) => {
-        const courseStudents = course.studentIds
-          .map((studentId) => findStudent(vault, studentId))
-          .filter((student): student is NonNullable<typeof student> => Boolean(student));
-        const searchable = [
-          course.name,
-          course.subject,
-          courseTypeLabel(vault, course.type),
-          campusName(vault, course.defaultCampusId),
-          studentNames(vault, course.studentIds),
-          ...courseStudents.flatMap((student) => [
-            student?.name ?? "",
-            student?.grade ?? "",
-            campusName(vault, student?.defaultCampusId),
-            student?.note ?? ""
-          ])
-        ].join(" ").toLowerCase();
-        return normalizedQuery.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
-      })
-    : courses;
-  const currentCourse = courses.find((course) => course.id === currentCourseId);
-  if (currentCourse && !filtered.some((course) => course.id === currentCourse.id)) {
-    return [currentCourse, ...filtered];
-  }
-  return filtered;
-}
-
-function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], normalizedNameFilter: string) {
-  const rows = new Map<string, {
-    studentId: string;
-    studentName: string;
-    total: number;
-    completed: number;
-    pending: number;
-    cancelled: number;
-    hours: number;
-    amount: number;
-    courseNames: string[];
-    details: Array<{
-      lessonId: string;
-      courseName: string;
-      subject: string;
-      courseTypeLabel: string;
-      campusName: string;
-      date: string;
-      startTime: string;
-      endTime: string;
-      status: Lesson["status"];
-      hours: number;
-      amount: number;
-    }>;
-  }>();
-
-  lessons.forEach((lesson) => {
-    const hours = lessonBillableHours(lesson);
-    const amount = lesson.feeSnapshot.amount;
-    lessonStudentIds(lesson).forEach((studentId) => {
-      const student = findStudent(vault, studentId);
-      const studentName = student?.name ?? "未知学生";
-      if (normalizedNameFilter && !studentName.toLowerCase().includes(normalizedNameFilter)) return;
-      const current = rows.get(studentId) ?? {
-        studentId,
-        studentName,
-        total: 0,
-        completed: 0,
-        pending: 0,
-        cancelled: 0,
-        hours: 0,
-        amount: 0,
-        courseNames: [],
-        details: []
-      };
-
-      current.total += 1;
-      current.hours += hours;
-      current.amount += amount;
-      if (isCompletedLessonStatus(lesson.status)) {
-        current.completed += 1;
-      } else if (isPendingLessonStatus(lesson.status)) {
-        current.pending += 1;
-      } else if (lesson.status === "cancelled") {
-        current.cancelled += 1;
-      }
-
-      const name = courseName(vault, lesson.courseGroupId);
-      const typeLabel = courseTypeLabel(vault, lesson.type);
-      const typedName = `${name}（${typeLabel}）`;
-      if (!current.courseNames.includes(typedName)) {
-        current.courseNames.push(typedName);
-      }
-      current.details.push({
-        lessonId: lesson.id,
-        courseName: name,
-        subject: courseSubject(vault, lesson.courseGroupId),
-        courseTypeLabel: typeLabel,
-        campusName: campusName(vault, lesson.campusId),
-        date: lesson.date,
-        startTime: lesson.startTime,
-        endTime: lesson.endTime,
-        status: lesson.status,
-        hours,
-        amount
-      });
-      rows.set(studentId, current);
-    });
-  });
-
-  return [...rows.values()]
-    .map((row) => ({ ...row, courseNames: [...row.courseNames].sort(compareByName) }))
-    .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
-}
-
-function buildStudentStatsGroupedLessonRows(vault: TeacherVault, lessons: Lesson[], normalizedNameFilter: string) {
-  const oneToOneLessons = lessons.filter((lesson) => isOneOnOneStatsLesson(vault, lesson));
-  const groupedLessons = lessons.filter((lesson) => !isOneOnOneStatsLesson(vault, lesson));
-  const oneToOneRows = buildStudentStatsRows(
-    vault,
-    oneToOneLessons,
-    normalizedNameFilter
-  ).map((row) => ({ kind: "student" as const, groupId: `student-${row.studentId}`, ...row }));
-
-  const groupedRows = groupedLessons
-    .map((lesson) => {
-      const filteredStudentIds = filteredStudentIdsForStats(vault, lesson, normalizedNameFilter);
-      if (filteredStudentIds.length === 0) return null;
-      const hours = lessonBillableHours(lesson);
-      return {
-        kind: "grouped" as const,
-        groupId: `lesson-${lesson.id}`,
-        lessonId: lesson.id,
-        courseName: courseName(vault, lesson.courseGroupId),
-        subject: courseSubject(vault, lesson.courseGroupId),
-        courseTypeLabel: courseTypeLabel(vault, lesson.type),
-        campusName: campusName(vault, lesson.campusId),
-        date: lesson.date,
-        startTime: lesson.startTime,
-        endTime: lesson.endTime,
-        status: lesson.status,
-        studentCount: filteredStudentIds.length,
-        hours,
-        amount: lesson.feeSnapshot.amount,
-        students: filteredStudentIds
-          .map((studentId) => {
-            const attendance = lesson.attendance.find((entry) => entry.studentId === studentId);
-            return {
-              studentId,
-              studentName: findStudent(vault, studentId)?.name ?? "未知学生",
-              attendanceStatus: attendance?.status ?? attendanceStatusForLessonStatus(lesson.status),
-              note: attendance?.note ?? ""
-            };
-          })
-          .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId))
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => Boolean(row));
-
-  return [...groupedRows, ...oneToOneRows].sort((a, b) => {
-    const aDateTime = a.kind === "grouped" ? `${a.date} ${a.startTime}` : a.details[0] ? `${a.details[0].date} ${a.details[0].startTime}` : "";
-    const bDateTime = b.kind === "grouped" ? `${b.date} ${b.startTime}` : b.details[0] ? `${b.details[0].date} ${b.details[0].startTime}` : "";
-    if (aDateTime !== bDateTime) return bDateTime.localeCompare(aDateTime);
-    const aLabel = a.kind === "grouped" ? a.courseName : a.studentName;
-    const bLabel = b.kind === "grouped" ? b.courseName : b.studentName;
-    return compareByName(aLabel, bLabel) || a.groupId.localeCompare(b.groupId);
-  });
-}
-
-function isOneOnOneStatsLesson(vault: TeacherVault, lesson: Lesson): boolean {
-  const course = getCourse(vault, lesson.courseGroupId);
-  if (lesson.type === "one_on_one" || course?.type === "one_on_one") return true;
-  return false;
-}
-
-function filteredStudentIdsForStats(vault: TeacherVault, lesson: Lesson, normalizedNameFilter: string): string[] {
-  return lessonStudentIds(lesson).filter((studentId) => {
-    const studentName = findStudent(vault, studentId)?.name ?? "未知学生";
-    return !normalizedNameFilter || studentName.toLowerCase().includes(normalizedNameFilter);
-  });
-}
-
-function attendanceSurfaceClass(status: AttendanceStatus, isTemporary: boolean): string {
-  if (status === "leave_requested" || status === "makeup_pending") {
-    return "border-[#facc15] bg-[#fef9c3]";
-  }
-  if (status === "absent" || status === "cancelled") {
-    return "border-[#fecaca] bg-[#fff1f2]";
-  }
-  if (isTemporary) {
-    return "border-[#c7d2fe] bg-[#eef0ff]";
-  }
-  return "border-[#dbe4ef] bg-[#f8fbff]";
 }
