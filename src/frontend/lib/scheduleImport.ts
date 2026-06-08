@@ -287,15 +287,22 @@ export function downloadMergedScheduleWorkbook(lessons: ImportedScheduleLesson[]
   const workbook = XLSX.utils.book_new();
   const dailySheet = XLSX.utils.aoa_to_sheet(buildMergedDailyRows(dayGroups, summary));
   dailySheet["!cols"] = [
-    { wch: 12 },
-    { wch: 8 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 12 },
+    { wch: 18 },
+    { wch: 16 },
     { wch: 14 },
-    { wch: 12 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 14 },
     { wch: 90 }
   ];
+  dailySheet["!rows"] = [
+    { hpt: 24 },
+    { hpt: 8 },
+    { hpt: 22 }
+  ];
+  styleMergedSheetHeader(dailySheet, 1, 5);
+  styleMergedSheetHeader(dailySheet, 3, 8);
   XLSX.utils.book_append_sheet(workbook, dailySheet, "每日合并");
 
   const detailSheet = XLSX.utils.aoa_to_sheet(buildMergedDetailRows(sortedLessons));
@@ -318,6 +325,8 @@ export function downloadMergedScheduleWorkbook(lessons: ImportedScheduleLesson[]
     { wch: 24 },
     { wch: 50 }
   ];
+  detailSheet["!rows"] = [{ hpt: 22 }];
+  styleMergedSheetHeader(detailSheet, 1, 17);
   XLSX.utils.book_append_sheet(workbook, detailSheet, "课程明细");
   XLSX.writeFile(workbook, `教务课表合并_${mergedExportDateRange(sortedLessons)}.xlsx`);
   return summary;
@@ -403,6 +412,19 @@ function buildMergedDetailRows(lessons: ImportedScheduleLesson[]): Array<Array<s
       lesson.rawText
     ])
   ];
+}
+
+function styleMergedSheetHeader(sheet: XLSX.WorkSheet, rowNumber: number, columnCount: number) {
+  for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+    const cellAddress = XLSX.utils.encode_cell({ r: rowNumber - 1, c: columnIndex });
+    const cell = sheet[cellAddress];
+    if (!cell) continue;
+    cell.s = {
+      ...(cell.s ?? {}),
+      alignment: { horizontal: "center", vertical: "center", wrapText: true },
+      font: { bold: true }
+    };
+  }
 }
 
 function formatMergedDailyLesson(lesson: ImportedScheduleLesson): string {
