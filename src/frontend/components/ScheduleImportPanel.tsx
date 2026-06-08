@@ -367,30 +367,34 @@ export function ScheduleImportPanel({
             <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
               <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-3 text-xs font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff] sm:px-4 sm:text-sm">
-                {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-                选择一个或多个 .xls / .xlsx
-                <input
-                  type="file"
-                  accept=".xls,.xlsx"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => {
-                    void handleFiles(event.target.files);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
-              <Button type="button" variant="outline" disabled={rows.length === 0} onClick={saveMapping}>
-                <Save size={15} /> 保存对账
-              </Button>
-              <Button type="button" variant="outline" disabled={rawLessons.length === 0} onClick={downloadMergedSchedule}>
-                <Download size={15} /> 合并导出
-              </Button>
-              <Button type="button" variant="outline" disabled={rawLessons.length === 0} onClick={clearImport}>
-                <X size={15} /> 清空
-              </Button>
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-3 text-xs font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff] sm:px-4 sm:text-sm">
+                  {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+                  选择一个或多个 .xls / .xlsx
+                  <input
+                    type="file"
+                    accept=".xls,.xlsx"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => {
+                      void handleFiles(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <Button type="button" variant="outline" disabled={rows.length === 0} onClick={saveMapping}>
+                  <Save size={15} /> 保存对账
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                <Button type="button" variant="outline" disabled={rawLessons.length === 0} onClick={downloadMergedSchedule}>
+                  <Download size={15} /> 合并导出
+                </Button>
+                <Button type="button" variant="outline" disabled={rawLessons.length === 0} onClick={clearImport}>
+                  <X size={15} /> 清空
+                </Button>
+              </div>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               {[
