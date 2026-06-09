@@ -128,9 +128,9 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
           <BadgeDollarSign size={14} /> 课时费计算
         </div>
         <CardTitle>教师课时费等级</CardTitle>
-        <CardDescription>
-          课程里只选择老师等级；实际课时费会按课程学生年级阶段套用该等级下对应金额，底薪仍按老师等级统一设置。
-          班课按“班课底费 + max(到课人数 - 5, 0) * 人头加价”计算；非班课按“非班课基础费 + max(到课人数 - 1, 0) * 人头加价”计算。
+        <CardDescription className="space-y-1">
+          <span className="block">课程里只选择老师等级；实际课时费会按课程学生年级阶段套用该等级下对应金额，底薪仍按老师等级统一设置。</span>
+          <span className="block">班课的班型按“班课底费 + max(到课人数 - 5, 0) * 人头加价”计算；非班课的班型按“一对一基础费 + max(到课人数 - 1, 0) * 人头加价”计算。</span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -199,7 +199,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
               <div className="mt-3 overflow-x-auto rounded-[12px] border border-[#e8eef6]">
                 <div className="grid min-w-[680px] grid-cols-[110px_repeat(3,minmax(130px,1fr))] gap-2 border-b border-[#eef3f8] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#64748b]">
                   <div>年级阶段</div>
-                  <div>非班课基础费</div>
+                  <div>一对一基础费</div>
                   <div>班课底费</div>
                   <div>人头加价</div>
                 </div>

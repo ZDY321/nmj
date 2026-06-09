@@ -48,6 +48,8 @@ export function ScheduleImportReconciliationRow({
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
 }) {
   const systemLesson = row.systemLessonId ? vault.lessons.find((lesson) => lesson.id === row.systemLessonId) : undefined;
+  const importTimeLabel = `${row.startTime}-${row.endTime}`;
+  const systemTimeLabel = systemLesson ? `${systemLesson.startTime}-${systemLesson.endTime}` : "";
   const resolutionStatus = resolution?.status ?? "unreviewed";
   const reviewed = isReviewedResolution(resolution);
   const displayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
@@ -83,6 +85,12 @@ export function ScheduleImportReconciliationRow({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant={statusVariant(displayStatus)}>{statusLabel(displayStatus)}</Badge>
             <Badge variant="secondary">{row.date}</Badge>
+            <Badge variant="secondary">教务 {importTimeLabel}</Badge>
+            {systemLesson && (
+              <Badge variant={systemTimeLabel === importTimeLabel ? "secondary" : "sky"}>
+                云端 {systemTimeLabel}
+              </Badge>
+            )}
             {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
             {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
@@ -91,7 +99,7 @@ export function ScheduleImportReconciliationRow({
           {isMatched && !detailsExpanded && (
             <>
               <div className="truncate text-sm font-extrabold leading-5 text-[#061226]">
-                {row.startTime}-{row.endTime} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
+                {systemLesson && systemTimeLabel !== importTimeLabel ? `教务 ${importTimeLabel} · 云端 ${systemTimeLabel}` : importTimeLabel} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
               </div>
               <div className="mt-1 truncate text-xs font-semibold leading-5 text-[#64748b]">
                 教务：{row.title} · 云端：{systemLesson ? localCourseName(vault, systemLesson.courseGroupId) : "未找到课节"}

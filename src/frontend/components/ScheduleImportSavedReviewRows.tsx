@@ -122,6 +122,8 @@ function SavedReviewRowCard({
   const systemLessonLabel = savedRowSystemLessonLabel(vault, row);
   const systemAttendance = savedRowSystemAttendance(vault, row);
   const systemCourseId = systemLesson?.courseGroupId ?? row.matchedCourseId;
+  const importTimeLabel = `${row.startTime}-${row.endTime}`;
+  const systemTimeLabel = systemLesson ? `${systemLesson.startTime}-${systemLesson.endTime}` : "";
   const usesCurrentSystemLesson = Boolean(systemLesson && row.systemLessonLabel && systemLessonLabel !== row.systemLessonLabel);
   return (
     <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(rowStatus, reviewed && !resolvedAsMatched)}`}>
@@ -130,7 +132,12 @@ function SavedReviewRowCard({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant={statusVariant(rowStatus)}>{statusLabel(rowStatus)}</Badge>
             <Badge variant="secondary">{row.date}</Badge>
-            <Badge variant="secondary">{row.startTime}-{row.endTime}</Badge>
+            <Badge variant="secondary">教务 {importTimeLabel}</Badge>
+            {systemLesson && (
+              <Badge variant={systemTimeLabel === importTimeLabel ? "secondary" : "sky"}>
+                云端 {systemTimeLabel}
+              </Badge>
+            )}
             {systemAttendance.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemAttendance.status]}</Badge>}
             {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && <Badge variant="sky">{resolutionStatusLabel(row.resolutionStatus)}</Badge>}
             {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
