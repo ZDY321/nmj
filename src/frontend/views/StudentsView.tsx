@@ -578,23 +578,11 @@ export function StudentsView({
 
   function customFeeRuleForCourseType(type: CourseType): FeeRule {
     if (type === "trial") return defaultFeeRuleForCourseType("trial");
-    if (supportsSalaryGradeFee(type)) {
-      const minStudents = classHeadcountBaseStudentCount(type);
-      const tier = {
-        id: "tier_1_plus",
-        minStudents,
-        baseFee: 0,
-        perStudentFee: 0
-      };
-      return {
-        mode: "class_headcount",
-        baseFee: tier.baseFee,
-        perPresentStudentFee: tier.perStudentFee,
-        classFeeTiers: [tier],
-        makeupFeeMode: "perStudentFee"
-      };
+    const backupRule = feeRuleForCourseType(vault, type);
+    if (backupRule.mode === "salary_grade") {
+      return defaultFeeRuleForCourseType(type);
     }
-    return { mode: "hourly", hourlyRate: 0 };
+    return normalizeCourseFeeRuleForType(type, backupRule);
   }
 
   function salaryGradeDefaultFeeRule(): FeeRule {

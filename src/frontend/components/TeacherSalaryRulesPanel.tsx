@@ -130,6 +130,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
         <CardTitle>教师课时费等级</CardTitle>
         <CardDescription>
           课程里只选择老师等级；实际课时费会按课程学生年级阶段套用该等级下对应金额，底薪仍按老师等级统一设置。
+          班课按“班课底费 + max(到课人数 - 5, 0) * 人头加价”计算；非班课按“非班课基础费 + max(到课人数 - 1, 0) * 人头加价”计算。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -163,7 +164,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
                     {vault.profile.defaultSalaryGradeId === rule.id && <Badge variant="sky">默认</Badge>}
                     {rule.custom && <Badge variant="plum">自定义</Badge>}
                   </div>
-                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节，实际按上课时长 / 2 折算；班课人头加价从第 6 人开始。</div>
+                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节，实际按上课时长 / 2 折算；班课人头加价从第 6 人开始，非班课从第 2 人开始。</div>
                 </div>
                 <div className="grid grid-cols-[minmax(160px,220px)_auto] gap-2">
                   <div>
@@ -198,7 +199,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
               <div className="mt-3 overflow-x-auto rounded-[12px] border border-[#e8eef6]">
                 <div className="grid min-w-[680px] grid-cols-[110px_repeat(3,minmax(130px,1fr))] gap-2 border-b border-[#eef3f8] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#64748b]">
                   <div>年级阶段</div>
-                  <div>一对一/一对二</div>
+                  <div>非班课基础费</div>
                   <div>班课底费</div>
                   <div>人头加价</div>
                 </div>

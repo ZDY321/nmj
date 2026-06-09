@@ -1,8 +1,9 @@
-import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault } from "@/shared/types";
+import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import { timeTextToMinutes } from "@/components/ui/time-text-input";
 import { formatAppDateTime, getCourse, lessonBillableHours, todayIso } from "@/frontend/lib/calculations";
 import {
   addDays,
+  attendedStudentNamesForLesson,
   campusName,
   compareByName,
   courseName,
@@ -13,8 +14,14 @@ import {
   isMakeupAttendanceStatus,
   lessonStatusLabels,
   lessonStudentIds,
-  studentNames
+  makeupNeededStudentIds,
+  sortLessons,
+  studentNames,
+  subjectOptionsForVault,
+  weekdayLabels,
+  weekdayOfDateIso
 } from "@/frontend/lib/helpers";
+import type { CourseTypeFilter, LessonScope } from "@/frontend/lib/scheduleViewTypes";
 
 export function offsetDate(offset: number): string {
   return addDays(todayIso(), offset);
@@ -509,6 +516,301 @@ export function filteredStudentIdsForStats(vault: TeacherVault, lesson: Lesson, 
     const studentName = findStudent(vault, studentId)?.name ?? "未知学生";
     return !normalizedNameFilter || studentName.toLowerCase().includes(normalizedNameFilter);
   });
+}
+
+export type CalendarLessonFilters = {
+  campusFilter: string;
+  gradeFilter: string;
+  subjectFilter: string;
+  studentFilter: string;
+};
+
+export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson, filters: CalendarLessonFilters): boolean {
+  const course = getCourse(vault, lesson.courseGroupId);
+  const campusId = lesson.campusId ?? course?.defaultCampusId;
+  const studentIds = lessonStudentIds(lesson);
+  const searchable = [
+    courseName(vault, lesson.courseGroupId),
+    courseSubject(vault, lesson.courseGroupId),
+    campusName(vault, campusId),
+    studentNames(vault, studentIds),
+    lesson.note ?? "",
+    ...studentIds.map((studentId) => {
+      const student = findStudent(vault, studentId);
+      return [student?.name ?? "", student?.grade ?? "", student?.note ?? ""].join(" ");
+    })
+  ].join(" ").toLowerCase();
+  const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;
+  const matchesGrade =
+    filters.gradeFilter === "all" ||
+    studentIds.some((studentId) => findStudent(vault, studentId)?.grade?.trim() === filters.gradeFilter);
+  const matchesSubject = filters.subjectFilter === "all" || course?.subject === filters.subjectFilter;
+  const searchTerms = filters.studentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matchesStudent = searchTerms.length === 0 || searchTerms.every((term) => searchable.includes(term));
+  return matchesCampus && matchesGrade && matchesSubject && matchesStudent;
+}
+
+export function calendarLessonsForDateWithFilters(vault: TeacherVault, date: string, filters: CalendarLessonFilters): Lesson[] {
+  return vault.lessons
+    .filter((lesson) => lesson.date === date && matchesCalendarLessonFilters(vault, lesson, filters))
+    .sort(sortLessons);
+}
+
+export type ScheduleRecordLessonFilters = {
+  campusFilter: string;
+  courseTypeFilter: CourseTypeFilter;
+  effectiveDay: string;
+  lessonMonth: string;
+  lessonRangeEnd: string;
+  lessonRangeStart: string;
+  lessonWeek: string;
+  normalizedStudentFilter: string;
+  scope: LessonScope;
+  showOnlyMakeup: boolean;
+};
+
+export function filterScheduleRecordLessons(vault: TeacherVault, filters: ScheduleRecordLessonFilters): Lesson[] {
+  const scopeDates = filters.scope === "week" ? datesForIsoWeekValue(filters.lessonWeek) : [];
+  const searchTerms = filters.normalizedStudentFilter.split(/\s+/).filter(Boolean);
+  return vault.lessons
+    .filter((lesson) => {
+      const course = getCourse(vault, lesson.courseGroupId);
+      const campusId = lesson.campusId ?? course?.defaultCampusId;
+      const searchText = lessonSearchText(vault, lesson);
+      const matchesScope =
+        filters.scope === "month"
+          ? lesson.date.startsWith(filters.lessonMonth)
+          : filters.scope === "day"
+            ? lesson.date === filters.effectiveDay
+            : filters.scope === "range"
+              ? isOrderedDateRange(filters.lessonRangeStart, filters.lessonRangeEnd) && lesson.date >= filters.lessonRangeStart && lesson.date <= filters.lessonRangeEnd
+              : scopeDates.includes(lesson.date);
+      const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;
+      const matchesType = filters.courseTypeFilter === "all" || lesson.type === filters.courseTypeFilter;
+      const matchesStudent = searchTerms.length === 0 || searchTerms.every((term) => searchText.includes(term));
+      const matchesMakeup =
+        !filters.showOnlyMakeup ||
+        makeupNeededStudentIds(lesson).length > 0 ||
+        (lesson.status === "makeup_pending" && lesson.attendance.length === 0) ||
+        Boolean(lesson.linkedOriginalLessonId);
+      return matchesScope && matchesCampus && matchesType && matchesStudent && matchesMakeup;
+    })
+    .sort(sortLessons)
+    .reverse();
+}
+
+export type StudentStatsLessonFilters = {
+  campusFilter: string;
+  courseFilter: string;
+  courseTypeFilter: CourseTypeFilter;
+  dateEnd: string;
+  dateStart: string;
+  endTime: string;
+  normalizedNameFilter: string;
+  startTime: string;
+  statusFilter: "all" | Lesson["status"];
+  subjectFilter: string;
+};
+
+export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentStatsLessonFilters): Lesson[] {
+  return vault.lessons
+    .filter((lesson) => {
+      const course = getCourse(vault, lesson.courseGroupId);
+      const campusId = lesson.campusId ?? course?.defaultCampusId;
+      const studentIds = lessonStudentIds(lesson);
+      const matchesStudent =
+        !filters.normalizedNameFilter ||
+        studentIds.some((studentId) =>
+          (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(filters.normalizedNameFilter)
+        );
+      const matchesCourse = filters.courseFilter === "all" || lesson.courseGroupId === filters.courseFilter;
+      const matchesType = filters.courseTypeFilter === "all" || lesson.type === filters.courseTypeFilter;
+      const matchesSubject = filters.subjectFilter === "all" || course?.subject === filters.subjectFilter;
+      const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;
+      const matchesStatus = filters.statusFilter === "all" || lesson.status === filters.statusFilter;
+      const matchesDate =
+        (!filters.dateStart || lesson.date >= filters.dateStart) &&
+        (!filters.dateEnd || lesson.date <= filters.dateEnd) &&
+        (!filters.dateStart || !filters.dateEnd || filters.dateStart <= filters.dateEnd);
+      const matchesTime =
+        (!filters.startTime || timeToMinutes(lesson.startTime) >= timeToMinutes(filters.startTime)) &&
+        (!filters.endTime || timeToMinutes(lesson.endTime) <= timeToMinutes(filters.endTime)) &&
+        (!filters.startTime || !filters.endTime || timeToMinutes(filters.startTime) <= timeToMinutes(filters.endTime));
+      return matchesStudent && matchesCourse && matchesType && matchesSubject && matchesCampus && matchesStatus && matchesDate && matchesTime;
+    })
+    .sort(sortLessons);
+}
+
+export type TrashLessonFilters = {
+  campusFilter: string;
+  dateEnd: string;
+  dateStart: string;
+  normalizedSearch: string;
+  sourceFilter: "all" | DeletedLesson["source"];
+};
+
+export function sortDeletedLessons(items: DeletedLesson[]): DeletedLesson[] {
+  return [...items].sort((a, b) =>
+    `${b.deletedAt} ${b.lesson.date} ${b.lesson.startTime}`.localeCompare(`${a.deletedAt} ${a.lesson.date} ${a.lesson.startTime}`)
+  );
+}
+
+export function filterTrashLessons(vault: TeacherVault, deletedLessons: DeletedLesson[], filters: TrashLessonFilters): DeletedLesson[] {
+  const searchTerms = filters.normalizedSearch.split(/\s+/).filter(Boolean);
+  return deletedLessons.filter((item) => {
+    const lesson = item.lesson;
+    const course = getCourse(vault, lesson.courseGroupId);
+    const campusId = lesson.campusId ?? course?.defaultCampusId;
+    const matchesDate =
+      (!filters.dateStart || lesson.date >= filters.dateStart) &&
+      (!filters.dateEnd || lesson.date <= filters.dateEnd) &&
+      (!filters.dateStart || !filters.dateEnd || filters.dateStart <= filters.dateEnd);
+    const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;
+    const matchesSource = filters.sourceFilter === "all" || item.source === filters.sourceFilter;
+    const searchText = deletedLessonSearchText(vault, item);
+    const matchesSearch = searchTerms.length === 0 || searchTerms.every((term) => searchText.includes(term));
+    return matchesDate && matchesCampus && matchesSource && matchesSearch;
+  });
+}
+
+type ScheduleAiAnalyticsLesson = {
+  id: string;
+  date: string;
+  weekday: string;
+  startTime: string;
+  endTime: string;
+  courseId: string;
+  courseName: string;
+  subject: string;
+  courseType: string;
+  campus: string;
+  status: Lesson["status"];
+  statusLabel: string;
+  students: string;
+  hours: number;
+  feeAmount: number | null;
+  feeKnown: boolean;
+};
+
+export function buildScheduleAiContext(
+  vault: TeacherVault,
+  options: {
+    calendarMonth: string;
+    selectedCalendarDate: string;
+    weekStartPreference: WeekStart;
+  }
+) {
+  const today = todayIso();
+  const currentMonth = today.slice(0, 7);
+  const analyticsStart = addDays(today, -90);
+  const analyticsEnd = addDays(today, 120);
+  const activeStudents = vault.students
+    .filter((student) => student.status === "active")
+    .map((student) => ({
+      id: student.id,
+      name: student.name,
+      grade: student.grade ?? "",
+      school: student.school ?? "",
+      campus: campusName(vault, student.defaultCampusId),
+      note: student.note ?? "",
+      status: student.status,
+      temporaryTrial: student.temporaryTrial ?? false
+    }));
+  const activeCourses = vault.courseGroups
+    .filter((course) => course.status === "active")
+    .map((course) => ({
+      id: course.id,
+      name: course.name,
+      subject: course.subject,
+      type: courseTypeLabel(vault, course.type),
+      campus: campusName(vault, course.defaultCampusId),
+      students: studentNames(vault, course.studentIds)
+    }));
+  const nearbyLessons = vault.lessons
+    .filter((lesson) => lesson.date >= addDays(today, -14) && lesson.date <= addDays(today, 45))
+    .sort(sortLessons)
+    .map((lesson) => ({
+      id: lesson.id,
+      date: lesson.date,
+      startTime: lesson.startTime,
+      endTime: lesson.endTime,
+      courseId: lesson.courseGroupId,
+      courseName: courseName(vault, lesson.courseGroupId),
+      subject: courseSubject(vault, lesson.courseGroupId),
+      campus: campusName(vault, lesson.campusId),
+      status: lessonStatusLabels[lesson.status],
+      students: attendedStudentNamesForLesson(vault, lesson) || studentNames(vault, lessonStudentIds(lesson))
+    }));
+  const analyticsLessons: ScheduleAiAnalyticsLesson[] = vault.lessons
+    .filter((lesson) => lesson.date >= analyticsStart && lesson.date <= analyticsEnd)
+    .sort(sortLessons)
+    .map((lesson) => {
+      const course = getCourse(vault, lesson.courseGroupId);
+      const amount = lesson.feeSnapshot.amount;
+      const hasKnownFee = Number.isFinite(amount);
+      return {
+        id: lesson.id,
+        date: lesson.date,
+        weekday: weekdayLabels[weekdayOfDateIso(lesson.date)],
+        startTime: lesson.startTime,
+        endTime: lesson.endTime,
+        courseId: lesson.courseGroupId,
+        courseName: courseName(vault, lesson.courseGroupId),
+        subject: courseSubject(vault, lesson.courseGroupId),
+        courseType: courseTypeLabel(vault, lesson.type),
+        campus: campusName(vault, lesson.campusId ?? course?.defaultCampusId),
+        status: lesson.status,
+        statusLabel: lessonStatusLabels[lesson.status],
+        students: studentNames(vault, lessonStudentIds(lesson)),
+        hours: lessonBillableHours(lesson),
+        feeAmount: hasKnownFee ? amount : null,
+        feeKnown: hasKnownFee
+      };
+    });
+  const summariseLessons = (lessons: ScheduleAiAnalyticsLesson[]) => ({
+    count: lessons.length,
+    totalHours: Number(lessons.reduce((sum, lesson) => sum + lesson.hours, 0).toFixed(2)),
+    knownFeeCount: lessons.filter((lesson) => lesson.feeKnown).length,
+    totalKnownFee: lessons.reduce((sum, lesson) => sum + (lesson.feeAmount ?? 0), 0),
+    hasUnknownFee: lessons.some((lesson) => !lesson.feeKnown),
+    byDate: Object.values(lessons.reduce<Record<string, { date: string; count: number; totalHours: number; totalKnownFee: number }>>((map, lesson) => {
+      const item = map[lesson.date] ?? { date: lesson.date, count: 0, totalHours: 0, totalKnownFee: 0 };
+      item.count += 1;
+      item.totalHours = Number((item.totalHours + lesson.hours).toFixed(2));
+      item.totalKnownFee += lesson.feeAmount ?? 0;
+      map[lesson.date] = item;
+      return map;
+    }, {}))
+  });
+  const currentWeekStart = addDays(today, -((weekdayOfDateIso(today) - options.weekStartPreference + 7) % 7));
+  const currentWeekEnd = addDays(currentWeekStart, 6);
+  const currentWeekLessons = analyticsLessons.filter((lesson) => lesson.date >= currentWeekStart && lesson.date <= currentWeekEnd);
+  const currentMonthLessons = analyticsLessons.filter((lesson) => lesson.date.startsWith(currentMonth));
+  const morningEightToTenLessons = analyticsLessons.filter((lesson) => lesson.startTime < "10:00" && lesson.endTime > "08:00");
+
+  return {
+    today,
+    selectedCalendarDate: options.selectedCalendarDate,
+    selectedCalendarMonth: options.calendarMonth,
+    campuses: vault.campuses.map((campus) => ({ id: campus.id, name: campus.name })),
+    subjects: subjectOptionsForVault(vault),
+    activeStudents,
+    activeCourses,
+    nearbyLessons,
+    analyticsRange: { start: analyticsStart, end: analyticsEnd },
+    analyticsLessons,
+    lessonAnalytics: {
+      currentWeek: { start: currentWeekStart, end: currentWeekEnd, ...summariseLessons(currentWeekLessons) },
+      currentMonth: { month: currentMonth, ...summariseLessons(currentMonthLessons) }
+    },
+    timeWindowSummaries: {
+      morningEightToTen: {
+        startTime: "08:00",
+        endTime: "10:00",
+        ...summariseLessons(morningEightToTenLessons)
+      }
+    }
+  };
 }
 
 export function attendanceSurfaceClass(status: AttendanceStatus, isTemporary: boolean): string {
