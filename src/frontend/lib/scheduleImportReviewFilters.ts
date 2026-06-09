@@ -14,6 +14,7 @@ import {
   effectiveSavedRowStatus,
   resolutionKey
 } from "@/frontend/lib/scheduleImportReviewMatching";
+import { savedRowSystemLessonLabel } from "@/frontend/lib/scheduleImportReviewLessons";
 
 export function matchesImportRowFilters(
   row: ImportPreviewLesson,
@@ -38,6 +39,7 @@ export function matchesImportRowFilters(
     row.room ?? "",
     row.note ?? "",
     row.rawText ?? "",
+    savedRowSystemLessonLabel(filters.vault, row),
     row.systemLessonLabel ?? "",
     row.systemLessonStatus ?? "",
     row.systemLessonNote ?? "",
@@ -71,6 +73,7 @@ export function matchesSavedReviewRowFilters(
     row.room ?? "",
     row.note ?? "",
     row.rawText ?? "",
+    savedRowSystemLessonLabel(filters.vault, row),
     row.systemLessonLabel ?? "",
     row.systemLessonStatus ?? "",
     row.systemLessonNote ?? "",

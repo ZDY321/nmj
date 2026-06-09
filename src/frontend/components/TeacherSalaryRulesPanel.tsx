@@ -4,10 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { CustomSalaryGradeId, SalaryGradeRuleConfig, TeacherProfile, TeacherVault } from "@/shared/types";
+import type { CustomSalaryGradeId, SalaryGradeRuleConfig, SalaryGradeStage, SalaryGradeStageRateConfig, TeacherProfile, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   defaultSalaryGradeRules,
+  salaryGradeStageLabels,
+  salaryGradeStageOrder,
   salaryGradeLabel,
   salaryGradeRuleById,
   salaryGradeRulesForVault,
@@ -42,15 +44,18 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
   }
 
   function upsertSalaryGradeRule(rule: SalaryGradeRule, patch: Partial<SalaryGradeRuleConfig>) {
+    const stageRates = mergeSalaryGradeStageRates(rule, patch.stageRates);
+    const displayRate = stageRates.junior_3;
     const nextRule: SalaryGradeRuleConfig = {
       id: rule.id,
       label: patch.label ?? rule.label,
       baseSalary: nonNegative(patch.baseSalary ?? rule.baseSalary),
       guaranteedLessonCount: 5,
       lessonHours: 2,
-      oneOnOneFee: nonNegative(patch.oneOnOneFee ?? rule.oneOnOneFee),
-      classBaseFee: nonNegative(patch.classBaseFee ?? rule.classBaseFee),
-      headcountIncrementFee: nonNegative(patch.headcountIncrementFee ?? rule.headcountIncrementFee)
+      oneOnOneFee: displayRate.oneOnOneFee,
+      classBaseFee: displayRate.classBaseFee,
+      headcountIncrementFee: displayRate.headcountIncrementFee,
+      stageRates
     };
     const salaryGradeRules = [
       ...(vault.profile.salaryGradeRules ?? []).filter((item) => item.id !== rule.id),
@@ -91,7 +96,8 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
       lessonHours: 2,
       oneOnOneFee: nonNegative(customOneOnOneFee),
       classBaseFee: nonNegative(customClassBaseFee),
-      headcountIncrementFee: nonNegative(customHeadcountIncrementFee)
+      headcountIncrementFee: nonNegative(customHeadcountIncrementFee),
+      stageRates: stageRatesFromCustomInputs(customOneOnOneFee, customClassBaseFee, customHeadcountIncrementFee)
     };
     updateProfile({
       salaryGradeRules: [...(vault.profile.salaryGradeRules ?? []), nextRule]
@@ -103,6 +109,18 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
     setCustomHeadcountIncrementFee(0);
   }
 
+  function updateRuleStageRate(rule: SalaryGradeRule, stage: SalaryGradeStage, patch: Partial<SalaryGradeStageRateConfig>) {
+    upsertSalaryGradeRule(rule, {
+      stageRates: {
+        ...rule.stageRates,
+        [stage]: {
+          ...rule.stageRates[stage],
+          ...patch
+        }
+      }
+    });
+  }
+
   return (
     <Card className="overflow-hidden">
       <CardHeader>
@@ -111,7 +129,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
         </div>
         <CardTitle>教师课时费等级</CardTitle>
         <CardDescription>
-          等级只代表老师课时费级别，不再按学生年级拆成“初三中级”这类选项；课程选择某个等级后，该课程所有学生都按这个等级计算。
+          课程里只选择老师等级；实际课时费会按课程学生年级阶段套用该等级下对应金额，底薪仍按老师等级统一设置。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -135,67 +153,80 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
           </div>
         )}
 
-        <div className="overflow-x-auto rounded-[14px] border border-[#dbe4ef] bg-white">
-          <div className="grid min-w-[760px] grid-cols-[1.2fr_repeat(4,minmax(112px,1fr))_112px] gap-2 border-b border-[#e8eef6] px-3 py-2 text-xs font-bold text-[#64748b]">
-            <div>等级</div>
-            <div>底薪</div>
-            <div>一对一/一对二</div>
-            <div>班课底费</div>
-            <div>人头加价</div>
-            <div>操作</div>
-          </div>
-          <div className="divide-y divide-[#eef3f8]">
-            {rules.map((rule) => (
-              <div key={rule.id} className="grid min-w-[760px] grid-cols-[1.2fr_repeat(4,minmax(112px,1fr))_112px] items-center gap-2 px-3 py-3">
+        <div className="space-y-3">
+          {rules.map((rule) => (
+            <div key={rule.id} className="rounded-[14px] border border-[#dbe4ef] bg-white p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-extrabold text-[#061226]">{salaryGradeLabel(rule)}</span>
                     {vault.profile.defaultSalaryGradeId === rule.id && <Badge variant="sky">默认</Badge>}
                     {rule.custom && <Badge variant="plum">自定义</Badge>}
                   </div>
-                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节，实际按上课时长 / 2 折算</div>
+                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节，实际按上课时长 / 2 折算；班课人头加价从第 6 人开始。</div>
                 </div>
-                <AmountInput
-                  amountsVisible={amountsVisible}
-                  value={rule.baseSalary}
-                  onChange={(baseSalary) => upsertSalaryGradeRule(rule, { baseSalary })}
-                />
-                <AmountInput
-                  amountsVisible={amountsVisible}
-                  value={rule.oneOnOneFee}
-                  onChange={(oneOnOneFee) => upsertSalaryGradeRule(rule, { oneOnOneFee })}
-                />
-                <AmountInput
-                  amountsVisible={amountsVisible}
-                  value={rule.classBaseFee}
-                  onChange={(classBaseFee) => upsertSalaryGradeRule(rule, { classBaseFee })}
-                />
-                <AmountInput
-                  amountsVisible={amountsVisible}
-                  value={rule.headcountIncrementFee}
-                  onChange={(headcountIncrementFee) => upsertSalaryGradeRule(rule, { headcountIncrementFee })}
-                />
-                <div className="flex gap-2">
-                  {rule.custom ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deleteCustomSalaryGradeRule(rule)}
-                      disabled={usedSalaryGradeIds.has(rule.id)}
-                      title={usedSalaryGradeIds.has(rule.id) ? "有默认等级或课程正在使用，先切换后再删除" : "删除自定义等级"}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  ) : (
-                    <Button type="button" size="sm" variant="outline" onClick={() => resetSalaryGradeRule(rule)}>
-                      <RotateCcw size={14} />
-                    </Button>
-                  )}
+                <div className="grid grid-cols-[minmax(160px,220px)_auto] gap-2">
+                  <div>
+                    <div className="mb-1 text-[11px] font-bold text-[#64748b]">底薪</div>
+                    <AmountInput
+                      amountsVisible={amountsVisible}
+                      value={rule.baseSalary}
+                      onChange={(baseSalary) => upsertSalaryGradeRule(rule, { baseSalary })}
+                    />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    {rule.custom ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteCustomSalaryGradeRule(rule)}
+                        disabled={usedSalaryGradeIds.has(rule.id)}
+                        title={usedSalaryGradeIds.has(rule.id) ? "有默认等级或课程正在使用，先切换后再删除" : "删除自定义等级"}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    ) : (
+                      <Button type="button" size="sm" variant="outline" onClick={() => resetSalaryGradeRule(rule)}>
+                        <RotateCcw size={14} />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="mt-3 overflow-x-auto rounded-[12px] border border-[#e8eef6]">
+                <div className="grid min-w-[680px] grid-cols-[110px_repeat(3,minmax(130px,1fr))] gap-2 border-b border-[#eef3f8] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#64748b]">
+                  <div>年级阶段</div>
+                  <div>一对一/一对二</div>
+                  <div>班课底费</div>
+                  <div>人头加价</div>
+                </div>
+                <div className="divide-y divide-[#eef3f8]">
+                  {salaryGradeStageOrder.map((stage) => (
+                    <div key={stage} className="grid min-w-[680px] grid-cols-[110px_repeat(3,minmax(130px,1fr))] items-center gap-2 px-3 py-2">
+                      <div className="text-sm font-extrabold text-[#061226]">{salaryGradeStageLabels[stage]}</div>
+                      <AmountInput
+                        amountsVisible={amountsVisible}
+                        value={rule.stageRates[stage].oneOnOneFee}
+                        onChange={(oneOnOneFee) => updateRuleStageRate(rule, stage, { oneOnOneFee })}
+                      />
+                      <AmountInput
+                        amountsVisible={amountsVisible}
+                        value={rule.stageRates[stage].classBaseFee}
+                        onChange={(classBaseFee) => updateRuleStageRate(rule, stage, { classBaseFee })}
+                      />
+                      <AmountInput
+                        amountsVisible={amountsVisible}
+                        value={rule.stageRates[stage].headcountIncrementFee}
+                        onChange={(headcountIncrementFee) => updateRuleStageRate(rule, stage, { headcountIncrementFee })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
@@ -253,4 +284,41 @@ function AmountInput({
 
 function nonNegative(value: number): number {
   return Number.isFinite(value) ? Math.max(value, 0) : 0;
+}
+
+function mergeSalaryGradeStageRates(
+  rule: SalaryGradeRule,
+  patch?: Partial<Record<SalaryGradeStage, SalaryGradeStageRateConfig>>
+): Record<SalaryGradeStage, SalaryGradeStageRateConfig> {
+  return salaryGradeStageOrder.reduce(
+    (rates, stage) => {
+      const current = rule.stageRates[stage];
+      const next = patch?.[stage];
+      rates[stage] = {
+        oneOnOneFee: nonNegative(next?.oneOnOneFee ?? current.oneOnOneFee),
+        classBaseFee: nonNegative(next?.classBaseFee ?? current.classBaseFee),
+        headcountIncrementFee: nonNegative(next?.headcountIncrementFee ?? current.headcountIncrementFee)
+      };
+      return rates;
+    },
+    {} as Record<SalaryGradeStage, SalaryGradeStageRateConfig>
+  );
+}
+
+function stageRatesFromCustomInputs(
+  oneOnOneFee: number,
+  classBaseFee: number,
+  headcountIncrementFee: number
+): Record<SalaryGradeStage, SalaryGradeStageRateConfig> {
+  return salaryGradeStageOrder.reduce(
+    (rates, stage) => {
+      rates[stage] = {
+        oneOnOneFee: nonNegative(oneOnOneFee),
+        classBaseFee: nonNegative(classBaseFee),
+        headcountIncrementFee: nonNegative(headcountIncrementFee)
+      };
+      return rates;
+    },
+    {} as Record<SalaryGradeStage, SalaryGradeStageRateConfig>
+  );
 }

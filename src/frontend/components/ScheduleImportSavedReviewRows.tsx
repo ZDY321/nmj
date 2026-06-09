@@ -15,6 +15,9 @@ import {
   linkedSystemLessonIdsFromSavedRows,
   matchesSavedReviewRowFilters,
   resolutionStatusLabel,
+  savedRowSystemAttendance,
+  savedRowSystemLesson,
+  savedRowSystemLessonLabel,
   statusLabel,
   statusSurfaceClass,
   statusVariant,
@@ -115,6 +118,11 @@ function SavedReviewRowCard({
   const reviewed = Boolean(row.resolutionStatus && row.resolutionStatus !== "unreviewed");
   const resolvedAsMatched = row.status !== "matched" && rowStatus === "matched";
   const linkedLessons = linkedLessonsForSavedRow(vault, row);
+  const systemLesson = savedRowSystemLesson(vault, row);
+  const systemLessonLabel = savedRowSystemLessonLabel(vault, row);
+  const systemAttendance = savedRowSystemAttendance(vault, row);
+  const systemCourseId = systemLesson?.courseGroupId ?? row.matchedCourseId;
+  const usesCurrentSystemLesson = Boolean(systemLesson && row.systemLessonLabel && systemLessonLabel !== row.systemLessonLabel);
   return (
     <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(rowStatus, reviewed && !resolvedAsMatched)}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -123,16 +131,17 @@ function SavedReviewRowCard({
             <Badge variant={statusVariant(rowStatus)}>{statusLabel(rowStatus)}</Badge>
             <Badge variant="secondary">{row.date}</Badge>
             <Badge variant="secondary">{row.startTime}-{row.endTime}</Badge>
-            {row.systemLessonStatus === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[row.systemLessonStatus]}</Badge>}
+            {systemAttendance.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemAttendance.status]}</Badge>}
             {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && <Badge variant="sky">{resolutionStatusLabel(row.resolutionStatus)}</Badge>}
             {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
+            {usesCurrentSystemLesson && <Badge variant="sky">当前云端时间</Badge>}
           </div>
           <div className="truncate text-sm font-extrabold text-[#061226]">
-            {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title || row.systemLessonLabel || "未命名课程"}
+            {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title || systemLessonLabel || "未命名课程"}
           </div>
         </div>
         <div className="shrink-0 rounded-[10px] border border-[#e8eef6] bg-white/80 px-3 py-2 text-xs font-bold text-[#64748b]">
-          教务 {formatSavedReviewCount(row.presentCount)}/{formatSavedReviewCount(row.expectedCount)} · 云端 {formatSavedReviewCount(row.systemPresentCount)}/{formatSavedReviewCount(row.systemExpectedCount)}
+          教务 {formatSavedReviewCount(row.presentCount)}/{formatSavedReviewCount(row.expectedCount)} · 云端 {formatSavedReviewCount(systemAttendance.presentCount)}/{formatSavedReviewCount(systemAttendance.expectedCount)}
         </div>
       </div>
 
@@ -171,30 +180,30 @@ function SavedReviewRowCard({
           <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
             <Link2 size={13} /> 云端课表
           </div>
-          <div className="text-sm font-extrabold leading-5 text-[#061226]">{row.systemLessonLabel || "云端课表没有对应课节"}</div>
+          <div className="text-sm font-extrabold leading-5 text-[#061226]">{systemLessonLabel || "云端课表没有对应课节"}</div>
           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-            {row.matchedCourseId ? `课程档案：${localCourseName(vault, row.matchedCourseId)}` : "未映射课程档案"}
+            {systemCourseId ? `课程档案：${localCourseName(vault, systemCourseId)}` : "未映射课程档案"}
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {row.systemLessonStatus && (
-              <Badge variant={row.systemLessonStatus === "cancelled" ? "destructive" : "secondary"} className="text-[10px]">
-                云端状态：{lessonStatusLabels[row.systemLessonStatus]}
+            {systemAttendance.status && (
+              <Badge variant={systemAttendance.status === "cancelled" ? "destructive" : "secondary"} className="text-[10px]">
+                云端状态：{lessonStatusLabels[systemAttendance.status]}
               </Badge>
             )}
             <Badge variant={row.status === "attendance_mismatch" ? "amber" : "secondary"} className="text-[10px]">
-              实到/应到 {formatSavedReviewCount(row.systemPresentCount)}/{formatSavedReviewCount(row.systemExpectedCount)}
+              实到/应到 {formatSavedReviewCount(systemAttendance.presentCount)}/{formatSavedReviewCount(systemAttendance.expectedCount)}
             </Badge>
           </div>
-          {row.systemLessonNote && (
+          {systemAttendance.note && (
             <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
-              云端备注：{row.systemLessonNote}
+              云端备注：{systemAttendance.note}
             </div>
           )}
           <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
-            实到：{row.systemPresentStudentNames || "未记录实到学生"}
+            实到：{systemAttendance.presentStudentNames || "未记录实到学生"}
           </div>
           <div className="mt-1 text-xs font-semibold leading-5 text-[#94a3b8]">
-            应到：{row.systemExpectedStudentNames || "未设置学生"}
+            应到：{systemAttendance.expectedStudentNames || "未设置学生"}
           </div>
         </div>
       </div>

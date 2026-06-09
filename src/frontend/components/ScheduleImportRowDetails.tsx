@@ -150,7 +150,7 @@ function CourseMappingSelect({
           className="h-10 pl-9 text-sm"
           value={courseSearch}
           onChange={(event) => setCourseSearch(event.target.value)}
-          placeholder="搜索课程档案名或科目"
+          placeholder="搜索课程档案名、学生或科目"
         />
       </label>
       <Select value={row.matchedCourseId ?? ""} onChange={(event) => onMap(event.target.value)}>
@@ -177,6 +177,9 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
       const haystack = [
         course.name,
         course.subject,
+        studentNames(vault, course.studentIds),
+        courseTypeLabel(vault, course.type),
+        campusName(vault, course.defaultCampusId),
         course.note ?? ""
       ].join(" ").toLowerCase();
       return terms.every((term) => haystack.includes(term));
@@ -188,7 +191,8 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
 }
 
 function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): string {
-  return localCourseName(vault, course.id);
+  const students = studentNames(vault, course.studentIds) || "未关联学生";
+  return `${localCourseName(vault, course.id)} · ${course.subject} · ${students}`;
 }
 
 function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {

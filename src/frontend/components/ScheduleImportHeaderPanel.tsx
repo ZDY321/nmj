@@ -57,10 +57,10 @@ export function ScheduleImportHeaderPanel({
   );
   const hasUnmappedFiles = fileSummaries.some((file) => !fileCampusOverrides[file.fileName]);
   const allFilesMapped = fileSummaries.length > 0 && !hasUnmappedFiles;
-  const [fileCampusExpanded, setFileCampusExpanded] = useState(() => !allFilesMapped);
+  const [importSetupExpanded, setImportSetupExpanded] = useState(() => !allFilesMapped);
 
   useEffect(() => {
-    setFileCampusExpanded(!allFilesMapped);
+    setImportSetupExpanded(!allFilesMapped);
   }, [allFilesMapped, fileSummaryKey]);
 
   return (
@@ -83,106 +83,116 @@ export function ScheduleImportHeaderPanel({
         </div>
       </CardHeader>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
-        <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-          <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
-            <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件
-          </div>
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-3 text-xs font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff] sm:px-4 sm:text-sm">
-                {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-                导入 Excel
-                <input
-                  type="file"
-                  accept=".xls,.xlsx"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => {
-                    onFilesSelected(event.target.files);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
-              <Button type="button" variant="outline" disabled={rowCount === 0} onClick={onSave}>
-                <Save size={15} /> 保存对账
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button type="button" variant="outline" disabled={rawLessonCount === 0} onClick={onExport}>
-                <Download size={15} /> 合并导出所有校区
-              </Button>
-              <Button type="button" variant="outline" disabled={rawLessonCount === 0} onClick={onClear}>
-                <X size={15} /> 清空
-              </Button>
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-            {[
-              ["文件", fileSummaries.length],
-              ["月份", monthCount],
-              ["云端缺少", summary.systemMissing],
-              ["教务缺少", summary.importMissing]
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
-                <div className="text-xs font-semibold text-[#64748b]">{label}</div>
-                <div className="mt-1 text-lg font-extrabold text-[#061226]">{value}</div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2]">
-            <div className="font-extrabold text-[#061226]">文件名识别规则</div>
-            <div>校区名写在中文或英文括号里，并和“档案信息”的校区名称一致，例如“2026-05-课表（城南校区）.xlsx”或“校宝课表(城南校区)-2026.xlsx”。</div>
-            <div>文件名建议包含年份，例如“2026”；没有年份时会按当前年份解析。多个括号同时存在时，优先识别带“校区、中心、分校、教学点”的括号内容。</div>
-          </div>
-        </div>
+      <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+        <button
+          type="button"
+          onClick={() => setImportSetupExpanded((current) => !current)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <span className="flex min-w-0 items-center gap-2 text-sm font-extrabold text-[#061226]">
+            <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件与对应校区
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <Badge variant="secondary" className="text-[10px]">{fileSummaries.length} 个文件</Badge>
+            {allFilesMapped && <Badge variant="sage" className="text-[10px]">校区已对应</Badge>}
+            {hasUnmappedFiles && <Badge variant="amber" className="text-[10px]">待选择校区</Badge>}
+            <ChevronDown size={16} className={`text-[#64748b] transition-transform ${importSetupExpanded ? "rotate-180" : ""}`} />
+          </span>
+        </button>
 
-        <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
-          <button
-            type="button"
-            onClick={() => setFileCampusExpanded((current) => !current)}
-            className="mb-3 flex w-full items-center justify-between gap-3 text-left"
-          >
-            <span className="flex min-w-0 items-center gap-2 text-sm font-extrabold text-[#061226]">
-              <MapPin size={16} className="text-[#1557c2]" /> 文件对应校区
-            </span>
-            <span className="flex shrink-0 items-center gap-2">
-              {allFilesMapped && <Badge variant="sage" className="text-[10px]">已对应 {fileSummaries.length} 个文件</Badge>}
-              {hasUnmappedFiles && <Badge variant="amber" className="text-[10px]">待选择校区</Badge>}
-              <ChevronDown size={16} className={`text-[#64748b] transition-transform ${fileCampusExpanded ? "rotate-180" : ""}`} />
-            </span>
-          </button>
-          {!fileCampusExpanded && (
-            <div className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
-              文件校区已对应，展开后可查看或修改每个文件的校区。
-            </div>
-          )}
-          {fileCampusExpanded && <div className="space-y-2">
-              {fileSummaries.map((file) => (
-                <div key={file.fileName} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[minmax(0,1fr)_240px]">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-extrabold text-[#061226]">{file.fileName}</div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
-                      <Badge variant="secondary" className="text-[10px]">{file.count} 节</Badge>
-                      <Badge variant="secondary" className="text-[10px]">{file.months.join("、") || "未知月份"}</Badge>
-                      <Badge variant={file.sourceCampus ? "sky" : "amber"} className="text-[10px]">{file.sourceCampus || "文件名未识别校区"}</Badge>
-                    </div>
+        {!importSetupExpanded && (
+          <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
+            已导入 {fileSummaries.length} 个文件，文件校区已对应。展开后可继续导入、保存、导出、清空或修改文件校区。
+          </div>
+        )}
+
+        {importSetupExpanded && (
+          <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
+            <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+                <FileSpreadsheet size={16} className="text-[#1557c2]" /> 教务 Excel 文件
+              </div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-3 text-xs font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff] sm:px-4 sm:text-sm">
+                    {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+                    导入 Excel
+                    <input
+                      type="file"
+                      accept=".xls,.xlsx"
+                      multiple
+                      className="hidden"
+                      onChange={(event) => {
+                        onFilesSelected(event.target.files);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <Button type="button" variant="outline" disabled={rowCount === 0} onClick={onSave}>
+                    <Save size={15} /> 保存对账
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="outline" disabled={rawLessonCount === 0} onClick={onExport}>
+                    <Download size={15} /> 合并导出所有校区
+                  </Button>
+                  <Button type="button" variant="outline" disabled={rawLessonCount === 0} onClick={onClear}>
+                    <X size={15} /> 清空
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                {[
+                  ["文件", fileSummaries.length],
+                  ["月份", monthCount],
+                  ["云端缺少", summary.systemMissing],
+                  ["教务缺少", summary.importMissing]
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
+                    <div className="text-xs font-semibold text-[#64748b]">{label}</div>
+                    <div className="mt-1 text-lg font-extrabold text-[#061226]">{value}</div>
                   </div>
-                  <Select value={fileCampusOverrides[file.fileName] ?? ""} onChange={(event) => onFileCampusChange(file.fileName, event.target.value)}>
-                    <option value="">选择校区</option>
-                    {campusOptions.map((campus) => (
-                      <option key={campus.id} value={campus.id}>{campus.name}</option>
-                    ))}
-                  </Select>
-                </div>
-              ))}
-              {fileSummaries.length === 0 && (
-                <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                  暂无教务 Excel 文件
-                </div>
-              )}
-          </div>}
-        </div>
+                ))}
+              </div>
+              <div className="mt-3 rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2]">
+                <div className="font-extrabold text-[#061226]">文件名识别规则</div>
+                <div>校区名写在中文或英文括号里，并和“档案信息”的校区名称一致，例如“2026-05-课表（城南校区）.xlsx”或“校宝课表(城南校区)-2026.xlsx”。</div>
+                <div>文件名建议包含年份，例如“2026”；没有年份时会按当前年份解析。多个括号同时存在时，优先识别带“校区、中心、分校、教学点”的括号内容。</div>
+              </div>
+            </div>
+
+            <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+                <MapPin size={16} className="text-[#1557c2]" /> 文件对应校区
+              </div>
+              <div className="space-y-2">
+                {fileSummaries.map((file) => (
+                  <div key={file.fileName} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[minmax(0,1fr)_240px]">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-extrabold text-[#061226]">{file.fileName}</div>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
+                        <Badge variant="secondary" className="text-[10px]">{file.count} 节</Badge>
+                        <Badge variant="secondary" className="text-[10px]">{file.months.join("、") || "未知月份"}</Badge>
+                        <Badge variant={file.sourceCampus ? "sky" : "amber"} className="text-[10px]">{file.sourceCampus || "文件名未识别校区"}</Badge>
+                      </div>
+                    </div>
+                    <Select value={fileCampusOverrides[file.fileName] ?? ""} onChange={(event) => onFileCampusChange(file.fileName, event.target.value)}>
+                      <option value="">选择校区</option>
+                      {campusOptions.map((campus) => (
+                        <option key={campus.id} value={campus.id}>{campus.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                ))}
+                {fileSummaries.length === 0 && (
+                  <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+                    暂无教务 Excel 文件
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {message && (

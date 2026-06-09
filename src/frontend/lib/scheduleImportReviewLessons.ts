@@ -1,5 +1,6 @@
 import type { CourseType, Lesson, ScheduleImportSavedRow, ScheduleImportResolution, TeacherVault } from "@/shared/types";
 import {
+  courseName as localCourseName,
   courseTypeLabel,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -99,6 +100,59 @@ export function linkedLessonsForSavedRow(vault: TeacherVault, row: ScheduleImpor
   return (row.linkedSystemLessonIds ?? [])
     .map((id) => vault.lessons.find((lesson) => lesson.id === id))
     .filter((lesson): lesson is Lesson => Boolean(lesson));
+}
+
+export function savedRowSystemLesson(vault: TeacherVault, row: Pick<ScheduleImportSavedRow, "systemLessonId">): Lesson | undefined {
+  return row.systemLessonId ? vault.lessons.find((lesson) => lesson.id === row.systemLessonId) : undefined;
+}
+
+export function savedRowSystemLessonLabel(vault: TeacherVault, row: Pick<ScheduleImportSavedRow, "systemLessonId" | "systemLessonLabel">): string {
+  const lesson = savedRowSystemLesson(vault, row);
+  if (lesson) {
+    return `${lesson.date} ${lesson.startTime}-${lesson.endTime} ${localCourseName(vault, lesson.courseGroupId)}`;
+  }
+  return row.systemLessonLabel ?? "";
+}
+
+export function savedRowSystemAttendance(
+  vault: TeacherVault,
+  row: Pick<ScheduleImportSavedRow, "systemLessonId" | "systemLessonStatus" | "systemLessonNote" | "systemPresentCount" | "systemExpectedCount" | "systemPresentStudentNames" | "systemExpectedStudentNames">
+): {
+  status: Lesson["status"] | undefined;
+  note: string | undefined;
+  presentCount: number | undefined;
+  expectedCount: number | undefined;
+  presentStudentNames: string;
+  expectedStudentNames: string;
+} {
+  const lesson = savedRowSystemLesson(vault, row);
+  if (!lesson) {
+    return {
+      status: row.systemLessonStatus,
+      note: row.systemLessonNote,
+      presentCount: row.systemPresentCount,
+      expectedCount: row.systemExpectedCount,
+      presentStudentNames: row.systemPresentStudentNames ?? "",
+      expectedStudentNames: row.systemExpectedStudentNames ?? ""
+    };
+  }
+  const presentStudentIds = lesson.status === "cancelled"
+    ? []
+    : lesson.attendance.length > 0
+    ? lesson.attendance
+      .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
+      .map((entry) => entry.studentId)
+    : lesson.expectedStudentIds;
+  const uniquePresentStudentIds = Array.from(new Set(presentStudentIds));
+  const uniqueExpectedStudentIds = Array.from(new Set(lesson.expectedStudentIds));
+  return {
+    status: lesson.status,
+    note: lesson.note,
+    presentCount: uniquePresentStudentIds.length,
+    expectedCount: lesson.status === "cancelled" ? 0 : uniqueExpectedStudentIds.length,
+    presentStudentNames: studentNames(vault, uniquePresentStudentIds),
+    expectedStudentNames: studentNames(vault, uniqueExpectedStudentIds)
+  };
 }
 
 export function summarizeLinkedLessons(linkedLessons: Lesson[], row: ImportPreviewLesson): { importHours: number; systemHours: number } {

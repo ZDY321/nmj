@@ -12,6 +12,7 @@ import type {
   SalaryBreakdown,
   SalaryGradeId,
   SalaryGradeLevel,
+  SalaryGradeStageRateConfig,
   SalaryGradeRuleConfig,
   SalaryGradeStage,
   TeacherVault
@@ -133,6 +134,58 @@ export const salaryGradeLevelLabels: Record<SalaryGradeLevel, string> = {
   reserve: "储备"
 };
 
+export const salaryGradeStageOrder: SalaryGradeStage[] = [
+  "primary",
+  "junior_1_2",
+  "junior_3",
+  "senior_1",
+  "senior_2",
+  "senior_3"
+];
+
+const defaultSalaryGradeStageRates: Record<SalaryGradeLevel, Record<SalaryGradeStage, SalaryGradeStageRateConfig>> = {
+  beginner: {
+    primary: { oneOnOneFee: 55, classBaseFee: 40, headcountIncrementFee: 10 },
+    junior_1_2: { oneOnOneFee: 65, classBaseFee: 50, headcountIncrementFee: 10 },
+    junior_3: { oneOnOneFee: 75, classBaseFee: 60, headcountIncrementFee: 10 },
+    senior_1: { oneOnOneFee: 95, classBaseFee: 95, headcountIncrementFee: 25 },
+    senior_2: { oneOnOneFee: 105, classBaseFee: 105, headcountIncrementFee: 25 },
+    senior_3: { oneOnOneFee: 115, classBaseFee: 115, headcountIncrementFee: 25 }
+  },
+  intermediate: {
+    primary: { oneOnOneFee: 65, classBaseFee: 50, headcountIncrementFee: 10 },
+    junior_1_2: { oneOnOneFee: 70, classBaseFee: 55, headcountIncrementFee: 12 },
+    junior_3: { oneOnOneFee: 80, classBaseFee: 65, headcountIncrementFee: 12 },
+    senior_1: { oneOnOneFee: 100, classBaseFee: 100, headcountIncrementFee: 25 },
+    senior_2: { oneOnOneFee: 110, classBaseFee: 110, headcountIncrementFee: 25 },
+    senior_3: { oneOnOneFee: 120, classBaseFee: 120, headcountIncrementFee: 25 }
+  },
+  advanced_1: {
+    primary: { oneOnOneFee: 70, classBaseFee: 55, headcountIncrementFee: 10 },
+    junior_1_2: { oneOnOneFee: 75, classBaseFee: 60, headcountIncrementFee: 15 },
+    junior_3: { oneOnOneFee: 85, classBaseFee: 70, headcountIncrementFee: 15 },
+    senior_1: { oneOnOneFee: 105, classBaseFee: 105, headcountIncrementFee: 30 },
+    senior_2: { oneOnOneFee: 115, classBaseFee: 115, headcountIncrementFee: 30 },
+    senior_3: { oneOnOneFee: 125, classBaseFee: 125, headcountIncrementFee: 30 }
+  },
+  advanced_2: {
+    primary: { oneOnOneFee: 73, classBaseFee: 58, headcountIncrementFee: 10 },
+    junior_1_2: { oneOnOneFee: 80, classBaseFee: 65, headcountIncrementFee: 18 },
+    junior_3: { oneOnOneFee: 90, classBaseFee: 75, headcountIncrementFee: 18 },
+    senior_1: { oneOnOneFee: 105, classBaseFee: 105, headcountIncrementFee: 30 },
+    senior_2: { oneOnOneFee: 115, classBaseFee: 115, headcountIncrementFee: 30 },
+    senior_3: { oneOnOneFee: 125, classBaseFee: 125, headcountIncrementFee: 30 }
+  },
+  reserve: {
+    primary: { oneOnOneFee: 75, classBaseFee: 60, headcountIncrementFee: 10 },
+    junior_1_2: { oneOnOneFee: 85, classBaseFee: 70, headcountIncrementFee: 20 },
+    junior_3: { oneOnOneFee: 95, classBaseFee: 80, headcountIncrementFee: 20 },
+    senior_1: { oneOnOneFee: 110, classBaseFee: 110, headcountIncrementFee: 35 },
+    senior_2: { oneOnOneFee: 120, classBaseFee: 120, headcountIncrementFee: 35 },
+    senior_3: { oneOnOneFee: 130, classBaseFee: 130, headcountIncrementFee: 35 }
+  }
+};
+
 export type SalaryGradeRule = {
   id: SalaryGradeId;
   label: string;
@@ -146,6 +199,7 @@ export type SalaryGradeRule = {
   oneOnOneFee: number;
   classBaseFee: number;
   headcountIncrementFee: number;
+  stageRates: Record<SalaryGradeStage, SalaryGradeStageRateConfig>;
 };
 
 function legacySalaryGradeId(stage: SalaryGradeStage, level: SalaryGradeLevel): LegacySalaryGradeId {
@@ -159,6 +213,8 @@ function salaryGradeRule(
   classBaseFee: number,
   headcountIncrementFee: number
 ): SalaryGradeRule {
+  const stageRates = defaultSalaryGradeStageRates[level] ?? stageRatesFromSingleRate({ oneOnOneFee, classBaseFee, headcountIncrementFee });
+  const defaultRate = stageRates.junior_3 ?? { oneOnOneFee, classBaseFee, headcountIncrementFee };
   return {
     id: level,
     label: salaryGradeLevelLabels[level],
@@ -166,9 +222,10 @@ function salaryGradeRule(
     baseSalary,
     guaranteedLessonCount: 5,
     lessonHours: 2,
-    oneOnOneFee,
-    classBaseFee,
-    headcountIncrementFee
+    oneOnOneFee: defaultRate.oneOnOneFee,
+    classBaseFee: defaultRate.classBaseFee,
+    headcountIncrementFee: defaultRate.headcountIncrementFee,
+    stageRates
   };
 }
 
@@ -191,8 +248,41 @@ function legacySalaryGradeRule(
     lessonHours: 2,
     oneOnOneFee,
     classBaseFee,
-    headcountIncrementFee
+    headcountIncrementFee,
+    stageRates: stageRatesFromSingleRate({ oneOnOneFee, classBaseFee, headcountIncrementFee })
   };
+}
+
+function stageRatesFromSingleRate(rate: SalaryGradeStageRateConfig): Record<SalaryGradeStage, SalaryGradeStageRateConfig> {
+  return salaryGradeStageOrder.reduce(
+    (rates, stage) => {
+      rates[stage] = normalizeStageRate(rate);
+      return rates;
+    },
+    {} as Record<SalaryGradeStage, SalaryGradeStageRateConfig>
+  );
+}
+
+function normalizeStageRate(rate: Partial<SalaryGradeStageRateConfig> | undefined, fallback: SalaryGradeStageRateConfig = { oneOnOneFee: 0, classBaseFee: 0, headcountIncrementFee: 0 }): SalaryGradeStageRateConfig {
+  return {
+    oneOnOneFee: nonNegativeNumber(rate?.oneOnOneFee, fallback.oneOnOneFee),
+    classBaseFee: nonNegativeNumber(rate?.classBaseFee, fallback.classBaseFee),
+    headcountIncrementFee: nonNegativeNumber(rate?.headcountIncrementFee, fallback.headcountIncrementFee)
+  };
+}
+
+function normalizeStageRates(
+  baseRate: SalaryGradeStageRateConfig,
+  stageRates?: Partial<Record<SalaryGradeStage, SalaryGradeStageRateConfig>>,
+  fallbackRates?: Record<SalaryGradeStage, SalaryGradeStageRateConfig>
+): Record<SalaryGradeStage, SalaryGradeStageRateConfig> {
+  return salaryGradeStageOrder.reduce(
+    (rates, stage) => {
+      rates[stage] = normalizeStageRate(stageRates?.[stage], fallbackRates?.[stage] ?? baseRate);
+      return rates;
+    },
+    {} as Record<SalaryGradeStage, SalaryGradeStageRateConfig>
+  );
 }
 
 export const defaultSalaryGradeRules: SalaryGradeRule[] = [
@@ -238,6 +328,13 @@ export const legacySalaryGradeRules: SalaryGradeRule[] = [
 ];
 
 function salaryGradeRuleFromConfig(config: SalaryGradeRuleConfig, fallback?: SalaryGradeRule): SalaryGradeRule {
+  const baseRate = {
+    oneOnOneFee: Math.max(config.oneOnOneFee, 0),
+    classBaseFee: Math.max(config.classBaseFee, 0),
+    headcountIncrementFee: Math.max(config.headcountIncrementFee, 0)
+  };
+  const stageRates = normalizeStageRates(baseRate, config.stageRates, fallback?.stageRates);
+  const displayRate = stageRates.junior_3 ?? baseRate;
   return {
     id: config.id,
     label: (config.label ?? "").trim() || fallback?.label || String(config.id),
@@ -246,9 +343,10 @@ function salaryGradeRuleFromConfig(config: SalaryGradeRuleConfig, fallback?: Sal
     baseSalary: Math.max(config.baseSalary, 0),
     guaranteedLessonCount: 5,
     lessonHours: 2,
-    oneOnOneFee: Math.max(config.oneOnOneFee, 0),
-    classBaseFee: Math.max(config.classBaseFee, 0),
-    headcountIncrementFee: Math.max(config.headcountIncrementFee, 0)
+    oneOnOneFee: displayRate.oneOnOneFee,
+    classBaseFee: displayRate.classBaseFee,
+    headcountIncrementFee: displayRate.headcountIncrementFee,
+    stageRates
   };
 }
 
@@ -290,12 +388,52 @@ export function resolveSalaryGradeRule(vault: TeacherVault, rule?: FeeRule): Sal
   return salaryGradeRuleById(id, vault) ?? salaryGradeRuleById(rule.salaryGradeId, vault) ?? salaryGradeRuleById(vault.profile.defaultSalaryGradeId, vault);
 }
 
-export function salaryGradeAmountForCount(rule: SalaryGradeRule, courseType: CourseType, presentStudentCount: number): number {
+export function salaryGradeStageForGrade(grade?: string): SalaryGradeStage | undefined {
+  const value = (grade ?? "").trim().toLowerCase().replace(/\s+/g, "");
+  if (!value) return undefined;
+  if (/高三|高中三|高3|12年级|十二年级|grade12|g12/.test(value)) return "senior_3";
+  if (/高二|高中二|高2|11年级|十一年级|grade11|g11/.test(value)) return "senior_2";
+  if (/高一|高中一|高1|10年级|十年级|grade10|g10/.test(value)) return "senior_1";
+  if (/初三|初中三|初3|九年级|9年级|grade9|g9/.test(value)) return "junior_3";
+  if (/初[一二12]|初中[一二12]|七年级|八年级|7年级|8年级|grade[78]|g[78]/.test(value)) return "junior_1_2";
+  if (/小学|小[一二三四五六123456]|一年级|二年级|三年级|四年级|五年级|六年级|[1-6]年级|grade[1-6]|g[1-6]/.test(value)) return "primary";
+  if (/高中|高/.test(value)) return "senior_1";
+  if (/初中|初/.test(value)) return "junior_1_2";
+  return undefined;
+}
+
+export function salaryGradeStageForStudentIds(vault: TeacherVault, studentIds: string[]): SalaryGradeStage | undefined {
+  const stages = studentIds
+    .map((studentId) => salaryGradeStageForGrade(vault.students.find((student) => student.id === studentId)?.grade))
+    .filter((stage): stage is SalaryGradeStage => Boolean(stage));
+  if (stages.length === 0) return undefined;
+  return stages.sort((a, b) => salaryGradeStageOrder.indexOf(b) - salaryGradeStageOrder.indexOf(a))[0];
+}
+
+export function salaryGradeStageForCourse(vault: TeacherVault, course: CourseGroup): SalaryGradeStage | undefined {
+  return salaryGradeStageForStudentIds(vault, course.studentIds);
+}
+
+export function salaryGradeStageForLesson(vault: TeacherVault, course: CourseGroup | undefined, lesson: Lesson): SalaryGradeStage | undefined {
+  const lessonStage = salaryGradeStageForStudentIds(vault, lesson.expectedStudentIds);
+  return lessonStage ?? (course ? salaryGradeStageForCourse(vault, course) : undefined);
+}
+
+export function salaryGradeRateForStage(rule: SalaryGradeRule, stage?: SalaryGradeStage): SalaryGradeStageRateConfig {
+  return rule.stageRates[stage ?? "junior_3"] ?? rule.stageRates.junior_3 ?? {
+    oneOnOneFee: rule.oneOnOneFee,
+    classBaseFee: rule.classBaseFee,
+    headcountIncrementFee: rule.headcountIncrementFee
+  };
+}
+
+export function salaryGradeAmountForCount(rule: SalaryGradeRule, courseType: CourseType, presentStudentCount: number, stage?: SalaryGradeStage): number {
   const count = nonNegativeInteger(presentStudentCount);
+  const rate = salaryGradeRateForStage(rule, stage);
   if (courseType === "class") {
-    return rule.classBaseFee + Math.max(count - 5, 0) * rule.headcountIncrementFee;
+    return rate.classBaseFee + Math.max(count - 5, 0) * rate.headcountIncrementFee;
   }
-  return rule.oneOnOneFee + Math.max(count - 1, 0) * rule.headcountIncrementFee;
+  return rate.oneOnOneFee + Math.max(count - 1, 0) * rate.headcountIncrementFee;
 }
 
 export const lessonFeeUnitHours = 2;
@@ -338,7 +476,7 @@ function temporaryFeeOverrideDelta(rule: FeeRule, lesson: Lesson): number {
   }, 0);
 }
 
-function salaryGradeTemporaryFeeOverrideDelta(rule: SalaryGradeRule, lesson: Lesson): number {
+function salaryGradeTemporaryFeeOverrideDelta(rule: SalaryGradeRule, lesson: Lesson, stage?: SalaryGradeStage): number {
   const presentStudentCount = presentCount(lesson);
   const multiplier = lessonDurationMultiplier(lesson);
   return lesson.attendance.reduce((sum, entry) => {
@@ -350,8 +488,8 @@ function salaryGradeTemporaryFeeOverrideDelta(rule: SalaryGradeRule, lesson: Les
     const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
     const defaultIncrement =
       (
-        salaryGradeAmountForCount(rule, lesson.type, presentStudentCount) -
-        salaryGradeAmountForCount(rule, lesson.type, countWithoutEntry)
+        salaryGradeAmountForCount(rule, lesson.type, presentStudentCount, stage) -
+        salaryGradeAmountForCount(rule, lesson.type, countWithoutEntry, stage)
       ) * multiplier;
     return sum + customFee - defaultIncrement;
   }, 0);
@@ -363,7 +501,8 @@ export function temporaryFeeTotal(lesson: Lesson, rule?: FeeRule, vault?: Teache
   }
   if (rule?.mode === "salary_grade" && vault) {
     const gradeRule = resolveSalaryGradeRule(vault, rule);
-    if (gradeRule) return salaryGradeTemporaryFeeOverrideDelta(gradeRule, lesson);
+    const course = getCourse(vault, lesson.courseGroupId);
+    if (gradeRule) return salaryGradeTemporaryFeeOverrideDelta(gradeRule, lesson, salaryGradeStageForLesson(vault, course, lesson));
   }
   return lesson.attendance.reduce((sum, entry) => sum + nonNegativeNumber(entry.temporaryFee), 0);
 }
@@ -422,7 +561,7 @@ export function calculateFee(rule: FeeRule, lesson: Lesson): number {
   return calculateFeeWithVault(undefined, rule, lesson);
 }
 
-export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: FeeRule, lesson: Lesson): number {
+export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: FeeRule, lesson: Lesson, course?: CourseGroup): number {
   if (isOriginalFullyMadeUp(lesson) || isLessonFullyMissedAndMakeupExempt(lesson)) {
     return 0;
   }
@@ -441,7 +580,8 @@ export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: Fee
   if (rule.mode === "salary_grade") {
     const gradeRule = vault ? resolveSalaryGradeRule(vault, rule) : salaryGradeRuleById(rule.salaryGradeId);
     if (!gradeRule) return Math.round(extraFee);
-    const unitAmount = salaryGradeAmountForCount(gradeRule, lesson.type, presentCount(lesson));
+    const salaryStage = vault ? salaryGradeStageForLesson(vault, course ?? getCourse(vault, lesson.courseGroupId), lesson) : undefined;
+    const unitAmount = salaryGradeAmountForCount(gradeRule, lesson.type, presentCount(lesson), salaryStage);
     return Math.round(proratedLessonUnitAmount(unitAmount, lesson, rule) + extraFee);
   }
 
@@ -494,21 +634,25 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
 
   if (course.feeRule.mode === "salary_grade") {
     const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
-    const unitAmount = gradeRule ? salaryGradeAmountForCount(gradeRule, course.type, presentStudentCount) : undefined;
+    const salaryStage = salaryGradeStageForLesson(vault, course, lesson);
+    const salaryStageRate = gradeRule ? salaryGradeRateForStage(gradeRule, salaryStage) : undefined;
+    const unitAmount = gradeRule ? salaryGradeAmountForCount(gradeRule, course.type, presentStudentCount, salaryStage) : undefined;
     return {
       ...lesson.feeSnapshot,
       ...common,
-      baseFee: gradeRule ? (course.type === "class" ? gradeRule.classBaseFee : gradeRule.oneOnOneFee) : undefined,
-      oneOnOneFee: gradeRule?.oneOnOneFee,
-      perPresentStudentFee: gradeRule?.headcountIncrementFee,
+      baseFee: salaryStageRate ? (course.type === "class" ? salaryStageRate.classBaseFee : salaryStageRate.oneOnOneFee) : undefined,
+      oneOnOneFee: salaryStageRate?.oneOnOneFee,
+      perPresentStudentFee: salaryStageRate?.headcountIncrementFee,
       salaryGradeId: gradeRule?.id,
       salaryGradeLabel: gradeRule ? salaryGradeLabel(gradeRule) : undefined,
+      salaryGradeStage: salaryStage,
+      salaryGradeStageLabel: salaryStage ? salaryGradeStageLabels[salaryStage] : undefined,
       headcountBaseStudentCount: course.type === "class" ? 5 : 1,
-      headcountIncrementFee: gradeRule?.headcountIncrementFee,
+      headcountIncrementFee: salaryStageRate?.headcountIncrementFee,
       lessonUnitHours: lessonFeeUnitHours,
       durationMultiplier,
       unitAmount,
-      amount: calculateFeeWithVault(vault, course.feeRule, lesson)
+      amount: calculateFeeWithVault(vault, course.feeRule, lesson, course)
     };
   }
 

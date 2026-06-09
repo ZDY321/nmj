@@ -49,6 +49,9 @@ export {
   lessonDurationHours,
   linkedLessonsForResolution,
   linkedLessonsForSavedRow,
+  savedRowSystemAttendance,
+  savedRowSystemLesson,
+  savedRowSystemLessonLabel,
   splitMergeCandidateLessons,
   summarizeLinkedLessons
 } from "@/frontend/lib/scheduleImportReviewLessons";

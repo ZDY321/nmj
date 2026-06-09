@@ -6,7 +6,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, SalaryGradeId, TeacherProfile, TeacherVault } from "@/shared/types";
-import type { ObligationSummary, SalaryGradeRule } from "@/frontend/lib/calculations";
+import { salaryGradeRateForStage, type ObligationSummary, type SalaryGradeRule } from "@/frontend/lib/calculations";
 import { formatPrivateMoney } from "@/frontend/lib/helpers";
 
 type TeacherProfilePanelProps = {
@@ -144,7 +144,10 @@ export function TeacherProfilePanel({
             <label className="text-sm font-medium">课时费规则</label>
             <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
               {selectedProfileSalaryGrade
-                ? `保底 5 节/月，每节 2 小时；一对一 ${formatPrivateMoney(selectedProfileSalaryGrade.oneOnOneFee, amountsVisible)}；班课底费 ${formatPrivateMoney(selectedProfileSalaryGrade.classBaseFee, amountsVisible)}；人头加价 ${formatPrivateMoney(selectedProfileSalaryGrade.headcountIncrementFee, amountsVisible)}。`
+                ? (() => {
+                    const referenceRate = salaryGradeRateForStage(selectedProfileSalaryGrade, "junior_3");
+                    return `保底 5 节/月，每节 2 小时；课时费按课程学生年级阶段取表，初三参考：一对一 ${formatPrivateMoney(referenceRate.oneOnOneFee, amountsVisible)}；班课底费 ${formatPrivateMoney(referenceRate.classBaseFee, amountsVisible)}；人头加价 ${formatPrivateMoney(referenceRate.headcountIncrementFee, amountsVisible)}。`;
+                  })()
                 : "未设置默认课时费等级，新课程不会自动套用等级课时费。"}
             </div>
           </div>

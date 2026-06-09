@@ -146,6 +146,13 @@ export type SalaryGradeRuleConfig = {
   oneOnOneFee: number;
   classBaseFee: number;
   headcountIncrementFee: number;
+  stageRates?: Partial<Record<SalaryGradeStage, SalaryGradeStageRateConfig>>;
+};
+
+export type SalaryGradeStageRateConfig = {
+  oneOnOneFee: number;
+  classBaseFee: number;
+  headcountIncrementFee: number;
 };
 
 export type ClassFeeTier = {
@@ -250,6 +257,8 @@ export type FeeSnapshot = {
   classFeeTierId?: string;
   salaryGradeId?: SalaryGradeId;
   salaryGradeLabel?: string;
+  salaryGradeStage?: SalaryGradeStage;
+  salaryGradeStageLabel?: string;
   headcountBaseStudentCount?: number;
   headcountIncrementFee?: number;
   lessonUnitHours?: number;
