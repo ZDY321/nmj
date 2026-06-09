@@ -1,21 +1,28 @@
 import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Archive, BookOpen, Building2, CalendarDays, ChevronDown, ChevronRight, FileText, GraduationCap, MapPin, Pencil, Plus, RotateCcw, Save, Search, Settings, Trash2, Users, X } from "lucide-react";
+import { Building2, CalendarDays, ChevronRight, GraduationCap, Plus, Search, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, CustomCourseTypeOption, FeeRule, SalaryGradeId, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { CampusCourseSettingsPanel } from "@/frontend/components/CampusCourseSettingsPanel";
+import { CourseEditDialog } from "@/frontend/components/CourseEditDialog";
+import { CourseArchiveListPanel } from "@/frontend/components/CourseArchiveListPanel";
+import { StudentArchivePanel } from "@/frontend/components/StudentArchivePanel";
+import { StudentCourseTransferPanel } from "@/frontend/components/StudentCourseTransferPanel";
+import { StudentEditDialog } from "@/frontend/components/StudentEditDialog";
+import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
+import { TeacherProfilePanel } from "@/frontend/components/TeacherProfilePanel";
+import { TeacherSalaryRulesPanel } from "@/frontend/components/TeacherSalaryRulesPanel";
 import { makeId } from "@/frontend/lib/crypto";
-import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRuleById, salaryGradeRules, salaryGradeAmountForCount, todayIso } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRuleById, salaryGradeRulesForVault, salaryGradeAmountForCount, todayIso } from "@/frontend/lib/calculations";
 import { builtInCourseTypeOptions, campusName, compareByName, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
-type ArchivePanel = "profile" | "campuses" | "students" | "courses";
+type ArchivePanel = "profile" | "salaryRules" | "campuses" | "students" | "courses";
 
 export function StudentsView({
   vault,
@@ -71,7 +78,8 @@ export function StudentsView({
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseTypeOptions = courseTypeOptionsForVault(vault);
   const subjectOptions = subjectOptionsForVault(vault);
-  const selectedProfileSalaryGrade = salaryGradeRuleById(vault.profile.defaultSalaryGradeId);
+  const salaryGradeOptions = salaryGradeRulesForVault(vault);
+  const selectedProfileSalaryGrade = salaryGradeRuleById(vault.profile.defaultSalaryGradeId, vault);
   const studentOptions = sortStudentsByName(vault.students);
   const activeStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status !== "paused"));
   const archivedStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "paused"));
@@ -601,7 +609,7 @@ export function StudentsView({
     return {
       mode: "salary_grade",
       salaryGradeSource: "specific",
-      salaryGradeId: id ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule().id
+      salaryGradeId: id ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule(vault).id
     };
   }
 
@@ -651,12 +659,31 @@ export function StudentsView({
   }
 
   function updateDefaultSalaryGrade(salaryGradeId: string) {
-    const rule = salaryGradeRuleById(salaryGradeId as SalaryGradeId);
+    if (!salaryGradeId) {
+      updateProfile({ defaultSalaryGradeId: undefined });
+      return;
+    }
+    const rule = salaryGradeRuleById(salaryGradeId as SalaryGradeId, vault);
     if (!rule) return;
     updateProfile({
       defaultSalaryGradeId: rule.id,
       baseSalary: rule.baseSalary
     });
+  }
+
+  function salaryGradeSelectOptions(currentId?: SalaryGradeId): ReactNode {
+    const currentRule = currentId ? salaryGradeRuleById(currentId, vault) : undefined;
+    const includeCurrentRule = currentRule && !salaryGradeOptions.some((rule) => rule.id === currentRule.id);
+    return (
+      <>
+        {includeCurrentRule && (
+          <option value={currentRule.id}>旧规则：{salaryGradeLabel(currentRule)}（建议切换）</option>
+        )}
+        {salaryGradeOptions.map((rule) => (
+          <option key={rule.id} value={rule.id}>{salaryGradeLabel(rule)}</option>
+        ))}
+      </>
+    );
   }
 
   function buildSuggestedCourseName(type: CourseType, studentIds: string[]): string {
@@ -829,9 +856,9 @@ export function StudentsView({
   function courseFeeSummary(course: CourseGroup): string {
     if (course.feeRule.mode === "salary_grade") {
       const rule = resolveSalaryGradeRule(vault, course.feeRule);
-      if (!rule) return "岗位薪资：未设置默认等级";
+      if (!rule) return "课时费等级：未设置默认等级";
       const amount = salaryGradeAmountForCount(rule, course.type, course.studentIds.length);
-      const source = course.feeRule.salaryGradeSource === "specific" ? "指定岗位" : "跟随默认岗位";
+      const source = course.feeRule.salaryGradeSource === "specific" ? "指定等级" : "跟随默认等级";
       return `${source}：${salaryGradeLabel(rule)}，当前 ${course.studentIds.length} 人 2小时标准课预估 ${formatPrivateMoney(amount, amountsVisible)}`;
     }
     if (course.feeRule.mode === "class_headcount") {
@@ -1125,6 +1152,20 @@ export function StudentsView({
     return vault.students.find((student) => student.id === studentIds[0])?.grade ?? "";
   }
 
+  function changeEditingCourseType(nextType: CourseType) {
+    if (!editingCourse) return;
+    const nextStudentIds = normalizeCourseStudentIds(nextType, editingCourse.studentIds);
+    const nextFeeRule = supportsSalaryGradeFee(nextType) && editingCourse.feeRule.mode === "salary_grade"
+      ? editingCourse.feeRule
+      : courseTypeDefaultFeeRule(nextType);
+    updateEditingCourse({
+      type: nextType,
+      feeRule: nextFeeRule,
+      studentIds: nextStudentIds,
+      defaultCampusId: firstCourseStudentCampus(nextStudentIds) ?? editingCourse.defaultCampusId
+    });
+  }
+
   function saveCourseDraft() {
     if (!editingCourse?.name.trim()) return;
     const courseId = editingCourse.id;
@@ -1199,6 +1240,7 @@ export function StudentsView({
           <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
           {[
             { key: "profile" as ArchivePanel, label: "老师个人信息" },
+            { key: "salaryRules" as ArchivePanel, label: "课时费计算" },
             { key: "campuses" as ArchivePanel, label: "校区与班型" },
             { key: "students" as ArchivePanel, label: "学生列表" },
             { key: "courses" as ArchivePanel, label: "添加课程档案" }
@@ -1226,1026 +1268,175 @@ export function StudentsView({
           删除限制：已有学生、课程或历史课时引用的数据不能直接删除，建议将对应的引用数据全部删除或改为归档状态。
         </div>
         {archivePanel === "profile" && (
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                <Settings size={14} /> 个人与义务课时设置
-              </div>
-              <CardTitle>老师个人信息</CardTitle>
-              <CardDescription>义务课时自动从本校区非试听课里按单节总课时费从低到高抵扣，本校区不足时再合并其他校区课次继续抵扣。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">显示姓名</label>
-                  <Input value={vault.profile.displayName} onChange={(event) => updateProfile({ displayName: event.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">所在校区</label>
-                  <Select value={vault.profile.homeCampusId ?? ""} onChange={(event) => updateHomeCampus(event.target.value)}>
-                    <option value="">未设置</option>
-                    {campusOptions.map((campus) => (
-                      <option key={campus.id} value={campus.id}>{campus.name}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">义务课时本校区</label>
-                  <Select value={vault.profile.obligationCampusId ?? ""} onChange={(event) => updateObligationCampus(event.target.value)}>
-                    <option value="">跟随所在校区</option>
-                    {campusOptions.map((campus) => (
-                      <option key={campus.id} value={campus.id}>{campus.name}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">扣义务课时方式</label>
-                  <Select
-                    value={obligationMode}
-                    onChange={(event) => updateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
-                  >
-                    <option value="auto_gap">按单节总课时费从低到高自动抵扣，不足按小时补扣</option>
-                    <option value="manual">手动填写扣除金额</option>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">每月义务小时</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={vault.profile.monthlyObligationHours ?? 0}
-                    onChange={(event) => updateProfile({ monthlyObligationHours: Math.max(Number(event.target.value), 0) })}
-                    disabled={isManualObligationMode}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">每小时补扣费用</label>
-                  <SensitiveAmountField visible={amountsVisible}>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={vault.profile.obligationHourlyDeduction ?? 0}
-                      onChange={(event) => updateProfile({ obligationHourlyDeduction: Math.max(Number(event.target.value), 0) })}
-                      disabled={isManualObligationMode}
-                    />
-                  </SensitiveAmountField>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">手动扣除金额</label>
-                  <SensitiveAmountField visible={amountsVisible}>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={vault.profile.manualObligationDeduction ?? 0}
-                      onChange={(event) => updateProfile({ manualObligationDeduction: Math.max(Number(event.target.value), 0) })}
-                      disabled={!isManualObligationMode}
-                    />
-                  </SensitiveAmountField>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">默认岗位薪资等级</label>
-                  <Select value={vault.profile.defaultSalaryGradeId ?? ""} onChange={(event) => updateDefaultSalaryGrade(event.target.value)}>
-                    <option value="">未设置</option>
-                    {salaryGradeRules.map((rule) => (
-                      <option key={rule.id} value={rule.id}>
-                        {salaryGradeLabel(rule)} · 底薪 {rule.baseSalary}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">基本工资</label>
-                  <SensitiveAmountField visible={amountsVisible}>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-[#64748b]">¥</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={vault.profile.baseSalary}
-                        onChange={(event) => {
-                          const value = Number(event.target.value);
-                          updateProfile({ baseSalary: Number.isFinite(value) ? Math.max(value, 0) : 0 });
-                        }}
-                        className="pl-10"
-                      />
-                    </div>
-                  </SensitiveAmountField>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">岗位课时规则</label>
-                  <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
-                    {selectedProfileSalaryGrade
-                      ? `保底 5 节/月，每节 2 小时；一对一 ${formatPrivateMoney(selectedProfileSalaryGrade.oneOnOneFee, amountsVisible)}；班课底费 ${formatPrivateMoney(selectedProfileSalaryGrade.classBaseFee, amountsVisible)}；人头加价 ${formatPrivateMoney(selectedProfileSalaryGrade.headcountIncrementFee, amountsVisible)}。`
-                      : "未设置默认岗位薪资等级，新课程不会自动套用岗位课时费。"}
-                  </div>
-                </div>
-                <div className="space-y-2 lg:col-span-3">
-                  <label className="text-sm font-medium">个人备注</label>
-                  <Textarea
-                    value={vault.profile.note ?? ""}
-                    onChange={(event) => updateProfile({ note: event.target.value })}
-                    placeholder="例如：主要负责中心校区，高中数学方向"
-                    className="min-h-[76px]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 rounded-[16px] border border-[#fecaca] bg-[#fff1f2] p-3 md:grid-cols-4">
-                {[
-                  { label: "义务目标", value: `${obligation.requiredHours.toFixed(1)} 小时` },
-                  { label: "本月应扣", value: `${obligation.deductedHours.toFixed(1)} 小时` },
-                  { label: "补扣小时", value: `${obligation.fallbackHours.toFixed(1)} 小时` },
-                  { label: "本月扣费", value: formatPrivateMoney(obligation.amount, amountsVisible) }
-                ].map((item) => (
-                  <div key={item.label} className="rounded-[12px] border border-[#fecaca] bg-[#fee2e2] p-3">
-                    <div className="text-xs font-bold text-[#991b1b]">{item.label}</div>
-                    <div className="mt-1 text-lg font-extrabold text-[#7f1d1d]">{item.value}</div>
-                  </div>
-                ))}
-              </div>
-
-            </CardContent>
-          </Card>
+          <TeacherProfilePanel
+            amountsVisible={amountsVisible}
+            campusOptions={campusOptions}
+            isManualObligationMode={isManualObligationMode}
+            obligation={obligation}
+            obligationMode={obligationMode}
+            onUpdateDefaultSalaryGrade={updateDefaultSalaryGrade}
+            onUpdateHomeCampus={updateHomeCampus}
+            onUpdateObligationCampus={updateObligationCampus}
+            onUpdateProfile={updateProfile}
+            renderSalaryGradeOptions={salaryGradeSelectOptions}
+            selectedProfileSalaryGrade={selectedProfileSalaryGrade}
+            vault={vault}
+          />
+        )}
+        {archivePanel === "salaryRules" && (
+          <TeacherSalaryRulesPanel
+            amountsVisible={amountsVisible}
+            onUpdateProfile={onUpdateProfile}
+            vault={vault}
+          />
         )}
         {archivePanel === "students" && (
-          <Card className="overflow-hidden">
-            <CardHeader className="gap-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                    <GraduationCap size={14} /> 班型调整
-                  </div>
-                  <CardTitle className="text-lg">学生课程关系</CardTitle>
-                  <CardDescription>调整后只影响后续新建课时；已经生成的课时保留原学生、班型和费用快照。</CardDescription>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Badge variant="sky" className="w-fit">{transferCurrentCourses.length} 个当前课程</Badge>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setTransferPanelOpen((open) => !open)}>
-                    <ChevronDown size={14} className={`transition-transform ${transferPanelOpen ? "rotate-180" : ""}`} />
-                    {transferPanelOpen ? "收起" : "展开"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            {transferPanelOpen && (
-            <CardContent className="space-y-4">
-              <form onSubmit={applyStudentCourseTransfer} className="space-y-4">
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">学生</label>
-                    <Select value={transferStudentId} onChange={(event) => setTransferStudentId(event.target.value)}>
-                      {activeStudentOptions.map((student) => (
-                        <option key={student.id} value={student.id}>{studentOptionLabel(student)}</option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">新班型</label>
-                    <Select value={transferCourseType} onChange={(event) => setTransferCourseType(event.target.value as CourseType)}>
-                      {courseTypeOptions.map((type) => (
-                        <option key={type.value} value={type.value}>{type.label}</option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">科目</label>
-                    <Select value={transferSubjectInput || transferCurrentCourses[0]?.subject || subjectOptions[0] || "未设置"} onChange={(event) => setTransferSubjectInput(event.target.value)}>
-                      {subjectOptions.map((subject) => (
-                        <option key={subject} value={subject}>{subject}</option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">处理方式</label>
-                    <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
-                      {[
-                        { key: "new" as const, label: "新建档案" },
-                        { key: "existing" as const, label: "加入已有" }
-                      ].map((item) => (
-                        <button
-                          key={item.key}
-                          type="button"
-                          onClick={() => setTransferTargetMode(item.key)}
-                          className={`rounded-[9px] px-3 py-2 text-xs font-bold ${
-                            transferTargetMode === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a]"
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {transferTargetMode === "new" ? (
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">课程档案名称</label>
-                      <Input
-                        value={transferCourseNameInput}
-                        onChange={(event) => setTransferCourseNameInput(event.target.value)}
-                        placeholder={transferStudent ? `${transferStudent.name}${courseTypeLabel(vault, transferCourseType)}` : "新课程档案名称"}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">默认校区</label>
-                      <Select value={transferCampusInput} onChange={(event) => setTransferCampusInput(event.target.value)}>
-                        <option value="">未设置校区</option>
-                        {campusOptions.map((campus) => (
-                          <option key={campus.id} value={campus.id}>{campus.name}</option>
-                        ))}
-                      </Select>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">目标课程</label>
-                    <Select value={transferTargetCourseId} onChange={(event) => setTransferTargetCourseId(event.target.value)}>
-                      {transferTargetCourses.map((course) => (
-                        <option key={course.id} value={course.id}>
-                          {course.name} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
-                        </option>
-                      ))}
-                    </Select>
-                    {transferTargetCourses.length === 0 && (
-                      <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
-                        当前没有可加入的同班型课程，可以切换为新建档案。
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <div className="text-sm font-extrabold text-[#061226]">当前课程</div>
-                      <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748b]">
-                        <input
-                          type="checkbox"
-                          checked={transferEndExisting}
-                          onChange={(event) => setTransferEndExisting(event.target.checked)}
-                          className="h-3.5 w-3.5 accent-[#ff8617]"
-                        />
-                        转班后从旧同科目课程中移除该学生
-                      </label>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {transferCurrentCourses.length > 0 ? transferCurrentCourses.map((course) => (
-                        <Badge key={course.id} variant={course.type === "class" ? "sky" : course.type === "trial" ? "plum" : "sage"}>
-                          {course.name} · {courseTypeLabel(vault, course.type)}
-                        </Badge>
-                      )) : (
-                        <Badge variant="secondary">暂无当前课程</Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Button type="submit" disabled={!transferStudentId || (transferTargetMode === "existing" && !transferTargetCourseId)}>
-                    <Save size={15} /> 保存调整
-                  </Button>
-                </div>
-              </form>
-              {transferMessage && (
-                <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-bold text-[#166534]">
-                  {transferMessage}
-                </div>
-              )}
-            </CardContent>
-            )}
-          </Card>
+          <StudentCourseTransferPanel
+            activeStudentOptions={activeStudentOptions}
+            campusOptions={campusOptions}
+            courseTypeOptions={courseTypeOptions}
+            onSubmit={applyStudentCourseTransfer}
+            setTransferCampusInput={setTransferCampusInput}
+            setTransferCourseNameInput={setTransferCourseNameInput}
+            setTransferCourseType={setTransferCourseType}
+            setTransferEndExisting={setTransferEndExisting}
+            setTransferPanelOpen={setTransferPanelOpen}
+            setTransferStudentId={setTransferStudentId}
+            setTransferSubjectInput={setTransferSubjectInput}
+            setTransferTargetCourseId={setTransferTargetCourseId}
+            setTransferTargetMode={setTransferTargetMode}
+            studentOptionLabel={studentOptionLabel}
+            subjectOptions={subjectOptions}
+            transferCampusInput={transferCampusInput}
+            transferCourseNameInput={transferCourseNameInput}
+            transferCourseType={transferCourseType}
+            transferCurrentCourses={transferCurrentCourses}
+            transferEndExisting={transferEndExisting}
+            transferMessage={transferMessage}
+            transferPanelOpen={transferPanelOpen}
+            transferStudent={transferStudent}
+            transferStudentId={transferStudentId}
+            transferSubjectInput={transferSubjectInput}
+            transferTargetCourseId={transferTargetCourseId}
+            transferTargetCourses={transferTargetCourses}
+            transferTargetMode={transferTargetMode}
+            vault={vault}
+          />
         )}
         {archivePanel === "campuses" && (
-        <div className="space-y-4">
-        <Card className="h-fit overflow-hidden">
-          <CardHeader className="gap-3">
-            <div className="flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Building2 size={18} className="text-[#ff8617]" />
-                <CardTitle className="text-lg">校区与班型</CardTitle>
-              </div>
-              <Badge variant="secondary">{vault.campuses.length} 个</Badge>
-            </div>
-            <form onSubmit={addCampus} className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto]">
-              <Input
-                value={campusNameInput}
-                onChange={(e) => setCampusNameInput(e.target.value)}
-                placeholder="校区名称，例如：中心校区"
-              />
-              <Input
-                value={campusAddressInput}
-                onChange={(e) => setCampusAddressInput(e.target.value)}
-                placeholder="地址，例如：人民路 88 号"
-              />
-              <Input
-                value={campusNoteInput}
-                onChange={(e) => setCampusNoteInput(e.target.value)}
-                placeholder="备注，可选"
-              />
-              <Button type="submit">
-                <Plus size={15} /> 添加校区
-              </Button>
-            </form>
-          </CardHeader>
-          <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
-            {campusOptions.map((campus) => {
-              const isEditing = editingCampus?.id === campus.id;
-              const used = campusInUse(campus.id);
-              return (
-                <motion.div
-                  key={campus.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className={archiveRowClass("campuses", campus.id)}
-                >
-                  {isEditing && editingCampus ? (
-                    <div className="space-y-3">
-                      <Input
-                        value={editingCampus.name}
-                        onChange={(event) => setEditingCampus({ ...editingCampus, name: event.target.value })}
-                        placeholder="校区名称"
-                      />
-                      <Input
-                        value={editingCampus.address ?? ""}
-                        onChange={(event) => setEditingCampus({ ...editingCampus, address: event.target.value })}
-                        placeholder="地址"
-                      />
-                      <Input
-                        value={editingCampus.note ?? ""}
-                        onChange={(event) => setEditingCampus({ ...editingCampus, note: event.target.value })}
-                        placeholder="备注"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button type="button" size="sm" onClick={() => {
-                          if (!editingCampus.name.trim()) return;
-                          const campusId = editingCampus.id;
-                          onUpdateCampus({ ...editingCampus, name: editingCampus.name.trim() });
-                          setEditingCampus(null);
-                          flashArchiveRow("campuses", campusId);
-                        }}>
-                          <Save size={14} /> 保存
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => {
-                          flashArchiveRow("campuses", editingCampus.id);
-                          setEditingCampus(null);
-                        }}>
-                          <X size={14} /> 取消
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
-                        <Building2 size={16} className="text-[#1557c2]" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{campus.name}</span>
-                        <span className="mt-1 flex items-center gap-1 text-xs text-(--color-muted-foreground)">
-                          <MapPin size={10} /> {campus.address || "未填写地址"}
-                        </span>
-                        {campus.note && (
-                          <span className="mt-1 block text-xs leading-5 text-(--color-muted-foreground)">
-                            {campus.note}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 w-8 rounded-[9px] p-0"
-                          title="编辑校区"
-                          aria-label={`编辑校区 ${campus.name}`}
-                          onClick={() => setEditingCampus(campus)}
-                        >
-                          <Pencil size={13} />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="h-8 w-8 rounded-[9px] p-0"
-                          disabled={used}
-                          title={used ? "已有学生、课程或课时引用，不能直接删除" : "删除校区"}
-                          aria-label={`删除校区 ${campus.name}`}
-                          onClick={() =>
-                            confirm({
-                              title: `删除校区「${campus.name}」？`,
-                              description: "删除后无法从校区与班型中恢复。",
-                              confirmLabel: "删除",
-                              tone: "danger",
-                              onConfirm: () => onDeleteCampus(campus.id)
-                            })
-                          }
-                        >
-                          <Trash2 size={13} />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
-            {vault.campuses.length === 0 && (
-              <p className="py-8 text-center text-sm text-(--color-muted-foreground)">还没有校区</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card className="h-fit overflow-hidden">
-          <CardHeader className="gap-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                  <BookOpen size={14} /> 科目管理
-                </div>
-                <CardTitle className="text-lg">科目列表</CardTitle>
-                <CardDescription>新增和编辑课程时统一从这里选择科目；修改科目名称会同步更新已有课程。</CardDescription>
-              </div>
-              <Badge variant="secondary" className="w-fit">{subjectOptions.length} 个</Badge>
-            </div>
-            <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <Input
-                value={subjectInput}
-                onChange={(event) => {
-                  setSubjectInput(event.target.value);
-                  if (subjectMessage) setSubjectMessage("");
-                }}
-                placeholder="新增科目，例如：英语、物理"
-                maxLength={24}
-                className="bg-white"
-              />
-              <Button type="button" onClick={addSubject} disabled={!subjectInput.trim()}>
-                <Plus size={14} /> 添加科目
-              </Button>
-            </div>
-            {subjectMessage && (
-              <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
-                {subjectMessage}
-              </div>
-            )}
-          </CardHeader>
-          <CardContent className="max-h-[360px] space-y-2 overflow-y-auto pr-2">
-            {subjectOptions.map((subject) => {
-              const isEditing = editingSubject === subject;
-              const used = subjectInUse(subject);
-              return (
-                <motion.div
-                  key={subject}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="rounded-[14px] border border-[#dbe4ef] bg-white p-3"
-                >
-                  {isEditing ? (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-                      <Input
-                        value={editingSubjectInput}
-                        onChange={(event) => {
-                          setEditingSubjectInput(event.target.value);
-                          if (subjectMessage) setSubjectMessage("");
-                        }}
-                        maxLength={24}
-                        className="bg-white"
-                      />
-                      <Button type="button" size="sm" onClick={saveSubject} disabled={!editingSubjectInput.trim()}>
-                        <Save size={14} /> 保存
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={cancelEditSubject}>
-                        <X size={14} /> 取消
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
-                        <BookOpen size={16} className="text-[#1557c2]" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-extrabold text-[#061226]">{subject}</span>
-                        <span className="mt-1 block text-xs font-semibold text-[#64748b]">
-                          {used ? "已有课程使用" : "暂无课程使用"}
-                        </span>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button type="button" size="sm" variant="outline" className="h-8 w-8 rounded-[9px] p-0" onClick={() => startEditSubject(subject)} title="编辑科目">
-                          <Pencil size={13} />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="h-8 w-8 rounded-[9px] p-0"
-                          disabled={used}
-                          title={used ? "已有课程使用，不能直接删除" : "删除科目"}
-                          onClick={() =>
-                            confirm({
-                              title: `删除科目「${subject}」？`,
-                              description: "删除后不会再出现在科目管理列表中。",
-                              confirmLabel: "删除",
-                              tone: "danger",
-                              onConfirm: () => onDeleteSubject(subject)
-                            })
-                          }
-                        >
-                          <Trash2 size={13} />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
-          </CardContent>
-        </Card>
-        <Card className="h-fit overflow-hidden">
-          <CardHeader className="gap-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                  <GraduationCap size={14} /> 班型管理
-                </div>
-                <CardTitle className="text-lg">班型与默认计费</CardTitle>
-                <CardDescription>班型可改名、按名称排序并设置默认计费；内置班型删除后会从主列表移除，自定义班型未使用时会直接删除。</CardDescription>
-                <div className="mt-1 text-sm font-semibold leading-5 text-[#64748b]">
-                  恢复默认计费会把该班型的默认价格恢复为 0，只影响以后新建的课程，已添加课程不会自动修改。
-                </div>
-              </div>
-              <Badge variant="secondary" className="w-fit">{managedCourseTypes.length} 个可配置</Badge>
-            </div>
-            <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3">
-              <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-center">
-                <Input
-                  value={customCourseTypeInput}
-                  onChange={(event) => {
-                    setCustomCourseTypeInput(event.target.value);
-                    if (courseTypeMessage) setCourseTypeMessage("");
-                  }}
-                  placeholder="自定义班型，例如：小组课、冲刺课"
-                  maxLength={24}
-                  className={`h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20 ${courseTypeMessage ? "border-[#fca5a5] bg-[#fff1f2]" : ""}`}
-                />
-                <Select
-                  value={customCourseTypeTemplate}
-                  onChange={(event) => setCustomCourseTypeTemplate(event.target.value as "class" | "hourly")}
-                  className="h-10 border-[#fdba74] bg-white text-[#7c2d12]"
-                  aria-label="选择自定义班型计费模板"
-                >
-                  <option value="class">班课人数计费模板</option>
-                  <option value="hourly">一对一按小时模板</option>
-                </Select>
-                <Button type="button" variant="outline" className="h-10 border-[#fdba74] bg-white text-[#9a3412] hover:bg-[#ffedd5]" disabled={!customCourseTypeInput.trim()} onClick={addCustomCourseType}>
-                  <Plus size={14} /> 添加班型
-                </Button>
-              </div>
-              {customCourseTypeTemplate === "class" ? (
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#9a3412]">最少人数</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={customCourseTypeMinStudents}
-                      onChange={(event) => setCustomCourseTypeMinStudents(Math.max(Number(event.target.value), 0))}
-                      className="h-9 border-[#fdba74] bg-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#9a3412]">基础费用</label>
-                    <SensitiveAmountField visible={amountsVisible} className="h-9">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={customCourseTypeBaseFee}
-                        onChange={(event) => setCustomCourseTypeBaseFee(Math.max(Number(event.target.value), 0))}
-                        className="h-9 border-[#fdba74] bg-white"
-                      />
-                    </SensitiveAmountField>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#9a3412]">每增加 1 人费用</label>
-                    <SensitiveAmountField visible={amountsVisible} className="h-9">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={customCourseTypePerStudentFee}
-                        onChange={(event) => setCustomCourseTypePerStudentFee(Math.max(Number(event.target.value), 0))}
-                        className="h-9 border-[#fdba74] bg-white"
-                      />
-                    </SensitiveAmountField>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-3 max-w-[220px] space-y-1">
-                  <label className="text-[11px] font-bold text-[#9a3412]">每小时费用</label>
-                  <SensitiveAmountField visible={amountsVisible} className="h-9">
-                    <Input
-                      type="number"
-                      min={0}
-                      value={customCourseTypeHourlyRate}
-                      onChange={(event) => setCustomCourseTypeHourlyRate(Math.max(Number(event.target.value), 0))}
-                      className="h-9 border-[#fdba74] bg-white"
-                    />
-                  </SensitiveAmountField>
-                </div>
-              )}
-            </div>
-            {courseTypeMessage && (
-              <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
-                {courseTypeMessage}
-              </div>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {managedCourseTypes.map((typeOption) => {
-              const type = typeOption.value;
-              const rule = feeRuleForCourseType(vault, type);
-              const tier = normalizedClassFeeTiers(rule)[0] ?? defaultClassFeeTiers(defaultFeeRuleForCourseType(type))[0];
-              const isCustom = type.startsWith("custom_");
-              const isEditingType = editingCustomCourseTypeId === type;
-              const used = courseTypeInUse(type);
-              return (
-                <div key={type} className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      {isEditingType ? (
-                        <>
-                          <Input
-                            value={editingCustomCourseTypeLabel}
-                            onChange={(event) => {
-                              setEditingCustomCourseTypeLabel(event.target.value);
-                              if (courseTypeMessage) setCourseTypeMessage("");
-                            }}
-                            maxLength={24}
-                            className={`h-9 max-w-[220px] border-[#fdba74] bg-white text-sm font-bold text-[#7c2d12] ${courseTypeMessage ? "border-[#fca5a5] bg-[#fff1f2]" : ""}`}
-                          />
-                          <Button type="button" size="sm" className="h-9" disabled={!editingCustomCourseTypeLabel.trim()} onClick={saveCustomCourseType}>
-                            <Save size={14} /> 保存
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" className="h-9" onClick={cancelCustomCourseTypeEdit}>
-                            <X size={14} /> 取消
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="truncate text-base font-extrabold text-[#061226]">{typeOption.label}</span>
-                          <Badge variant={isCustom ? "amber" : "sky"}>{isCustom ? "自定义" : "内置"}</Badge>
-                          {used && <span className="text-xs font-extrabold text-[#15803d]">使用中</span>}
-                        </>
-                      )}
-                    </div>
-                    {!isEditingType && (
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => startEditCustomCourseType({ id: type, label: typeOption.label })}>
-                          <Pencil size={14} /> 改名
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          disabled={isCustom && used}
-                          onClick={() => requestDeleteCourseType({ id: type, label: typeOption.label })}
-                          title={isCustom && used ? "这个自定义班型已有课程或历史课时使用，不能直接删除" : isCustom ? "直接删除自定义班型" : "内置班型会从主列表和添加课程档案中移除"}
-                        >
-                          <Trash2 size={14} /> 删除
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => resetCourseTypeFeeRule(type)}>
-                          恢复默认计费
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                  {rule.mode === "class_headcount" ? (
-                  <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
-                    <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-sm font-extrabold text-[#061226]">默认人数计费</div>
-                      <div className="text-xs font-semibold text-[#64748b]">按 2 小时为 1 节设置标准课金额；实际课时费按上课时长 / 2 折算。</div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={tier.minStudents}
-                          onChange={(event) => updateCourseTypeClassFeeTier(type, tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
-                          className="h-9 bg-white"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">基础费用</label>
-                        <SensitiveAmountField visible={amountsVisible} className="h-9">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={tier.baseFee}
-                            onChange={(event) => updateCourseTypeClassFeeTier(type, tier.id, { baseFee: Math.max(Number(event.target.value), 0) })}
-                            className="h-9 bg-white"
-                          />
-                        </SensitiveAmountField>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">每增加一人</label>
-                        <SensitiveAmountField visible={amountsVisible} className="h-9">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={tier.perStudentFee ?? 0}
-                            onChange={(event) => updateCourseTypeClassFeeTier(type, tier.id, { perStudentFee: Math.max(Number(event.target.value), 0) })}
-                            className="h-9 bg-white"
-                          />
-                        </SensitiveAmountField>
-                      </div>
-                    </div>
-                  </div>
-                  ) : type === "trial" ? (
-                  <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
-                    <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-sm font-extrabold text-[#061226]">默认单次费用</div>
-                      <div className="text-xs font-semibold text-[#64748b]">新建试听课程时自动带入，不按小时相乘。</div>
-                    </div>
-                    <SensitiveAmountField visible={amountsVisible} className="h-9">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={fixedFeeForRule(rule)}
-                        onChange={(event) => updateCourseTypeFixedRule(type, Math.max(Number(event.target.value), 0))}
-                        className="h-9 bg-white"
-                      />
-                    </SensitiveAmountField>
-                  </div>
-                  ) : (
-                  <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
-                    <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-sm font-extrabold text-[#061226]">默认每小时费用</div>
-                      <div className="text-xs font-semibold text-[#64748b]">新建该班型课程时自动带入，默认值为 0。</div>
-                    </div>
-                    <SensitiveAmountField visible={amountsVisible} className="h-9">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={rule.hourlyRate ?? 0}
-                        onChange={(event) => updateCourseTypeHourlyRule(type, Math.max(Number(event.target.value), 0))}
-                        className="h-9 bg-white"
-                      />
-                    </SensitiveAmountField>
-                  </div>
-                  )}
-                </div>
-              );
-            })}
-            {deletedBuiltInCourseTypes.length > 0 && (
-              <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-white p-3">
-                <div className="mb-2 text-xs font-extrabold text-[#64748b]">已删除内置班型</div>
-                <div className="flex flex-wrap gap-2">
-                  {deletedBuiltInCourseTypes.map((typeOption) => (
-                    <Button
-                      key={typeOption.value}
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 bg-[#f8fbff] text-xs"
-                      onClick={() => onRestoreCourseType(typeOption.value)}
-                    >
-                      恢复 {typeOption.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {managedCourseTypes.length === 0 && (
-              <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                暂无可配置班型，可以先添加自定义班型。
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        </div>
+          <CampusCourseSettingsPanel
+            amountsVisible={amountsVisible}
+            archiveRowClass={archiveRowClass}
+            campusAddressInput={campusAddressInput}
+            campusInUse={campusInUse}
+            campusNameInput={campusNameInput}
+            campusNoteInput={campusNoteInput}
+            campusOptions={campusOptions}
+            confirm={confirm}
+            courseTypeInUse={courseTypeInUse}
+            courseTypeMessage={courseTypeMessage}
+            customCourseTypeBaseFee={customCourseTypeBaseFee}
+            customCourseTypeHourlyRate={customCourseTypeHourlyRate}
+            customCourseTypeInput={customCourseTypeInput}
+            customCourseTypeMinStudents={customCourseTypeMinStudents}
+            customCourseTypePerStudentFee={customCourseTypePerStudentFee}
+            customCourseTypeTemplate={customCourseTypeTemplate}
+            deletedBuiltInCourseTypes={deletedBuiltInCourseTypes}
+            editingCampus={editingCampus}
+            editingCustomCourseTypeId={editingCustomCourseTypeId}
+            editingCustomCourseTypeLabel={editingCustomCourseTypeLabel}
+            editingSubject={editingSubject}
+            editingSubjectInput={editingSubjectInput}
+            flashArchiveRow={flashArchiveRow}
+            managedCourseTypes={managedCourseTypes}
+            onAddCampus={addCampus}
+            onAddCustomCourseType={addCustomCourseType}
+            onAddSubject={addSubject}
+            onCancelCustomCourseTypeEdit={cancelCustomCourseTypeEdit}
+            onCancelEditSubject={cancelEditSubject}
+            onDeleteCampus={onDeleteCampus}
+            onDeleteSubject={onDeleteSubject}
+            onRequestDeleteCourseType={requestDeleteCourseType}
+            onResetCourseTypeFeeRule={resetCourseTypeFeeRule}
+            onRestoreCourseType={onRestoreCourseType}
+            onSaveCustomCourseType={saveCustomCourseType}
+            onSaveSubject={saveSubject}
+            onStartEditCustomCourseType={startEditCustomCourseType}
+            onStartEditSubject={startEditSubject}
+            onUpdateCampus={onUpdateCampus}
+            onUpdateCourseTypeClassFeeTier={updateCourseTypeClassFeeTier}
+            onUpdateCourseTypeFixedRule={updateCourseTypeFixedRule}
+            onUpdateCourseTypeHourlyRule={updateCourseTypeHourlyRule}
+            setCampusAddressInput={setCampusAddressInput}
+            setCampusNameInput={setCampusNameInput}
+            setCampusNoteInput={setCampusNoteInput}
+            setCourseTypeMessage={setCourseTypeMessage}
+            setCustomCourseTypeBaseFee={setCustomCourseTypeBaseFee}
+            setCustomCourseTypeHourlyRate={setCustomCourseTypeHourlyRate}
+            setCustomCourseTypeInput={setCustomCourseTypeInput}
+            setCustomCourseTypeMinStudents={setCustomCourseTypeMinStudents}
+            setCustomCourseTypePerStudentFee={setCustomCourseTypePerStudentFee}
+            setCustomCourseTypeTemplate={setCustomCourseTypeTemplate}
+            setEditingCampus={setEditingCampus}
+            setEditingCustomCourseTypeLabel={setEditingCustomCourseTypeLabel}
+            setEditingSubjectInput={setEditingSubjectInput}
+            setSubjectInput={setSubjectInput}
+            setSubjectMessage={setSubjectMessage}
+            subjectInUse={subjectInUse}
+            subjectInput={subjectInput}
+            subjectMessage={subjectMessage}
+            subjectOptions={subjectOptions}
+            vault={vault}
+          />
         )}
 
         {archivePanel === "students" && (
-        <Card className="h-fit overflow-hidden">
-          <CardHeader className="gap-3">
-            <div className="flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users size={18} className="text-[#ff8617]" />
-                <CardTitle className="text-lg">学生列表</CardTitle>
-              </div>
-              <Badge variant="secondary">
-                {visibleStudents.length} / {vault.students.length} 人
-                {studentStatusFilter !== "all" ? ` · ${studentStatusFilter === "archived" ? "已归档" : "在读"}` : ""}
-              </Badge>
-            </div>
-            <form onSubmit={addStudent} className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-              <Input
-                value={studentNameInput}
-                onChange={(e) => setStudentNameInput(e.target.value)}
-                placeholder="例如：学生 E"
-              />
-              <Select value={studentGradeInput} onChange={(e) => setStudentGradeInput(e.target.value)}>
-                {gradeOptions.map((grade) => (
-                  <option key={grade} value={grade === "未设置年级" ? "" : grade}>{grade}</option>
-                ))}
-              </Select>
-              {studentGradeInput === "自定义" && (
-                <Input
-                  value={customGradeInput}
-                  onChange={(e) => setCustomGradeInput(e.target.value)}
-                  placeholder="输入自定义年级"
-                />
-              )}
-              <Input
-                value={studentSchoolInput}
-                onChange={(e) => setStudentSchoolInput(e.target.value)}
-                placeholder="所在学校，例如：实验中学"
-              />
-              <Select value={studentCampusInput} onChange={(e) => setStudentCampusInput(e.target.value)}>
-                <option value="">未设置校区</option>
-                {campusOptions.map((campus) => (
-                  <option key={campus.id} value={campus.id}>{campus.name}</option>
-                ))}
-              </Select>
-              <Input
-                value={studentNoteInput}
-                onChange={(e) => setStudentNoteInput(e.target.value)}
-                placeholder="档案备注，可选"
-              />
-              <label className="flex min-h-11 items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
-                <input
-                  type="checkbox"
-                  checked={studentTemporaryTrialInput}
-                  onChange={(event) => setStudentTemporaryTrialInput(event.target.checked)}
-                  className="h-4 w-4 accent-[#ff8617]"
-                />
-                临时试听学生
-              </label>
-              <Button type="submit">
-                <Plus size={15} /> 添加学生
-              </Button>
-            </form>
-            <label className="relative block">
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-              <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名、学校或备注" />
-            </label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
-              <Select value={studentStatusFilter} onChange={(event) => setStudentStatusFilter(event.target.value as "active" | "archived" | "all")} className="h-10">
-                <option value="active">在读学生</option>
-                <option value="archived">已归档学生</option>
-                <option value="all">全部学生</option>
-              </Select>
-              <Select value={studentTrialFilter} onChange={(event) => setStudentTrialFilter(event.target.value as "all" | "trial" | "regular")} className="h-10">
-                <option value="all">全部档案</option>
-                <option value="trial">仅试听档案</option>
-                <option value="regular">非试听档案</option>
-              </Select>
-              <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)} className="h-10">
-                <option value="all">全部年级</option>
-                {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
-                {gradeFilterOptions.map((grade) => (
-                  <option key={grade} value={grade}>{grade}</option>
-                ))}
-              </Select>
-              <Select value={studentCampusFilter} onChange={(event) => setStudentCampusFilter(event.target.value)} className="h-10">
-                <option value="all">全部校区</option>
-                {campusOptions.map((campus) => (
-                  <option key={campus.id} value={campus.id}>{campus.name}</option>
-                ))}
-              </Select>
-              <Select value={studentCourseTypeFilter} onChange={(event) => setStudentCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
-                <option value="all">全部班型</option>
-                {courseTypeOptions.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </Select>
-              <Select value={studentSubjectFilter} onChange={(event) => setStudentSubjectFilter(event.target.value)} className="h-10">
-                <option value="all">全部科目</option>
-                {subjectFilterOptions.map((subject) => (
-                  <option key={subject} value={subject}>{subject}</option>
-                ))}
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
-            {visibleStudents.map((student) => {
-              const used = studentInUse(student.id);
-              const archived = student.status === "paused";
-              return (
-                <motion.div
-                  key={student.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className={`${archiveRowClass("students", student.id)} cursor-pointer transition-colors hover:bg-[#f8fbff]`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openStudentEditor(student)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openStudentEditor(student);
-                    }
-                  }}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#fff1e2]">
-                          <span className="text-xs font-bold text-[#ff8617]">{student.name.slice(0, 1)}</span>
-                        </div>
-                        <div className="min-w-0">
-                          <span className="block truncate text-sm font-medium">{student.name}</span>
-                          <div className="mt-1 flex flex-wrap gap-1 text-xs text-(--color-muted-foreground)">
-                            <span className="flex items-center gap-1"><MapPin size={10} /> {campusName(vault, student.defaultCampusId)}</span>
-                            <span>{student.grade || "未设置年级"}</span>
-                            <span>{student.school || "未填写学校"}</span>
-                            {student.temporaryTrial && <span className="font-bold text-[#5161d6]">临时试听</span>}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                        <Badge variant={archived ? "secondary" : "sage"}>
-                          {archived ? "已归档" : "在读"}
-                        </Badge>
-                        {archived ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8 w-8 rounded-[9px] border-[#bbf7d0] bg-[#f0fdf4] p-0 text-[#166534] hover:bg-[#dcfce7] hover:text-[#14532d]"
-                            title="恢复学生"
-                            aria-label={`恢复学生 ${student.name}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              restoreStudent(student);
-                            }}
-                          >
-                            <RotateCcw size={13} />
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8 w-8 rounded-[9px] border-[#fed7aa] bg-[#fff7ed] p-0 text-[#9a3412] hover:bg-[#ffedd5] hover:text-[#7c2d12]"
-                            title="归档学生"
-                            aria-label={`归档学生 ${student.name}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              requestArchiveStudent(student);
-                            }}
-                          >
-                            <Archive size={13} />
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 w-8 rounded-[9px] p-0"
-                          title="编辑学生"
-                          aria-label={`编辑学生 ${student.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openStudentEditor(student);
-                          }}
-                        >
-                          <Pencil size={13} />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="h-8 w-8 rounded-[9px] p-0"
-                          disabled={used}
-                          title={used ? "已有课程或课时引用，不能直接删除" : "删除学生"}
-                          aria-label={`删除学生 ${student.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            confirm({
-                              title: `删除学生「${student.name}」？`,
-                              description: "已有历史课时建议保留为归档状态，确认删除后将从档案信息移除。",
-                              confirmLabel: "删除",
-                              tone: "danger",
-                              onConfirm: () => onDeleteStudent(student.id)
-                            });
-                          }}
-                        >
-                          <Trash2 size={13} />
-                        </Button>
-                      </div>
-                    </div>
-                    {student.note && (
-                      <div className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
-                        <FileText size={12} className="mr-1 inline" />
-                        {student.note}
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-            {visibleStudents.length === 0 && (
-              <p className="py-8 text-center text-sm text-(--color-muted-foreground)">
-                {studentStatusFilter === "archived" ? "还没有已归档学生" : "还没有符合条件的学生"}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+          <StudentArchivePanel
+            archiveRowClass={archiveRowClass}
+            archiveSearch={archiveSearch}
+            campusOptions={campusOptions}
+            confirm={confirm}
+            courseTypeOptions={courseTypeOptions}
+            customGradeInput={customGradeInput}
+            gradeFilter={gradeFilter}
+            gradeFilterOptions={gradeFilterOptions}
+            gradeOptions={gradeOptions}
+            hasUnsetGradeFilterOption={hasUnsetGradeFilterOption}
+            onAddStudent={addStudent}
+            onDeleteStudent={onDeleteStudent}
+            onOpenStudentEditor={openStudentEditor}
+            onRequestArchiveStudent={requestArchiveStudent}
+            onRestoreStudent={restoreStudent}
+            setArchiveSearch={setArchiveSearch}
+            setCustomGradeInput={setCustomGradeInput}
+            setGradeFilter={setGradeFilter}
+            setStudentCampusFilter={setStudentCampusFilter}
+            setStudentCampusInput={setStudentCampusInput}
+            setStudentCourseTypeFilter={setStudentCourseTypeFilter}
+            setStudentGradeInput={setStudentGradeInput}
+            setStudentNameInput={setStudentNameInput}
+            setStudentNoteInput={setStudentNoteInput}
+            setStudentSchoolInput={setStudentSchoolInput}
+            setStudentStatusFilter={setStudentStatusFilter}
+            setStudentSubjectFilter={setStudentSubjectFilter}
+            setStudentTemporaryTrialInput={setStudentTemporaryTrialInput}
+            setStudentTrialFilter={setStudentTrialFilter}
+            studentCampusFilter={studentCampusFilter}
+            studentCampusInput={studentCampusInput}
+            studentCourseTypeFilter={studentCourseTypeFilter}
+            studentGradeInput={studentGradeInput}
+            studentInUse={studentInUse}
+            studentNameInput={studentNameInput}
+            studentNoteInput={studentNoteInput}
+            studentSchoolInput={studentSchoolInput}
+            studentStatusFilter={studentStatusFilter}
+            studentSubjectFilter={studentSubjectFilter}
+            studentTemporaryTrialInput={studentTemporaryTrialInput}
+            studentTrialFilter={studentTrialFilter}
+            subjectFilterOptions={subjectFilterOptions}
+            vault={vault}
+            visibleStudents={visibleStudents}
+          />
         )}
 
         {archivePanel === "courses" && (
@@ -2311,20 +1502,18 @@ export function StudentsView({
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm font-extrabold text-[#061226]">课时费来源</div>
                     <div className="text-xs font-semibold text-[#64748b]">
-                      岗位薪资按 2 小时为 1 节设置标准课金额；实际课时费按上课时长 / 2 折算。
+                      课时费等级按 2 小时为 1 节设置标准课金额；实际课时费按上课时长 / 2 折算。
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Select value={feeModeValue(courseFeeRule)} onChange={(event) => changeNewCourseFeeMode(event.target.value as "salary_default" | "salary_specific" | "custom")}>
-                      <option value="salary_default">跟随老师默认岗位薪资</option>
-                      <option value="salary_specific">指定岗位薪资等级</option>
+                      <option value="salary_default">跟随老师默认课时费等级</option>
+                      <option value="salary_specific">指定课时费等级</option>
                       <option value="custom">自定义课时费</option>
                     </Select>
                     {courseFeeRule.mode === "salary_grade" && courseFeeRule.salaryGradeSource === "specific" && (
-                      <Select value={courseFeeRule.salaryGradeId ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule().id} onChange={(event) => changeNewCourseSalaryGrade(event.target.value)}>
-                        {salaryGradeRules.map((rule) => (
-                          <option key={rule.id} value={rule.id}>{salaryGradeLabel(rule)}</option>
-                        ))}
+                      <Select value={courseFeeRule.salaryGradeId ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule(vault).id} onChange={(event) => changeNewCourseSalaryGrade(event.target.value)}>
+                        {salaryGradeSelectOptions(courseFeeRule.salaryGradeId ?? vault.profile.defaultSalaryGradeId)}
                       </Select>
                     )}
                   </div>
@@ -2337,7 +1526,7 @@ export function StudentsView({
                               ? `${salaryGradeLabel(rule)}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rule.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rule.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rule.headcountIncrementFee, amountsVisible)}。`
                               : "";
                           })()
-                        : "还没有设置老师默认岗位薪资等级，请先在老师个人信息里设置，或改为指定岗位薪资等级。"}
+                        : "还没有设置老师默认课时费等级，请先在老师个人信息里设置，或改为指定课时费等级。"}
                     </div>
                   )}
                 </div>
@@ -2526,573 +1715,78 @@ export function StudentsView({
           </CardContent>
         </Card>
 
-        <Card className="h-fit overflow-hidden">
-          <CardHeader>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-                  <GraduationCap size={14} /> 已添加课程
-                </div>
-                <CardTitle className="text-lg">课程档案列表</CardTitle>
-                <CardDescription>筛选和数量只作用于下方已添加课程。</CardDescription>
-              </div>
-              <Badge variant="secondary" className="w-fit">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <label className="relative block">
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-              <Input
-                className="h-10 pl-9"
-                value={courseSearch}
-                onChange={(event) => setCourseSearch(event.target.value)}
-                placeholder="搜索课程档案名称、学科、校区、学生或班型"
-              />
-            </label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
-                <option value="all">全部课程类型</option>
-                {courseTypeOptions.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </Select>
-              <Select value={courseGradeFilter} onChange={(event) => setCourseGradeFilter(event.target.value)} className="h-10">
-                <option value="all">全部年级</option>
-                {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
-                {gradeFilterOptions.map((grade) => (
-                  <option key={grade} value={grade}>{grade}</option>
-                ))}
-              </Select>
-              <Select value={courseSubjectFilter} onChange={(event) => setCourseSubjectFilter(event.target.value)} className="h-10">
-                <option value="all">全部科目</option>
-                {subjectFilterOptions.map((subject) => (
-                  <option key={subject} value={subject}>{subject}</option>
-                ))}
-              </Select>
-              <Select value={courseCampusFilter} onChange={(event) => setCourseCampusFilter(event.target.value)} className="h-10">
-                <option value="all">全部校区</option>
-                {campusOptions.map((campus) => (
-                  <option key={campus.id} value={campus.id}>{campus.name}</option>
-                ))}
-              </Select>
-          </div>
-          <div className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
-            {visibleCourses.map((course) => {
-              const used = courseInUse(course.id);
-              return (
-                <motion.div
-                  key={course.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className={`${archiveRowClass("courses", course.id)} cursor-pointer transition-colors hover:bg-[#f8fbff]`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openCourseEditor(course)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openCourseEditor(course);
-                    }
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
-                        <GraduationCap size={16} className="text-[#1557c2]" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{course.name}</span>
-                        <span className="text-xs text-(--color-muted-foreground)">
-                          {courseTypeLabel(vault, course.type)} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
-                        </span>
-                        <span className="mt-1 block text-xs font-bold text-[#1557c2]">
-                          {courseFeeSummary(course)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Badge variant={course.status === "active" ? "sage" : "secondary"}>
-                        {course.status === "active" ? "启用" : "暂停"}
-                      </Badge>
-                      <span className="mr-1 max-w-[96px] truncate text-xs text-(--color-muted-foreground)" title={campusName(vault, course.defaultCampusId)}>
-                        {campusName(vault, course.defaultCampusId)}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 w-8 rounded-[9px] p-0"
-                        title="编辑课程"
-                        aria-label={`编辑课程 ${course.name}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openCourseEditor(course);
-                        }}
-                      >
-                        <Pencil size={13} />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        className="h-8 w-8 rounded-[9px] p-0"
-                        disabled={used}
-                        title={used ? "已有课时引用，不能直接删除" : "删除课程"}
-                        aria-label={`删除课程 ${course.name}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          confirm({
-                            title: `删除课程「${course.name}」？`,
-                            description: "删除课程不会自动清理历史课时。已有引用时建议先暂停课程。",
-                            confirmLabel: "删除",
-                            tone: "danger",
-                            onConfirm: () => onDeleteCourse(course.id)
-                          });
-                        }}
-                      >
-                        <Trash2 size={13} />
-                      </Button>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-            {visibleCourses.length === 0 && (
-              <p className="py-8 text-center text-sm text-(--color-muted-foreground)">当前筛选下没有课程</p>
-            )}
-          </div>
-          </CardContent>
-        </Card>
+        <CourseArchiveListPanel
+          archiveRowClass={archiveRowClass}
+          campusOptions={campusOptions}
+          confirm={confirm}
+          courseCampusFilter={courseCampusFilter}
+          courseFeeSummary={courseFeeSummary}
+          courseGradeFilter={courseGradeFilter}
+          courseInUse={courseInUse}
+          courseSearch={courseSearch}
+          courseSubjectFilter={courseSubjectFilter}
+          courseTypeFilter={courseTypeFilter}
+          courseTypeOptions={courseTypeOptions}
+          gradeFilterOptions={gradeFilterOptions}
+          hasUnsetGradeFilterOption={hasUnsetGradeFilterOption}
+          onDeleteCourse={onDeleteCourse}
+          onOpenCourseEditor={openCourseEditor}
+          setCourseCampusFilter={setCourseCampusFilter}
+          setCourseGradeFilter={setCourseGradeFilter}
+          setCourseSearch={setCourseSearch}
+          setCourseSubjectFilter={setCourseSubjectFilter}
+          setCourseTypeFilter={setCourseTypeFilter}
+          subjectFilterOptions={subjectFilterOptions}
+          vault={vault}
+          visibleCourses={visibleCourses}
+        />
         </div>
         )}
       </div>
 
-      <AnimatePresence>
-        {editingStudent && (
-          <motion.div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-[#061226]/36 p-4 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) cancelStudentDraft();
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.98 }}
-              transition={{ duration: 0.18 }}
-              className="flex max-h-[88vh] w-full max-w-[560px] flex-col overflow-hidden rounded-[18px] border border-[#dbe4ef] bg-white shadow-[0_28px_80px_rgba(6,18,38,0.24)]"
-            >
-              <div className="flex items-start justify-between gap-4 border-b border-[#e8eef6] p-5">
-                <div className="min-w-0">
-                  <div className="text-lg font-extrabold text-[#061226]">编辑学生</div>
-                  <div className="mt-1 truncate text-sm font-semibold text-[#64748b]">{editingStudent.name}</div>
-                </div>
-                <Button type="button" variant="ghost" size="icon" onClick={cancelStudentDraft} aria-label="关闭学生编辑弹窗">
-                  <X size={17} />
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-                <Input
-                  value={editingStudent.name}
-                  onChange={(event) => setEditingStudent({ ...editingStudent, name: event.target.value })}
-                  placeholder="学生姓名"
-                />
-                <Select
-                  value={gradeSelectValue(editingStudent.grade)}
-                  onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value === "自定义" ? "__custom__" : event.target.value || undefined })}
-                >
-                  {gradeOptions.map((grade) => (
-                    <option key={grade} value={grade === "未设置年级" ? "" : grade}>{grade}</option>
-                  ))}
-                </Select>
-                {gradeSelectValue(editingStudent.grade) === "自定义" && (
-                  <Input
-                    value={editingStudent.grade === "__custom__" ? "" : editingStudent.grade ?? ""}
-                    onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value })}
-                    placeholder="输入自定义年级"
-                  />
-                )}
-                <Input
-                  value={editingStudent.school ?? ""}
-                  onChange={(event) => setEditingStudent({ ...editingStudent, school: event.target.value || undefined })}
-                  placeholder="所在学校"
-                />
-                <Select
-                  value={editingStudent.defaultCampusId ?? ""}
-                  onChange={(event) => setEditingStudent({ ...editingStudent, defaultCampusId: event.target.value || undefined })}
-                >
-                  <option value="">未设置校区</option>
-                  {campusOptions.map((campus) => (
-                    <option key={campus.id} value={campus.id}>{campus.name}</option>
-                  ))}
-                </Select>
-                <Select
-                  value={editingStudent.status}
-                  onChange={(event) => setEditingStudent({ ...editingStudent, status: event.target.value as Student["status"] })}
-                >
-                  <option value="active">在读</option>
-                  <option value="paused">已归档</option>
-                </Select>
-                <label className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(editingStudent.temporaryTrial)}
-                    onChange={(event) => setEditingStudent({ ...editingStudent, temporaryTrial: event.target.checked })}
-                    className="h-4 w-4 accent-[#ff8617]"
-                  />
-                  临时试听学生
-                </label>
-                <Textarea
-                  value={editingStudent.note ?? ""}
-                  onChange={(event) => setEditingStudent({ ...editingStudent, note: event.target.value })}
-                  placeholder="档案备注，例如学习情况、家长沟通、排课偏好"
-                  className="min-h-[92px]"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2 border-t border-[#e8eef6] bg-[#f8fbff] p-4">
-                <Button type="button" onClick={saveStudentDraft} disabled={!editingStudent.name.trim()}>
-                  <Save size={14} /> 保存
-                </Button>
-                <Button type="button" variant="outline" onClick={cancelStudentDraft}>
-                  <X size={14} /> 取消
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <StudentEditDialog
+        campusOptions={campusOptions}
+        editingStudent={editingStudent}
+        gradeOptions={gradeOptions}
+        gradeSelectValue={gradeSelectValue}
+        onCancel={cancelStudentDraft}
+        onSave={saveStudentDraft}
+        setEditingStudent={setEditingStudent}
+      />
 
-      <AnimatePresence>
-        {editingCourse && (
-          <motion.div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-[#061226]/36 p-4 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) cancelCourseDraft();
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.98 }}
-              transition={{ duration: 0.18 }}
-              className="flex max-h-[90vh] w-full max-w-[920px] flex-col overflow-hidden rounded-[18px] border border-[#dbe4ef] bg-white shadow-[0_28px_80px_rgba(6,18,38,0.24)]"
-            >
-              <div className="flex items-start justify-between gap-4 border-b border-[#e8eef6] p-5">
-                <div className="min-w-0">
-                  <div className="text-lg font-extrabold text-[#061226]">编辑课程</div>
-                  <div className="mt-1 truncate text-sm font-semibold text-[#64748b]">{editingCourse.name}</div>
-                </div>
-                <Button type="button" variant="ghost" size="icon" onClick={cancelCourseDraft} aria-label="关闭课程编辑弹窗">
-                  <X size={17} />
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <Input
-                    value={editingCourse.name}
-                    onChange={(event) => updateEditingCourse({ name: event.target.value })}
-                    placeholder="课程档案名称"
-                  />
-                  <Select value={editingCourse.subject || subjectOptions[0] || "未设置"} onChange={(event) => updateEditingCourse({ subject: event.target.value })}>
-                    {subjectOptions.map((subject) => (
-                      <option key={subject} value={subject}>{subject}</option>
-                    ))}
-                  </Select>
-                  <Select
-                    value={editingCourse.type}
-                    onChange={(event) => {
-                      const nextType = event.target.value as CourseType;
-                      const nextStudentIds = normalizeCourseStudentIds(nextType, editingCourse.studentIds);
-                      const nextFeeRule = supportsSalaryGradeFee(nextType) && editingCourse.feeRule.mode === "salary_grade"
-                        ? editingCourse.feeRule
-                        : courseTypeDefaultFeeRule(nextType);
-                      updateEditingCourse({
-                        type: nextType,
-                        feeRule: nextFeeRule,
-                        studentIds: nextStudentIds,
-                        defaultCampusId: firstCourseStudentCampus(nextStudentIds) ?? editingCourse.defaultCampusId
-                      });
-                    }}
-                  >
-                    {editingCourseTypeOptions.map((type) => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
-                  </Select>
-                  <Select
-                    value={editingCourse.defaultCampusId ?? ""}
-                    onChange={(event) => updateEditingCourse({ defaultCampusId: event.target.value || undefined })}
-                  >
-                    <option value="">未设置校区</option>
-                    {campusOptions.map((campus) => (
-                      <option key={campus.id} value={campus.id}>{campus.name}</option>
-                    ))}
-                  </Select>
-                  <Select
-                    value={editingCourse.status}
-                    onChange={(event) => updateEditingCourse({ status: event.target.value as CourseGroup["status"] })}
-                    className="md:col-span-2"
-                  >
-                    <option value="active">启用</option>
-                    <option value="paused">暂停</option>
-                  </Select>
-                </div>
-
-                {supportsSalaryGradeFee(editingCourse.type) && (
-                  <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-                    <div>
-                      <div className="text-sm font-extrabold text-[#061226]">课时费来源</div>
-                      <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        保存后只会同步未来待上课课节；已完成课时保留原金额快照。
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Select value={feeModeValue(editingCourse.feeRule)} onChange={(event) => changeEditingCourseFeeMode(event.target.value as "salary_default" | "salary_specific" | "custom")}>
-                        <option value="salary_default">跟随老师默认岗位薪资</option>
-                        <option value="salary_specific">指定岗位薪资等级</option>
-                        <option value="custom">自定义课时费</option>
-                      </Select>
-                      {editingCourse.feeRule.mode === "salary_grade" && editingCourse.feeRule.salaryGradeSource === "specific" && (
-                        <Select value={editingCourse.feeRule.salaryGradeId ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule().id} onChange={(event) => changeEditingCourseSalaryGrade(event.target.value)}>
-                          {salaryGradeRules.map((rule) => (
-                            <option key={rule.id} value={rule.id}>{salaryGradeLabel(rule)}</option>
-                          ))}
-                        </Select>
-                      )}
-                    </div>
-                    {editingCourse.feeRule.mode === "salary_grade" && (
-                      <div className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
-                        {resolveSalaryGradeRule(vault, editingCourse.feeRule)
-                          ? (() => {
-                              const rule = resolveSalaryGradeRule(vault, editingCourse.feeRule);
-                              return rule
-                                ? `${salaryGradeLabel(rule)}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rule.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rule.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rule.headcountIncrementFee, amountsVisible)}。`
-                                : "";
-                            })()
-                          : "还没有设置老师默认岗位薪资等级，请先在老师个人信息里设置，或改为指定岗位薪资等级。"}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {editingCourse.feeRule.mode !== "salary_grade" && (editingCourse.feeRule.mode === "class_headcount" ? (
-                  <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-                    <div>
-                      <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
-                      <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        当前关联 {editingCourse.studentIds.length} 人，2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length), amountsVisible)}，实际按上课时长 / 2 折算。
-                      </div>
-                    </div>
-                    {normalizedClassFeeTiers(editingCourse.feeRule).slice(0, 1).map((tier) => (
-                      <div key={tier.id} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white p-2 sm:grid-cols-3">
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={tier.minStudents}
-                            onChange={(event) => updateClassFeeTier(tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
-                            className="h-9"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-[#64748b]">基础费用</label>
-                          <SensitiveAmountField visible={amountsVisible} className="h-9">
-                            <Input
-                              type="number"
-                              min={0}
-                              value={tier.baseFee}
-                              onChange={(event) => updateClassFeeTier(tier.id, { baseFee: Math.max(Number(event.target.value), 0) })}
-                              className="h-9"
-                            />
-                          </SensitiveAmountField>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-[#64748b]">每增加一人</label>
-                          <SensitiveAmountField visible={amountsVisible} className="h-9">
-                            <Input
-                              type="number"
-                              min={0}
-                              value={tier.perStudentFee ?? 0}
-                              onChange={(event) => updateClassFeeTier(tier.id, { perStudentFee: Math.max(Number(event.target.value), 0) })}
-                              className="h-9"
-                            />
-                          </SensitiveAmountField>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : editingCourse.type === "trial" ? (
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-[#64748b]">试听单次费用</label>
-                    <div className="text-xs font-semibold text-[#64748b]">按单次试听计费，不按上课时长相乘。</div>
-                    <SensitiveAmountField visible={amountsVisible}>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={fixedFeeForRule(editingCourse.feeRule)}
-                        onChange={(event) => updateEditingTrialFixedFee(Math.max(Number(event.target.value), 0))}
-                        placeholder="试听单次费用"
-                      />
-                    </SensitiveAmountField>
-                  </div>
-                ) : editingCourse.feeRule.mode === "hourly" ? (
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-[#64748b]">每小时费用</label>
-                    <SensitiveAmountField visible={amountsVisible}>
-                      <Input
-                        type="number"
-                        value={editingCourse.feeRule.hourlyRate ?? 0}
-                        onChange={(event) => updateEditingCourseFee({ hourlyRate: Number(event.target.value) })}
-                        placeholder="每小时费用"
-                      />
-                    </SensitiveAmountField>
-                  </div>
-                ) : null)}
-
-                <div className="space-y-2">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm font-medium">
-                      关联学生（{editingCourse.studentIds.length} 人）
-                      {editingCourse.type === "class" && (
-                        <span className="ml-2 text-xs font-bold text-[#64748b]">
-                          班课需同年级{firstCourseStudentGrade(editingCourse.studentIds) !== undefined ? `：${firstCourseStudentGrade(editingCourse.studentIds) || "未设置年级"}` : ""}
-                        </span>
-                      )}
-                      {studentLimitForCourseType(editingCourse.type) && editingCourse.type !== "one_on_one" && (
-                        <span className="ml-2 text-xs font-bold text-[#64748b]">
-                          最多选择 {studentLimitForCourseType(editingCourse.type)} 人
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs font-bold text-[#64748b]">当前显示 {editingCourseStudentOptions.length} 人</span>
-                  </div>
-                  {editingCourse.type === "class" && (
-                    <div className="rounded-[10px] border border-[#dbe4ef] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
-                      调整班课档案学生只影响之后按课程档案生成的新课节；已经排好的课节会保留本节自己的学生名单。单节课排错时，可到课程详情里单独移除学生或填写备注。
-                    </div>
-                  )}
-                  <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
-                      <label className="relative block">
-                        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                        <Input
-                          className="h-10 bg-white pl-9"
-                          value={courseStudentSearch}
-                          onChange={(event) => setCourseStudentSearch(event.target.value)}
-                          placeholder="搜索学生姓名、学科、校区、年级、学校或备注"
-                        />
-                      </label>
-                      <div className="grid grid-cols-3 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
-                        {[
-                          { key: "all" as const, label: "全部" },
-                          { key: "selected" as const, label: "已关联" },
-                          { key: "available" as const, label: "未关联" }
-                        ].map((item) => (
-                          <button
-                            type="button"
-                            key={item.key}
-                            onClick={() => setCourseStudentScope(item.key)}
-                            className={`rounded-[9px] px-2 py-2 text-xs font-bold ${
-                              courseStudentScope === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a]"
-                            }`}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Select value={courseStudentGradeFilter} onChange={(event) => setCourseStudentGradeFilter(event.target.value)} className="h-10">
-                        <option value="all">全部年级</option>
-                        {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
-                        {gradeFilterOptions.map((grade) => (
-                          <option key={grade} value={grade}>{grade}</option>
-                        ))}
-                      </Select>
-                      <Select value={courseStudentCampusFilter} onChange={(event) => setCourseStudentCampusFilter(event.target.value)} className="h-10">
-                        <option value="all">全部校区</option>
-                        {campusOptions.map((campus) => (
-                          <option key={campus.id} value={campus.id}>{campus.name}</option>
-                        ))}
-                      </Select>
-                    </div>
-                    {editingCourse.studentIds.length > 0 && (
-                      <div className="mt-3 max-h-20 overflow-y-auto pr-1">
-                        <div className="flex flex-wrap gap-2">
-                          {editingCourse.studentIds.map((studentId) => {
-                            const student = vault.students.find((item) => item.id === studentId);
-                            return (
-                              <button
-                                type="button"
-                                key={studentId}
-                                onClick={() => toggleCourseStudent(studentId)}
-                                className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1 text-xs font-bold text-[#9a3412]"
-                                title="点击取消关联"
-                              >
-                                <span className="truncate">{student?.name ?? "未知学生"}</span>
-                                <X size={12} />
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    <div className="mt-3 max-h-[260px] overflow-y-auto pr-1">
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        {editingCourseStudentOptions.map((student) => {
-                          const isSelected = editingCourse.studentIds.includes(student.id);
-                          const selectedGrade = editingCourse.type === "class" ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
-                          const isDifferentGrade = editingCourse.type === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
-                          const isAtStudentLimit = !isSelected && Boolean(studentLimitForCourseType(editingCourse.type)) && editingCourse.studentIds.length >= (studentLimitForCourseType(editingCourse.type) ?? 0);
-                          return (
-                            <button
-                              type="button"
-                              key={student.id}
-                              onClick={() => toggleCourseStudent(student.id)}
-                              disabled={isDifferentGrade || isAtStudentLimit}
-                              title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(editingCourse.type)} 人` : undefined}
-                              className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
-                                isSelected
-                                  ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
-                                  : isDifferentGrade || isAtStudentLimit
-                                    ? "cursor-not-allowed border-[#e2e8f0] bg-white text-[#94a3b8]"
-                                    : student.temporaryTrial
-                                      ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
-                                      : "border-[#dbe4ef] bg-white text-[#25324a]"
-                              }`}
-                            >
-                              {student.name} · {student.grade || "未设置年级"}{student.status === "paused" ? " · 已归档" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {editingCourseStudentOptions.length === 0 && (
-                        <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
-                          没有符合条件的学生
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 border-t border-[#e8eef6] bg-[#f8fbff] p-4">
-                <Button type="button" onClick={saveCourseDraft} disabled={!editingCourse.name.trim()}>
-                  <Save size={14} /> 保存
-                </Button>
-                <Button type="button" variant="outline" onClick={cancelCourseDraft}>
-                  <X size={14} /> 取消
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <CourseEditDialog
+        amountsVisible={amountsVisible}
+        campusOptions={campusOptions}
+        courseStudentCampusFilter={courseStudentCampusFilter}
+        courseStudentGradeFilter={courseStudentGradeFilter}
+        courseStudentScope={courseStudentScope}
+        courseStudentSearch={courseStudentSearch}
+        editingCourse={editingCourse}
+        editingCourseStudentOptions={editingCourseStudentOptions}
+        editingCourseTypeOptions={editingCourseTypeOptions}
+        feeModeValue={feeModeValue}
+        firstCourseStudentGrade={firstCourseStudentGrade}
+        gradeFilterOptions={gradeFilterOptions}
+        hasUnsetGradeFilterOption={hasUnsetGradeFilterOption}
+        onCancel={cancelCourseDraft}
+        onChangeCourseType={changeEditingCourseType}
+        onChangeFeeMode={changeEditingCourseFeeMode}
+        onChangeSalaryGrade={changeEditingCourseSalaryGrade}
+        onSave={saveCourseDraft}
+        onToggleCourseStudent={toggleCourseStudent}
+        onUpdateClassFeeTier={updateClassFeeTier}
+        onUpdateCourse={updateEditingCourse}
+        onUpdateCourseFee={updateEditingCourseFee}
+        onUpdateTrialFixedFee={updateEditingTrialFixedFee}
+        renderSalaryGradeOptions={salaryGradeSelectOptions}
+        setCourseStudentCampusFilter={setCourseStudentCampusFilter}
+        setCourseStudentGradeFilter={setCourseStudentGradeFilter}
+        setCourseStudentScope={setCourseStudentScope}
+        setCourseStudentSearch={setCourseStudentSearch}
+        subjectOptions={subjectOptions}
+        supportsSalaryGradeFee={supportsSalaryGradeFee}
+        vault={vault}
+      />
 
     </div>
   );
@@ -3202,23 +1896,6 @@ function normalizeCourseFeeRuleForType(type: CourseType, feeRule: FeeRule): FeeR
 function matchesKeywordSearch(searchable: string, normalizedQuery: string): boolean {
   const terms = normalizedQuery.split(/\s+/).filter(Boolean);
   return terms.length === 0 || terms.every((term) => searchable.includes(term));
-}
-
-function SensitiveAmountField({
-  visible,
-  children,
-  className = "h-10"
-}: {
-  visible: boolean;
-  children: ReactNode;
-  className?: string;
-}) {
-  if (visible) return <>{children}</>;
-  return (
-    <div className={`flex items-center rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 text-sm font-extrabold text-[#64748b] ${className}`}>
-      ***
-    </div>
-  );
 }
 
 function matchesGradeFilter(grade: string | undefined, filter: string): boolean {

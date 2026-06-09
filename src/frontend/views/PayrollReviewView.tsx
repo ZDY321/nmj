@@ -21,7 +21,8 @@ export function PayrollReviewView({
   panelFocus,
   storageScope,
   onSaveScheduleImport,
-  onOpenLessonInCalendar
+  onOpenLessonInCalendar,
+  onSuggestSchedule
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
@@ -29,6 +30,7 @@ export function PayrollReviewView({
   storageScope?: string;
   onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
   onOpenLessonInCalendar?: (lesson: Lesson) => void;
+  onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
 }) {
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
   const [campusFilter, setCampusFilter] = useState(vault.profile.homeCampusId ?? vault.campuses[0]?.id ?? "all");
@@ -111,6 +113,7 @@ export function PayrollReviewView({
           storageScope={storageScope}
           onSaveScheduleImport={onSaveScheduleImport}
           onOpenLesson={onOpenLessonInCalendar}
+          onSuggestSchedule={onSuggestSchedule}
         />
       ) : (
       <>

@@ -1,6 +1,5 @@
 import type { CourseType, Lesson, ScheduleImportSavedRow, ScheduleImportResolution, TeacherVault } from "@/shared/types";
 import {
-  courseName as localCourseName,
   courseTypeLabel,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -12,25 +11,43 @@ export function splitMergeCandidateLessons(vault: TeacherVault, row: ImportPrevi
   const rowCampusId = row.campusId;
   const rowStudentNames = normalizeText(row.studentNameHint ?? "");
   const rowSubject = normalizeText(row.subjectHint);
+  const rowTitle = normalizeText(row.title);
   return vault.lessons
-    .filter((lesson) => lesson.status !== "cancelled")
     .filter((lesson) => lesson.date.slice(0, 7) === month)
     .map((lesson) => {
       const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
+      const courseName = normalizeText(course?.name ?? "");
       const courseStudentNames = normalizeText(studentNames(vault, lesson.expectedStudentIds));
+      const sameSystemLesson = Boolean(row.systemLessonId && lesson.id === row.systemLessonId);
       const sameCourse = Boolean(rowCourseId && lesson.courseGroupId === rowCourseId);
+      const sameCourseName = Boolean(rowTitle && courseName && (rowTitle.includes(courseName) || courseName.includes(rowTitle)));
+      const sameType = row.courseTypeHint !== "unknown" && lesson.type === row.courseTypeHint;
       const sameCampus = Boolean(rowCampusId && lessonCampusId(vault, lesson) === rowCampusId);
       const sameSubject = Boolean(rowSubject && course && normalizeText(course.subject) === rowSubject);
       const studentMatches = Boolean(rowStudentNames && courseStudentNames && (courseStudentNames.includes(rowStudentNames) || rowStudentNames.includes(courseStudentNames)));
       const dayDistance = Math.abs(daysBetween(row.date, lesson.date));
-      const score = (sameCourse ? 5 : 0) + (sameCampus ? 2 : 0) + (sameSubject ? 2 : 0) + (studentMatches ? 2 : 0) + Math.max(0, 3 - Math.min(dayDistance, 3));
-      const scoreLabel = sameCourse
-        ? "同课程"
-        : sameSubject && sameCampus
-          ? "同科目校区"
-        : sameSubject
-          ? "同科目"
-        : "候选";
+      const timeGap = timeGapMinutes(row, lesson);
+      const timeScore = timeGap === 0 ? 4 : timeGap <= 15 ? 3 : timeGap <= 30 ? 2 : timeGap <= 60 ? 1 : 0;
+      const dateScore = dayDistance === 0 ? 3 : dayDistance <= 1 ? 2 : dayDistance <= 3 ? 1 : 0;
+      const score =
+        (sameSystemLesson ? 10 : 0) +
+        (sameCourse ? 5 : 0) +
+        (sameCourseName ? 4 : 0) +
+        (sameType ? 2 : 0) +
+        (sameCampus ? 2 : 0) +
+        (sameSubject ? 2 : 0) +
+        (studentMatches ? 2 : 0) +
+        timeScore +
+        dateScore;
+      const scoreLabel = candidateScoreLabel({
+        sameSystemLesson,
+        sameCourse,
+        sameCourseName,
+        sameType,
+        sameCampus,
+        sameSubject,
+        timeGap
+      });
       return { ...lesson, score, scoreLabel };
     })
     .filter((lesson) => lesson.score > 0)
@@ -40,6 +57,35 @@ export function splitMergeCandidateLessons(vault: TeacherVault, row: ImportPrevi
       `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`)
     )
     .slice(0, 24);
+}
+
+function candidateScoreLabel({
+  sameSystemLesson,
+  sameCourse,
+  sameCourseName,
+  sameType,
+  sameCampus,
+  sameSubject,
+  timeGap
+}: {
+  sameSystemLesson: boolean;
+  sameCourse: boolean;
+  sameCourseName: boolean;
+  sameType: boolean;
+  sameCampus: boolean;
+  sameSubject: boolean;
+  timeGap: number;
+}): string {
+  if (sameSystemLesson) return "本条云端";
+  const labels: string[] = [];
+  if (sameCourse) labels.push("同课程");
+  else if (sameCourseName) labels.push("同名");
+  if (sameType) labels.push("同班型");
+  if (timeGap === 0) labels.push("时间重叠");
+  else if (timeGap <= 30) labels.push("时间近似");
+  if (labels.length === 0 && sameSubject && sameCampus) labels.push("同科目校区");
+  if (labels.length === 0 && sameSubject) labels.push("同科目");
+  return labels.slice(0, 3).join(" · ") || "候选";
 }
 
 export function linkedLessonsForResolution(vault: TeacherVault, resolution?: ScheduleImportResolution): Lesson[] {
@@ -68,6 +114,15 @@ function importedRowDurationHours(row: Pick<ImportPreviewLesson, "startTime" | "
 
 export function lessonDurationHours(lesson: Pick<Lesson, "startTime" | "endTime">): number {
   return Math.max(0, timeToMinutes(lesson.endTime) - timeToMinutes(lesson.startTime)) / 60;
+}
+
+function timeGapMinutes(row: Pick<ImportPreviewLesson, "startTime" | "endTime">, lesson: Pick<Lesson, "startTime" | "endTime">): number {
+  const rowStart = timeToMinutes(row.startTime);
+  const rowEnd = timeToMinutes(row.endTime);
+  const lessonStart = timeToMinutes(lesson.startTime);
+  const lessonEnd = timeToMinutes(lesson.endTime);
+  if (rowStart <= lessonEnd && lessonStart <= rowEnd) return 0;
+  return Math.min(Math.abs(rowStart - lessonEnd), Math.abs(lessonStart - rowEnd));
 }
 
 function timeToMinutes(value: string): number {

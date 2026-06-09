@@ -39,6 +39,12 @@ export type CalendarFocus = {
   date: string;
   lessonId?: string;
   targetPanel?: SchedulePanel;
+  calendarMode?: "schedule" | "view";
+  scheduleDraft?: {
+    courseGroupId?: string;
+    startTime?: string;
+    endTime?: string;
+  };
   nonce: number;
   returnTarget?: ExternalLessonReturnTarget | null;
 } | null;

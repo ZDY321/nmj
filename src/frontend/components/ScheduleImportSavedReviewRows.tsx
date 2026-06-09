@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIssueList";
 import type { ScheduleImportSavedRow, ScheduleImportReviewRecord, TeacherVault } from "@/shared/types";
-import { courseName as localCourseName, courseSubject } from "@/frontend/lib/helpers";
+import { courseName as localCourseName, courseSubject, lessonStatusLabels } from "@/frontend/lib/helpers";
 import {
   courseTypeLabelSafe,
   effectiveSavedRowStatus,
@@ -123,6 +123,7 @@ function SavedReviewRowCard({
             <Badge variant={statusVariant(rowStatus)}>{statusLabel(rowStatus)}</Badge>
             <Badge variant="secondary">{row.date}</Badge>
             <Badge variant="secondary">{row.startTime}-{row.endTime}</Badge>
+            {row.systemLessonStatus === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[row.systemLessonStatus]}</Badge>}
             {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && <Badge variant="sky">{resolutionStatusLabel(row.resolutionStatus)}</Badge>}
             {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
           </div>
@@ -154,6 +155,16 @@ function SavedReviewRowCard({
               <Badge key={warning} variant="secondary" className="text-[10px]">教务标记：{warning}</Badge>
             ))}
           </div>
+          {row.note && (
+            <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
+              教务备注：{row.note}
+            </div>
+          )}
+          {row.rawText && (
+            <div className="mt-2 rounded-[9px] border border-[#e8eef6] bg-[#f8fbff] px-2 py-1 text-xs font-semibold leading-5 text-[#64748b]">
+              原始内容：{row.rawText}
+            </div>
+          )}
         </div>
 
         <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
@@ -165,10 +176,20 @@ function SavedReviewRowCard({
             {row.matchedCourseId ? `课程档案：${localCourseName(vault, row.matchedCourseId)}` : "未映射课程档案"}
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
+            {row.systemLessonStatus && (
+              <Badge variant={row.systemLessonStatus === "cancelled" ? "destructive" : "secondary"} className="text-[10px]">
+                云端状态：{lessonStatusLabels[row.systemLessonStatus]}
+              </Badge>
+            )}
             <Badge variant={row.status === "attendance_mismatch" ? "amber" : "secondary"} className="text-[10px]">
               实到/应到 {formatSavedReviewCount(row.systemPresentCount)}/{formatSavedReviewCount(row.systemExpectedCount)}
             </Badge>
           </div>
+          {row.systemLessonNote && (
+            <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
+              云端备注：{row.systemLessonNote}
+            </div>
+          )}
           <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
             实到：{row.systemPresentStudentNames || "未记录实到学生"}
           </div>

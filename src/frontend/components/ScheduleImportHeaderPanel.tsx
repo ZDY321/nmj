@@ -1,4 +1,5 @@
-import { Download, FileSpreadsheet, MapPin, RefreshCw, Save, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, Download, FileSpreadsheet, MapPin, RefreshCw, Save, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +51,18 @@ export function ScheduleImportHeaderPanel({
   onClear: () => void;
   onFileCampusChange: (fileName: string, campusId: string) => void;
 }) {
+  const fileSummaryKey = useMemo(
+    () => fileSummaries.map((file) => `${file.fileName}:${fileCampusOverrides[file.fileName] ?? ""}`).join("|"),
+    [fileCampusOverrides, fileSummaries]
+  );
+  const hasUnmappedFiles = fileSummaries.some((file) => !fileCampusOverrides[file.fileName]);
+  const allFilesMapped = fileSummaries.length > 0 && !hasUnmappedFiles;
+  const [fileCampusExpanded, setFileCampusExpanded] = useState(() => !allFilesMapped);
+
+  useEffect(() => {
+    setFileCampusExpanded(!allFilesMapped);
+  }, [allFilesMapped, fileSummaryKey]);
+
   return (
     <>
       <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -125,34 +138,50 @@ export function ScheduleImportHeaderPanel({
         </div>
 
         <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
-          <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
-            <MapPin size={16} className="text-[#1557c2]" /> 文件对应校区
-          </div>
-          <div className="space-y-2">
-            {fileSummaries.map((file) => (
-              <div key={file.fileName} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[minmax(0,1fr)_240px]">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-extrabold text-[#061226]">{file.fileName}</div>
-                  <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
-                    <Badge variant="secondary" className="text-[10px]">{file.count} 节</Badge>
-                    <Badge variant="secondary" className="text-[10px]">{file.months.join("、") || "未知月份"}</Badge>
-                    <Badge variant={file.sourceCampus ? "sky" : "amber"} className="text-[10px]">{file.sourceCampus || "文件名未识别校区"}</Badge>
+          <button
+            type="button"
+            onClick={() => setFileCampusExpanded((current) => !current)}
+            className="mb-3 flex w-full items-center justify-between gap-3 text-left"
+          >
+            <span className="flex min-w-0 items-center gap-2 text-sm font-extrabold text-[#061226]">
+              <MapPin size={16} className="text-[#1557c2]" /> 文件对应校区
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              {allFilesMapped && <Badge variant="sage" className="text-[10px]">已对应 {fileSummaries.length} 个文件</Badge>}
+              {hasUnmappedFiles && <Badge variant="amber" className="text-[10px]">待选择校区</Badge>}
+              <ChevronDown size={16} className={`text-[#64748b] transition-transform ${fileCampusExpanded ? "rotate-180" : ""}`} />
+            </span>
+          </button>
+          {!fileCampusExpanded && (
+            <div className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
+              文件校区已对应，展开后可查看或修改每个文件的校区。
+            </div>
+          )}
+          {fileCampusExpanded && <div className="space-y-2">
+              {fileSummaries.map((file) => (
+                <div key={file.fileName} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[minmax(0,1fr)_240px]">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-extrabold text-[#061226]">{file.fileName}</div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
+                      <Badge variant="secondary" className="text-[10px]">{file.count} 节</Badge>
+                      <Badge variant="secondary" className="text-[10px]">{file.months.join("、") || "未知月份"}</Badge>
+                      <Badge variant={file.sourceCampus ? "sky" : "amber"} className="text-[10px]">{file.sourceCampus || "文件名未识别校区"}</Badge>
+                    </div>
                   </div>
+                  <Select value={fileCampusOverrides[file.fileName] ?? ""} onChange={(event) => onFileCampusChange(file.fileName, event.target.value)}>
+                    <option value="">选择校区</option>
+                    {campusOptions.map((campus) => (
+                      <option key={campus.id} value={campus.id}>{campus.name}</option>
+                    ))}
+                  </Select>
                 </div>
-                <Select value={fileCampusOverrides[file.fileName] ?? ""} onChange={(event) => onFileCampusChange(file.fileName, event.target.value)}>
-                  <option value="">选择校区</option>
-                  {campusOptions.map((campus) => (
-                    <option key={campus.id} value={campus.id}>{campus.name}</option>
-                  ))}
-                </Select>
-              </div>
-            ))}
-            {fileSummaries.length === 0 && (
-              <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                暂无教务 Excel 文件
-              </div>
-            )}
-          </div>
+              ))}
+              {fileSummaries.length === 0 && (
+                <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+                  暂无教务 Excel 文件
+                </div>
+              )}
+          </div>}
         </div>
       </div>
 

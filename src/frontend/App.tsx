@@ -111,6 +111,12 @@ type ScheduleCalendarFocus = {
   date: string;
   lessonId?: string;
   targetPanel?: "calendar" | "records";
+  calendarMode?: "schedule" | "view";
+  scheduleDraft?: {
+    courseGroupId?: string;
+    startTime?: string;
+    endTime?: string;
+  };
   nonce: number;
   returnTarget?: {
     kind: "view";
@@ -809,7 +815,7 @@ export function App() {
     const aiDataFeeMode = (data: Record<string, unknown>): FeeRule["mode"] | null => {
       const source = isPlainRecordLocal(data.feeRule) ? data.feeRule : data;
       const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
-      if (mode === "salary_grade" || mode === "salary" || mode === "岗位薪资" || mode === "岗位薪资等级") return "salary_grade";
+      if (mode === "salary_grade" || mode === "salary" || mode === "岗位薪资" || mode === "岗位薪资等级" || mode === "课时费等级") return "salary_grade";
       if (mode === "class_headcount" || mode === "class") return "class_headcount";
       if (mode === "fixed") return "fixed";
       if (mode === "hourly") return "hourly";
@@ -2107,6 +2113,31 @@ export function App() {
     });
   }
 
+  function openPayrollSuggestedScheduleInCalendar(request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) {
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setMobileNavOpen(false);
+    setOnboardingVisible(false);
+    setScheduleCalendarFocus({
+      date: request.date,
+      targetPanel: "calendar",
+      calendarMode: "schedule",
+      scheduleDraft: {
+        courseGroupId: request.courseGroupId,
+        startTime: request.startTime,
+        endTime: request.endTime
+      },
+      returnTarget: {
+        kind: "view",
+        view: "payroll",
+        label: "返回教务课表对账",
+        payrollPanel: "reconcile"
+      },
+      nonce: Date.now()
+    });
+    setView("schedule");
+  }
+
   function returnToViewFromSchedule(target: NonNullable<ScheduleCalendarFocus["returnTarget"]>) {
     setNoticeModalOpen(false);
     setFeedbackModalOpen(false);
@@ -2658,6 +2689,7 @@ export function App() {
                   })
                 }
                 onOpenLessonInCalendar={openPayrollReconcileLessonInScheduleRecords}
+                onSuggestSchedule={openPayrollSuggestedScheduleInCalendar}
               />
             )}
             {!onboardingVisible && view === "salary" && (
@@ -3037,7 +3069,7 @@ function numberValue(value: unknown): number | undefined {
 }
 
 function feeModeLabel(mode: FeeRule["mode"]): string {
-  if (mode === "salary_grade") return "岗位薪资等级计费";
+  if (mode === "salary_grade") return "课时费等级计费";
   if (mode === "class_headcount") return "按人数班课计费";
   if (mode === "fixed") return "按单节固定计费";
   return "按小时计费";
@@ -3085,7 +3117,7 @@ function feeRuleFromAiData(data: Record<string, unknown>, vault: TeacherVault, t
   const templateRule = fallback?.mode === courseTypeRule.mode ? fallback : courseTypeRule;
   const mode = stringValue(source.mode ?? source.feeMode).toLowerCase();
   const salaryGradeId = stringValue(source.salaryGradeId ?? source.gradeId ?? source.positionGradeId);
-  if (mode === "salary_grade" || mode === "salary" || mode === "岗位薪资" || mode === "岗位薪资等级") {
+  if (mode === "salary_grade" || mode === "salary" || mode === "岗位薪资" || mode === "岗位薪资等级" || mode === "课时费等级") {
     return {
       mode: "salary_grade",
       salaryGradeSource: salaryGradeId ? "specific" : "teacher_default",

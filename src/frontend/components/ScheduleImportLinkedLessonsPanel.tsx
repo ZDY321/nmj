@@ -1,6 +1,9 @@
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
-import { campusName, courseName as localCourseName, courseSubject, courseTypeLabel, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseName as localCourseName, courseSubject, courseTypeLabel, lessonStatusLabels, studentNames } from "@/frontend/lib/helpers";
 
 type SplitMergeCandidate = Lesson & { score: number; scoreLabel: string };
 
@@ -27,6 +30,8 @@ export function ScheduleImportLinkedLessonsPanel({
   lessonCampusId: (vault: TeacherVault, lesson: Lesson) => string | undefined;
   lessonDurationHours: (lesson: Pick<Lesson, "startTime" | "endTime">) => number;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -36,13 +41,19 @@ export function ScheduleImportLinkedLessonsPanel({
             用于处理教务一节课对应云端多节课、跨日期记录或拆分合并记录。选中后会保存对应课节 ID，并计入“拆分合并正常”。
           </div>
         </div>
-        {linkedLessonCount > 0 && (
-          <Badge variant="plum" className="w-fit text-[10px]">
-            已关联 {linkedLessonCount} 节 · 云端 {systemHours.toFixed(1)}h / 教务 {importHours.toFixed(1)}h
-          </Badge>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {linkedLessonCount > 0 && (
+            <Badge variant="plum" className="w-fit text-[10px]">
+              已关联 {linkedLessonCount} 节 · 云端 {systemHours.toFixed(1)}h / 教务 {importHours.toFixed(1)}h
+            </Badge>
+          )}
+          <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => setExpanded((current) => !current)}>
+            <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
+            {expanded ? "收起" : "展开"}
+          </Button>
+        </div>
       </div>
-      <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
+      {expanded && <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
         {candidates.map((candidate) => {
           const checked = Boolean(resolution?.linkedSystemLessonIds?.includes(candidate.id));
           return (
@@ -81,6 +92,11 @@ export function ScheduleImportLinkedLessonsPanel({
                   <Badge variant={candidate.score >= 4 ? "sage" : candidate.score >= 2 ? "yellow" : "secondary"} className="text-[10px]">
                     {candidate.scoreLabel}
                   </Badge>
+                  {candidate.status === "cancelled" && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      {lessonStatusLabels[candidate.status]}
+                    </Badge>
+                  )}
                 </div>
                 <div className="mt-1 text-[11px] font-semibold leading-5 text-[#64748b]">
                   {localCourseName(vault, candidate.courseGroupId)} · {courseSubject(vault, candidate.courseGroupId)} · {courseTypeLabel(vault, candidate.type)} · {campusName(vault, lessonCampusId(vault, candidate))}
@@ -97,7 +113,7 @@ export function ScheduleImportLinkedLessonsPanel({
             暂无可关联的云端课节
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

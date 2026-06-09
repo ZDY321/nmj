@@ -131,7 +131,22 @@ export type SalaryGradeLevel =
   | "advanced_2"
   | "reserve";
 
-export type SalaryGradeId = `${SalaryGradeStage}:${SalaryGradeLevel}`;
+export type LegacySalaryGradeId = `${SalaryGradeStage}:${SalaryGradeLevel}`;
+
+export type CustomSalaryGradeId = `custom_salary_${string}`;
+
+export type SalaryGradeId = SalaryGradeLevel | LegacySalaryGradeId | CustomSalaryGradeId;
+
+export type SalaryGradeRuleConfig = {
+  id: SalaryGradeId;
+  label: string;
+  baseSalary: number;
+  guaranteedLessonCount?: number;
+  lessonHours?: number;
+  oneOnOneFee: number;
+  classBaseFee: number;
+  headcountIncrementFee: number;
+};
 
 export type ClassFeeTier = {
   id: string;
@@ -309,6 +324,7 @@ export type TeacherProfile = {
   baseSalary: number;
   currency: "CNY";
   defaultSalaryGradeId?: SalaryGradeId;
+  salaryGradeRules?: SalaryGradeRuleConfig[];
   phone?: string;
   email?: string;
   homeCampusId?: string;
@@ -466,6 +482,7 @@ export type ScheduleImportSavedRow = {
   room?: string;
   presentCount?: number;
   expectedCount?: number;
+  note?: string;
   rawText?: string;
   warnings: string[];
   matchedCourseId?: string;
@@ -473,6 +490,8 @@ export type ScheduleImportSavedRow = {
   status: ScheduleImportMatchStatus;
   systemLessonId?: string;
   systemLessonLabel?: string;
+  systemLessonStatus?: LessonStatus;
+  systemLessonNote?: string;
   systemPresentCount?: number;
   systemExpectedCount?: number;
   systemPresentStudentNames?: string;

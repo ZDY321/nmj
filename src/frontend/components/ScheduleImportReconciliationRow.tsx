@@ -8,7 +8,7 @@ import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIss
 import { ScheduleImportLinkedLessonsPanel } from "@/frontend/components/ScheduleImportLinkedLessonsPanel";
 import { ScheduleImportRowDetails } from "@/frontend/components/ScheduleImportRowDetails";
 import type { CourseGroup, Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
-import { courseName as localCourseName } from "@/frontend/lib/helpers";
+import { courseName as localCourseName, lessonStatusLabels } from "@/frontend/lib/helpers";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import {
   effectiveRowStatus,
@@ -34,7 +34,8 @@ export function ScheduleImportReconciliationRow({
   linkedSystemLessonIds,
   onMap,
   onResolutionChange,
-  onOpenLesson
+  onOpenLesson,
+  onSuggestSchedule
 }: {
   row: ImportPreviewLesson;
   vault: TeacherVault;
@@ -44,6 +45,7 @@ export function ScheduleImportReconciliationRow({
   onMap: (courseId: string) => void;
   onResolutionChange: (patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) => void;
   onOpenLesson?: (lesson: Lesson) => void;
+  onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
 }) {
   const systemLesson = row.systemLessonId ? vault.lessons.find((lesson) => lesson.id === row.systemLessonId) : undefined;
   const resolutionStatus = resolution?.status ?? "unreviewed";
@@ -60,6 +62,11 @@ export function ScheduleImportReconciliationRow({
     [resolution, vault]
   );
   const linkedSummary = summarizeLinkedLessons(linkedLessons, row);
+  const canLinkSplitMerge =
+    row.status === "time_mismatch" ||
+    row.status === "system_missing" ||
+    row.status === "course_mismatch" ||
+    row.status === "import_missing";
 
   useEffect(() => {
     if (displayStatus !== "matched") {
@@ -76,6 +83,7 @@ export function ScheduleImportReconciliationRow({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant={statusVariant(displayStatus)}>{statusLabel(displayStatus)}</Badge>
             <Badge variant="secondary">{row.date}</Badge>
+            {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
             {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
             {resolvedByLinkedImport && <Badge variant="plum">已被拆分合并关联</Badge>}
@@ -88,6 +96,8 @@ export function ScheduleImportReconciliationRow({
               <div className="mt-1 truncate text-xs font-semibold leading-5 text-[#64748b]">
                 教务：{row.title} · 云端：{systemLesson ? localCourseName(vault, systemLesson.courseGroupId) : "未找到课节"}
                 {row.presentCount !== undefined && row.expectedCount !== undefined ? ` · 教务实到/应到 ${row.presentCount}/${row.expectedCount}` : ""}
+                {row.note ? ` · 教务备注：${row.note}` : ""}
+                {systemLesson?.note ? ` · 云端备注：${systemLesson.note}` : ""}
               </div>
             </>
           )}
@@ -135,6 +145,24 @@ export function ScheduleImportReconciliationRow({
           )}
           {quickResolutionActions.length > 0 && (
             <div className="flex flex-wrap gap-2">
+              {row.status === "system_missing" && onSuggestSchedule && (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() =>
+                    onSuggestSchedule({
+                      date: row.date,
+                      startTime: row.startTime,
+                      endTime: row.endTime,
+                      courseGroupId: row.matchedCourseId ?? row.mappedCourseId
+                    })
+                  }
+                  disabled={!row.matchedCourseId && !row.mappedCourseId}
+                >
+                  建议排课
+                </Button>
+              )}
               {quickResolutionActions.map((action) => (
                 <Button
                   key={action.status}
@@ -148,7 +176,7 @@ export function ScheduleImportReconciliationRow({
               ))}
             </div>
           )}
-          {row.status !== "import_missing" && (row.status === "time_mismatch" || row.status === "system_missing" || row.status === "course_mismatch") && (
+          {canLinkSplitMerge && (
             <ScheduleImportLinkedLessonsPanel
               vault={vault}
               resolution={resolution}

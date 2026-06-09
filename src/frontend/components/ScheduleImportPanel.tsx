@@ -66,12 +66,14 @@ export function ScheduleImportPanel({
   vault,
   amountsVisible = false,
   onOpenLesson,
+  onSuggestSchedule,
   onSaveScheduleImport,
   storageScope
 }: {
   vault: TeacherVault;
   amountsVisible?: boolean;
   onOpenLesson?: (lesson: Lesson) => void;
+  onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
   onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
   storageScope?: string;
 }) {
@@ -446,6 +448,7 @@ export function ScheduleImportPanel({
               onMap={(courseId) => updateCourseMapping(row, courseId)}
               onResolutionChange={(patch) => updateResolution(row, patch)}
               onOpenLesson={onOpenLesson}
+              onSuggestSchedule={onSuggestSchedule}
             />
           )}
         />

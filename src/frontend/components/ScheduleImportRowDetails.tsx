@@ -10,6 +10,7 @@ import {
   courseName as localCourseName,
   courseSubject,
   courseTypeLabel,
+  lessonStatusLabels,
   studentNames
 } from "@/frontend/lib/helpers";
 
@@ -52,6 +53,16 @@ export function ScheduleImportRowDetails({
                 ))}
               </div>
             )}
+            {row.note && (
+              <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
+                教务备注：{row.note}
+              </div>
+            )}
+            {row.rawText && (
+              <div className="mt-2 rounded-[9px] border border-[#e8eef6] bg-[#f8fbff] px-2 py-1 text-xs font-semibold leading-5 text-[#64748b]">
+                原始内容：{row.rawText}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -78,11 +89,19 @@ export function ScheduleImportRowDetails({
               {systemLesson.startTime}-{systemLesson.endTime} · {courseSubject(vault, systemLesson.courseGroupId)} · {courseTypeLabel(vault, systemLesson.type)} · {campusName(vault, systemLesson.campusId)}
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
+              <Badge variant={systemLesson.status === "cancelled" ? "destructive" : "secondary"} className="text-[10px]">
+                云端状态：{lessonStatusLabels[systemLesson.status]}
+              </Badge>
               {row.systemPresentCount !== undefined && row.systemExpectedCount !== undefined && (
                 <Badge variant={row.status === "attendance_mismatch" ? "amber" : "secondary"} className="text-[10px]">云端实到/应到 {row.systemPresentCount}/{row.systemExpectedCount}</Badge>
               )}
               <Badge variant="secondary" className="text-[10px]">课程档案 {systemLesson.expectedStudentIds.length} 人</Badge>
             </div>
+            {systemLesson.note && (
+              <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
+                云端备注：{systemLesson.note}
+              </div>
+            )}
             <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
               实到：{row.systemPresentStudentNames || "未记录实到学生"}
             </div>

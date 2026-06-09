@@ -6,11 +6,13 @@ import type {
   CourseType,
   FeeRule,
   FeeSnapshot,
+  LegacySalaryGradeId,
   Lesson,
   SalaryAdjustment,
   SalaryBreakdown,
   SalaryGradeId,
   SalaryGradeLevel,
+  SalaryGradeRuleConfig,
   SalaryGradeStage,
   TeacherVault
 } from "../../shared/types";
@@ -133,8 +135,11 @@ export const salaryGradeLevelLabels: Record<SalaryGradeLevel, string> = {
 
 export type SalaryGradeRule = {
   id: SalaryGradeId;
-  stage: SalaryGradeStage;
-  level: SalaryGradeLevel;
+  label: string;
+  stage?: SalaryGradeStage;
+  level?: SalaryGradeLevel;
+  legacy?: boolean;
+  custom?: boolean;
   baseSalary: number;
   guaranteedLessonCount: 5;
   lessonHours: 2;
@@ -143,12 +148,11 @@ export type SalaryGradeRule = {
   headcountIncrementFee: number;
 };
 
-function salaryGradeId(stage: SalaryGradeStage, level: SalaryGradeLevel): SalaryGradeId {
+function legacySalaryGradeId(stage: SalaryGradeStage, level: SalaryGradeLevel): LegacySalaryGradeId {
   return `${stage}:${level}`;
 }
 
 function salaryGradeRule(
-  stage: SalaryGradeStage,
   level: SalaryGradeLevel,
   baseSalary: number,
   oneOnOneFee: number,
@@ -156,8 +160,8 @@ function salaryGradeRule(
   headcountIncrementFee: number
 ): SalaryGradeRule {
   return {
-    id: salaryGradeId(stage, level),
-    stage,
+    id: level,
+    label: salaryGradeLevelLabels[level],
     level,
     baseSalary,
     guaranteedLessonCount: 5,
@@ -168,54 +172,122 @@ function salaryGradeRule(
   };
 }
 
-export const salaryGradeRules: SalaryGradeRule[] = [
-  salaryGradeRule("primary", "beginner", 2800, 55, 40, 10),
-  salaryGradeRule("primary", "intermediate", 3000, 65, 50, 10),
-  salaryGradeRule("primary", "advanced_1", 3200, 70, 55, 10),
-  salaryGradeRule("primary", "advanced_2", 3300, 73, 58, 10),
-  salaryGradeRule("primary", "reserve", 3500, 75, 60, 10),
-  salaryGradeRule("junior_1_2", "beginner", 2800, 65, 50, 10),
-  salaryGradeRule("junior_1_2", "intermediate", 3000, 70, 55, 12),
-  salaryGradeRule("junior_1_2", "advanced_1", 3200, 75, 60, 15),
-  salaryGradeRule("junior_1_2", "advanced_2", 3300, 80, 65, 18),
-  salaryGradeRule("junior_1_2", "reserve", 3500, 85, 70, 20),
-  salaryGradeRule("junior_3", "beginner", 2800, 75, 60, 10),
-  salaryGradeRule("junior_3", "intermediate", 3000, 80, 65, 12),
-  salaryGradeRule("junior_3", "advanced_1", 3200, 85, 70, 15),
-  salaryGradeRule("junior_3", "advanced_2", 3300, 90, 75, 18),
-  salaryGradeRule("junior_3", "reserve", 3500, 95, 80, 20),
-  salaryGradeRule("senior_1", "intermediate", 3000, 100, 100, 25),
-  salaryGradeRule("senior_1", "advanced_1", 3200, 105, 105, 30),
-  salaryGradeRule("senior_1", "advanced_2", 3300, 105, 105, 30),
-  salaryGradeRule("senior_1", "reserve", 3500, 110, 110, 35),
-  salaryGradeRule("senior_2", "intermediate", 3000, 110, 110, 25),
-  salaryGradeRule("senior_2", "advanced_1", 3200, 115, 115, 30),
-  salaryGradeRule("senior_2", "advanced_2", 3300, 115, 115, 30),
-  salaryGradeRule("senior_2", "reserve", 3500, 120, 120, 35),
-  salaryGradeRule("senior_3", "intermediate", 3000, 120, 120, 25),
-  salaryGradeRule("senior_3", "advanced_1", 3200, 125, 125, 30),
-  salaryGradeRule("senior_3", "advanced_2", 3300, 125, 125, 30),
-  salaryGradeRule("senior_3", "reserve", 3500, 130, 130, 35)
+function legacySalaryGradeRule(
+  stage: SalaryGradeStage,
+  level: SalaryGradeLevel,
+  baseSalary: number,
+  oneOnOneFee: number,
+  classBaseFee: number,
+  headcountIncrementFee: number
+): SalaryGradeRule {
+  return {
+    id: legacySalaryGradeId(stage, level),
+    label: `${salaryGradeStageLabels[stage]} · ${salaryGradeLevelLabels[level]}`,
+    stage,
+    level,
+    legacy: true,
+    baseSalary,
+    guaranteedLessonCount: 5,
+    lessonHours: 2,
+    oneOnOneFee,
+    classBaseFee,
+    headcountIncrementFee
+  };
+}
+
+export const defaultSalaryGradeRules: SalaryGradeRule[] = [
+  salaryGradeRule("beginner", 2800, 75, 60, 10),
+  salaryGradeRule("intermediate", 3000, 80, 65, 12),
+  salaryGradeRule("advanced_1", 3200, 85, 70, 15),
+  salaryGradeRule("advanced_2", 3300, 90, 75, 18),
+  salaryGradeRule("reserve", 3500, 95, 80, 20)
 ];
 
-export function salaryGradeLabel(ruleOrId: SalaryGradeRule | SalaryGradeId): string {
-  const rule = typeof ruleOrId === "string" ? salaryGradeRuleById(ruleOrId) : ruleOrId;
-  if (!rule) return "未设置岗位薪资";
-  return `${salaryGradeStageLabels[rule.stage]} · ${salaryGradeLevelLabels[rule.level]}`;
+export const salaryGradeRules: SalaryGradeRule[] = [
+  ...defaultSalaryGradeRules
+];
+
+export const legacySalaryGradeRules: SalaryGradeRule[] = [
+  legacySalaryGradeRule("primary", "beginner", 2800, 55, 40, 10),
+  legacySalaryGradeRule("primary", "intermediate", 3000, 65, 50, 10),
+  legacySalaryGradeRule("primary", "advanced_1", 3200, 70, 55, 10),
+  legacySalaryGradeRule("primary", "advanced_2", 3300, 73, 58, 10),
+  legacySalaryGradeRule("primary", "reserve", 3500, 75, 60, 10),
+  legacySalaryGradeRule("junior_1_2", "beginner", 2800, 65, 50, 10),
+  legacySalaryGradeRule("junior_1_2", "intermediate", 3000, 70, 55, 12),
+  legacySalaryGradeRule("junior_1_2", "advanced_1", 3200, 75, 60, 15),
+  legacySalaryGradeRule("junior_1_2", "advanced_2", 3300, 80, 65, 18),
+  legacySalaryGradeRule("junior_1_2", "reserve", 3500, 85, 70, 20),
+  legacySalaryGradeRule("junior_3", "beginner", 2800, 75, 60, 10),
+  legacySalaryGradeRule("junior_3", "intermediate", 3000, 80, 65, 12),
+  legacySalaryGradeRule("junior_3", "advanced_1", 3200, 85, 70, 15),
+  legacySalaryGradeRule("junior_3", "advanced_2", 3300, 90, 75, 18),
+  legacySalaryGradeRule("junior_3", "reserve", 3500, 95, 80, 20),
+  legacySalaryGradeRule("senior_1", "intermediate", 3000, 100, 100, 25),
+  legacySalaryGradeRule("senior_1", "advanced_1", 3200, 105, 105, 30),
+  legacySalaryGradeRule("senior_1", "advanced_2", 3300, 105, 105, 30),
+  legacySalaryGradeRule("senior_1", "reserve", 3500, 110, 110, 35),
+  legacySalaryGradeRule("senior_2", "intermediate", 3000, 110, 110, 25),
+  legacySalaryGradeRule("senior_2", "advanced_1", 3200, 115, 115, 30),
+  legacySalaryGradeRule("senior_2", "advanced_2", 3300, 115, 115, 30),
+  legacySalaryGradeRule("senior_2", "reserve", 3500, 120, 120, 35),
+  legacySalaryGradeRule("senior_3", "intermediate", 3000, 120, 120, 25),
+  legacySalaryGradeRule("senior_3", "advanced_1", 3200, 125, 125, 30),
+  legacySalaryGradeRule("senior_3", "advanced_2", 3300, 125, 125, 30),
+  legacySalaryGradeRule("senior_3", "reserve", 3500, 130, 130, 35)
+];
+
+function salaryGradeRuleFromConfig(config: SalaryGradeRuleConfig, fallback?: SalaryGradeRule): SalaryGradeRule {
+  return {
+    id: config.id,
+    label: (config.label ?? "").trim() || fallback?.label || String(config.id),
+    level: fallback?.level,
+    custom: !defaultSalaryGradeRules.some((rule) => rule.id === config.id),
+    baseSalary: Math.max(config.baseSalary, 0),
+    guaranteedLessonCount: 5,
+    lessonHours: 2,
+    oneOnOneFee: Math.max(config.oneOnOneFee, 0),
+    classBaseFee: Math.max(config.classBaseFee, 0),
+    headcountIncrementFee: Math.max(config.headcountIncrementFee, 0)
+  };
 }
 
-export function salaryGradeRuleById(id?: SalaryGradeId): SalaryGradeRule | undefined {
-  return id ? salaryGradeRules.find((rule) => rule.id === id) : undefined;
+export function salaryGradeRulesForVault(vault?: TeacherVault): SalaryGradeRule[] {
+  const overrides = vault?.profile.salaryGradeRules ?? [];
+  const overrideMap = new Map(overrides.map((rule) => [rule.id, rule]));
+  const visibleRules = defaultSalaryGradeRules.map((rule) => {
+    const override = overrideMap.get(rule.id);
+    return override ? salaryGradeRuleFromConfig(override, rule) : rule;
+  });
+  const customRules = overrides
+    .filter((rule) => !defaultSalaryGradeRules.some((defaultRule) => defaultRule.id === rule.id))
+    .map((rule) => salaryGradeRuleFromConfig(rule))
+    .sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN") || a.id.localeCompare(b.id));
+  return [...visibleRules, ...customRules];
 }
 
-export function defaultSalaryGradeRule(): SalaryGradeRule {
-  return salaryGradeRules[0];
+export function salaryGradeLabel(ruleOrId: SalaryGradeRule | SalaryGradeId, vault?: TeacherVault): string {
+  const rule = typeof ruleOrId === "string" ? salaryGradeRuleById(ruleOrId, vault) : ruleOrId;
+  if (!rule) return "未设置课时费等级";
+  return rule.label;
+}
+
+export function salaryGradeRuleById(id?: SalaryGradeId, vault?: TeacherVault): SalaryGradeRule | undefined {
+  if (!id) return undefined;
+  return (
+    salaryGradeRulesForVault(vault).find((rule) => rule.id === id) ??
+    legacySalaryGradeRules.find((rule) => rule.id === id)
+  );
+}
+
+export function defaultSalaryGradeRule(vault?: TeacherVault): SalaryGradeRule {
+  return salaryGradeRulesForVault(vault)[0] ?? defaultSalaryGradeRules[0];
 }
 
 export function resolveSalaryGradeRule(vault: TeacherVault, rule?: FeeRule): SalaryGradeRule | undefined {
   if (rule?.mode !== "salary_grade") return undefined;
   const id = rule.salaryGradeSource === "specific" ? rule.salaryGradeId : vault.profile.defaultSalaryGradeId;
-  return salaryGradeRuleById(id) ?? salaryGradeRuleById(rule.salaryGradeId) ?? salaryGradeRuleById(vault.profile.defaultSalaryGradeId);
+  return salaryGradeRuleById(id, vault) ?? salaryGradeRuleById(rule.salaryGradeId, vault) ?? salaryGradeRuleById(vault.profile.defaultSalaryGradeId, vault);
 }
 
 export function salaryGradeAmountForCount(rule: SalaryGradeRule, courseType: CourseType, presentStudentCount: number): number {

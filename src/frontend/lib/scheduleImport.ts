@@ -17,6 +17,7 @@ export type ImportedScheduleLesson = {
   room?: string;
   presentCount?: number;
   expectedCount?: number;
+  note?: string;
   rawText: string;
   warnings: string[];
 };
@@ -37,6 +38,8 @@ export type ImportPreviewLesson = ImportedScheduleLesson & {
   status: ImportMatchStatus;
   systemLessonId?: string;
   systemLessonLabel?: string;
+  systemLessonStatus?: Lesson["status"];
+  systemLessonNote?: string;
   systemPresentCount?: number;
   systemExpectedCount?: number;
   systemPresentStudentNames?: string;
@@ -129,11 +132,13 @@ export function parseScheduleCell(
     const countMatch = body.match(/实到\/应到：\s*(\d+)\s*\/\s*(\d+)/);
     const expectedCount = countMatch ? Number(countMatch[2]) : undefined;
     const presentCount = countMatch ? Number(countMatch[1]) : undefined;
+    const note = extractScheduleNote(body);
     const subjectHint = inferSubjectHint(title);
     const courseTypeHint = inferCourseTypeHint(title, expectedCount);
     const warnings: string[] = [];
     if (!countMatch) warnings.push("缺少实到/应到");
     if (presentCount !== undefined && expectedCount !== undefined && presentCount < expectedCount) warnings.push("未全员到课");
+    if (isLikelyCancelledImportedLesson({ presentCount, note, rawText: body })) warnings.push("未开课/取消");
     if (!title) warnings.push("缺少课程标题");
 
     lessons.push({
@@ -152,6 +157,7 @@ export function parseScheduleCell(
       room: extractNamedField(body, "教室"),
       presentCount,
       expectedCount,
+      note,
       rawText: body,
       warnings
     });
@@ -215,12 +221,14 @@ export function buildImportPreview(
       : undefined;
     const systemLesson = exactLesson ?? sameTimeDifferentCourse ?? sameCourseDifferentTime;
     const systemAttendance = systemLesson ? systemLessonAttendanceSnapshot(vault, systemLesson) : undefined;
+    const systemCompletionIssue = exactLesson ? importSystemCompletionIssue(lesson, exactLesson) : "";
     const attendanceIssue = systemAttendance && lesson.presentCount !== undefined && lesson.expectedCount !== undefined
       ? importAttendanceIssue(lesson, systemAttendance)
       : "";
     const issues = [
       campus ? "" : "校区未匹配",
       matchedCourse ? "" : "课程未匹配",
+      systemCompletionIssue,
       attendanceIssue,
       exactLesson ? "" : sameTimeDifferentCourse ? `同一时间云端课程不一致：${systemLessonLabel(vault, sameTimeDifferentCourse)}，请检查课程映射或云端课表` : "",
       exactLesson || sameTimeDifferentCourse ? "" : sameCourseDifferentTime ? `云端同课程时间不一致：教务 ${lesson.date} ${lesson.startTime}-${lesson.endTime}，云端 ${systemLessonLabel(vault, sameCourseDifferentTime)}` : "",
@@ -229,7 +237,7 @@ export function buildImportPreview(
     const status: ImportMatchStatus = !campus || !matchedCourse
       ? "needs_mapping"
       : exactLesson
-        ? attendanceIssue ? "attendance_mismatch" : "matched"
+        ? systemCompletionIssue || attendanceIssue ? "attendance_mismatch" : "matched"
         : sameTimeDifferentCourse
           ? "course_mismatch"
           : sameCourseDifferentTime
@@ -244,6 +252,8 @@ export function buildImportPreview(
       status,
       systemLessonId: systemLesson?.id,
       systemLessonLabel: systemLesson ? systemLessonLabel(vault, systemLesson) : undefined,
+      systemLessonStatus: systemLesson?.status,
+      systemLessonNote: systemLesson?.note,
       systemPresentCount: systemAttendance?.presentCount,
       systemExpectedCount: systemAttendance?.expectedCount,
       systemPresentStudentNames: systemAttendance?.presentStudentNames,
@@ -567,7 +577,20 @@ function inferCourseTypeHint(title: string, expectedCount?: number): CourseType 
 }
 
 function extractNamedField(text: string, field: string): string | undefined {
-  return text.match(new RegExp(`${field}：\\s*(.*?)(?=\\s+教师：|\\s+助教：|\\s+教室：|\\s+实到\\/应到：|$)`))?.[1]?.trim();
+  return text.match(new RegExp(`${field}：\\s*(.*?)(?=\\s+(?:教师|助教|教室|实到\\/应到|取消原因|未上课原因|缺勤原因|课程备注|备注|说明|原因)：|$)`))?.[1]?.trim();
+}
+
+function extractScheduleNote(text: string): string | undefined {
+  const namedNote = ["取消原因", "未上课原因", "缺勤原因", "课程备注", "备注", "说明", "原因"]
+    .map((field) => extractNamedField(text, field))
+    .find((value): value is string => Boolean(value));
+  if (namedNote) return namedNote;
+  return text.match(/(?:取消|停课|请假|未上|不上课|未开课|课消|缺勤|无学生)[^。；;\n]*/)?.[0]?.trim();
+}
+
+function isLikelyCancelledImportedLesson(lesson: Pick<ImportedScheduleLesson, "presentCount" | "note" | "rawText">): boolean {
+  if (lesson.presentCount !== 0) return false;
+  return /取消|停课|请假|未上|不上课|未开课|课消|缺勤|无学生/.test(`${lesson.note ?? ""} ${lesson.rawText}`);
 }
 
 function normalizeTime(value: string): string | null {
@@ -594,31 +617,43 @@ function systemLessonCampusId(vault: TeacherVault, lesson: Lesson): string | und
 
 function activeSystemLessonsForDate(vault: TeacherVault, date: string, campusId?: string): Lesson[] {
   return vault.lessons.filter((lesson) =>
-    lesson.status !== "cancelled" &&
     lesson.date === date &&
     (!campusId || systemLessonCampusId(vault, lesson) === campusId)
   );
 }
 
 function findExactSystemLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, courseId: string, campusId?: string): Lesson | undefined {
-  return activeSystemLessonsForDate(vault, lesson.date, campusId).find((item) =>
+  const candidates = activeSystemLessonsForDate(vault, lesson.date, campusId).filter((item) =>
     item.courseGroupId === courseId &&
     item.startTime === lesson.startTime &&
     item.endTime === lesson.endTime
   );
+  return preferredSystemLessonForImportedLesson(candidates, lesson);
 }
 
 function findSameCourseDifferentTimeLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, courseId: string, campusId?: string): Lesson | undefined {
   const candidates = activeSystemLessonsForDate(vault, lesson.date, campusId).filter((item) => item.courseGroupId === courseId);
-  return candidates.find((item) => timeOverlaps(item.startTime, item.endTime, lesson.startTime, lesson.endTime)) ?? candidates[0];
+  const overlapping = candidates.filter((item) => timeOverlaps(item.startTime, item.endTime, lesson.startTime, lesson.endTime));
+  return preferredSystemLessonForImportedLesson(overlapping, lesson) ?? preferredSystemLessonForImportedLesson(candidates, lesson);
 }
 
 function findSameTimeDifferentCourseLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, courseId?: string, campusId?: string): Lesson | undefined {
-  return activeSystemLessonsForDate(vault, lesson.date, campusId).find((item) =>
+  const candidates = activeSystemLessonsForDate(vault, lesson.date, campusId).filter((item) =>
     item.courseGroupId !== courseId &&
     item.startTime === lesson.startTime &&
     item.endTime === lesson.endTime
   );
+  return preferredSystemLessonForImportedLesson(candidates, lesson);
+}
+
+function preferredSystemLessonForImportedLesson(candidates: Lesson[], lesson: Pick<ImportedScheduleLesson, "presentCount" | "note" | "rawText">): Lesson | undefined {
+  if (candidates.length <= 1) return candidates[0];
+  const importedLooksCancelled = isLikelyCancelledImportedLesson(lesson) || lesson.presentCount === 0;
+  return [...candidates].sort((a, b) => {
+    const aCancelledMatch = a.status === "cancelled" ? importedLooksCancelled : !importedLooksCancelled;
+    const bCancelledMatch = b.status === "cancelled" ? importedLooksCancelled : !importedLooksCancelled;
+    return Number(bCancelledMatch) - Number(aCancelledMatch);
+  })[0];
 }
 
 function systemLessonAttendanceSnapshot(vault: TeacherVault, lesson: Lesson): {
@@ -626,28 +661,46 @@ function systemLessonAttendanceSnapshot(vault: TeacherVault, lesson: Lesson): {
   expectedCount: number;
   presentStudentNames: string;
   expectedStudentNames: string;
+  status: Lesson["status"];
 } {
+  const expectedStudentIds = Array.from(new Set(lesson.expectedStudentIds));
+  if (lesson.status === "cancelled") {
+    return {
+      presentCount: 0,
+      expectedCount: 0,
+      presentStudentNames: "",
+      expectedStudentNames: studentNamesForIds(vault, expectedStudentIds),
+      status: lesson.status
+    };
+  }
   const presentStudentIds = lesson.attendance
     .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
     .map((entry) => entry.studentId);
   const effectivePresentStudentIds = lesson.attendance.length > 0
     ? Array.from(new Set(presentStudentIds))
     : Array.from(new Set(lesson.expectedStudentIds));
-  const expectedStudentIds = Array.from(new Set(lesson.expectedStudentIds));
   return {
     presentCount: effectivePresentStudentIds.length,
     expectedCount: expectedStudentIds.length,
     presentStudentNames: studentNamesForIds(vault, effectivePresentStudentIds),
-    expectedStudentNames: studentNamesForIds(vault, expectedStudentIds)
+    expectedStudentNames: studentNamesForIds(vault, expectedStudentIds),
+    status: lesson.status
   };
 }
 
 function importAttendanceIssue(
   lesson: Pick<ImportedScheduleLesson, "presentCount" | "expectedCount">,
-  systemAttendance: { presentCount: number; expectedCount: number }
+  systemAttendance: { presentCount: number; expectedCount: number; status?: Lesson["status"] }
 ): string {
+  if (systemAttendance.status === "cancelled" && lesson.presentCount === 0 && systemAttendance.presentCount === 0) return "";
   if (lesson.presentCount === systemAttendance.presentCount && lesson.expectedCount === systemAttendance.expectedCount) return "";
   return `到课人数不一致：教务 ${lesson.presentCount}/${lesson.expectedCount}，云端 ${systemAttendance.presentCount}/${systemAttendance.expectedCount}`;
+}
+
+function importSystemCompletionIssue(lesson: Pick<ImportedScheduleLesson, "presentCount" | "note" | "rawText">, systemLesson: Lesson): string {
+  if (systemLesson.status === "completed" || systemLesson.status === "makeup_completed") return "";
+  if (systemLesson.status === "cancelled" && (lesson.presentCount === 0 || isLikelyCancelledImportedLesson(lesson))) return "";
+  return `云端课节尚未标记完成：当前状态为「${systemLesson.status === "scheduled" ? "待上课" : systemLesson.status === "draft" ? "草稿" : systemLesson.status}」`;
 }
 
 function studentNamesForIds(vault: TeacherVault, studentIds: string[]): string {

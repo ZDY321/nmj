@@ -21,7 +21,6 @@ export function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPrev
 
   return vault.lessons
     .filter((lesson) =>
-      lesson.status !== "cancelled" &&
       months.has(lesson.date.slice(0, 7)) &&
       campusIds.has(lessonCampusId(vault, lesson) ?? "") &&
       !usedSystemLessonIds.has(lesson.id)
@@ -30,13 +29,15 @@ export function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPrev
     .map((lesson): ImportPreviewLesson => {
       const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
       const campusId = lessonCampusId(vault, lesson);
-      const systemPresentStudentIds = lesson.attendance.length > 0
+      const systemPresentStudentIds = lesson.status === "cancelled"
+        ? []
+        : lesson.attendance.length > 0
         ? lesson.attendance
           .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
           .map((entry) => entry.studentId)
         : lesson.expectedStudentIds;
       const systemPresentCount = Array.from(new Set(systemPresentStudentIds)).length;
-      const systemExpectedCount = Array.from(new Set(lesson.expectedStudentIds)).length;
+      const systemExpectedCount = lesson.status === "cancelled" ? 0 : Array.from(new Set(lesson.expectedStudentIds)).length;
       return {
         id: `local-only-${lesson.id}`,
         fileName: "云端课表",
@@ -57,6 +58,8 @@ export function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPrev
         status: "import_missing",
         systemLessonId: lesson.id,
         systemLessonLabel: `${lesson.date} ${lesson.startTime}-${lesson.endTime} ${course?.name ?? "未知课程"}`,
+        systemLessonStatus: lesson.status,
+        systemLessonNote: lesson.note,
         systemPresentCount,
         systemExpectedCount,
         systemPresentStudentNames: studentNames(vault, Array.from(new Set(systemPresentStudentIds))),
