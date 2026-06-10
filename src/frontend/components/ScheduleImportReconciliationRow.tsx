@@ -23,7 +23,8 @@ import {
   statusLabel,
   statusSurfaceClass,
   statusVariant,
-  summarizeLinkedLessons
+  summarizeLinkedLessons,
+  type LinkedSystemLessonSource
 } from "@/frontend/lib/scheduleImportReview";
 
 export function ScheduleImportReconciliationRow({
@@ -32,6 +33,8 @@ export function ScheduleImportReconciliationRow({
   courses,
   resolution,
   linkedSystemLessonIds,
+  linkedBySources,
+  staleLinkedByPreviousResolution,
   onMap,
   onResolutionChange,
   onOpenLesson,
@@ -42,6 +45,8 @@ export function ScheduleImportReconciliationRow({
   courses: CourseGroup[];
   resolution?: ScheduleImportResolution;
   linkedSystemLessonIds: Set<string>;
+  linkedBySources: LinkedSystemLessonSource[];
+  staleLinkedByPreviousResolution: boolean;
   onMap: (courseId: string) => void;
   onResolutionChange: (patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) => void;
   onOpenLesson?: (lesson: Lesson) => void;
@@ -64,6 +69,10 @@ export function ScheduleImportReconciliationRow({
     [resolution, vault]
   );
   const linkedSummary = summarizeLinkedLessons(linkedLessons, row);
+  const resolutionNote = resolution?.note ?? "";
+  const resolutionNotePreview = resolutionNote.trim();
+  const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
+  const splitMergeNeedsReview = Boolean(resolution?.linkedSystemLessonIds?.length && hasCurrentDirectMatch);
   const canLinkSplitMerge =
     row.status === "time_mismatch" ||
     row.status === "system_missing" ||
@@ -94,7 +103,9 @@ export function ScheduleImportReconciliationRow({
             {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
             {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
-            {resolvedByLinkedImport && <Badge variant="plum">已被拆分合并关联</Badge>}
+            {resolvedByLinkedImport && <Badge variant="plum">被 {linkedBySources.length || 1} 条拆分合并关联</Badge>}
+            {splitMergeNeedsReview && <Badge variant="amber">拆分合并需复核</Badge>}
+            {staleLinkedByPreviousResolution && <Badge variant="amber">旧拆分合并标记已失效</Badge>}
           </div>
           {isMatched && !detailsExpanded && (
             <>
@@ -139,6 +150,53 @@ export function ScheduleImportReconciliationRow({
             <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-white/70 p-3">
               <div className="mb-2 text-xs font-extrabold text-[#9a3412]">对账差异</div>
               <ScheduleImportIssueList issues={row.issues} />
+            </div>
+          )}
+
+          {linkedLessons.length > 0 && (
+            <div className="mt-3 rounded-[12px] border border-[#c7d2fe] bg-[#eef0ff] p-3">
+              <div className="text-xs font-extrabold text-[#5161d6]">本条拆分合并关联的云端课节</div>
+              <div className="mt-2 space-y-1.5">
+                {linkedLessons.map((lesson) => (
+                  <button
+                    key={lesson.id}
+                    type="button"
+                    onClick={() => onOpenLesson?.(lesson)}
+                    className="block w-full rounded-[9px] border border-[#dbe4ef] bg-white px-2.5 py-2 text-left text-xs font-semibold text-[#64748b] transition-colors hover:border-[#93c5fd] hover:bg-[#f8fbff]"
+                  >
+                    <span className="font-extrabold text-[#061226]">{lesson.date} {lesson.startTime}-{lesson.endTime}</span>
+                    {" · "}{localCourseName(vault, lesson.courseGroupId)}
+                    {" · "}{lessonDurationHours(lesson).toFixed(1)} 小时
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {linkedBySources.length > 0 && (
+            <div className="mt-3 rounded-[12px] border border-[#c7d2fe] bg-[#eef0ff] p-3">
+              <div className="text-xs font-extrabold text-[#5161d6]">这节云端课被以下教务课节拆分/合并关联</div>
+              <div className="mt-2 space-y-1.5">
+                {linkedBySources.map((source) => (
+                  <div key={`${source.rowKey}-${source.lessonId}`} className="rounded-[9px] border border-[#dbe4ef] bg-white px-2.5 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                    <span className="font-extrabold text-[#061226]">{source.date} {source.startTime}-{source.endTime}</span>
+                    {" · "}{source.matchedCourseId ? localCourseName(vault, source.matchedCourseId) : source.title}
+                    {source.resolutionNote ? <span className="block text-[#5161d6]">标注：{source.resolutionNote}</span> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {splitMergeNeedsReview && (
+            <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
+              当前教务课节已经能直接对应云端课节，但仍保留了拆分合并关联。请复核是否需要取消旧关联，避免同一课时重复被计入“拆分合并正常”。
+            </div>
+          )}
+
+          {staleLinkedByPreviousResolution && (
+            <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
+              这节云端课曾被历史拆分合并标记引用，但当前导入行已经不再命中那条标记，系统已把它重新暴露为待核对项。请确认这节云端课是否仍应保留。
             </div>
           )}
         </>
@@ -204,11 +262,19 @@ export function ScheduleImportReconciliationRow({
                 <option key={status} value={status}>{resolutionStatusLabel(status)}</option>
               ))}
             </Select>
-            <Input
-              value={resolution?.note ?? ""}
-              onChange={(event) => onResolutionChange({ note: event.target.value })}
-              placeholder="记录最终判断，例如：教务表人数错、云端已改、确认无需处理"
-            />
+            <div className="group relative min-w-0">
+              <Input
+                value={resolutionNote}
+                onChange={(event) => onResolutionChange({ note: event.target.value })}
+                placeholder="记录最终判断，例如：教务表人数错、云端已改、确认无需处理"
+                title={resolutionNotePreview || undefined}
+              />
+              {resolutionNotePreview && (
+                <div className="pointer-events-none absolute bottom-full right-0 z-30 mb-2 hidden max-h-40 w-full min-w-[260px] overflow-y-auto whitespace-pre-wrap rounded-[12px] border border-[#c7d2fe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#25324a] shadow-[0_14px_36px_rgba(15,35,66,0.16)] group-hover:block group-focus-within:block">
+                  {resolutionNotePreview}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

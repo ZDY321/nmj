@@ -483,6 +483,9 @@ export function ScheduleView({
   const selectedLessonStudentCount = selected ? lessonStudentIds(selected).length : 0;
   const selectedExpectedStudentCount = selected ? new Set(selected.expectedStudentIds).size : 0;
   const selectedAttendedStudentCount = selected ? attendedStudentIdsForLesson(selected).length : 0;
+  const selectedRecalculatedLesson = selected ? recalculateLessonFee(selected) : undefined;
+  const selectedCalculatedAmount = selectedRecalculatedLesson?.feeSnapshot.amount ?? selected?.feeSnapshot.amount ?? 0;
+  const selectedCalculatedPresentCount = selectedRecalculatedLesson?.feeSnapshot.presentStudentCount ?? (selected ? presentCount(selected) : 0);
   const selectedScheduledMakeupStudentIds = selected ? activeMakeupStudentIdsForOriginal(selected.id) : new Set<string>();
   const selectedLinkedMakeupLessons = selected && !selected.linkedOriginalLessonId ? activeMakeupLessonsByOriginal[selected.id] ?? [] : [];
   const selectedMakeupCandidateStudentIds = selected
@@ -1072,6 +1075,11 @@ export function ScheduleView({
     if (!selected) return;
     const next = { ...selected, ...patch };
     onUpdateLesson(shouldRecalculate ? recalculateLessonFee(next) : next);
+  }
+
+  function recalculateSelectedFee() {
+    if (!selected) return;
+    onUpdateLesson(recalculateLessonFee(selected));
   }
 
   function updateSelectedStatus(status: Lesson["status"]) {
@@ -1989,6 +1997,7 @@ export function ScheduleView({
             onSelectedEndTimeChange={updateSelectedEndTime}
             onSelectedStartTimeChange={updateSelectedStartTime}
             onSelectedStatusChange={updateSelectedStatus}
+            onRecalculateSelectedFee={recalculateSelectedFee}
             onToggleAttendancePanel={() => setAttendancePanelOpen((open) => !open)}
             onToggleDetailMakeupStudent={toggleDetailMakeupStudent}
             onToggleMakeupArrangement={() => setMakeupArrangementOpen((open) => !open)}
@@ -2002,6 +2011,8 @@ export function ScheduleView({
             selected={selected}
             selectedAttendanceEntries={selectedAttendanceEntries}
             selectedAttendedStudentCount={selectedAttendedStudentCount}
+            selectedCalculatedAmount={selectedCalculatedAmount}
+            selectedCalculatedPresentCount={selectedCalculatedPresentCount}
             selectedCourse={selectedCourse}
             selectedDetailMakeupStudentIds={selectedDetailMakeupStudentIds}
             selectedExpectedStudentCount={selectedExpectedStudentCount}

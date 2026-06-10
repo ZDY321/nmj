@@ -26,6 +26,7 @@ export function splitMergeCandidateLessons(vault: TeacherVault, row: ImportPrevi
       const sameCampus = Boolean(rowCampusId && lessonCampusId(vault, lesson) === rowCampusId);
       const sameSubject = Boolean(rowSubject && course && normalizeText(course.subject) === rowSubject);
       const studentMatches = Boolean(rowStudentNames && courseStudentNames && (courseStudentNames.includes(rowStudentNames) || rowStudentNames.includes(courseStudentNames)));
+      const sameStudentAndSubject = studentMatches && sameSubject;
       const dayDistance = Math.abs(daysBetween(row.date, lesson.date));
       const timeGap = timeGapMinutes(row, lesson);
       const timeScore = timeGap === 0 ? 4 : timeGap <= 15 ? 3 : timeGap <= 30 ? 2 : timeGap <= 60 ? 1 : 0;
@@ -49,13 +50,14 @@ export function splitMergeCandidateLessons(vault: TeacherVault, row: ImportPrevi
         sameSubject,
         timeGap
       });
-      return { ...lesson, score, scoreLabel };
+      return { ...lesson, score, scoreLabel, sameStudentAndSubject };
     })
     .filter((lesson) => lesson.score > 0)
     .sort((a, b) =>
+      Number(b.sameStudentAndSubject) - Number(a.sameStudentAndSubject) ||
+      `${a.date} ${a.startTime} ${a.endTime}`.localeCompare(`${b.date} ${b.startTime} ${b.endTime}`) ||
       b.score - a.score ||
-      Math.abs(daysBetween(row.date, a.date)) - Math.abs(daysBetween(row.date, b.date)) ||
-      `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`)
+      a.id.localeCompare(b.id)
     )
     .slice(0, 24);
 }

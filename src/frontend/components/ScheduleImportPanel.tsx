@@ -45,7 +45,9 @@ import {
   formatSavedReviewAmount,
   formatSavedReviewNumber,
   isReviewedResolution,
+  linkedSystemLessonIdsFromRows,
   linkedSystemLessonIdsFromResolutions,
+  linkedSystemLessonSourcesFromRows,
   matchesImportRowFilters,
   readSavedMapping,
   readSavedWorkspace,
@@ -113,7 +115,13 @@ export function ScheduleImportPanel({
     () => [...importedRows, ...buildLocalOnlyRows(vault, importedRows, rawLessons)],
     [importedRows, rawLessons, vault]
   );
-  const linkedSystemLessonIds = useMemo(() => linkedSystemLessonIdsFromResolutions(resolutions), [resolutions]);
+  const linkedSystemLessonSources = useMemo(() => linkedSystemLessonSourcesFromRows(rows, resolutions), [resolutions, rows]);
+  const linkedSystemLessonIds = useMemo(() => linkedSystemLessonIdsFromRows(rows, resolutions), [resolutions, rows]);
+  const historicalLinkedSystemLessonIds = useMemo(() => linkedSystemLessonIdsFromResolutions(resolutions), [resolutions]);
+  const staleLinkedSystemLessonIds = useMemo(
+    () => new Set(Array.from(historicalLinkedSystemLessonIds).filter((lessonId) => !linkedSystemLessonIds.has(lessonId))),
+    [historicalLinkedSystemLessonIds, linkedSystemLessonIds]
+  );
   const effectiveRows = useMemo(
     () => rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds)),
     [linkedSystemLessonIds, resolutions, rows]
@@ -445,6 +453,8 @@ export function ScheduleImportPanel({
               courses={courseOptions}
               resolution={resolutions[resolutionKey(row)]}
               linkedSystemLessonIds={linkedSystemLessonIds}
+              linkedBySources={row.systemLessonId ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId) : []}
+              staleLinkedByPreviousResolution={Boolean(row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId))}
               onMap={(courseId) => updateCourseMapping(row, courseId)}
               onResolutionChange={(patch) => updateResolution(row, patch)}
               onOpenLesson={onOpenLesson}

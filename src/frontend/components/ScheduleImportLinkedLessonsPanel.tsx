@@ -31,23 +31,24 @@ export function ScheduleImportLinkedLessonsPanel({
   lessonDurationHours: (lesson: Pick<Lesson, "startTime" | "endTime">) => number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const linkedSummaryLabel = `已关联 ${linkedLessonCount} 节 · 云端 ${systemHours.toFixed(1)}h / 教务 ${importHours.toFixed(1)}h`;
 
   return (
     <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="space-y-2">
+        <div className="min-w-0">
           <div className="text-xs font-extrabold text-[#061226]">关联云端课节</div>
           <div className="mt-1 text-[11px] font-semibold leading-5 text-[#64748b]">
             用于处理教务一节课对应云端多节课、跨日期记录或拆分合并记录。选中后会保存对应课节 ID，并计入“拆分合并正常”。
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           {linkedLessonCount > 0 && (
-            <Badge variant="plum" className="w-fit text-[10px]">
-              已关联 {linkedLessonCount} 节 · 云端 {systemHours.toFixed(1)}h / 教务 {importHours.toFixed(1)}h
+            <Badge variant="plum" className="max-w-full text-[10px]" title={linkedSummaryLabel}>
+              <span className="block min-w-0 truncate">{linkedSummaryLabel}</span>
             </Badge>
           )}
-          <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => setExpanded((current) => !current)}>
+          <Button type="button" variant="outline" size="sm" className="h-8 w-fit shrink-0 px-2 text-xs" onClick={() => setExpanded((current) => !current)}>
             <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
             {expanded ? "收起" : "展开"}
           </Button>

@@ -446,6 +446,32 @@ export function proratedLessonUnitAmount(unitAmount: number, lesson: Pick<Lesson
   return nonNegativeNumber(unitAmount) * lessonDurationMultiplier(lesson, rule);
 }
 
+export function classHeadcountBaseStudentCountForCourseType(type: CourseType): number {
+  return type === "class" ? 5 : 1;
+}
+
+export function classHeadcountFeeRuleForCourseType(
+  type: CourseType,
+  baseFee = 0,
+  perStudentFee = 0,
+  minStudents = classHeadcountBaseStudentCountForCourseType(type),
+  makeupFeeMode: FeeRule["makeupFeeMode"] = "perStudentFee"
+): FeeRule {
+  const tier = {
+    id: "tier_1_plus",
+    minStudents: nonNegativeInteger(minStudents),
+    baseFee: nonNegativeNumber(baseFee),
+    perStudentFee: nonNegativeNumber(perStudentFee)
+  };
+  return {
+    mode: "class_headcount",
+    baseFee: tier.baseFee,
+    perPresentStudentFee: tier.perStudentFee,
+    classFeeTiers: [tier],
+    makeupFeeMode
+  };
+}
+
 function nonNegativeNumber(value: number | undefined, fallback = 0): number {
   return Number.isFinite(value) ? Math.max(value ?? fallback, 0) : fallback;
 }
@@ -593,22 +619,48 @@ export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
     return { mode: "fixed", fixedFee: 0 };
   }
   if (type !== "full_time") {
-    const baseFee = 0;
-    const perPresentStudentFee = 0;
-    const minStudents = type === "class" ? 5 : 1;
-    return {
-      mode: "class_headcount",
-      baseFee,
-      perPresentStudentFee,
-      classFeeTiers: [{ id: "tier_1_plus", minStudents, baseFee, perStudentFee: perPresentStudentFee }],
-      makeupFeeMode: "perStudentFee"
-    };
+    return classHeadcountFeeRuleForCourseType(type);
   }
   return { mode: "hourly", hourlyRate: 0 };
 }
 
 export function fixedFeeForRule(rule: FeeRule): number {
   return Math.max(rule.fixedFee ?? rule.hourlyRate ?? 0, 0);
+}
+
+export function backupFeeRuleForCourseType(type: CourseType, feeRule?: FeeRule): FeeRule {
+  const sourceRule = feeRule ?? defaultFeeRuleForCourseType(type);
+  if (type === "trial") {
+    return { mode: "fixed", fixedFee: fixedFeeForRule(sourceRule) };
+  }
+  if (type === "full_time") {
+    return {
+      mode: "hourly",
+      hourlyRate: sourceRule.mode === "hourly" ? nonNegativeNumber(sourceRule.hourlyRate) : fixedFeeForRule(sourceRule)
+    };
+  }
+  if (sourceRule.mode === "class_headcount") {
+    const explicitTiers = (sourceRule.classFeeTiers ?? []).filter((tier) => Number.isFinite(tier.minStudents));
+    const tier = explicitTiers.length > 0
+      ? [...explicitTiers].sort((a, b) => a.minStudents - b.minStudents)[0]
+      : undefined;
+    const minStudents = type.startsWith("custom_")
+      ? nonNegativeInteger(tier?.minStudents, classHeadcountBaseStudentCountForCourseType(type))
+      : classHeadcountBaseStudentCountForCourseType(type);
+    return classHeadcountFeeRuleForCourseType(
+      type,
+      tier ? tier.baseFee : sourceRule.baseFee,
+      tier ? tier.perStudentFee : sourceRule.perPresentStudentFee,
+      minStudents,
+      sourceRule.makeupFeeMode ?? "perStudentFee"
+    );
+  }
+  const baseFee = sourceRule.mode === "hourly"
+    ? nonNegativeNumber(sourceRule.hourlyRate) * lessonFeeUnitHours
+    : sourceRule.mode === "fixed"
+      ? fixedFeeForRule(sourceRule)
+      : 0;
+  return classHeadcountFeeRuleForCourseType(type, baseFee, 0);
 }
 
 export function feeRuleForCourseType(vault: TeacherVault, type: CourseType): FeeRule {

@@ -28,10 +28,13 @@ export {
   countResolutionsForRows,
   effectiveRowStatus,
   effectiveSavedRowStatus,
+  linkedSystemLessonIdsFromRows,
   linkedSystemLessonIdsFromResolutions,
   linkedSystemLessonIdsFromSavedRows,
+  linkedSystemLessonSourcesFromRows,
   quickResolutionActionsForRow,
-  resolutionKey
+  resolutionKey,
+  type LinkedSystemLessonSource
 } from "@/frontend/lib/scheduleImportReviewMatching";
 export {
   buildNextScheduleImportState,

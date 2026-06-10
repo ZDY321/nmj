@@ -8,6 +8,21 @@ import type { ImportMatchStatus, ImportPreviewLesson } from "@/frontend/lib/sche
 import { resolutionMarksRowResolved } from "@/frontend/lib/scheduleImportReviewStatus";
 import { normalizeLinkedSystemLessonIds } from "@/frontend/lib/scheduleImportReviewUtils";
 
+export type LinkedSystemLessonSource = {
+  lessonId: string;
+  rowKey: string;
+  rowId: string;
+  fileName: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  matchedCourseId?: string;
+  status: ImportMatchStatus;
+  resolutionStatus: ScheduleImportResolutionStatus;
+  resolutionNote?: string;
+};
+
 export function buildUpdatedResolutions(
   current: ScheduleImportResolutionMap,
   key: string,
@@ -61,6 +76,36 @@ export function countResolutionsForRows(rows: ImportPreviewLesson[], resolutions
 
 export function linkedSystemLessonIdsFromResolutions(resolutions: ScheduleImportResolutionMap): Set<string> {
   return new Set(Object.values(resolutions).flatMap((resolution) => resolution.linkedSystemLessonIds ?? []));
+}
+
+export function linkedSystemLessonSourcesFromRows(rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): LinkedSystemLessonSource[] {
+  return rows.flatMap((row) => {
+    const rowKey = resolutionKey(row);
+    const resolution = resolutions[rowKey];
+    if (!resolution?.linkedSystemLessonIds?.length || !splitMergeLinkAppliesToRow(row)) return [];
+    return resolution.linkedSystemLessonIds.map((lessonId) => ({
+      lessonId,
+      rowKey,
+      rowId: row.id,
+      fileName: row.fileName,
+      date: row.date,
+      startTime: row.startTime,
+      endTime: row.endTime,
+      title: row.title,
+      matchedCourseId: row.matchedCourseId,
+      status: row.status,
+      resolutionStatus: resolution.status,
+      resolutionNote: resolution.note
+    }));
+  });
+}
+
+function splitMergeLinkAppliesToRow(row: ImportPreviewLesson): boolean {
+  return row.status === "time_mismatch" || row.status === "system_missing" || row.status === "course_mismatch" || row.status === "import_missing";
+}
+
+export function linkedSystemLessonIdsFromRows(rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): Set<string> {
+  return new Set(linkedSystemLessonSourcesFromRows(rows, resolutions).map((source) => source.lessonId));
 }
 
 export function linkedSystemLessonIdsFromSavedRows(rows: ScheduleImportSavedRow[]): Set<string> {

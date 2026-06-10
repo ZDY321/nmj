@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import {
   AlertTriangle,
   BookOpen,
+  Calculator,
   ChevronLeft,
   CornerUpLeft,
   Link2,
@@ -22,6 +23,7 @@ import {
   courseName,
   courseSubject,
   courseTypeLabel,
+  formatPrivateMoney,
   lessonStatusLabels,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -60,6 +62,7 @@ type ScheduleLessonDetailPanelProps = {
   onSelectedEndTimeChange: (time: string) => void;
   onSelectedStartTimeChange: (time: string) => void;
   onSelectedStatusChange: (status: Lesson["status"]) => void;
+  onRecalculateSelectedFee: () => void;
   onToggleAttendancePanel: () => void;
   onToggleDetailMakeupStudent: (studentId: string) => void;
   onToggleMakeupArrangement: () => void;
@@ -73,6 +76,8 @@ type ScheduleLessonDetailPanelProps = {
   selected: Lesson;
   selectedAttendanceEntries: Lesson["attendance"];
   selectedAttendedStudentCount: number;
+  selectedCalculatedAmount: number;
+  selectedCalculatedPresentCount: number;
   selectedCourse: CourseGroup | undefined;
   selectedDetailMakeupStudentIds: string[];
   selectedExpectedStudentCount: number;
@@ -129,6 +134,7 @@ export function ScheduleLessonDetailPanel({
   onSelectedEndTimeChange,
   onSelectedStartTimeChange,
   onSelectedStatusChange,
+  onRecalculateSelectedFee,
   onToggleAttendancePanel,
   onToggleDetailMakeupStudent,
   onToggleMakeupArrangement,
@@ -142,6 +148,8 @@ export function ScheduleLessonDetailPanel({
   selected,
   selectedAttendanceEntries,
   selectedAttendedStudentCount,
+  selectedCalculatedAmount,
+  selectedCalculatedPresentCount,
   selectedCourse,
   selectedDetailMakeupStudentIds,
   selectedExpectedStudentCount,
@@ -282,6 +290,14 @@ export function ScheduleLessonDetailPanel({
                   ***
                 </div>
               )}
+              <div className="flex flex-col gap-2 rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs font-semibold leading-5 text-[#64748b]">
+                  实到 {selectedCalculatedPresentCount} 人 · 重算 {formatPrivateMoney(selectedCalculatedAmount, amountsVisible)}
+                </div>
+                <Button type="button" variant="outline" size="sm" className="h-8 w-fit bg-white text-xs" onClick={onRecalculateSelectedFee}>
+                  <Calculator size={14} /> 按实到重算
+                </Button>
+              </div>
             </div>
           </div>
 

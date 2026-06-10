@@ -9,7 +9,7 @@ import { CampusSettingsCard } from "@/frontend/components/CampusSettingsCard";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import { SubjectSettingsCard } from "@/frontend/components/SubjectSettingsCard";
 import type { Campus, ClassFeeTier, CourseType, TeacherVault } from "@/shared/types";
-import { defaultClassFeeTiers, defaultFeeRuleForCourseType, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers } from "@/frontend/lib/calculations";
+import { backupFeeRuleForCourseType, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers } from "@/frontend/lib/calculations";
 
 type ConfirmRequest = {
   title: string;
@@ -25,6 +25,8 @@ type CourseTypeOption = {
   label: string;
 };
 
+type CustomCourseTypeTemplate = "class" | "non_class";
+
 type CampusCourseSettingsPanelProps = {
   amountsVisible: boolean;
   archiveRowClass: (panel: "campuses", id: string) => string;
@@ -37,11 +39,10 @@ type CampusCourseSettingsPanelProps = {
   courseTypeInUse: (type: CourseType) => boolean;
   courseTypeMessage: string;
   customCourseTypeBaseFee: number;
-  customCourseTypeHourlyRate: number;
   customCourseTypeInput: string;
   customCourseTypeMinStudents: number;
   customCourseTypePerStudentFee: number;
-  customCourseTypeTemplate: "class" | "hourly";
+  customCourseTypeTemplate: CustomCourseTypeTemplate;
   deletedBuiltInCourseTypes: CourseTypeOption[];
   editingCampus: Campus | null;
   editingCustomCourseTypeId: CourseType | "";
@@ -73,11 +74,10 @@ type CampusCourseSettingsPanelProps = {
   setCampusNoteInput: Dispatch<SetStateAction<string>>;
   setCourseTypeMessage: Dispatch<SetStateAction<string>>;
   setCustomCourseTypeBaseFee: Dispatch<SetStateAction<number>>;
-  setCustomCourseTypeHourlyRate: Dispatch<SetStateAction<number>>;
   setCustomCourseTypeInput: Dispatch<SetStateAction<string>>;
   setCustomCourseTypeMinStudents: Dispatch<SetStateAction<number>>;
   setCustomCourseTypePerStudentFee: Dispatch<SetStateAction<number>>;
-  setCustomCourseTypeTemplate: Dispatch<SetStateAction<"class" | "hourly">>;
+  setCustomCourseTypeTemplate: Dispatch<SetStateAction<CustomCourseTypeTemplate>>;
   setEditingCampus: Dispatch<SetStateAction<Campus | null>>;
   setEditingCustomCourseTypeLabel: Dispatch<SetStateAction<string>>;
   setEditingSubjectInput: Dispatch<SetStateAction<string>>;
@@ -102,7 +102,6 @@ export function CampusCourseSettingsPanel({
   courseTypeInUse,
   courseTypeMessage,
   customCourseTypeBaseFee,
-  customCourseTypeHourlyRate,
   customCourseTypeInput,
   customCourseTypeMinStudents,
   customCourseTypePerStudentFee,
@@ -138,7 +137,6 @@ export function CampusCourseSettingsPanel({
   setCampusNoteInput,
   setCourseTypeMessage,
   setCustomCourseTypeBaseFee,
-  setCustomCourseTypeHourlyRate,
   setCustomCourseTypeInput,
   setCustomCourseTypeMinStudents,
   setCustomCourseTypePerStudentFee,
@@ -154,6 +152,13 @@ export function CampusCourseSettingsPanel({
   subjectOptions,
   vault
 }: CampusCourseSettingsPanelProps) {
+  const customTemplateIsClass = customCourseTypeTemplate === "class";
+  const customMinStudentsLabel = customTemplateIsClass ? "班课起算人数" : "非班课起算人数";
+  const customBaseFeeLabel = customTemplateIsClass ? "班课底费" : "一对一基础费";
+  const customTemplateHint = customTemplateIsClass
+    ? "默认 5 人，从第 6 人开始加人头费。"
+    : "默认 1 人，从第 2 人开始加人头费。";
+
   return (
     <div className="space-y-4">
       <CampusSettingsCard
@@ -223,12 +228,16 @@ export function CampusCourseSettingsPanel({
               />
               <Select
                 value={customCourseTypeTemplate}
-                onChange={(event) => setCustomCourseTypeTemplate(event.target.value as "class" | "hourly")}
+                onChange={(event) => {
+                  const nextTemplate = event.target.value as CustomCourseTypeTemplate;
+                  setCustomCourseTypeTemplate(nextTemplate);
+                  setCustomCourseTypeMinStudents(nextTemplate === "class" ? 5 : 1);
+                }}
                 className="h-10 border-[#fdba74] bg-white text-[#7c2d12]"
                 aria-label="选择自定义班型计费模板"
               >
                 <option value="class">班课人数计费模板</option>
-                <option value="hourly">一对一按小时模板</option>
+                <option value="non_class">非班课人数计费模板</option>
               </Select>
               <Button
                 type="button"
@@ -240,10 +249,11 @@ export function CampusCourseSettingsPanel({
                 <Plus size={14} /> 添加班型
               </Button>
             </div>
-            {customCourseTypeTemplate === "class" ? (
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="mt-3 space-y-2">
+              <div className="text-xs font-bold text-[#9a3412]">{customTemplateHint}</div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#9a3412]">最少人数</label>
+                  <label className="text-[11px] font-bold text-[#9a3412]">{customMinStudentsLabel}</label>
                   <Input
                     type="number"
                     min={0}
@@ -253,7 +263,7 @@ export function CampusCourseSettingsPanel({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#9a3412]">基础费用</label>
+                  <label className="text-[11px] font-bold text-[#9a3412]">{customBaseFeeLabel}</label>
                   <SensitiveAmountField visible={amountsVisible} className="h-9">
                     <Input
                       type="number"
@@ -265,7 +275,7 @@ export function CampusCourseSettingsPanel({
                   </SensitiveAmountField>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#9a3412]">每增加 1 人费用</label>
+                  <label className="text-[11px] font-bold text-[#9a3412]">人头加价</label>
                   <SensitiveAmountField visible={amountsVisible} className="h-9">
                     <Input
                       type="number"
@@ -277,20 +287,7 @@ export function CampusCourseSettingsPanel({
                   </SensitiveAmountField>
                 </div>
               </div>
-            ) : (
-              <div className="mt-3 max-w-[220px] space-y-1">
-                <label className="text-[11px] font-bold text-[#9a3412]">每小时费用</label>
-                <SensitiveAmountField visible={amountsVisible} className="h-9">
-                  <Input
-                    type="number"
-                    min={0}
-                    value={customCourseTypeHourlyRate}
-                    onChange={(event) => setCustomCourseTypeHourlyRate(Math.max(Number(event.target.value), 0))}
-                    className="h-9 border-[#fdba74] bg-white"
-                  />
-                </SensitiveAmountField>
-              </div>
-            )}
+            </div>
           </div>
           {courseTypeMessage && (
             <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
@@ -301,11 +298,18 @@ export function CampusCourseSettingsPanel({
         <CardContent className="space-y-3">
           {managedCourseTypes.map((typeOption) => {
             const type = typeOption.value;
-            const rule = feeRuleForCourseType(vault, type);
-            const tier = normalizedClassFeeTiers(rule)[0] ?? defaultClassFeeTiers(defaultFeeRuleForCourseType(type))[0];
+            const savedRule = feeRuleForCourseType(vault, type);
+            const rule = backupFeeRuleForCourseType(type, savedRule);
+            const tier = normalizedClassFeeTiers(rule)[0];
             const isCustom = type.startsWith("custom_");
             const isEditingType = editingCustomCourseTypeId === type;
             const used = courseTypeInUse(type);
+            const isClassType = type === "class";
+            const backupMinStudentsLabel = isClassType ? "班课起算人数" : "非班课起算人数";
+            const backupBaseFeeLabel = isClassType ? "班课底费" : "一对一基础费";
+            const backupHint = isClassType
+              ? "班课按班课底费 + max(到课人数 - 5, 0) * 人头加价计算。"
+              : "非班课按一对一基础费 + max(到课人数 - 1, 0) * 人头加价计算。";
             return (
               <div key={type} className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -362,11 +366,11 @@ export function CampusCourseSettingsPanel({
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm font-extrabold text-[#061226]">备用人数计费</div>
-                      <div className="text-xs font-semibold text-[#64748b]">仅在课程改为自定义课时费或未设置老师默认等级时带入；等级计费课程不使用这里的金额。</div>
+                      <div className="text-xs font-semibold text-[#64748b]">{backupHint}</div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
+                        <label className="text-[11px] font-bold text-[#64748b]">{backupMinStudentsLabel}</label>
                         <Input
                           type="number"
                           min={0}
@@ -376,7 +380,7 @@ export function CampusCourseSettingsPanel({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">基础费用</label>
+                        <label className="text-[11px] font-bold text-[#64748b]">{backupBaseFeeLabel}</label>
                         <SensitiveAmountField visible={amountsVisible} className="h-9">
                           <Input
                             type="number"
@@ -388,7 +392,7 @@ export function CampusCourseSettingsPanel({
                         </SensitiveAmountField>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">每增加一人</label>
+                        <label className="text-[11px] font-bold text-[#64748b]">人头加价</label>
                         <SensitiveAmountField visible={amountsVisible} className="h-9">
                           <Input
                             type="number"
@@ -420,8 +424,8 @@ export function CampusCourseSettingsPanel({
                 ) : (
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-sm font-extrabold text-[#061226]">备用每小时费用</div>
-                      <div className="text-xs font-semibold text-[#64748b]">新建该班型的自定义计费课程时带入，默认值为 0。</div>
+                      <div className="text-sm font-extrabold text-[#061226]">全日制每小时费用</div>
+                      <div className="text-xs font-semibold text-[#64748b]">仅全日制按开始和结束时间使用每小时费用折算。</div>
                     </div>
                     <SensitiveAmountField visible={amountsVisible} className="h-9">
                       <Input

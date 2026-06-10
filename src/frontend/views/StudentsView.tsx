@@ -17,12 +17,13 @@ import { TeacherProfilePanel } from "@/frontend/components/TeacherProfilePanel";
 import { TeacherSalaryRulesPanel } from "@/frontend/components/TeacherSalaryRulesPanel";
 import { NewCourseFormPanel } from "@/frontend/components/NewCourseFormPanel";
 import { makeId } from "@/frontend/lib/crypto";
-import { calculateClassHeadcountFee, defaultClassFeeTiers, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRuleById, salaryGradeRulesForVault, salaryGradeAmountForCount, salaryGradeStageForCourse, salaryGradeStageLabels, todayIso } from "@/frontend/lib/calculations";
+import { backupFeeRuleForCourseType, calculateClassHeadcountFee, classHeadcountFeeRuleForCourseType, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRuleById, salaryGradeRulesForVault, salaryGradeAmountForCount, salaryGradeStageForCourse, salaryGradeStageLabels, todayIso } from "@/frontend/lib/calculations";
 import { builtInCourseTypeOptions, campusName, compareByName, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
 type ArchivePanel = "profile" | "salaryRules" | "campuses" | "students" | "courses";
+type CustomCourseTypeTemplate = "class" | "non_class";
 
 export function StudentsView({
   vault,
@@ -113,17 +114,16 @@ export function StudentsView({
   const [courseCampusCustomized, setCourseCampusCustomized] = useState(false);
   const [courseStatusInput, setCourseStatusInput] = useState<CourseGroup["status"]>("active");
   const [courseStudentIds, setCourseStudentIds] = useState<string[]>([]);
-  const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => feeRuleForCourseType(vault, "one_on_one"));
+  const [courseFeeRule, setCourseFeeRule] = useState<FeeRule>(() => backupFeeRuleForCourseType("one_on_one", feeRuleForCourseType(vault, "one_on_one")));
   const [subjectInput, setSubjectInput] = useState("");
   const [editingSubject, setEditingSubject] = useState("");
   const [editingSubjectInput, setEditingSubjectInput] = useState("");
   const [subjectMessage, setSubjectMessage] = useState("");
   const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
-  const [customCourseTypeTemplate, setCustomCourseTypeTemplate] = useState<"class" | "hourly">("class");
-  const [customCourseTypeMinStudents, setCustomCourseTypeMinStudents] = useState(1);
+  const [customCourseTypeTemplate, setCustomCourseTypeTemplate] = useState<CustomCourseTypeTemplate>("class");
+  const [customCourseTypeMinStudents, setCustomCourseTypeMinStudents] = useState(5);
   const [customCourseTypeBaseFee, setCustomCourseTypeBaseFee] = useState(0);
   const [customCourseTypePerStudentFee, setCustomCourseTypePerStudentFee] = useState(0);
-  const [customCourseTypeHourlyRate, setCustomCourseTypeHourlyRate] = useState(0);
   const [courseTypeMessage, setCourseTypeMessage] = useState("");
   const [editingCustomCourseTypeId, setEditingCustomCourseTypeId] = useState<CourseType | "">("");
   const [editingCustomCourseTypeLabel, setEditingCustomCourseTypeLabel] = useState("");
@@ -573,16 +573,11 @@ export function StudentsView({
         salaryGradeId: vault.profile.defaultSalaryGradeId
       };
     }
-    return feeRuleForCourseType(vault, type);
+    return customFeeRuleForCourseType(type);
   }
 
   function customFeeRuleForCourseType(type: CourseType): FeeRule {
-    if (type === "trial") return defaultFeeRuleForCourseType("trial");
-    const backupRule = feeRuleForCourseType(vault, type);
-    if (backupRule.mode === "salary_grade") {
-      return defaultFeeRuleForCourseType(type);
-    }
-    return normalizeCourseFeeRuleForType(type, backupRule);
+    return backupFeeRuleForCourseType(type, feeRuleForCourseType(vault, type));
   }
 
   function salaryGradeDefaultFeeRule(): FeeRule {
@@ -717,16 +712,14 @@ export function StudentsView({
         customCourseTypeTemplate,
         customCourseTypeMinStudents,
         customCourseTypeBaseFee,
-        customCourseTypePerStudentFee,
-        customCourseTypeHourlyRate
+        customCourseTypePerStudentFee
       )
     );
     setCustomCourseTypeInput("");
     setCustomCourseTypeTemplate("class");
-    setCustomCourseTypeMinStudents(1);
+    setCustomCourseTypeMinStudents(5);
     setCustomCourseTypeBaseFee(0);
     setCustomCourseTypePerStudentFee(0);
-    setCustomCourseTypeHourlyRate(0);
     setCourseTypeMessage("");
   }
 
@@ -789,8 +782,8 @@ export function StudentsView({
   }
 
   function updateCourseTypeClassFeeTier(type: CourseType, tierId: string, patch: Partial<ClassFeeTier>) {
-    const rule = feeRuleForCourseType(vault, type);
-    const tier = normalizedClassFeeTiers(rule).find((item) => item.id === tierId) ?? normalizedClassFeeTiers(rule)[0] ?? defaultClassFeeTiers(defaultFeeRuleForCourseType(type))[0];
+    const rule = backupFeeRuleForCourseType(type, feeRuleForCourseType(vault, type));
+    const tier = normalizedClassFeeTiers(rule).find((item) => item.id === tierId) ?? normalizedClassFeeTiers(rule)[0];
     replaceCourseTypeClassFeeTiers(type, [{ ...tier, ...patch, maxStudents: undefined }]);
   }
 
@@ -830,11 +823,11 @@ export function StudentsView({
 
   function resetCourseTypeFeeRule(type: CourseType) {
     const current = feeRuleForCourseType(vault, type);
-    const nextRule = type === "trial"
-      ? defaultFeeRuleForCourseType("trial")
-      : current.mode === "class_headcount"
-        ? customFeeRuleForCourseType(type)
-        : { mode: "hourly" as const, hourlyRate: 0 };
+    const backupRule = backupFeeRuleForCourseType(type, current);
+    const tier = backupRule.mode === "class_headcount" ? normalizedClassFeeTiers(backupRule)[0] : undefined;
+    const nextRule = type === "trial" || type === "full_time"
+      ? defaultFeeRuleForCourseType(type)
+      : classHeadcountFeeRuleForCourseType(type, 0, 0, type.startsWith("custom_") ? tier?.minStudents : undefined);
     onUpdateCourseTypeFeeRule(type, nextRule);
     if (courseType === type) {
       setCourseFeeRule(nextRule);
@@ -1325,7 +1318,6 @@ export function StudentsView({
             courseTypeInUse={courseTypeInUse}
             courseTypeMessage={courseTypeMessage}
             customCourseTypeBaseFee={customCourseTypeBaseFee}
-            customCourseTypeHourlyRate={customCourseTypeHourlyRate}
             customCourseTypeInput={customCourseTypeInput}
             customCourseTypeMinStudents={customCourseTypeMinStudents}
             customCourseTypePerStudentFee={customCourseTypePerStudentFee}
@@ -1361,7 +1353,6 @@ export function StudentsView({
             setCampusNoteInput={setCampusNoteInput}
             setCourseTypeMessage={setCourseTypeMessage}
             setCustomCourseTypeBaseFee={setCustomCourseTypeBaseFee}
-            setCustomCourseTypeHourlyRate={setCustomCourseTypeHourlyRate}
             setCustomCourseTypeInput={setCustomCourseTypeInput}
             setCustomCourseTypeMinStudents={setCustomCourseTypeMinStudents}
             setCustomCourseTypePerStudentFee={setCustomCourseTypePerStudentFee}
@@ -1586,42 +1577,18 @@ function normalizeStudentDuplicateValue(value: string): string {
   return value.trim().replace(/\s+/g, "").toLowerCase();
 }
 
-function classHeadcountBaseStudentCount(type: CourseType): number {
-  return type === "class" ? 5 : 1;
-}
-
 function defaultFeeRuleForCustomTemplate(
-  template: "class" | "hourly",
+  template: CustomCourseTypeTemplate,
   minStudents = 1,
   baseFee = 0,
-  perStudentFee = 0,
-  hourlyRate = 0
+  perStudentFee = 0
 ): FeeRule {
-  if (template === "hourly") {
-    return { mode: "hourly", hourlyRate: Math.max(hourlyRate, 0) };
-  }
-  const tier = {
-    id: "tier_1_plus",
-    minStudents: Math.max(Math.round(minStudents), 0),
-    baseFee: Math.max(baseFee, 0),
-    perStudentFee: Math.max(perStudentFee, 0)
-  };
-  return {
-    mode: "class_headcount",
-    baseFee: tier.baseFee,
-    perPresentStudentFee: tier.perStudentFee,
-    classFeeTiers: [tier],
-    makeupFeeMode: "perStudentFee"
-  };
+  const templateType: CourseType = template === "class" ? "class" : "one_on_one";
+  return classHeadcountFeeRuleForCourseType(templateType, baseFee, perStudentFee, minStudents);
 }
 
 function normalizeCourseFeeRuleForType(type: CourseType, feeRule: FeeRule): FeeRule {
-  if (type === "trial") {
-    return {
-      mode: "fixed",
-      fixedFee: fixedFeeForRule(feeRule)
-    };
-  }
+  if (type === "trial" || type === "full_time") return backupFeeRuleForCourseType(type, feeRule);
   if (feeRule.mode === "salary_grade") {
     return {
       mode: "salary_grade",
@@ -1629,22 +1596,7 @@ function normalizeCourseFeeRuleForType(type: CourseType, feeRule: FeeRule): FeeR
       salaryGradeId: feeRule.salaryGradeId
     };
   }
-  if (feeRule.mode === "class_headcount") {
-    const tier = normalizedClassFeeTiers(feeRule)[0] ?? defaultClassFeeTiers(feeRule)[0];
-    const normalizedTier = {
-      ...tier,
-      minStudents: Number.isFinite(tier.minStudents) ? Math.max(Math.round(tier.minStudents), 0) : classHeadcountBaseStudentCount(type),
-      maxStudents: undefined
-    };
-    return {
-      ...feeRule,
-      mode: "class_headcount",
-      baseFee: normalizedTier.baseFee,
-      perPresentStudentFee: normalizedTier.perStudentFee,
-      classFeeTiers: [normalizedTier]
-    };
-  }
-  return feeRule;
+  return backupFeeRuleForCourseType(type, feeRule);
 }
 
 function matchesKeywordSearch(searchable: string, normalizedQuery: string): boolean {
