@@ -1,5 +1,5 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react";
-import { GraduationCap, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { GraduationCap, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { CampusSettingsCard } from "@/frontend/components/CampusSettingsCard";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import { SubjectSettingsCard } from "@/frontend/components/SubjectSettingsCard";
 import type { Campus, ClassFeeTier, CourseType, SalaryGradeStage, SalaryGradeStageRateConfig, TeacherVault } from "@/shared/types";
-import { backupFeeRuleForCourseType, classHeadcountStageRateForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, salaryGradeStageLabels, salaryGradeStageOrder } from "@/frontend/lib/calculations";
+import { backupFeeRuleForCourseType, classHeadcountStageRateForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
 
 type ConfirmRequest = {
   title: string;
@@ -59,6 +59,7 @@ type CampusCourseSettingsPanelProps = {
   onDeleteCampus: (campusId: string) => void;
   onDeleteSubject: (subject: string) => void;
   onRequestDeleteCourseType: (courseTypeOption: { id: CourseType; label: string }) => void;
+  onRequestSyncCourseTypeFeeRuleToCourses: (type: CourseType) => void;
   onResetCourseTypeFeeRule: (type: CourseType) => void;
   onRestoreCourseType: (courseType: CourseType) => void;
   onSaveCustomCourseType: () => void;
@@ -123,6 +124,7 @@ export function CampusCourseSettingsPanel({
   onDeleteCampus,
   onDeleteSubject,
   onRequestDeleteCourseType,
+  onRequestSyncCourseTypeFeeRuleToCourses,
   onResetCourseTypeFeeRule,
   onRestoreCourseType,
   onSaveCustomCourseType,
@@ -160,6 +162,8 @@ export function CampusCourseSettingsPanel({
   const customTemplateHint = customTemplateIsClass
     ? "默认 5 人，从第 6 人开始加人头费。"
     : "默认 1 人，从第 2 人开始加人头费。";
+  const today = todayIso();
+  const courseTypeMessageIsSuccess = courseTypeMessage.startsWith("同步完成：");
 
   return (
     <div className="space-y-4">
@@ -211,7 +215,7 @@ export function CampusCourseSettingsPanel({
               <CardTitle className="text-lg">班型与备用计费</CardTitle>
               <CardDescription>班型可改名、按名称排序；常规课程优先使用教师课时费等级，这里的金额只作为自定义课时费或未设置默认等级时的备用模板，备用模板也会按课程学生年级阶段取对应金额。</CardDescription>
               <div className="mt-1 text-sm font-semibold leading-5 text-[#64748b]">
-                恢复备用计费会把该班型的模板价格恢复为 0，只影响以后新建的课程，已添加课程不会自动修改。
+                修改备用计费默认只影响以后新建课程；需要更新已添加课程时，使用对应班型里的“同步到已有课程”。
               </div>
             </div>
             <Badge variant="secondary" className="w-fit">{managedCourseTypes.length} 个可配置</Badge>
@@ -292,7 +296,11 @@ export function CampusCourseSettingsPanel({
             </div>
           </div>
           {courseTypeMessage && (
-            <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
+            <div className={`rounded-[12px] border px-3 py-2 text-sm font-bold ${
+              courseTypeMessageIsSuccess
+                ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]"
+                : "border-[#fecaca] bg-[#fff1f2] text-[#b91c1c]"
+            }`}>
               {courseTypeMessage}
             </div>
           )}
@@ -314,6 +322,15 @@ export function CampusCourseSettingsPanel({
               : "非班课按「一对一基础费 + max(到课人数 - 1, 0) * 人头加价」计算。";
             const juniorStageRate = classHeadcountStageRateForRule(rule, type, "junior_3");
             const juniorBaseValue = isClassType ? juniorStageRate.classBaseFee : juniorStageRate.oneOnOneFee;
+            const linkedCourseIds = new Set(vault.courseGroups.filter((course) => course.type === type).map((course) => course.id));
+            const linkedCourseCount = linkedCourseIds.size;
+            const linkedLessonCount = vault.lessons.filter((lesson) => lesson.type === type || linkedCourseIds.has(lesson.courseGroupId)).length;
+            const futureSyncLessonCount = vault.lessons.filter((lesson) =>
+              linkedCourseIds.has(lesson.courseGroupId) &&
+              !lesson.linkedOriginalLessonId &&
+              (lesson.status === "scheduled" || lesson.status === "draft") &&
+              lesson.date >= today
+            ).length;
             return (
               <div key={type} className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -353,6 +370,16 @@ export function CampusCourseSettingsPanel({
                       <Button
                         type="button"
                         size="sm"
+                        variant="outline"
+                        disabled={linkedCourseCount === 0}
+                        onClick={() => onRequestSyncCourseTypeFeeRuleToCourses(type)}
+                        title={linkedCourseCount === 0 ? "这个班型还没有已添加课程" : "把当前备用计费模板同步到同班型已有课程"}
+                      >
+                        <RefreshCw size={14} /> 同步到已有课程
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
                         variant="destructive"
                         disabled={isCustom && used}
                         onClick={() => onRequestDeleteCourseType({ id: type, label: typeOption.label })}
@@ -366,6 +393,14 @@ export function CampusCourseSettingsPanel({
                     </div>
                   )}
                 </div>
+                {!isEditingType && used && (
+                  <div className="flex flex-wrap gap-2 text-xs font-bold">
+                    <Badge variant="secondary">已添加课程 {linkedCourseCount}</Badge>
+                    <Badge variant="outline">已生成课节 {linkedLessonCount}</Badge>
+                    <Badge variant="sky">可刷新未来课节 {futureSyncLessonCount}</Badge>
+                    <span className="flex items-center text-[#64748b]">同步不会改已完成历史课节金额快照</span>
+                  </div>
+                )}
                 {rule.mode === "class_headcount" ? (
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">

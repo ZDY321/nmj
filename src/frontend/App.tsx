@@ -678,6 +678,25 @@ export function App() {
     });
   }
 
+  function syncCourseTypeFeeRuleToCourses(courseType: CourseType) {
+    updateVault((draft) => {
+      const templateRule = feeRuleForCourseType(draft, courseType);
+      draft.courseGroups = draft.courseGroups.map((course) => {
+        if (course.type !== courseType) return course;
+        if (course.feeRule.mode === "salary_grade") return course;
+        return {
+          ...course,
+          feeRule: cloneFeeRule(templateRule)
+        };
+      });
+      draft.courseGroups
+        .filter((course) => course.type === courseType)
+        .forEach((course) => {
+          syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
+        });
+    });
+  }
+
   function updateAiScheduleSession(session: AiScheduleSession | null) {
     setAiScheduleSession(session);
   }
@@ -2663,6 +2682,7 @@ export function App() {
                 onDeleteCourseType={deleteCourseType}
                 onRestoreCourseType={restoreCourseType}
                 onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
+                onSyncCourseTypeFeeRuleToCourses={syncCourseTypeFeeRuleToCourses}
                 onAddSubject={addSubject}
                 onUpdateSubject={updateSubject}
                 onDeleteSubject={deleteSubject}
@@ -2843,6 +2863,18 @@ function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Less
     feeSnapshot: {
       ...buildFeeSnapshot(vault, course, normalizedLesson)
     }
+  };
+}
+
+function cloneFeeRule(rule: FeeRule): FeeRule {
+  return {
+    ...rule,
+    classFeeTiers: rule.classFeeTiers?.map((tier) => ({ ...tier })),
+    stageRates: rule.stageRates
+      ? Object.fromEntries(
+          Object.entries(rule.stageRates).map(([stage, rate]) => [stage, rate ? { ...rate } : rate])
+        ) as FeeRule["stageRates"]
+      : undefined
   };
 }
 

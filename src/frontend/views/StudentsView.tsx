@@ -44,6 +44,7 @@ export function StudentsView({
   onDeleteCourseType,
   onRestoreCourseType,
   onUpdateCourseTypeFeeRule,
+  onSyncCourseTypeFeeRuleToCourses,
   onAddSubject,
   onUpdateSubject,
   onDeleteSubject,
@@ -70,6 +71,7 @@ export function StudentsView({
   onDeleteCourseType: (courseType: CourseType) => void;
   onRestoreCourseType: (courseType: CourseType) => void;
   onUpdateCourseTypeFeeRule: (courseType: CourseType, feeRule: FeeRule) => void;
+  onSyncCourseTypeFeeRuleToCourses: (courseType: CourseType) => void;
   onAddSubject: (subject: string) => void;
   onUpdateSubject: (previousSubject: string, nextSubject: string) => void;
   onDeleteSubject: (subject: string) => void;
@@ -894,6 +896,41 @@ export function StudentsView({
     return `每小时：${formatPrivateMoney(hourlyRate, amountsVisible)}；2小时预估：${formatPrivateMoney(hourlyRate * 2, amountsVisible)}`;
   }
 
+  function courseTypeUsageCounts(type: CourseType): { courseCount: number; lessonCount: number; futureLessonCount: number } {
+    const courseIds = new Set(vault.courseGroups.filter((course) => course.type === type).map((course) => course.id));
+    const today = todayIso();
+    const lessonCount = vault.lessons.filter((lesson) => lesson.type === type || courseIds.has(lesson.courseGroupId)).length;
+    const futureLessonCount = vault.lessons.filter((lesson) =>
+      courseIds.has(lesson.courseGroupId) &&
+      !lesson.linkedOriginalLessonId &&
+      (lesson.status === "scheduled" || lesson.status === "draft") &&
+      lesson.date >= today
+    ).length;
+    return {
+      courseCount: courseIds.size,
+      lessonCount,
+      futureLessonCount
+    };
+  }
+
+  function requestSyncCourseTypeFeeRuleToCourses(type: CourseType) {
+    const label = courseTypeLabel(vault, type);
+    const counts = courseTypeUsageCounts(type);
+    if (counts.courseCount === 0) {
+      setCourseTypeMessage(`班型「${label}」还没有已添加课程，不需要同步。`);
+      return;
+    }
+    confirm({
+      title: `同步「${label}」到已有课程？`,
+      description: `会把当前班型备用计费模板同步到 ${counts.courseCount} 个同班型课程档案，并刷新 ${counts.futureLessonCount} 节未来待上课课节的金额快照。已完成或历史课节保留原金额；跟随课时费等级的课程会保留等级来源，只刷新未来课节金额。`,
+      confirmLabel: "同步更改",
+      onConfirm: () => {
+        onSyncCourseTypeFeeRuleToCourses(type);
+        setCourseTypeMessage(`同步完成：已处理「${label}」的 ${counts.courseCount} 个已有课程，并刷新 ${counts.futureLessonCount} 节未来待上课课节。`);
+      }
+    });
+  }
+
   function requestDeleteCourseType(courseTypeOption: { id: CourseType; label: string }) {
     const isCustom = courseTypeOption.id.startsWith("custom_");
     confirm({
@@ -1378,6 +1415,7 @@ export function StudentsView({
             onDeleteCampus={onDeleteCampus}
             onDeleteSubject={onDeleteSubject}
             onRequestDeleteCourseType={requestDeleteCourseType}
+            onRequestSyncCourseTypeFeeRuleToCourses={requestSyncCourseTypeFeeRuleToCourses}
             onResetCourseTypeFeeRule={resetCourseTypeFeeRule}
             onRestoreCourseType={onRestoreCourseType}
             onSaveCustomCourseType={saveCustomCourseType}
