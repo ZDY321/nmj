@@ -200,6 +200,7 @@ export type FeeRule = {
   baseFee?: number;
   perPresentStudentFee?: number;
   classFeeTiers?: ClassFeeTier[];
+  stageRates?: Partial<Record<SalaryGradeStage, SalaryGradeStageRateConfig>>;
   salaryGradeSource?: "teacher_default" | "specific";
   salaryGradeId?: SalaryGradeId;
   makeupFeeMode?: "sameAsOriginal" | "perStudentFee" | "custom";

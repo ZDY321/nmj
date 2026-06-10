@@ -13,7 +13,7 @@ import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsLi
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { buildFeeSnapshot, calculateClassHeadcountFee, getCourse, lessonDurationMultiplier, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, lessonDurationMultiplier, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -1306,13 +1306,15 @@ export function ScheduleView({
     if (!entryIsPresent) return 0;
     const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
     const multiplier = lessonDurationMultiplier(lesson, course.feeRule);
+    const stage = salaryGradeStageForLesson(vault, course, lesson);
     if (course.feeRule.mode === "salary_grade") {
       const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
       if (!gradeRule) return undefined;
-      return Math.round((salaryGradeAmountForCount(gradeRule, lesson.type, presentStudentCount) - salaryGradeAmountForCount(gradeRule, lesson.type, countWithoutEntry)) * multiplier);
+      const baseStudentCount = classHeadcountBaseStudentCountForRule(lesson.type, feeRuleForCourseType(vault, lesson.type));
+      return Math.round((salaryGradeAmountForCount(gradeRule, lesson.type, presentStudentCount, stage, baseStudentCount) - salaryGradeAmountForCount(gradeRule, lesson.type, countWithoutEntry, stage, baseStudentCount)) * multiplier);
     }
     if (course.feeRule.mode !== "class_headcount") return undefined;
-    return Math.round((calculateClassHeadcountFee(course.feeRule, presentStudentCount) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry)) * multiplier);
+    return Math.round((calculateClassHeadcountFee(course.feeRule, presentStudentCount, lesson.type, stage) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry, lesson.type, stage)) * multiplier);
   }
 
   function updateTrialStats(patch: Pick<Partial<Lesson>, "trialStudentCount" | "trialFee">) {

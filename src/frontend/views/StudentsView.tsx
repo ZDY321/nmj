@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, CustomCourseTypeOption, FeeRule, SalaryGradeId, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
+import type { Campus, ClassFeeTier, CourseGroup, CourseType, CustomCourseType, CustomCourseTypeOption, FeeRule, SalaryGradeId, SalaryGradeStage, SalaryGradeStageRateConfig, Student, StudentCourseTransition, TeacherProfile, TeacherVault } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { CampusCourseSettingsPanel } from "@/frontend/components/CampusCourseSettingsPanel";
 import { CourseEditDialog } from "@/frontend/components/CourseEditDialog";
@@ -17,7 +17,7 @@ import { TeacherProfilePanel } from "@/frontend/components/TeacherProfilePanel";
 import { TeacherSalaryRulesPanel } from "@/frontend/components/TeacherSalaryRulesPanel";
 import { NewCourseFormPanel } from "@/frontend/components/NewCourseFormPanel";
 import { makeId } from "@/frontend/lib/crypto";
-import { backupFeeRuleForCourseType, calculateClassHeadcountFee, classHeadcountFeeRuleForCourseType, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRuleById, salaryGradeRulesForVault, salaryGradeAmountForCount, salaryGradeStageForCourse, salaryGradeStageLabels, todayIso } from "@/frontend/lib/calculations";
+import { backupFeeRuleForCourseType, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, classHeadcountFeeRuleForCourseType, classHeadcountStageRateForRule, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRuleById, salaryGradeRulesForVault, salaryGradeAmountForCount, salaryGradeStageForCourse, salaryGradeStageForStudentIds, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
 import { builtInCourseTypeOptions, campusName, compareByName, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
@@ -773,6 +773,7 @@ export function StudentsView({
       baseFee: firstTier?.baseFee ?? current.baseFee,
       perPresentStudentFee: firstTier?.perStudentFee ?? current.perPresentStudentFee,
       classFeeTiers: sortedTiers,
+      stageRates: backupFeeRuleForCourseType(type, current).stageRates,
       makeupFeeMode: current.makeupFeeMode ?? "perStudentFee"
     };
     onUpdateCourseTypeFeeRule(type, nextRule);
@@ -785,6 +786,41 @@ export function StudentsView({
     const rule = backupFeeRuleForCourseType(type, feeRuleForCourseType(vault, type));
     const tier = normalizedClassFeeTiers(rule).find((item) => item.id === tierId) ?? normalizedClassFeeTiers(rule)[0];
     replaceCourseTypeClassFeeTiers(type, [{ ...tier, ...patch, maxStudents: undefined }]);
+  }
+
+  function updateCourseTypeStageRate(type: CourseType, stage: SalaryGradeStage, patch: Partial<SalaryGradeStageRateConfig>) {
+    const current = backupFeeRuleForCourseType(type, feeRuleForCourseType(vault, type));
+    const nextStageRates = salaryGradeStageOrder.reduce(
+      (rates, item) => {
+        rates[item] = classHeadcountStageRateForRule(current, type, item);
+        return rates;
+      },
+      {} as Record<SalaryGradeStage, SalaryGradeStageRateConfig>
+    );
+    nextStageRates[stage] = {
+      ...nextStageRates[stage],
+      ...patch
+    };
+    const tier = normalizedClassFeeTiers(current)[0];
+    const displayRate = nextStageRates.junior_3;
+    const nextRule: FeeRule = {
+      ...current,
+      mode: "class_headcount",
+      baseFee: type === "class" ? displayRate.classBaseFee : displayRate.oneOnOneFee,
+      perPresentStudentFee: displayRate.headcountIncrementFee,
+      classFeeTiers: [{
+        ...tier,
+        baseFee: type === "class" ? displayRate.classBaseFee : displayRate.oneOnOneFee,
+        perStudentFee: displayRate.headcountIncrementFee,
+        maxStudents: undefined
+      }],
+      stageRates: nextStageRates,
+      makeupFeeMode: current.makeupFeeMode ?? "perStudentFee"
+    };
+    onUpdateCourseTypeFeeRule(type, nextRule);
+    if (courseType === type) {
+      setCourseFeeRule(nextRule);
+    }
   }
 
   function updateCourseTypeHourlyRule(type: CourseType, hourlyRate: number) {
@@ -839,12 +875,14 @@ export function StudentsView({
       const rule = resolveSalaryGradeRule(vault, course.feeRule);
       if (!rule) return "课时费等级：未设置默认等级";
       const stage = salaryGradeStageForCourse(vault, course);
-      const amount = salaryGradeAmountForCount(rule, course.type, course.studentIds.length, stage);
+      const amount = salaryGradeAmountForCount(rule, course.type, course.studentIds.length, stage, classHeadcountBaseStudentCountForRule(course.type, feeRuleForCourseType(vault, course.type)));
       const source = course.feeRule.salaryGradeSource === "specific" ? "指定等级" : "跟随默认等级";
       return `${source}：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}，当前 ${course.studentIds.length} 人 2小时标准课预估 ${formatPrivateMoney(amount, amountsVisible)}`;
     }
     if (course.feeRule.mode === "class_headcount") {
-      return `当前 ${course.studentIds.length} 人 2小时标准课预估：${formatPrivateMoney(calculateClassHeadcountFee(course.feeRule, course.studentIds.length), amountsVisible)}`;
+      const stage = salaryGradeStageForCourse(vault, course);
+      const amount = calculateClassHeadcountFee(course.feeRule, course.studentIds.length, course.type, stage);
+      return `自定义课时费：${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}，当前 ${course.studentIds.length} 人 2小时标准课预估 ${formatPrivateMoney(amount, amountsVisible)}`;
     }
     if (course.feeRule.mode === "fixed") {
       return `单节固定费用：${formatPrivateMoney(course.feeRule.fixedFee ?? 0, amountsVisible)}`;
@@ -906,7 +944,8 @@ export function StudentsView({
         mode: "class_headcount",
         baseFee: firstTier?.baseFee ?? current.baseFee,
         perPresentStudentFee: firstTier?.perStudentFee ?? current.perPresentStudentFee,
-        classFeeTiers: sortedTiers
+        classFeeTiers: sortedTiers,
+        stageRates: firstTier ? stageRatesFromTierForCourseType(courseType, firstTier) : current.stageRates
       };
     });
   }
@@ -994,7 +1033,8 @@ export function StudentsView({
           mode: "class_headcount",
           baseFee: firstTier?.baseFee ?? current.feeRule.baseFee,
           perPresentStudentFee: firstTier?.perStudentFee ?? current.feeRule.perPresentStudentFee,
-          classFeeTiers: sortedTiers
+          classFeeTiers: sortedTiers,
+          stageRates: firstTier ? stageRatesFromTierForCourseType(current.type, firstTier) : current.feeRule.stageRates
         }
       };
     });
@@ -1346,6 +1386,7 @@ export function StudentsView({
             onStartEditSubject={startEditSubject}
             onUpdateCampus={onUpdateCampus}
             onUpdateCourseTypeClassFeeTier={updateCourseTypeClassFeeTier}
+            onUpdateCourseTypeStageRate={updateCourseTypeStageRate}
             onUpdateCourseTypeFixedRule={updateCourseTypeFixedRule}
             onUpdateCourseTypeHourlyRule={updateCourseTypeHourlyRule}
             setCampusAddressInput={setCampusAddressInput}
@@ -1585,6 +1626,22 @@ function defaultFeeRuleForCustomTemplate(
 ): FeeRule {
   const templateType: CourseType = template === "class" ? "class" : "one_on_one";
   return classHeadcountFeeRuleForCourseType(templateType, baseFee, perStudentFee, minStudents);
+}
+
+function stageRatesFromTierForCourseType(type: CourseType, tier: ClassFeeTier): Record<SalaryGradeStage, SalaryGradeStageRateConfig> {
+  const usesClassBase = type === "class" || (type.startsWith("custom_") && tier.minStudents > 1);
+  const rate = {
+    oneOnOneFee: usesClassBase ? 0 : Math.max(tier.baseFee, 0),
+    classBaseFee: usesClassBase ? Math.max(tier.baseFee, 0) : 0,
+    headcountIncrementFee: Math.max(tier.perStudentFee ?? 0, 0)
+  };
+  return salaryGradeStageOrder.reduce(
+    (rates, stage) => {
+      rates[stage] = rate;
+      return rates;
+    },
+    {} as Record<SalaryGradeStage, SalaryGradeStageRateConfig>
+  );
 }
 
 function normalizeCourseFeeRuleForType(type: CourseType, feeRule: FeeRule): FeeRule {

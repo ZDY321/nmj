@@ -156,7 +156,7 @@ export function NewCourseFormPanel({
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm font-extrabold text-[#061226]">课时费来源</div>
                 <div className="text-xs font-semibold text-[#64748b]">
-                  课时费等级按 2 小时为 1 节设置标准课金额；实际课时费按上课时长 / 2 折算。
+                  课时费等级按 2 小时为 1 节设置标准课金额；实际课时费按「上课时长 / 2」折算。
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -192,7 +192,7 @@ export function NewCourseFormPanel({
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                 <div className="text-xs font-semibold text-[#64748b]">
-                  当前关联 {courseStudentIds.length} 人，2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length), amountsVisible)}，实际按上课时长 / 2 折算
+                  当前关联 {courseStudentIds.length} 人，{salaryGradeStageForStudentIds(vault, courseStudentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, courseStudentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length, courseType, salaryGradeStageForStudentIds(vault, courseStudentIds)), amountsVisible)}，实际按「上课时长 / 2」折算
                 </div>
               </div>
               {normalizedClassFeeTiers(courseFeeRule).slice(0, 1).map((tier) => (

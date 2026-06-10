@@ -191,7 +191,7 @@ export function CourseEditDialog({
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                      当前关联 {editingCourse.studentIds.length} 人，2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length), amountsVisible)}，实际按上课时长 / 2 折算。
+                      当前关联 {editingCourse.studentIds.length} 人，{salaryGradeStageForStudentIds(vault, editingCourse.studentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, editingCourse.studentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length, editingCourse.type, salaryGradeStageForStudentIds(vault, editingCourse.studentIds)), amountsVisible)}，实际按「上课时长 / 2」折算。
                     </div>
                   </div>
                   {normalizedClassFeeTiers(editingCourse.feeRule).slice(0, 1).map((tier) => (

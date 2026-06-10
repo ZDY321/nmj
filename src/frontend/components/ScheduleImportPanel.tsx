@@ -122,6 +122,22 @@ export function ScheduleImportPanel({
     () => new Set(Array.from(historicalLinkedSystemLessonIds).filter((lessonId) => !linkedSystemLessonIds.has(lessonId))),
     [historicalLinkedSystemLessonIds, linkedSystemLessonIds]
   );
+  const existingSystemLessonIds = useMemo(() => new Set(vault.lessons.map((lesson) => lesson.id)), [vault.lessons]);
+  const invalidSplitMergeRowKeys = useMemo(
+    () => new Set(rows
+      .filter((row) => (resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? []).some((lessonId) => !existingSystemLessonIds.has(lessonId)))
+      .map((row) => resolutionKey(row))
+    ),
+    [existingSystemLessonIds, resolutions, rows]
+  );
+  const splitMergeReviewLabel = (row: ImportPreviewLesson): string | undefined => {
+    const rowKey = resolutionKey(row);
+    const resolution = resolutions[rowKey];
+    if (invalidSplitMergeRowKeys.has(rowKey)) return "关联课已失效";
+    if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId)) return "旧合并失效";
+    if (resolution?.linkedSystemLessonIds?.length && row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch")) return "合并需复核";
+    return undefined;
+  };
   const effectiveRows = useMemo(
     () => rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds)),
     [linkedSystemLessonIds, resolutions, rows]
@@ -445,6 +461,7 @@ export function ScheduleImportPanel({
           resolutionKey={resolutionKey}
           isReviewedResolution={isReviewedResolution}
           statusPillClass={statusPillClass}
+          rowAttentionLabel={splitMergeReviewLabel}
           renderRow={(row) => (
             <ScheduleImportReconciliationRow
               key={row.id}
@@ -455,6 +472,7 @@ export function ScheduleImportPanel({
               linkedSystemLessonIds={linkedSystemLessonIds}
               linkedBySources={row.systemLessonId ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId) : []}
               staleLinkedByPreviousResolution={Boolean(row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId))}
+              invalidLinkedSystemLessonIds={(resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? []).filter((lessonId) => !existingSystemLessonIds.has(lessonId))}
               onMap={(courseId) => updateCourseMapping(row, courseId)}
               onResolutionChange={(patch) => updateResolution(row, patch)}
               onOpenLesson={onOpenLesson}

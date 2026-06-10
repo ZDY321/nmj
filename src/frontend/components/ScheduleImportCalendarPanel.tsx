@@ -20,6 +20,7 @@ export function ScheduleImportCalendarPanel({
   resolutionKey,
   isReviewedResolution,
   statusPillClass,
+  rowAttentionLabel,
   renderRow
 }: {
   vault: TeacherVault;
@@ -36,10 +37,11 @@ export function ScheduleImportCalendarPanel({
   resolutionKey: (row: ImportPreviewLesson) => string;
   isReviewedResolution: (resolution: ScheduleImportResolution | undefined) => boolean;
   statusPillClass: (status: ImportMatchStatus, reviewed?: boolean) => string;
+  rowAttentionLabel?: (row: ImportPreviewLesson) => string | undefined;
   renderRow: (row: ImportPreviewLesson) => ReactNode;
 }) {
   const selectedDateHasProblems = selectedDateRows.some((row) =>
-    effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched"
+    effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" || Boolean(rowAttentionLabel?.(row))
   );
 
   return (
@@ -55,7 +57,7 @@ export function ScheduleImportCalendarPanel({
             const dayRows = filteredRows.filter((row) => row.date === date);
             const isSelected = selectedDate === date;
             const isCurrentMonth = date.startsWith(displayMonth);
-            const hasProblems = dayRows.some((row) => effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched");
+            const hasProblems = dayRows.some((row) => effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" || Boolean(rowAttentionLabel?.(row)));
             const reviewedDayCount = dayRows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
             return (
               <button
@@ -87,10 +89,11 @@ export function ScheduleImportCalendarPanel({
                   {dayRows.slice(0, 3).map((row) => {
                     const rowReviewed = isReviewedResolution(resolutions[resolutionKey(row)]);
                     const rowStatus = effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds);
+                    const attentionLabel = rowAttentionLabel?.(row);
                     const rowPrefix = rowReviewed ? rowStatus === "matched" ? "已确认 · " : "已标 · " : "";
                     return (
-                      <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${statusPillClass(rowStatus, rowReviewed && rowStatus !== "matched")}`}>
-                        {rowPrefix}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
+                      <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${attentionLabel ? "bg-[#fff3e4] text-[#9a3412] ring-1 ring-[#fdba74]" : statusPillClass(rowStatus, rowReviewed && rowStatus !== "matched")}`}>
+                        {attentionLabel ? `${attentionLabel} · ` : rowPrefix}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
                       </span>
                     );
                   })}

@@ -130,7 +130,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
         <CardTitle>教师课时费等级</CardTitle>
         <CardDescription className="space-y-1">
           <span className="block">课程里只选择老师等级；实际课时费会按课程学生年级阶段套用该等级下对应金额，底薪仍按老师等级统一设置。</span>
-          <span className="block">班课的班型按“班课底费 + max(到课人数 - 5, 0) * 人头加价”计算；非班课的班型按“一对一基础费 + max(到课人数 - 1, 0) * 人头加价”计算。</span>
+          <span className="block">班课的班型按「班课底费 + max(到课人数 - 5, 0) * 人头加价」计算；非班课的班型按「一对一基础费 + max(到课人数 - 1, 0) * 人头加价」计算。</span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -164,7 +164,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
                     {vault.profile.defaultSalaryGradeId === rule.id && <Badge variant="sky">默认</Badge>}
                     {rule.custom && <Badge variant="plum">自定义</Badge>}
                   </div>
-                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节，实际按上课时长 / 2 折算；班课人头加价从第 6 人开始，非班课从第 2 人开始。</div>
+                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节，实际按「上课时长 / 2」折算；班课人头加价从第 6 人开始，非班课从第 2 人开始。</div>
                 </div>
                 <div className="grid grid-cols-[minmax(160px,220px)_auto] gap-2">
                   <div>

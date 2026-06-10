@@ -8,8 +8,8 @@ import { Select } from "@/components/ui/select";
 import { CampusSettingsCard } from "@/frontend/components/CampusSettingsCard";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import { SubjectSettingsCard } from "@/frontend/components/SubjectSettingsCard";
-import type { Campus, ClassFeeTier, CourseType, TeacherVault } from "@/shared/types";
-import { backupFeeRuleForCourseType, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers } from "@/frontend/lib/calculations";
+import type { Campus, ClassFeeTier, CourseType, SalaryGradeStage, SalaryGradeStageRateConfig, TeacherVault } from "@/shared/types";
+import { backupFeeRuleForCourseType, classHeadcountStageRateForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, salaryGradeStageLabels, salaryGradeStageOrder } from "@/frontend/lib/calculations";
 
 type ConfirmRequest = {
   title: string;
@@ -67,6 +67,7 @@ type CampusCourseSettingsPanelProps = {
   onStartEditSubject: (subject: string) => void;
   onUpdateCampus: (campus: Campus) => void;
   onUpdateCourseTypeClassFeeTier: (type: CourseType, tierId: string, patch: Partial<ClassFeeTier>) => void;
+  onUpdateCourseTypeStageRate: (type: CourseType, stage: SalaryGradeStage, patch: Partial<SalaryGradeStageRateConfig>) => void;
   onUpdateCourseTypeFixedRule: (type: CourseType, fixedFee: number) => void;
   onUpdateCourseTypeHourlyRule: (type: CourseType, hourlyRate: number) => void;
   setCampusAddressInput: Dispatch<SetStateAction<string>>;
@@ -130,6 +131,7 @@ export function CampusCourseSettingsPanel({
   onStartEditSubject,
   onUpdateCampus,
   onUpdateCourseTypeClassFeeTier,
+  onUpdateCourseTypeStageRate,
   onUpdateCourseTypeFixedRule,
   onUpdateCourseTypeHourlyRule,
   setCampusAddressInput,
@@ -207,7 +209,7 @@ export function CampusCourseSettingsPanel({
                 <GraduationCap size={14} /> 班型管理
               </div>
               <CardTitle className="text-lg">班型与备用计费</CardTitle>
-              <CardDescription>班型可改名、按名称排序；常规课程优先使用教师课时费等级，这里的金额只作为自定义课时费或未设置默认等级时的备用模板。</CardDescription>
+              <CardDescription>班型可改名、按名称排序；常规课程优先使用教师课时费等级，这里的金额只作为自定义课时费或未设置默认等级时的备用模板，备用模板也会按课程学生年级阶段取对应金额。</CardDescription>
               <div className="mt-1 text-sm font-semibold leading-5 text-[#64748b]">
                 恢复备用计费会把该班型的模板价格恢复为 0，只影响以后新建的课程，已添加课程不会自动修改。
               </div>
@@ -250,7 +252,7 @@ export function CampusCourseSettingsPanel({
               </Button>
             </div>
             <div className="mt-3 space-y-2">
-              <div className="text-xs font-bold text-[#9a3412]">{customTemplateHint}</div>
+              <div className="text-xs font-bold text-[#9a3412]">{customTemplateHint} 下方金额作为各年级阶段的初始备用金额，添加后可在班型列表里按年级阶段细调。</div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold text-[#9a3412]">{customMinStudentsLabel}</label>
@@ -304,12 +306,14 @@ export function CampusCourseSettingsPanel({
             const isCustom = type.startsWith("custom_");
             const isEditingType = editingCustomCourseTypeId === type;
             const used = courseTypeInUse(type);
-            const isClassType = type === "class";
+            const isClassType = type === "class" || (type.startsWith("custom_") && tier.minStudents > 1);
             const backupMinStudentsLabel = isClassType ? "班课起算人数" : "非班课起算人数";
             const backupBaseFeeLabel = isClassType ? "班课底费" : "一对一基础费";
             const backupHint = isClassType
-              ? "班课按班课底费 + max(到课人数 - 5, 0) * 人头加价计算。"
-              : "非班课按一对一基础费 + max(到课人数 - 1, 0) * 人头加价计算。";
+              ? "班课按「班课底费 + max(到课人数 - 5, 0) * 人头加价」计算。"
+              : "非班课按「一对一基础费 + max(到课人数 - 1, 0) * 人头加价」计算。";
+            const juniorStageRate = classHeadcountStageRateForRule(rule, type, "junior_3");
+            const juniorBaseValue = isClassType ? juniorStageRate.classBaseFee : juniorStageRate.oneOnOneFee;
             return (
               <div key={type} className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -380,28 +384,70 @@ export function CampusCourseSettingsPanel({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">{backupBaseFeeLabel}</label>
+                        <label className="text-[11px] font-bold text-[#64748b]">初三参考{backupBaseFeeLabel}</label>
                         <SensitiveAmountField visible={amountsVisible} className="h-9">
                           <Input
                             type="number"
                             min={0}
-                            value={tier.baseFee}
-                            onChange={(event) => onUpdateCourseTypeClassFeeTier(type, tier.id, { baseFee: Math.max(Number(event.target.value), 0) })}
+                            value={juniorBaseValue}
+                            onChange={(event) => onUpdateCourseTypeStageRate(type, "junior_3", isClassType
+                              ? { classBaseFee: Math.max(Number(event.target.value), 0) }
+                              : { oneOnOneFee: Math.max(Number(event.target.value), 0) }
+                            )}
                             className="h-9 bg-white"
                           />
                         </SensitiveAmountField>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">人头加价</label>
+                        <label className="text-[11px] font-bold text-[#64748b]">初三参考人头加价</label>
                         <SensitiveAmountField visible={amountsVisible} className="h-9">
                           <Input
                             type="number"
                             min={0}
-                            value={tier.perStudentFee ?? 0}
-                            onChange={(event) => onUpdateCourseTypeClassFeeTier(type, tier.id, { perStudentFee: Math.max(Number(event.target.value), 0) })}
+                            value={juniorStageRate.headcountIncrementFee}
+                            onChange={(event) => onUpdateCourseTypeStageRate(type, "junior_3", { headcountIncrementFee: Math.max(Number(event.target.value), 0) })}
                             className="h-9 bg-white"
                           />
                         </SensitiveAmountField>
+                      </div>
+                    </div>
+                    <div className="mt-3 overflow-x-auto rounded-[12px] border border-[#e8eef6]">
+                      <div className="grid min-w-[620px] grid-cols-[100px_repeat(2,minmax(130px,1fr))] gap-2 border-b border-[#eef3f8] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#64748b]">
+                        <div>年级阶段</div>
+                        <div>{backupBaseFeeLabel}</div>
+                        <div>人头加价</div>
+                      </div>
+                      <div className="divide-y divide-[#eef3f8]">
+                        {salaryGradeStageOrder.map((stage) => {
+                          const stageRate = classHeadcountStageRateForRule(rule, type, stage);
+                          const baseValue = isClassType ? stageRate.classBaseFee : stageRate.oneOnOneFee;
+                          return (
+                            <div key={stage} className="grid min-w-[620px] grid-cols-[100px_repeat(2,minmax(130px,1fr))] items-center gap-2 px-3 py-2">
+                              <div className="text-sm font-extrabold text-[#061226]">{salaryGradeStageLabels[stage]}</div>
+                              <SensitiveAmountField visible={amountsVisible} className="h-9">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={baseValue}
+                                  onChange={(event) => onUpdateCourseTypeStageRate(type, stage, isClassType
+                                    ? { classBaseFee: Math.max(Number(event.target.value), 0) }
+                                    : { oneOnOneFee: Math.max(Number(event.target.value), 0) }
+                                  )}
+                                  className="h-9 bg-white"
+                                />
+                              </SensitiveAmountField>
+                              <SensitiveAmountField visible={amountsVisible} className="h-9">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={stageRate.headcountIncrementFee}
+                                  onChange={(event) => onUpdateCourseTypeStageRate(type, stage, { headcountIncrementFee: Math.max(Number(event.target.value), 0) })}
+                                  className="h-9 bg-white"
+                                />
+                              </SensitiveAmountField>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
