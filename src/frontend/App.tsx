@@ -451,6 +451,17 @@ export function App() {
     });
   }
 
+  function updateLessons(lessons: Lesson[]) {
+    if (lessons.length === 0) return;
+    updateVault((draft) => {
+      lessons.forEach((lesson) => {
+        cleanupResolvedMakeupLessons(draft, lesson);
+        const nextLesson = syncOriginalLessonFromMakeupCompletion(draft, lesson);
+        draft.lessons = draft.lessons.map((item) => (item.id === nextLesson.id ? nextLesson : item));
+      });
+    });
+  }
+
   function deleteLesson(lessonId: string) {
     updateVault((draft) => {
       const lesson = draft.lessons.find((item) => item.id === lessonId);
@@ -2616,6 +2627,7 @@ export function App() {
               <CalendarView
                 vault={vault}
                 amountsVisible={amountsVisible}
+                onUpdateLessons={updateLessons}
                 onWeekStartChange={updateWeekStart}
                 onOpenLessonInRecords={openCalendarLessonInScheduleRecords}
                 focusRequest={calendarOverviewFocus}
@@ -2629,6 +2641,7 @@ export function App() {
                 onAddLessons={addLessons}
                 onAddLessonAndUpdateLesson={addLessonAndUpdateLesson}
                 onUpdateLesson={updateLesson}
+                onUpdateLessons={updateLessons}
                 onDeleteLesson={deleteLesson}
                 onRestoreDeletedLessons={restoreDeletedLessons}
                 onPermanentlyDeleteDeletedLessons={permanentlyDeleteDeletedLessons}

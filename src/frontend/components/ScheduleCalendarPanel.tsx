@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,7 +32,9 @@ type ScheduleCalendarPanelProps = {
   onClearCalendarFilters: () => void;
   onNextMonth: () => void;
   onPreviousMonth: () => void;
+  onRefreshSelectedDateLessons: () => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
+  refreshSelectedDateLessonCount: number;
   selectedCalendarLessonCount: number;
   selectedCalendarWeekLessonCount: number;
   setCalendarCourseGroupId: (value: string) => void;
@@ -69,7 +71,9 @@ export function ScheduleCalendarPanel({
   onClearCalendarFilters,
   onNextMonth,
   onPreviousMonth,
+  onRefreshSelectedDateLessons,
   onWeekStartChange,
+  refreshSelectedDateLessonCount,
   selectedCalendarLessonCount,
   selectedCalendarWeekLessonCount,
   setCalendarCourseGroupId,
@@ -114,6 +118,16 @@ export function ScheduleCalendarPanel({
             <option value="0">周日开始</option>
             <option value="1">周一开始</option>
           </Select>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 bg-white"
+            onClick={onRefreshSelectedDateLessons}
+            disabled={refreshSelectedDateLessonCount === 0}
+            title="按当前课程档案刷新选中日期的全部课节，包含已完成历史课节"
+          >
+            <RefreshCw size={15} /> 刷新当天课节
+          </Button>
           <Button variant="ghost" size="icon" onClick={onPreviousMonth}>
             <ChevronLeft size={18} />
           </Button>

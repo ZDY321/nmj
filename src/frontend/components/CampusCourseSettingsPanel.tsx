@@ -285,12 +285,18 @@ export function CampusCourseSettingsPanel({
             const linkedCourseIds = new Set(vault.courseGroups.filter((course) => course.type === type).map((course) => course.id));
             const linkedCourseCount = linkedCourseIds.size;
             const linkedLessonCount = vault.lessons.filter((lesson) => lesson.type === type || linkedCourseIds.has(lesson.courseGroupId)).length;
+            const legacyLessonCount = vault.lessons.filter((lesson) => lesson.type === type && !linkedCourseIds.has(lesson.courseGroupId)).length;
             const futureSyncLessonCount = vault.lessons.filter((lesson) =>
               linkedCourseIds.has(lesson.courseGroupId) &&
               !lesson.linkedOriginalLessonId &&
               (lesson.status === "scheduled" || lesson.status === "draft") &&
               lesson.date >= today
             ).length;
+            const customDeleteBlockedReason = linkedCourseCount > 0
+              ? `还有 ${linkedCourseCount} 个课程档案引用这个班型`
+              : linkedLessonCount > 0
+                ? `还有 ${linkedLessonCount} 节历史课节引用这个班型${legacyLessonCount > 0 ? `，其中 ${legacyLessonCount} 节是旧课节快照` : ""}`
+                : "";
             return (
               <div key={type} className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -343,7 +349,7 @@ export function CampusCourseSettingsPanel({
                         variant="destructive"
                         disabled={isCustom && used}
                         onClick={() => onRequestDeleteCourseType({ id: type, label: typeOption.label })}
-                        title={isCustom && used ? "这个自定义班型已有课程或历史课时使用，不能直接删除" : isCustom ? "直接删除自定义班型" : "内置班型会从主列表和添加课程档案中移除"}
+                        title={isCustom && used ? `${customDeleteBlockedReason}，不能直接删除` : isCustom ? "直接删除自定义班型" : "内置班型会从主列表和添加课程档案中移除"}
                       >
                         <Trash2 size={14} /> 删除
                       </Button>
@@ -357,8 +363,14 @@ export function CampusCourseSettingsPanel({
                   <div className="flex flex-wrap gap-2 text-xs font-bold">
                     <Badge variant="secondary">已添加课程 {linkedCourseCount}</Badge>
                     <Badge variant="outline">已生成课节 {linkedLessonCount}</Badge>
+                    {legacyLessonCount > 0 && <Badge variant="amber">旧课节快照 {legacyLessonCount}</Badge>}
                     <Badge variant="sky">可刷新未来课节 {futureSyncLessonCount}</Badge>
                     <span className="flex items-center text-[#64748b]">同步不会改已完成历史课节金额快照</span>
+                  </div>
+                )}
+                {!isEditingType && isCustom && used && customDeleteBlockedReason && (
+                  <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">
+                    暂不能删除：{customDeleteBlockedReason}。如果课程档案已经改成新班型，但历史课节仍显示旧班型，可到“课时列表”选择对应日期后使用“刷新当天课节”。
                   </div>
                 )}
                 {rule.mode === "class_headcount" ? (

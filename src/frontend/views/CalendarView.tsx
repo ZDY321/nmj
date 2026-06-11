@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, ChevronLeft, ChevronRight, Search, Table2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Search, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { Lesson, TeacherVault, WeekStart } from "@/shared/types";
+import type { CourseGroup, Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import {
   addDays,
   calendarDates,
@@ -34,7 +35,8 @@ import {
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
-import { todayIso } from "@/frontend/lib/calculations";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
 
 type CalendarOverviewPage = "month" | "week";
 type WeekTimeRow = {
@@ -122,12 +124,14 @@ function buildCompactWeekTimeRows(lessons: Lesson[]): WeekTimeRow[] {
 export function CalendarView({
   vault,
   amountsVisible,
+  onUpdateLessons,
   onWeekStartChange,
   onOpenLessonInRecords,
   focusRequest
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
+  onUpdateLessons: (lessons: Lesson[]) => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
   onOpenLessonInRecords?: (lesson: Lesson, returnFocus: CalendarOverviewFocusState) => void;
   focusRequest?: CalendarOverviewFocusRequest | null;
@@ -139,6 +143,8 @@ export function CalendarView({
   const [weekGradeFilter, setWeekGradeFilter] = useState(() => focusRequest?.weekGradeFilter ?? "all");
   const [weekSubjectFilter, setWeekSubjectFilter] = useState(() => focusRequest?.weekSubjectFilter ?? "all");
   const [weekStudentFilter, setWeekStudentFilter] = useState(() => focusRequest?.weekStudentFilter ?? "");
+  const [refreshMessage, setRefreshMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
+  const { confirm, dialog } = useConfirmDialog();
   const weekStartPreference = weekStartsOn(vault);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const gradeOptions = Array.from(
@@ -151,6 +157,8 @@ export function CalendarView({
   const filteredVisibleLessons = visibleLessons.filter((lesson) => matchesCalendarLessonFilter(lesson));
 
   const selectedLessons = filteredVisibleLessons.filter((l) => l.date === selectedDate).sort(sortLessons);
+  const selectedDateAllLessons = visibleLessons.filter((l) => l.date === selectedDate).sort(sortLessons);
+  const selectedDateRefreshableLessons = selectedDateAllLessons.filter((lesson) => Boolean(getCourse(vault, lesson.courseGroupId)));
   const weekDates = weekDatesFor(selectedDate, weekStartPreference);
   const weekLessons = filteredVisibleLessons.filter((l) => weekDates.includes(l.date)).sort(sortLessons);
   const monthLessons = filteredVisibleLessons.filter((l) => l.date.startsWith(month));
@@ -203,6 +211,81 @@ export function CalendarView({
     selectCalendarDate(addDays(selectedDate, days));
   }
 
+  function attendanceStatusForLessonRefresh(status: Lesson["status"]) {
+    if (status === "cancelled") return "cancelled";
+    if (status === "makeup_pending") return "makeup_pending";
+    if (status === "makeup_completed") return "makeup_completed";
+    return "attended";
+  }
+
+  function attendanceFromCurrentCourse(lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
+    const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
+    const fallbackStatus = attendanceStatusForLessonRefresh(lesson.status);
+    return course.studentIds.map((studentId) => {
+      const existing = existingByStudent.get(studentId);
+      if (existing) {
+        return {
+          ...existing,
+          trial: existing.trial ?? Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
+        };
+      }
+      return {
+        studentId,
+        status: fallbackStatus,
+        trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
+      };
+    });
+  }
+
+  function refreshLessonFromCurrentCourse(lesson: Lesson): Lesson | null {
+    const course = getCourse(vault, lesson.courseGroupId);
+    if (!course) return null;
+    const refreshedLesson: Lesson = {
+      ...lesson,
+      campusId: course.defaultCampusId,
+      type: course.type,
+      expectedStudentIds: [...course.studentIds],
+      attendance: attendanceFromCurrentCourse(lesson, course),
+      trialStudentCount: course.type === "class" ? lesson.trialStudentCount ?? 0 : 0,
+      trialFee: course.type === "class" ? lesson.trialFee ?? 0 : 0
+    };
+    return {
+      ...refreshedLesson,
+      feeSnapshot: buildFeeSnapshot(vault, course, refreshedLesson)
+    };
+  }
+
+  function showRefreshMessage(text: string, tone: "success" | "error") {
+    setRefreshMessage({ text, tone });
+    window.setTimeout(() => {
+      setRefreshMessage((current) => current?.text === text ? null : current);
+    }, 3200);
+  }
+
+  function refreshSelectedDateLessons() {
+    if (selectedDateAllLessons.length === 0) {
+      showRefreshMessage("选中日期没有课节，不需要刷新。", "error");
+      return;
+    }
+    if (selectedDateRefreshableLessons.length === 0) {
+      showRefreshMessage("选中日期的课节都缺少课程档案，无法按课程档案刷新。", "error");
+      return;
+    }
+    const missingCourseCount = selectedDateAllLessons.length - selectedDateRefreshableLessons.length;
+    confirm({
+      title: `刷新 ${dateWithWeekday(selectedDate)} 的课节？`,
+      description: `会按当前课程档案刷新当天 ${selectedDateRefreshableLessons.length} 节课的班型、校区、学生名单和金额快照，包含已完成历史课节；课程内容、作业、备注会保留，同一学生原有出勤状态和备注会保留。${missingCourseCount > 0 ? `另有 ${missingCourseCount} 节课缺少课程档案，会自动跳过。` : ""}`,
+      confirmLabel: "刷新当天课节",
+      onConfirm: () => {
+        const refreshedLessons = selectedDateRefreshableLessons
+          .map((lesson) => refreshLessonFromCurrentCourse(lesson))
+          .filter((lesson): lesson is Lesson => Boolean(lesson));
+        onUpdateLessons(refreshedLessons);
+        showRefreshMessage(`已刷新 ${dateWithWeekday(selectedDate)} 的 ${refreshedLessons.length} 节课。`, "success");
+      }
+    });
+  }
+
   function lessonCampusId(lesson: Lesson): string | undefined {
     return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
   }
@@ -249,6 +332,7 @@ export function CalendarView({
 
   return (
     <div className="space-y-6">
+      {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="选中日期" value={`${selectedLessons.length} 节`} hint={formatPrivateMoney(selectedTotal, amountsVisible)} variant={1} index={0} showSparkline={false} />
         <MetricCard label="本周课程" value={`${weekLessons.length} 节`} hint={formatPrivateMoney(weekTotal, amountsVisible)} variant={2} index={1} showSparkline={false} />
@@ -262,6 +346,15 @@ export function CalendarView({
           showSparkline={false}
         />
       </div>
+      {refreshMessage && (
+        <div className={`rounded-[12px] border px-4 py-3 text-sm font-extrabold ${
+          refreshMessage.tone === "success"
+            ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]"
+            : "border-[#fecaca] bg-[#fff1f2] text-[#b91c1c]"
+        }`}>
+          {refreshMessage.text}
+        </div>
+      )}
 
       <div className={overviewPage === "month" ? "grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr]" : "grid grid-cols-1 gap-6"}>
         <Card className="overflow-hidden">
@@ -307,6 +400,16 @@ export function CalendarView({
                 <option value="0">周日开始</option>
                 <option value="1">周一开始</option>
               </Select>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 bg-white"
+                onClick={refreshSelectedDateLessons}
+                disabled={selectedDateRefreshableLessons.length === 0}
+                title="按当前课程档案刷新选中日期的全部课节，包含已完成历史课节"
+              >
+                <RefreshCw size={15} /> 刷新当天课节
+              </Button>
               <button
                 type="button"
                 onClick={() => {

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Clock, GraduationCap, RotateCcw, Search } from "lucide-react";
+import { Clock, GraduationCap, RefreshCw, RotateCcw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,8 @@ type ScheduleRecordsListCardProps = {
   lessonWeek: string;
   lessons: Lesson[];
   onOpenLesson: (lesson: Lesson) => void;
+  onRefreshSelectedDateLessons: () => void;
+  refreshSelectedDateLessonCount: number;
   selectedLessonId?: string;
   selectedCalendarDate: string;
   setCampusFilter: (value: string) => void;
@@ -71,6 +73,8 @@ export function ScheduleRecordsListCard({
   lessonWeek,
   lessons,
   onOpenLesson,
+  onRefreshSelectedDateLessons,
+  refreshSelectedDateLessonCount,
   selectedLessonId,
   selectedCalendarDate,
   setCampusFilter,
@@ -178,11 +182,20 @@ export function ScheduleRecordsListCard({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto]">
           <label className="relative block">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
             <Input className="pl-9" value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} placeholder="搜索姓名、年级、校区或班型" />
           </label>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onRefreshSelectedDateLessons}
+            disabled={refreshSelectedDateLessonCount === 0}
+            title="按当前课程档案刷新选中日期的全部课节，包含已完成历史课节"
+          >
+            <RefreshCw size={15} /> 刷新当天课节
+          </Button>
           <Button type="button" variant={showOnlyMakeup ? "default" : "outline"} onClick={() => setShowOnlyMakeup((value) => !value)}>
             <RotateCcw size={15} /> 只看补课
           </Button>

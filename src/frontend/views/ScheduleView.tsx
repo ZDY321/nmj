@@ -96,6 +96,7 @@ export function ScheduleView({
   onAddLessons,
   onAddLessonAndUpdateLesson,
   onUpdateLesson,
+  onUpdateLessons,
   onDeleteLesson,
   onRestoreDeletedLessons,
   onPermanentlyDeleteDeletedLessons,
@@ -117,6 +118,7 @@ export function ScheduleView({
   onAddLessons: (lessons: Lesson[], options?: { replaceLessonIds?: string[] }) => void;
   onAddLessonAndUpdateLesson: (lessonToAdd: Lesson, lessonToUpdate: Lesson) => void;
   onUpdateLesson: (lesson: Lesson) => void;
+  onUpdateLessons: (lessons: Lesson[]) => void;
   onDeleteLesson: (lessonId: string) => void;
   onRestoreDeletedLessons: (deletedLessonIds: string[]) => void;
   onPermanentlyDeleteDeletedLessons: (deletedLessonIds: string[]) => void;
@@ -229,6 +231,7 @@ export function ScheduleView({
   const [detailMakeupStudentIds, setDetailMakeupStudentIds] = useState<string[]>([]);
   const [makeupArrangementOpen, setMakeupArrangementOpen] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
+  const [scheduleNotice, setScheduleNotice] = useState("");
   const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
   const aiProviderId = aiSession?.providerId ?? "";
   const aiTaskType = aiSession?.taskType ?? "auto";
@@ -411,6 +414,8 @@ export function ScheduleView({
   const matchesCalendarLessonFilter = (lesson: Lesson) => matchesCalendarLessonFilters(vault, lesson, calendarLessonFilters);
   const calendarLessonsForDate = (date: string) => calendarLessonsForDateWithFilters(vault, date, calendarLessonFilters);
   const selectedCalendarLessons = calendarLessonsForDate(selectedCalendarDate);
+  const selectedCalendarDateAllLessons = vault.lessons.filter((lesson) => lesson.date === selectedCalendarDate).sort(sortLessons);
+  const selectedCalendarRefreshableLessons = selectedCalendarDateAllLessons.filter((lesson) => Boolean(getCourse(vault, lesson.courseGroupId)));
   const selectedCalendarWeekLessons = vault.lessons.filter((lesson) => weekDatesFor(selectedCalendarDate, weekStartPreference).includes(lesson.date) && matchesCalendarLessonFilter(lesson));
   const selectedCalendarCompletedCount = selectedCalendarLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const selectedCalendarPendingCount = selectedCalendarLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
@@ -1071,6 +1076,63 @@ export function ScheduleView({
     };
   }
 
+  function attendanceFromCurrentCourse(lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
+    const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
+    const fallbackStatus = attendanceStatusForLessonStatus(lesson.status);
+    return course.studentIds.map((studentId) => {
+      const existing = existingByStudent.get(studentId);
+      if (existing) {
+        return {
+          ...existing,
+          trial: existing.trial ?? Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
+        };
+      }
+      return {
+        studentId,
+        status: fallbackStatus,
+        trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
+      };
+    });
+  }
+
+  function refreshLessonFromCurrentCourse(lesson: Lesson): Lesson | null {
+    const course = getCourse(vault, lesson.courseGroupId);
+    if (!course) return null;
+    return recalculateLessonFee({
+      ...lesson,
+      campusId: course.defaultCampusId,
+      type: course.type,
+      expectedStudentIds: [...course.studentIds],
+      attendance: attendanceFromCurrentCourse(lesson, course),
+      trialStudentCount: course.type === "class" ? lesson.trialStudentCount ?? 0 : 0,
+      trialFee: course.type === "class" ? lesson.trialFee ?? 0 : 0
+    });
+  }
+
+  function refreshSelectedCalendarDateLessons() {
+    if (selectedCalendarDateAllLessons.length === 0) {
+      showScheduleError("选中日期没有课节，不需要刷新。");
+      return;
+    }
+    if (selectedCalendarRefreshableLessons.length === 0) {
+      showScheduleError("选中日期的课节都缺少课程档案，无法按课程档案刷新。");
+      return;
+    }
+    const missingCourseCount = selectedCalendarDateAllLessons.length - selectedCalendarRefreshableLessons.length;
+    confirm({
+      title: `刷新 ${dateWithWeekday(selectedCalendarDate)} 的课节？`,
+      description: `会按当前课程档案刷新当天 ${selectedCalendarRefreshableLessons.length} 节课的班型、校区、学生名单和金额快照，包含已完成历史课节；课程内容、作业、备注会保留，同一学生原有出勤状态和备注会保留。${missingCourseCount > 0 ? `另有 ${missingCourseCount} 节课缺少课程档案，会自动跳过。` : ""}`,
+      confirmLabel: "刷新当天课节",
+      onConfirm: () => {
+        const refreshedLessons = selectedCalendarRefreshableLessons
+          .map((lesson) => refreshLessonFromCurrentCourse(lesson))
+          .filter((lesson): lesson is Lesson => Boolean(lesson));
+        onUpdateLessons(refreshedLessons);
+        showScheduleNotice(`已刷新 ${dateWithWeekday(selectedCalendarDate)} 的 ${refreshedLessons.length} 节课。`);
+      }
+    });
+  }
+
   function updateSelected(patch: Partial<Lesson>, shouldRecalculate = false) {
     if (!selected) return;
     const next = { ...selected, ...patch };
@@ -1574,9 +1636,18 @@ export function ScheduleView({
   }
 
   function showScheduleError(message: string) {
+    setScheduleNotice("");
     setScheduleError(message);
     window.setTimeout(() => {
       setScheduleError((current) => (current === message ? "" : current));
+    }, 3200);
+  }
+
+  function showScheduleNotice(message: string) {
+    setScheduleError("");
+    setScheduleNotice(message);
+    window.setTimeout(() => {
+      setScheduleNotice((current) => (current === message ? "" : current));
     }, 3200);
   }
 
@@ -1629,6 +1700,11 @@ export function ScheduleView({
       {scheduleError && (
         <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-4 py-3 text-sm font-extrabold text-[#b91c1c]">
           {scheduleError}
+        </div>
+      )}
+      {scheduleNotice && (
+        <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3 text-sm font-extrabold text-[#15803d]">
+          {scheduleNotice}
         </div>
       )}
 
@@ -1791,7 +1867,9 @@ export function ScheduleView({
           }}
           onNextMonth={() => setCalendarMonth((month) => monthShift(month, 1))}
           onPreviousMonth={() => setCalendarMonth((month) => monthShift(month, -1))}
+          onRefreshSelectedDateLessons={refreshSelectedCalendarDateLessons}
           onWeekStartChange={onWeekStartChange}
+          refreshSelectedDateLessonCount={selectedCalendarRefreshableLessons.length}
           selectedCalendarLessonCount={selectedCalendarLessons.length}
           selectedCalendarWeekLessonCount={selectedCalendarWeekLessons.length}
           setCalendarCourseGroupId={setCalendarCourseGroupId}
@@ -1947,6 +2025,8 @@ export function ScheduleView({
           lessonWeek={lessonWeek}
           lessons={lessons}
           onOpenLesson={openLessonInRecords}
+          onRefreshSelectedDateLessons={refreshSelectedCalendarDateLessons}
+          refreshSelectedDateLessonCount={selectedCalendarRefreshableLessons.length}
           selectedLessonId={selected?.id}
           selectedCalendarDate={selectedCalendarDate}
           setCampusFilter={setCampusFilter}
