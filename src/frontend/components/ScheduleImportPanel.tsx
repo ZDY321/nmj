@@ -180,7 +180,13 @@ export function ScheduleImportPanel({
   const selectedReviewCounts = selectedReview ? savedReviewEffectiveCounts(selectedReview) : undefined;
 
   useEffect(() => {
-    setMapping((current) => ({ ...cloudMapping, ...current }));
+    setMapping((current) => {
+      const merged = { ...cloudMapping };
+      for (const key in current) {
+        merged[key] = current[key];
+      }
+      return merged;
+    });
     setResolutions((current) => ({ ...cloudResolutions, ...current }));
   }, [vault.scheduleImport?.updatedAt]);
 
