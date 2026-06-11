@@ -805,6 +805,26 @@ function completedHours(lesson: Lesson): number {
   return lessonBillableHours(lesson);
 }
 
+export function payrollExcludedSplitMergeLessonIds(vault: TeacherVault, month?: string): Set<string> {
+  const reviews = vault.scheduleImport?.reviews ?? [];
+  const lessonIds = new Set<string>();
+  reviews
+    .filter((review) => !month || review.month === month)
+    .forEach((review) => {
+      review.rows.forEach((row) => {
+        if (row.resolutionStatus !== "split_merge_ok" || !row.systemLessonId) return;
+        (row.linkedSystemLessonIds ?? []).forEach((lessonId) => {
+          if (lessonId !== row.systemLessonId) lessonIds.add(lessonId);
+        });
+      });
+    });
+  return lessonIds;
+}
+
+export function isPayrollExcludedSplitMergeLesson(lesson: Lesson, excludedLessonIds: Set<string>): boolean {
+  return excludedLessonIds.has(lesson.id);
+}
+
 function isLessonFullyMissedAndMakeupExempt(lesson: Lesson): boolean {
   if (lesson.linkedOriginalLessonId || lesson.attendance.length === 0) return false;
   const billableEntries = lesson.attendance.filter((entry) => !entry.trial);
@@ -866,8 +886,10 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
   let courseDeductedHours = 0;
   let courseDeductionAmount = 0;
   const breakdown = new Map<string, ObligationCourseDeduction>();
+  const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, month);
   const eligibleLessons = vault.lessons
     .filter((lesson) => monthOf(lesson.date) === month && lesson.type !== "trial" && completedHours(lesson) > 0)
+    .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
     .map((lesson) => {
       const lessonCourse = getCourse(vault, lesson.courseGroupId);
       const lessonHours = completedHours(lesson);
@@ -955,9 +977,11 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
 export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreakdown {
   const monthLessons = vault.lessons.filter((lesson) => monthOf(lesson.date) === month);
   const monthAdjustments = vault.salaryAdjustments.filter((item) => item.month === month);
+  const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, month);
 
   const lessonTotals = monthLessons.reduce(
     (totals, lesson) => {
+      if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return totals;
       const amount = completedAmount(lesson);
       if (lesson.status === "makeup_completed") {
         totals.makeup += amount;
@@ -997,8 +1021,10 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
 
 export function estimatedMonthlyIncome(vault: TeacherVault, month: string): number {
   const monthLessons = vault.lessons.filter((lesson) => monthOf(lesson.date) === month);
-  const completedIncome = monthLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
+  const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, month);
+  const completedIncome = monthLessons.reduce((sum, lesson) => isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds) ? sum : sum + completedAmount(lesson), 0);
   const pendingIncome = monthLessons.reduce((sum, lesson) => {
+    if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return sum;
     if (lesson.status !== "scheduled" && lesson.status !== "makeup_pending") return sum;
     return sum + lesson.feeSnapshot.amount;
   }, 0);

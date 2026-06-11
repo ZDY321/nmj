@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
-import { completedAmount, estimatedMonthlyIncome, lessonBillableHours, obligationSummary, salaryBreakdown } from "@/frontend/lib/calculations";
+import { completedAmount, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, lessonBillableHours, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
 import {
   campusName,
   compareByName,
@@ -81,9 +81,16 @@ export function usePayrollReviewData({
     () => vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth)),
     [selectedMonth, vault.lessons]
   );
+  const splitMergeExcludedLessonIds = useMemo(
+    () => payrollExcludedSplitMergeLessonIds(vault, selectedMonth),
+    [selectedMonth, vault]
+  );
   const filteredLessons = useMemo(
-    () => monthLessons.filter((lesson) => matchesReviewFilters(lesson, true)).sort(sortLessons),
-    [campusFilter, gradeFilter, monthLessons, statusFilter, typeFilter, vault]
+    () => monthLessons
+      .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
+      .filter((lesson) => matchesReviewFilters(lesson, true))
+      .sort(sortLessons),
+    [campusFilter, gradeFilter, monthLessons, splitMergeExcludedLessonIds, statusFilter, typeFilter, vault]
   );
   const detailLessons = useMemo(
     () => filteredLessons
@@ -145,6 +152,7 @@ export function usePayrollReviewData({
     }
 
     monthLessons.forEach((lesson) => {
+      if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return;
       if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return;
       const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
       const campusId = lesson.campusId ?? course?.defaultCampusId;
@@ -166,10 +174,12 @@ export function usePayrollReviewData({
       fullTime: Object.values(buckets.fullTime).sort((a, b) => b.amount - a.amount),
       makeup: Object.values(buckets.makeup).sort((a, b) => b.amount - a.amount)
     };
-  }, [monthLessons, vault]);
+  }, [monthLessons, splitMergeExcludedLessonIds, vault]);
 
   const campusSummaries = useMemo(() => {
-    const campusSummaryBaseLessons = monthLessons.filter((lesson) => matchesReviewFilters(lesson, false));
+    const campusSummaryBaseLessons = monthLessons
+      .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
+      .filter((lesson) => matchesReviewFilters(lesson, false));
     return campusOptions.map((campus) => {
       const lessons = campusSummaryBaseLessons.filter((lesson) => lessonCampusId(lesson) === campus.id);
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
@@ -187,7 +197,7 @@ export function usePayrollReviewData({
         net: amount - obligation
       };
     });
-  }, [campusOptions, effectiveObligationCampusId, gradeFilter, monthLessons, selectedMonth, statusFilter, typeFilter, vault]);
+  }, [campusOptions, effectiveObligationCampusId, gradeFilter, monthLessons, selectedMonth, splitMergeExcludedLessonIds, statusFilter, typeFilter, vault]);
 
   const typeCountCards = useMemo(() => {
     const typeCounts = filteredLessons.reduce<Record<string, number>>(
