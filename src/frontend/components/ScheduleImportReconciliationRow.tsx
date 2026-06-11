@@ -61,9 +61,10 @@ export function ScheduleImportReconciliationRow({
   const reviewed = isReviewedResolution(resolution);
   const displayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
   const isMatched = displayStatus === "matched";
+  const canCollapseDetails = isMatched || reviewed;
   const resolvedAsMatched = isMatched && row.status !== "matched";
   const resolvedByLinkedImport = row.status === "import_missing" && Boolean(row.systemLessonId && linkedSystemLessonIds.has(row.systemLessonId));
-  const [detailsExpanded, setDetailsExpanded] = useState(() => displayStatus !== "matched");
+  const [detailsExpanded, setDetailsExpanded] = useState(() => !canCollapseDetails);
   const quickResolutionActions = quickResolutionActionsForRow(row);
   const splitMergeCandidates = useMemo(() => splitMergeCandidateLessons(vault, row), [row, vault]);
   const linkedLessons = useMemo(
@@ -76,6 +77,7 @@ export function ScheduleImportReconciliationRow({
   const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
   const splitMergeNeedsReview = Boolean(resolution?.linkedSystemLessonIds?.length && hasCurrentDirectMatch);
   const hasInvalidLinkedLessons = invalidLinkedSystemLessonIds.length > 0;
+  const hasSplitMergeLinkProblem = hasInvalidLinkedLessons || staleLinkedByPreviousResolution;
   const canLinkSplitMerge =
     row.status === "time_mismatch" ||
     row.status === "system_missing" ||
@@ -83,12 +85,12 @@ export function ScheduleImportReconciliationRow({
     row.status === "import_missing";
 
   useEffect(() => {
-    if (displayStatus !== "matched") {
-      setDetailsExpanded(true);
-    } else if (row.status !== "matched") {
+    if (canCollapseDetails) {
       setDetailsExpanded(false);
+    } else {
+      setDetailsExpanded(true);
     }
-  }, [displayStatus, row.status]);
+  }, [canCollapseDetails]);
 
   return (
     <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(displayStatus, reviewed && !resolvedAsMatched)}`}>
@@ -109,10 +111,9 @@ export function ScheduleImportReconciliationRow({
             {resolvedByLinkedImport && <Badge variant="plum">被 {linkedBySources.length || 1} 条拆分合并关联</Badge>}
             {resolution?.linkedSystemLessonIds?.length ? <Badge variant="plum">关联 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}
             {splitMergeNeedsReview && <Badge variant="amber">拆分合并需复核</Badge>}
-            {hasInvalidLinkedLessons && <Badge variant="destructive">关联课已删除/不存在</Badge>}
-            {staleLinkedByPreviousResolution && <Badge variant="amber">旧拆分合并标记已失效</Badge>}
+            {hasSplitMergeLinkProblem && <Badge variant="amber">拆分合并标记已失效</Badge>}
           </div>
-          {isMatched && !detailsExpanded && (
+          {canCollapseDetails && !detailsExpanded && (
             <>
               <div className="truncate text-sm font-extrabold leading-5 text-[#061226]">
                 {systemLesson && systemTimeLabel !== importTimeLabel ? `教务 ${importTimeLabel} · 云端 ${systemTimeLabel}` : importTimeLabel} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
@@ -126,7 +127,7 @@ export function ScheduleImportReconciliationRow({
             </>
           )}
         </div>
-        {isMatched && (
+        {canCollapseDetails && (
           <Button
             type="button"
             variant="ghost"
@@ -140,7 +141,7 @@ export function ScheduleImportReconciliationRow({
         )}
       </div>
 
-      {(!isMatched || detailsExpanded) && (
+      {(!canCollapseDetails || detailsExpanded) && (
         <>
           <ScheduleImportRowDetails
             row={row}
@@ -178,9 +179,11 @@ export function ScheduleImportReconciliationRow({
             </div>
           )}
 
-          {hasInvalidLinkedLessons && (
-            <div className="mt-3 rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-xs font-semibold leading-5 text-[#7f1d1d]">
-              这条拆分合并标记引用的云端课节已经不存在或已被删除：{invalidLinkedSystemLessonIds.join("、")}。请重新选择关联课节，或把状态改回“未处理/云端需修正”后重新核对。
+          {hasSplitMergeLinkProblem && (
+            <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
+              {hasInvalidLinkedLessons
+                ? `这条拆分合并标记引用的云端课节已经不存在或已被删除：${invalidLinkedSystemLessonIds.join("、")}。请重新选择关联课节，旧失效关联会在重新选择后清除。`
+                : "这节云端课曾被历史拆分合并标记引用，但当前导入行已经不再命中那条标记。请确认这节云端课是否仍应保留。"}
             </div>
           )}
 
@@ -205,11 +208,6 @@ export function ScheduleImportReconciliationRow({
             </div>
           )}
 
-          {staleLinkedByPreviousResolution && (
-            <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
-              这节云端课曾被历史拆分合并标记引用，但当前导入行已经不再命中那条标记，系统已把它重新暴露为待核对项。请确认这节云端课是否仍应保留。
-            </div>
-          )}
         </>
       )}
 

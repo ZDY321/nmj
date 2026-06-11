@@ -68,7 +68,8 @@ export function ScheduleImportLinkedLessonsPanel({
                 type="checkbox"
                 checked={checked}
                 onChange={(event) => {
-                  const current = new Set(resolution?.linkedSystemLessonIds ?? []);
+                  const existingLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
+                  const current = new Set((resolution?.linkedSystemLessonIds ?? []).filter((lessonId) => existingLessonIds.has(lessonId)));
                   if (event.target.checked) {
                     current.add(candidate.id);
                   } else {

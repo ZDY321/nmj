@@ -276,7 +276,7 @@ export function CampusCourseSettingsPanel({
             const isCustom = type.startsWith("custom_");
             const isEditingType = editingCustomCourseTypeId === type;
             const used = courseTypeInUse(type);
-            const isClassType = type === "class" || (type.startsWith("custom_") && tier.minStudents > 1);
+            const isClassType = tier.minStudents > 1;
             const backupMinStudentsLabel = isClassType ? "班课起算人数" : "非班课起算人数";
             const backupBaseFeeLabel = isClassType ? "班课底费" : "一对一基础费";
             const backupHint = isClassType
@@ -373,7 +373,6 @@ export function CampusCourseSettingsPanel({
                       <Select
                         value={isClassType ? "class" : "non_class"}
                         onChange={(event) => onUpdateCourseTypeClassFeeTier(type, tier.id, { minStudents: event.target.value === "class" ? 5 : 1 })}
-                        disabled={!isCustom}
                         className="h-9 bg-white"
                         aria-label="选择班型计费规则"
                       >
@@ -381,8 +380,7 @@ export function CampusCourseSettingsPanel({
                         <option value="non_class">非班课计费规则</option>
                       </Select>
                       <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
-                        {isCustom ? "自定义班型可以切换班课/非班课规则。" : "内置班型使用固定规则。"}
-                        金额统一从“教师课时费等级”读取，课程学生年级会自动对应小学、初中、高中阶段；自定义等级也会被识别。
+                        所有班型都可以手动选择班课或非班课规则。金额统一从“教师课时费等级”读取，课程学生年级会自动对应小学、初中、高中阶段；自定义等级也会被识别。
                       </div>
                     </div>
                   </div>

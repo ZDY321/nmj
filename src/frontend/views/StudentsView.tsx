@@ -852,7 +852,7 @@ export function StudentsView({
     const nextRule = type === "trial" || type === "full_time"
       ? defaultFeeRuleForCourseType(type)
       : defaultFeeRuleForCustomTemplate(
-          type === "class" || (type.startsWith("custom_") && (tier?.minStudents ?? 1) > 1) ? "class" : "non_class",
+          (tier?.minStudents ?? classHeadcountBaseStudentCountForRule(type, backupRule)) > 1 ? "class" : "non_class",
           vault
         );
     onUpdateCourseTypeFeeRule(type, nextRule);
@@ -1665,7 +1665,7 @@ function defaultFeeRuleForCustomTemplate(
 }
 
 function stageRatesFromTierForCourseType(type: CourseType, tier: ClassFeeTier): Record<SalaryGradeStage, SalaryGradeStageRateConfig> {
-  const usesClassBase = type === "class" || (type.startsWith("custom_") && tier.minStudents > 1);
+  const usesClassBase = tier.minStudents > 1;
   const rate = {
     oneOnOneFee: usesClassBase ? 0 : Math.max(tier.baseFee, 0),
     classBaseFee: usesClassBase ? Math.max(tier.baseFee, 0) : 0,

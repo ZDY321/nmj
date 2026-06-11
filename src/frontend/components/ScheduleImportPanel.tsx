@@ -125,7 +125,13 @@ export function ScheduleImportPanel({
   const existingSystemLessonIds = useMemo(() => new Set(vault.lessons.map((lesson) => lesson.id)), [vault.lessons]);
   const invalidSplitMergeRowKeys = useMemo(
     () => new Set(rows
-      .filter((row) => (resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? []).some((lessonId) => !existingSystemLessonIds.has(lessonId)))
+      .filter((row) => {
+        const linkedIds = resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? [];
+        const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
+        if (hasCurrentDirectMatch) return false;
+        const hasValidLinkedLesson = linkedIds.some((lessonId) => existingSystemLessonIds.has(lessonId));
+        return !hasValidLinkedLesson && linkedIds.some((lessonId) => !existingSystemLessonIds.has(lessonId));
+      })
       .map((row) => resolutionKey(row))
     ),
     [existingSystemLessonIds, resolutions, rows]
@@ -133,8 +139,8 @@ export function ScheduleImportPanel({
   const splitMergeReviewLabel = (row: ImportPreviewLesson): string | undefined => {
     const rowKey = resolutionKey(row);
     const resolution = resolutions[rowKey];
-    if (invalidSplitMergeRowKeys.has(rowKey)) return "关联课已失效";
-    if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId)) return "旧合并失效";
+    if (invalidSplitMergeRowKeys.has(rowKey)) return "拆分合并标记已失效";
+    if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId)) return "拆分合并标记已失效";
     if (resolution?.linkedSystemLessonIds?.length && row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch")) return "合并需复核";
     return undefined;
   };
@@ -472,7 +478,12 @@ export function ScheduleImportPanel({
               linkedSystemLessonIds={linkedSystemLessonIds}
               linkedBySources={row.systemLessonId ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId) : []}
               staleLinkedByPreviousResolution={Boolean(row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId))}
-              invalidLinkedSystemLessonIds={(resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? []).filter((lessonId) => !existingSystemLessonIds.has(lessonId))}
+              invalidLinkedSystemLessonIds={(() => {
+                const linkedIds = resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? [];
+                const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
+                if (hasCurrentDirectMatch) return [];
+                return linkedIds.some((lessonId) => existingSystemLessonIds.has(lessonId)) ? [] : linkedIds.filter((lessonId) => !existingSystemLessonIds.has(lessonId));
+              })()}
               onMap={(courseId) => updateCourseMapping(row, courseId)}
               onResolutionChange={(patch) => updateResolution(row, patch)}
               onOpenLesson={onOpenLesson}

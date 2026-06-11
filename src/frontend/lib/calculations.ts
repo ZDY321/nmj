@@ -451,10 +451,8 @@ export function classHeadcountBaseStudentCountForCourseType(type: CourseType): n
 }
 
 export function classHeadcountBaseStudentCountForRule(type: CourseType, rule?: FeeRule): number {
-  if (type === "class") return 5;
   const minStudents = rule?.mode === "class_headcount" ? normalizedClassFeeTiers(rule)[0]?.minStudents : undefined;
-  if (type.startsWith("custom_") && minStudents && minStudents > 1) return minStudents;
-  return 1;
+  return nonNegativeInteger(minStudents, classHeadcountBaseStudentCountForCourseType(type));
 }
 
 export function classHeadcountRuleUsesClassBase(type: CourseType, rule?: FeeRule): boolean {
@@ -495,7 +493,7 @@ export function classHeadcountFeeRuleForCourseType(
     baseFee: nonNegativeNumber(baseFee),
     perStudentFee: nonNegativeNumber(perStudentFee)
   };
-  const usesClassBase = type === "class" || tier.minStudents > 1;
+  const usesClassBase = tier.minStudents > 1;
   const fallbackRate = {
     oneOnOneFee: usesClassBase ? 0 : tier.baseFee,
     classBaseFee: usesClassBase ? tier.baseFee : 0,
@@ -689,9 +687,7 @@ export function backupFeeRuleForCourseType(type: CourseType, feeRule?: FeeRule):
     const tier = explicitTiers.length > 0
       ? [...explicitTiers].sort((a, b) => a.minStudents - b.minStudents)[0]
       : undefined;
-    const minStudents = type.startsWith("custom_")
-      ? nonNegativeInteger(tier?.minStudents, classHeadcountBaseStudentCountForCourseType(type))
-      : classHeadcountBaseStudentCountForCourseType(type);
+    const minStudents = nonNegativeInteger(tier?.minStudents, classHeadcountBaseStudentCountForCourseType(type));
     return classHeadcountFeeRuleForCourseType(
       type,
       tier ? tier.baseFee : sourceRule.baseFee,

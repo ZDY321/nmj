@@ -15,6 +15,8 @@ import {
 } from "@/frontend/lib/scheduleImport";
 import {
   effectiveSavedRowStatus,
+  linkedSystemLessonIdsFromResolutions,
+  linkedSystemLessonIdsFromRows,
   linkedSystemLessonIdsFromSavedRows,
   resolutionKey
 } from "@/frontend/lib/scheduleImportReviewMatching";
@@ -61,7 +63,7 @@ function buildReviewRecord(
   savedAt: string
 ): ScheduleImportReviewRecord {
   const fileNames = Array.from(new Set(context.rawLessons.map((lesson) => lesson.fileName))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-  const systemLessonSummary = summarizeSystemLessonsForReview(vault, context.rows);
+  const systemLessonSummary = summarizeSystemLessonsForReview(vault, context.rows, context.resolutions);
   return {
     id: `schedule-import-${savedAt}`,
     savedAt,
@@ -141,8 +143,8 @@ export function buildScheduleImportStateWithoutReview(
   };
 }
 
-function summarizeSystemLessonsForReview(vault: TeacherVault, rows: ImportPreviewLesson[]): { lessonCount: number; completedLessonCount: number; completedAmount: number } {
-  const lessonIds = Array.from(new Set(rows.map((row) => row.systemLessonId).filter((lessonId): lessonId is string => Boolean(lessonId))));
+function summarizeSystemLessonsForReview(vault: TeacherVault, rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): { lessonCount: number; completedLessonCount: number; completedAmount: number } {
+  const lessonIds = dedupSplitMergeLessonIds(rows, resolutions);
   const lessons = lessonIds
     .map((lessonId) => vault.lessons.find((lesson) => lesson.id === lessonId))
     .filter((lesson): lesson is Lesson => Boolean(lesson));
@@ -152,6 +154,23 @@ function summarizeSystemLessonsForReview(vault: TeacherVault, rows: ImportPrevie
     completedLessonCount: completedLessons.length,
     completedAmount: completedLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0)
   };
+}
+
+function dedupSplitMergeLessonIds(rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): string[] {
+  const linkedLessonIds = linkedSystemLessonIdsFromRows(rows, resolutions);
+  const allResolutionLinkedLessonIds = linkedSystemLessonIdsFromResolutions(resolutions);
+  const ids = new Set<string>();
+  rows.forEach((row) => {
+    const rowKey = resolutionKey(row);
+    const linkedIds = (resolutions[rowKey]?.linkedSystemLessonIds ?? []).filter(Boolean);
+    if (row.systemLessonId && linkedIds.length > 0) {
+      ids.add(row.systemLessonId);
+      return;
+    }
+    if (row.systemLessonId && (linkedLessonIds.has(row.systemLessonId) || allResolutionLinkedLessonIds.has(row.systemLessonId))) return;
+    if (row.systemLessonId) ids.add(row.systemLessonId);
+  });
+  return Array.from(ids);
 }
 
 export function savedReviewNeedsAttention(review: ScheduleImportReviewRecord): number {
