@@ -31,7 +31,7 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
-import { buildFeeSnapshot, currentAppHour, defaultFeeRuleForCourseType, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, currentAppHour, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, salaryGradeRateForStage, salaryGradeRuleById, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   buildScheduleSyncLessonsForDate,
@@ -680,13 +680,17 @@ export function App() {
 
   function syncCourseTypeFeeRuleToCourses(courseType: CourseType) {
     updateVault((draft) => {
-      const templateRule = feeRuleForCourseType(draft, courseType);
+      const defaultSalaryFeeRule: FeeRule = {
+        mode: "salary_grade",
+        salaryGradeSource: "teacher_default",
+        salaryGradeId: draft.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule(draft).id
+      };
       draft.courseGroups = draft.courseGroups.map((course) => {
         if (course.type !== courseType) return course;
-        if (course.feeRule.mode === "salary_grade") return course;
+        if (course.type === "trial" || course.type === "full_time") return course;
         return {
           ...course,
-          feeRule: cloneFeeRule(templateRule)
+          feeRule: cloneFeeRule(defaultSalaryFeeRule)
         };
       });
       draft.courseGroups
@@ -814,11 +818,8 @@ export function App() {
       if (existingType) return;
       const templateMode = stringValue(data.templateMode ?? data.template ?? data.mode).toLowerCase();
       const feeRule = defaultFeeRuleForCustomTemplate(
-        templateMode === "hourly" ? "hourly" : "class",
-        numberValue(data.minStudents) ?? numberValue(data.minimumStudents) ?? numberValue(data.includedStudents) ?? 1,
-        numberValue(data.baseFee) ?? numberValue(data.classBaseFee) ?? numberValue(data.minimumFee) ?? 0,
-        numberValue(data.perStudentFee ?? data.perPresentStudentFee ?? data.extraStudentFee ?? data.headcountFee) ?? 0,
-        numberValue(data.hourlyRate ?? data.rate) ?? 0
+        nextVault,
+        templateMode === "hourly" ? "hourly" : templateMode === "non_class" || templateMode === "one_on_one" ? "non_class" : "class"
       );
       nextVault.preferences = {
         ...(nextVault.preferences ?? { weekStartsOn: 0 }),
@@ -3108,37 +3109,39 @@ function feeModeLabel(mode: FeeRule["mode"]): string {
 }
 
 function defaultFeeRuleForVaultCourseType(vault: TeacherVault, type: CourseType): FeeRule {
-  if (type !== "trial" && type !== "full_time" && vault.profile.defaultSalaryGradeId) {
+  if (type !== "trial" && type !== "full_time") {
     return {
       mode: "salary_grade",
       salaryGradeSource: "teacher_default",
-      salaryGradeId: vault.profile.defaultSalaryGradeId
+      salaryGradeId: vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule(vault).id
     };
   }
   return feeRuleForCourseType(vault, type);
 }
 
 function defaultFeeRuleForCustomTemplate(
-  template: "class" | "hourly",
-  minStudents = 1,
-  baseFee = 0,
-  perStudentFee = 0,
-  hourlyRate = 0
+  vault: TeacherVault,
+  template: "class" | "non_class" | "hourly"
 ): FeeRule {
   if (template === "hourly") {
-    return { mode: "hourly", hourlyRate: Math.max(hourlyRate, 0) };
+    return { mode: "hourly", hourlyRate: 0 };
   }
+  const defaultGradeRule = salaryGradeRuleById(vault.profile.defaultSalaryGradeId, vault) ?? defaultSalaryGradeRule(vault);
+  const juniorRate = salaryGradeRateForStage(defaultGradeRule, "junior_3");
+  const minStudents = template === "class" ? 5 : 1;
+  const baseFee = template === "class" ? juniorRate.classBaseFee : juniorRate.oneOnOneFee;
   const tier = {
     id: "tier_1_plus",
     minStudents: Math.max(Math.round(minStudents), 0),
     baseFee: Math.max(baseFee, 0),
-    perStudentFee: Math.max(perStudentFee, 0)
+    perStudentFee: Math.max(juniorRate.headcountIncrementFee, 0)
   };
   return {
     mode: "class_headcount",
     baseFee: tier.baseFee,
     perPresentStudentFee: tier.perStudentFee,
     classFeeTiers: [tier],
+    stageRates: defaultGradeRule.stageRates,
     makeupFeeMode: "perStudentFee"
   };
 }

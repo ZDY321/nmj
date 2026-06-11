@@ -153,22 +153,10 @@ export function CourseEditDialog({
               {supportsSalaryGradeFee(editingCourse.type) && (
                 <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                   <div>
-                    <div className="text-sm font-extrabold text-[#061226]">课时费来源</div>
+                    <div className="text-sm font-extrabold text-[#061226]">课时费规则</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                      保存后只会同步未来待上课课节；已完成课时保留原金额快照。
+                      常规课程默认跟随教师档案里的课时费等级；保存后只会同步未来待上课课节，已完成课时保留原金额快照。
                     </div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <Select value={feeModeValue(editingCourse.feeRule)} onChange={(event) => onChangeFeeMode(event.target.value as CourseFeeMode)}>
-                      <option value="salary_default">跟随老师默认课时费等级</option>
-                      <option value="salary_specific">指定课时费等级</option>
-                      <option value="custom">自定义课时费</option>
-                    </Select>
-                    {editingCourse.feeRule.mode === "salary_grade" && editingCourse.feeRule.salaryGradeSource === "specific" && (
-                      <Select value={editingCourse.feeRule.salaryGradeId ?? vault.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule(vault).id} onChange={(event) => onChangeSalaryGrade(event.target.value)}>
-                        {renderSalaryGradeOptions(editingCourse.feeRule.salaryGradeId ?? vault.profile.defaultSalaryGradeId)}
-                      </Select>
-                    )}
                   </div>
                   {editingCourse.feeRule.mode === "salary_grade" && (
                     <div className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
@@ -178,9 +166,9 @@ export function CourseEditDialog({
                             if (!rule) return "";
                             const stage = salaryGradeStageForStudentIds(vault, editingCourse.studentIds);
                             const rate = salaryGradeRateForStage(rule, stage);
-                            return `${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。`
+                            return `跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。`
                           })()
-                        : "还没有设置老师默认课时费等级，请先在老师个人信息里设置，或改为指定课时费等级。"}
+                        : "还没有设置老师默认课时费等级，请先在老师个人信息里设置。"}
                     </div>
                   )}
                 </div>

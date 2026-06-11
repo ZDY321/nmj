@@ -157,11 +157,9 @@ export function CampusCourseSettingsPanel({
   vault
 }: CampusCourseSettingsPanelProps) {
   const customTemplateIsClass = customCourseTypeTemplate === "class";
-  const customMinStudentsLabel = customTemplateIsClass ? "班课起算人数" : "非班课起算人数";
-  const customBaseFeeLabel = customTemplateIsClass ? "班课底费" : "一对一基础费";
   const customTemplateHint = customTemplateIsClass
-    ? "默认 5 人，从第 6 人开始加人头费。"
-    : "默认 1 人，从第 2 人开始加人头费。";
+    ? "班课规则：按教师课时费等级里的班课底费计算，默认 5 人，从第 6 人开始加人头费。"
+    : "非班课规则：按教师课时费等级里的一对一基础费计算，默认 1 人，从第 2 人开始加人头费。";
   const today = todayIso();
   const courseTypeMessageIsSuccess = courseTypeMessage.startsWith("同步完成：");
 
@@ -212,10 +210,10 @@ export function CampusCourseSettingsPanel({
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
                 <GraduationCap size={14} /> 班型管理
               </div>
-              <CardTitle className="text-lg">班型与备用计费</CardTitle>
-              <CardDescription>班型可改名、按名称排序；常规课程优先使用教师课时费等级，这里的金额只作为自定义课时费或未设置默认等级时的备用模板，备用模板也会按课程学生年级阶段取对应金额。</CardDescription>
+              <CardTitle className="text-lg">班型与计费规则</CardTitle>
+              <CardDescription>班型只维护名称和班课/非班课规则；常规课程金额统一跟随教师课时费等级，并按课程学生年级阶段自动取对应金额。</CardDescription>
               <div className="mt-1 text-sm font-semibold leading-5 text-[#64748b]">
-                修改备用计费默认只影响以后新建课程；需要更新已添加课程时，使用对应班型里的“同步到已有课程”。
+                新增课程档案时只需要选择班型、课程名称和关联学生；课时费不再需要在课程档案里单独选择来源。
               </div>
             </div>
             <Badge variant="secondary" className="w-fit">{managedCourseTypes.length} 个可配置</Badge>
@@ -240,10 +238,10 @@ export function CampusCourseSettingsPanel({
                   setCustomCourseTypeMinStudents(nextTemplate === "class" ? 5 : 1);
                 }}
                 className="h-10 border-[#fdba74] bg-white text-[#7c2d12]"
-                aria-label="选择自定义班型计费模板"
+                aria-label="选择自定义班型计费规则"
               >
-                <option value="class">班课人数计费模板</option>
-                <option value="non_class">非班课人数计费模板</option>
+                <option value="class">班课计费规则</option>
+                <option value="non_class">非班课计费规则</option>
               </Select>
               <Button
                 type="button"
@@ -255,44 +253,8 @@ export function CampusCourseSettingsPanel({
                 <Plus size={14} /> 添加班型
               </Button>
             </div>
-            <div className="mt-3 space-y-2">
-              <div className="text-xs font-bold text-[#9a3412]">{customTemplateHint} 下方金额作为各年级阶段的初始备用金额，添加后可在班型列表里按年级阶段细调。</div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#9a3412]">{customMinStudentsLabel}</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={customCourseTypeMinStudents}
-                    onChange={(event) => setCustomCourseTypeMinStudents(Math.max(Number(event.target.value), 0))}
-                    className="h-9 border-[#fdba74] bg-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#9a3412]">{customBaseFeeLabel}</label>
-                  <SensitiveAmountField visible={amountsVisible} className="h-9">
-                    <Input
-                      type="number"
-                      min={0}
-                      value={customCourseTypeBaseFee}
-                      onChange={(event) => setCustomCourseTypeBaseFee(Math.max(Number(event.target.value), 0))}
-                      className="h-9 border-[#fdba74] bg-white"
-                    />
-                  </SensitiveAmountField>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#9a3412]">人头加价</label>
-                  <SensitiveAmountField visible={amountsVisible} className="h-9">
-                    <Input
-                      type="number"
-                      min={0}
-                      value={customCourseTypePerStudentFee}
-                      onChange={(event) => setCustomCourseTypePerStudentFee(Math.max(Number(event.target.value), 0))}
-                      className="h-9 border-[#fdba74] bg-white"
-                    />
-                  </SensitiveAmountField>
-                </div>
-              </div>
+            <div className="mt-3 rounded-[12px] border border-[#fdba74] bg-white/70 px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">
+              {customTemplateHint} 金额来自“教师课时费等级”，会自动支持自定义等级和小学、初中、高中不同年级阶段。
             </div>
           </div>
           {courseTypeMessage && (
@@ -373,7 +335,7 @@ export function CampusCourseSettingsPanel({
                         variant="outline"
                         disabled={linkedCourseCount === 0}
                         onClick={() => onRequestSyncCourseTypeFeeRuleToCourses(type)}
-                        title={linkedCourseCount === 0 ? "这个班型还没有已添加课程" : "把当前备用计费模板同步到同班型已有课程"}
+                        title={linkedCourseCount === 0 ? "这个班型还没有已添加课程" : "把当前班课/非班课规则同步到同班型已有课程"}
                       >
                         <RefreshCw size={14} /> 同步到已有课程
                       </Button>
@@ -388,7 +350,7 @@ export function CampusCourseSettingsPanel({
                         <Trash2 size={14} /> 删除
                       </Button>
                       <Button type="button" size="sm" variant="outline" onClick={() => onResetCourseTypeFeeRule(type)}>
-                        恢复备用计费
+                        恢复默认规则
                       </Button>
                     </div>
                   )}
@@ -404,85 +366,23 @@ export function CampusCourseSettingsPanel({
                 {rule.mode === "class_headcount" ? (
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-sm font-extrabold text-[#061226]">备用人数计费</div>
+                      <div className="text-sm font-extrabold text-[#061226]">计费规则</div>
                       <div className="text-xs font-semibold text-[#64748b]">{backupHint}</div>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">{backupMinStudentsLabel}</label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={tier.minStudents}
-                          onChange={(event) => onUpdateCourseTypeClassFeeTier(type, tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
-                          className="h-9 bg-white"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">初三参考{backupBaseFeeLabel}</label>
-                        <SensitiveAmountField visible={amountsVisible} className="h-9">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={juniorBaseValue}
-                            onChange={(event) => onUpdateCourseTypeStageRate(type, "junior_3", isClassType
-                              ? { classBaseFee: Math.max(Number(event.target.value), 0) }
-                              : { oneOnOneFee: Math.max(Number(event.target.value), 0) }
-                            )}
-                            className="h-9 bg-white"
-                          />
-                        </SensitiveAmountField>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">初三参考人头加价</label>
-                        <SensitiveAmountField visible={amountsVisible} className="h-9">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={juniorStageRate.headcountIncrementFee}
-                            onChange={(event) => onUpdateCourseTypeStageRate(type, "junior_3", { headcountIncrementFee: Math.max(Number(event.target.value), 0) })}
-                            className="h-9 bg-white"
-                          />
-                        </SensitiveAmountField>
-                      </div>
-                    </div>
-                    <div className="mt-3 overflow-x-auto rounded-[12px] border border-[#e8eef6]">
-                      <div className="grid min-w-[620px] grid-cols-[100px_repeat(2,minmax(130px,1fr))] gap-2 border-b border-[#eef3f8] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#64748b]">
-                        <div>年级阶段</div>
-                        <div>{backupBaseFeeLabel}</div>
-                        <div>人头加价</div>
-                      </div>
-                      <div className="divide-y divide-[#eef3f8]">
-                        {salaryGradeStageOrder.map((stage) => {
-                          const stageRate = classHeadcountStageRateForRule(rule, type, stage);
-                          const baseValue = isClassType ? stageRate.classBaseFee : stageRate.oneOnOneFee;
-                          return (
-                            <div key={stage} className="grid min-w-[620px] grid-cols-[100px_repeat(2,minmax(130px,1fr))] items-center gap-2 px-3 py-2">
-                              <div className="text-sm font-extrabold text-[#061226]">{salaryGradeStageLabels[stage]}</div>
-                              <SensitiveAmountField visible={amountsVisible} className="h-9">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  value={baseValue}
-                                  onChange={(event) => onUpdateCourseTypeStageRate(type, stage, isClassType
-                                    ? { classBaseFee: Math.max(Number(event.target.value), 0) }
-                                    : { oneOnOneFee: Math.max(Number(event.target.value), 0) }
-                                  )}
-                                  className="h-9 bg-white"
-                                />
-                              </SensitiveAmountField>
-                              <SensitiveAmountField visible={amountsVisible} className="h-9">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  value={stageRate.headcountIncrementFee}
-                                  onChange={(event) => onUpdateCourseTypeStageRate(type, stage, { headcountIncrementFee: Math.max(Number(event.target.value), 0) })}
-                                  className="h-9 bg-white"
-                                />
-                              </SensitiveAmountField>
-                            </div>
-                          );
-                        })}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center">
+                      <Select
+                        value={isClassType ? "class" : "non_class"}
+                        onChange={(event) => onUpdateCourseTypeClassFeeTier(type, tier.id, { minStudents: event.target.value === "class" ? 5 : 1 })}
+                        disabled={!isCustom}
+                        className="h-9 bg-white"
+                        aria-label="选择班型计费规则"
+                      >
+                        <option value="class">班课计费规则</option>
+                        <option value="non_class">非班课计费规则</option>
+                      </Select>
+                      <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                        {isCustom ? "自定义班型可以切换班课/非班课规则。" : "内置班型使用固定规则。"}
+                        金额统一从“教师课时费等级”读取，课程学生年级会自动对应小学、初中、高中阶段；自定义等级也会被识别。
                       </div>
                     </div>
                   </div>
