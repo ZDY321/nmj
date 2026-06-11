@@ -529,6 +529,18 @@ export function App() {
     });
   }
 
+  function syncCoursesToLessons(courseIds: string[]) {
+    const courseIdSet = new Set(courseIds);
+    if (courseIdSet.size === 0) return;
+    updateVault((draft) => {
+      draft.courseGroups
+        .filter((course) => courseIdSet.has(course.id))
+        .forEach((course) => {
+          syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
+        });
+    });
+  }
+
   function deleteCourse(courseId: string) {
     updateVault((draft) => {
       draft.courseGroups = draft.courseGroups.filter((course) => course.id !== courseId);
@@ -650,18 +662,15 @@ export function App() {
 
   function deleteCourseType(courseType: CourseType) {
     updateVault((draft) => {
+      const courseTypeLabels = { ...(draft.preferences?.courseTypeLabels ?? {}) };
+      const courseTypeFeeRules = { ...(draft.preferences?.courseTypeFeeRules ?? {}) };
+      delete courseTypeLabels[courseType];
+      delete courseTypeFeeRules[courseType];
       draft.preferences = {
         ...(draft.preferences ?? { weekStartsOn: 0 }),
-        disabledCourseTypes: Array.from(new Set([...(draft.preferences?.disabledCourseTypes ?? []), courseType]))
-      };
-    });
-  }
-
-  function restoreCourseType(courseType: CourseType) {
-    updateVault((draft) => {
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        disabledCourseTypes: (draft.preferences?.disabledCourseTypes ?? []).filter((type) => type !== courseType)
+        disabledCourseTypes: Array.from(new Set([...(draft.preferences?.disabledCourseTypes ?? []), courseType])),
+        courseTypeLabels,
+        courseTypeFeeRules
       };
     });
   }
@@ -2675,13 +2684,13 @@ export function App() {
                   })
                 }
                 onUpdateCourse={updateCourse}
+                onSyncCoursesToLessons={syncCoursesToLessons}
                 onDeleteCourse={deleteCourse}
                 onAddCustomCourseType={addCustomCourseType}
                 onUpdateCustomCourseType={updateCustomCourseType}
                 onDeleteCustomCourseType={deleteCustomCourseType}
                 onUpdateCourseTypeLabel={updateCourseTypeLabel}
                 onDeleteCourseType={deleteCourseType}
-                onRestoreCourseType={restoreCourseType}
                 onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
                 onSyncCourseTypeFeeRuleToCourses={syncCourseTypeFeeRuleToCourses}
                 onAddSubject={addSubject}
@@ -2903,6 +2912,7 @@ function courseUpdateAffectsLessonDefaults(previousCourse: CourseGroup, nextCour
   return (
     previousCourse.type !== nextCourse.type ||
     previousCourse.defaultCampusId !== nextCourse.defaultCampusId ||
+    JSON.stringify(previousCourse.studentIds) !== JSON.stringify(nextCourse.studentIds) ||
     JSON.stringify(previousCourse.feeRule) !== JSON.stringify(nextCourse.feeRule)
   );
 }
@@ -2927,6 +2937,32 @@ function shouldSyncLessonWithCourseDefaults(lesson: Lesson, scope: CourseLessonS
   return lesson.date >= todayIso();
 }
 
+function attendanceStatusForLessonSync(status: Lesson["status"]): AttendanceStatus {
+  if (status === "cancelled") return "cancelled";
+  if (status === "makeup_pending") return "makeup_pending";
+  if (status === "makeup_completed") return "makeup_completed";
+  return "attended";
+}
+
+function lessonAttendanceFromCourse(vault: TeacherVault, lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
+  const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
+  const fallbackStatus = attendanceStatusForLessonSync(lesson.status);
+  return course.studentIds.map((studentId) => {
+    const existing = existingByStudent.get(studentId);
+    if (existing) {
+      return {
+        ...existing,
+        trial: existing.trial ?? Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
+      };
+    }
+    return {
+      studentId,
+      status: fallbackStatus,
+      trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
+    };
+  });
+}
+
 function syncLessonsWithCourseDefaults(vault: TeacherVault, course: CourseGroup, scope: CourseLessonSyncScope): number {
   let changedCount = 0;
   vault.lessons = vault.lessons.map((lesson) => {
@@ -2935,7 +2971,11 @@ function syncLessonsWithCourseDefaults(vault: TeacherVault, course: CourseGroup,
     return recalculateLessonFeeSnapshot(vault, {
       ...lesson,
       type: course.type,
-      campusId: course.defaultCampusId ?? lesson.campusId
+      campusId: course.defaultCampusId,
+      expectedStudentIds: [...course.studentIds],
+      attendance: lessonAttendanceFromCourse(vault, lesson, course),
+      trialStudentCount: course.type === "class" ? lesson.trialStudentCount ?? 0 : 0,
+      trialFee: course.type === "class" ? lesson.trialFee ?? 0 : 0
     });
   });
   return changedCount;

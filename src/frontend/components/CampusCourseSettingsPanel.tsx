@@ -43,7 +43,6 @@ type CampusCourseSettingsPanelProps = {
   customCourseTypeMinStudents: number;
   customCourseTypePerStudentFee: number;
   customCourseTypeTemplate: CustomCourseTypeTemplate;
-  deletedBuiltInCourseTypes: CourseTypeOption[];
   editingCampus: Campus | null;
   editingCustomCourseTypeId: CourseType | "";
   editingCustomCourseTypeLabel: string;
@@ -61,7 +60,6 @@ type CampusCourseSettingsPanelProps = {
   onRequestDeleteCourseType: (courseTypeOption: { id: CourseType; label: string }) => void;
   onRequestSyncCourseTypeFeeRuleToCourses: (type: CourseType) => void;
   onResetCourseTypeFeeRule: (type: CourseType) => void;
-  onRestoreCourseType: (courseType: CourseType) => void;
   onSaveCustomCourseType: () => void;
   onSaveSubject: () => void;
   onStartEditCustomCourseType: (courseTypeOption: { id: CourseType; label: string }) => void;
@@ -108,7 +106,6 @@ export function CampusCourseSettingsPanel({
   customCourseTypeMinStudents,
   customCourseTypePerStudentFee,
   customCourseTypeTemplate,
-  deletedBuiltInCourseTypes,
   editingCampus,
   editingCustomCourseTypeId,
   editingCustomCourseTypeLabel,
@@ -126,7 +123,6 @@ export function CampusCourseSettingsPanel({
   onRequestDeleteCourseType,
   onRequestSyncCourseTypeFeeRuleToCourses,
   onResetCourseTypeFeeRule,
-  onRestoreCourseType,
   onSaveCustomCourseType,
   onSaveSubject,
   onStartEditCustomCourseType,
@@ -211,7 +207,9 @@ export function CampusCourseSettingsPanel({
                 <GraduationCap size={14} /> 班型管理
               </div>
               <CardTitle className="text-lg">班型与计费规则</CardTitle>
-              <CardDescription>班型只维护名称和班课/非班课规则；常规课程金额统一跟随教师课时费等级，并按课程学生年级阶段自动取对应金额。</CardDescription>
+              <CardDescription>
+                班型只维护名称和班课/非班课规则；<span className="font-bold">常规课程金额统一跟随教师课时费等级，并按课程学生年级阶段自动取对应金额。</span>
+              </CardDescription>
               <div className="mt-1 text-sm font-semibold leading-5 text-[#64748b]">
                 新增课程档案时只需要选择班型、课程名称和关联学生；课时费不再需要在课程档案里单独选择来源。
               </div>
@@ -420,25 +418,6 @@ export function CampusCourseSettingsPanel({
               </div>
             );
           })}
-          {deletedBuiltInCourseTypes.length > 0 && (
-            <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-white p-3">
-              <div className="mb-2 text-xs font-extrabold text-[#64748b]">已删除内置班型</div>
-              <div className="flex flex-wrap gap-2">
-                {deletedBuiltInCourseTypes.map((typeOption) => (
-                  <Button
-                    key={typeOption.value}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 bg-[#f8fbff] text-xs"
-                    onClick={() => onRestoreCourseType(typeOption.value)}
-                  >
-                    恢复 {typeOption.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
           {managedCourseTypes.length === 0 && (
             <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
               暂无可配置班型，可以先添加自定义班型。

@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { GraduationCap, Pencil, Search, Trash2 } from "lucide-react";
+import { GraduationCap, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,7 @@ type CourseArchiveListPanelProps = {
   archiveRowClass: (panel: "courses", id: string) => string;
   campusOptions: Campus[];
   confirm: (request: ConfirmRequest) => void;
+  courseArchiveMessage: string;
   courseCampusFilter: string;
   courseFeeSummary: (course: CourseGroup) => string;
   courseGradeFilter: string;
@@ -39,6 +40,7 @@ type CourseArchiveListPanelProps = {
   hasUnsetGradeFilterOption: boolean;
   onDeleteCourse: (courseId: string) => void;
   onOpenCourseEditor: (course: CourseGroup) => void;
+  onRequestSyncVisibleCourses: () => void;
   setCourseCampusFilter: Dispatch<SetStateAction<string>>;
   setCourseGradeFilter: Dispatch<SetStateAction<string>>;
   setCourseSearch: Dispatch<SetStateAction<string>>;
@@ -53,6 +55,7 @@ export function CourseArchiveListPanel({
   archiveRowClass,
   campusOptions,
   confirm,
+  courseArchiveMessage,
   courseCampusFilter,
   courseFeeSummary,
   courseGradeFilter,
@@ -65,6 +68,7 @@ export function CourseArchiveListPanel({
   hasUnsetGradeFilterOption,
   onDeleteCourse,
   onOpenCourseEditor,
+  onRequestSyncVisibleCourses,
   setCourseCampusFilter,
   setCourseGradeFilter,
   setCourseSearch,
@@ -85,10 +89,20 @@ export function CourseArchiveListPanel({
             <CardTitle className="text-lg">课程档案列表</CardTitle>
             <CardDescription>筛选和数量只作用于下方已添加课程。</CardDescription>
           </div>
-          <Badge variant="secondary" className="w-fit">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="w-fit">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
+            <Button type="button" size="sm" variant="outline" className="h-8 bg-[#f8fbff]" onClick={onRequestSyncVisibleCourses} disabled={visibleCourses.length === 0}>
+              <RefreshCw size={14} /> 同步当前筛选课程
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {courseArchiveMessage && (
+          <div className="rounded-[12px] border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2 text-sm font-semibold text-[#1557c2]">
+            {courseArchiveMessage}
+          </div>
+        )}
         <label className="relative block">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
           <Input

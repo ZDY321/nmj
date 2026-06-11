@@ -26,6 +26,7 @@ type CourseEditDialogProps = {
   editingCourse: CourseGroup | null;
   editingCourseStudentOptions: Student[];
   editingCourseTypeOptions: CourseTypeOption[];
+  courseFeeSummary: (course: CourseGroup) => string;
   feeModeValue: (rule: CourseGroup["feeRule"]) => CourseFeeMode;
   firstCourseStudentGrade: (studentIds: string[]) => string | undefined;
   gradeFilterOptions: string[];
@@ -60,6 +61,7 @@ export function CourseEditDialog({
   editingCourse,
   editingCourseStudentOptions,
   editingCourseTypeOptions,
+  courseFeeSummary,
   feeModeValue,
   firstCourseStudentGrade,
   gradeFilterOptions,
@@ -159,14 +161,17 @@ export function CourseEditDialog({
                     </div>
                   </div>
                   {editingCourse.feeRule.mode === "salary_grade" && (
-                    <div className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
+                    <div className="space-y-2 rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
+                      <div className="rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
+                        {courseFeeSummary(editingCourse)}
+                      </div>
                       {resolveSalaryGradeRule(vault, editingCourse.feeRule)
                         ? (() => {
                             const rule = resolveSalaryGradeRule(vault, editingCourse.feeRule);
                             if (!rule) return "";
                             const stage = salaryGradeStageForStudentIds(vault, editingCourse.studentIds);
                             const rate = salaryGradeRateForStage(rule, stage);
-                            return `跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。`
+                            return <div>{`跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。`}</div>
                           })()
                         : "还没有设置老师默认课时费等级，请先在老师个人信息里设置。"}
                     </div>
@@ -181,6 +186,9 @@ export function CourseEditDialog({
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
                       当前关联 {editingCourse.studentIds.length} 人，{salaryGradeStageForStudentIds(vault, editingCourse.studentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, editingCourse.studentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length, editingCourse.type, salaryGradeStageForStudentIds(vault, editingCourse.studentIds)), amountsVisible)}，实际按「上课时长 / 2」折算。
                     </div>
+                  </div>
+                  <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
+                    {courseFeeSummary(editingCourse)}
                   </div>
                   {normalizedClassFeeTiers(editingCourse.feeRule).slice(0, 1).map((tier) => (
                     <div key={tier.id} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white p-2 sm:grid-cols-3">
@@ -225,6 +233,9 @@ export function CourseEditDialog({
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-[#64748b]">试听单次费用</label>
                   <div className="text-xs font-semibold text-[#64748b]">按单次试听计费，不按上课时长相乘。</div>
+                  <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
+                    {courseFeeSummary(editingCourse)}
+                  </div>
                   <SensitiveAmountField visible={amountsVisible}>
                     <Input
                       type="number"
@@ -238,6 +249,9 @@ export function CourseEditDialog({
               ) : editingCourse.feeRule.mode === "hourly" ? (
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-[#64748b]">每小时费用</label>
+                  <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
+                    {courseFeeSummary(editingCourse)}
+                  </div>
                   <SensitiveAmountField visible={amountsVisible}>
                     <Input
                       type="number"

@@ -36,13 +36,13 @@ export function StudentsView({
   onUpdateProfile,
   onAddCourse,
   onUpdateCourse,
+  onSyncCoursesToLessons,
   onDeleteCourse,
   onAddCustomCourseType,
   onUpdateCustomCourseType,
   onDeleteCustomCourseType,
   onUpdateCourseTypeLabel,
   onDeleteCourseType,
-  onRestoreCourseType,
   onUpdateCourseTypeFeeRule,
   onSyncCourseTypeFeeRuleToCourses,
   onAddSubject,
@@ -63,13 +63,13 @@ export function StudentsView({
   onUpdateProfile: (profile: TeacherProfile) => void;
   onAddCourse: (course: CourseGroup) => void;
   onUpdateCourse: (course: CourseGroup) => void;
+  onSyncCoursesToLessons: (courseIds: string[]) => void;
   onDeleteCourse: (courseId: string) => void;
   onAddCustomCourseType: (courseType: CustomCourseTypeOption, feeRule?: FeeRule) => void;
   onUpdateCustomCourseType: (courseType: CustomCourseTypeOption) => void;
   onDeleteCustomCourseType: (courseTypeId: CustomCourseType) => void;
   onUpdateCourseTypeLabel: (courseType: CourseType, label: string) => void;
   onDeleteCourseType: (courseType: CourseType) => void;
-  onRestoreCourseType: (courseType: CourseType) => void;
   onUpdateCourseTypeFeeRule: (courseType: CourseType, feeRule: FeeRule) => void;
   onSyncCourseTypeFeeRuleToCourses: (courseType: CourseType) => void;
   onAddSubject: (subject: string) => void;
@@ -94,9 +94,6 @@ export function StudentsView({
     ...customCourseTypes.map((item) => ({ value: item.id as CourseType, label: item.label }))
   ].sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN") || a.value.localeCompare(b.value));
   const managedCourseTypes = allManagedCourseTypes.filter((item) => !disabledCourseTypes.has(item.value));
-  const deletedBuiltInCourseTypes = allManagedCourseTypes.filter(
-    (item) => !item.value.startsWith("custom_") && disabledCourseTypes.has(item.value)
-  );
   const preferredCampusId = campusOptions[0]?.id ?? "";
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
@@ -161,6 +158,7 @@ export function StudentsView({
   const [transferCampusInput, setTransferCampusInput] = useState(preferredCampusId);
   const [transferEndExisting, setTransferEndExisting] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
+  const [courseArchiveMessage, setCourseArchiveMessage] = useState("");
   const { confirm, dialog } = useConfirmDialog();
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
   const normalizedCourseStudentSearch = courseStudentSearch.trim().toLowerCase();
@@ -902,6 +900,39 @@ export function StudentsView({
     };
   }
 
+  function futureSyncableLessonCountForCourses(courses: CourseGroup[]): number {
+    const courseIds = new Set(courses.map((course) => course.id));
+    const today = todayIso();
+    return vault.lessons.filter((lesson) =>
+      courseIds.has(lesson.courseGroupId) &&
+      !lesson.linkedOriginalLessonId &&
+      (lesson.status === "scheduled" || lesson.status === "draft") &&
+      lesson.date >= today
+    ).length;
+  }
+
+  function requestSyncVisibleCoursesToLessons() {
+    const courses = visibleCourses;
+    const lessonCount = futureSyncableLessonCountForCourses(courses);
+    if (courses.length === 0) {
+      setCourseArchiveMessage("当前筛选下没有课程档案，不需要同步。");
+      return;
+    }
+    if (lessonCount === 0) {
+      setCourseArchiveMessage(`当前筛选下 ${courses.length} 个课程档案没有未来待上课课节，不需要同步。`);
+      return;
+    }
+    confirm({
+      title: "同步当前筛选课程？",
+      description: `会按当前课程档案列表筛选出的 ${courses.length} 个课程档案，刷新 ${lessonCount} 节未来待上课课节的班型、校区、学生名单和金额快照。已完成或历史课节保留原信息。`,
+      confirmLabel: "同步刷新",
+      onConfirm: () => {
+        onSyncCoursesToLessons(courses.map((course) => course.id));
+        setCourseArchiveMessage(`同步完成：已刷新 ${courses.length} 个课程档案下的 ${lessonCount} 节未来待上课课节。`);
+      }
+    });
+  }
+
   function requestSyncCourseTypeFeeRuleToCourses(type: CourseType) {
     const label = courseTypeLabel(vault, type);
     const counts = courseTypeUsageCounts(type);
@@ -926,7 +957,7 @@ export function StudentsView({
       title: `删除班型「${courseTypeOption.label}」？`,
       description: isCustom
         ? "自定义班型会从班型列表中直接删除；已被课程或历史课时使用的自定义班型不能直接删除。"
-        : "内置班型会从主列表、添加课程档案和筛选下拉中移除，已有课程和历史课时仍会保留显示，可在已删除内置班型中恢复。",
+        : "内置班型会从主列表、添加课程档案和筛选下拉中移除，并清理该班型的旧名称和旧计费规则配置；已有课程和历史课时仍会保留显示。",
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => {
@@ -1388,7 +1419,6 @@ export function StudentsView({
             customCourseTypeMinStudents={customCourseTypeMinStudents}
             customCourseTypePerStudentFee={customCourseTypePerStudentFee}
             customCourseTypeTemplate={customCourseTypeTemplate}
-            deletedBuiltInCourseTypes={deletedBuiltInCourseTypes}
             editingCampus={editingCampus}
             editingCustomCourseTypeId={editingCustomCourseTypeId}
             editingCustomCourseTypeLabel={editingCustomCourseTypeLabel}
@@ -1406,7 +1436,6 @@ export function StudentsView({
             onRequestDeleteCourseType={requestDeleteCourseType}
             onRequestSyncCourseTypeFeeRuleToCourses={requestSyncCourseTypeFeeRuleToCourses}
             onResetCourseTypeFeeRule={resetCourseTypeFeeRule}
-            onRestoreCourseType={onRestoreCourseType}
             onSaveCustomCourseType={saveCustomCourseType}
             onSaveSubject={saveSubject}
             onStartEditCustomCourseType={startEditCustomCourseType}
@@ -1532,6 +1561,7 @@ export function StudentsView({
           archiveRowClass={archiveRowClass}
           campusOptions={campusOptions}
           confirm={confirm}
+          courseArchiveMessage={courseArchiveMessage}
           courseCampusFilter={courseCampusFilter}
           courseFeeSummary={courseFeeSummary}
           courseGradeFilter={courseGradeFilter}
@@ -1544,6 +1574,7 @@ export function StudentsView({
           hasUnsetGradeFilterOption={hasUnsetGradeFilterOption}
           onDeleteCourse={onDeleteCourse}
           onOpenCourseEditor={openCourseEditor}
+          onRequestSyncVisibleCourses={requestSyncVisibleCoursesToLessons}
           setCourseCampusFilter={setCourseCampusFilter}
           setCourseGradeFilter={setCourseGradeFilter}
           setCourseSearch={setCourseSearch}
@@ -1577,6 +1608,7 @@ export function StudentsView({
         editingCourse={editingCourse}
         editingCourseStudentOptions={editingCourseStudentOptions}
         editingCourseTypeOptions={editingCourseTypeOptions}
+        courseFeeSummary={courseFeeSummary}
         feeModeValue={feeModeValue}
         firstCourseStudentGrade={firstCourseStudentGrade}
         gradeFilterOptions={gradeFilterOptions}
