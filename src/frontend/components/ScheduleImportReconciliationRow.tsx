@@ -75,9 +75,10 @@ export function ScheduleImportReconciliationRow({
   const resolutionNote = resolution?.note ?? "";
   const resolutionNotePreview = resolutionNote.trim();
   const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
+  const isCurrentlyLinkedBySources = Boolean(row.systemLessonId && linkedSystemLessonIds.has(row.systemLessonId));
   const splitMergeNeedsReview = Boolean(resolution?.linkedSystemLessonIds?.length && hasCurrentDirectMatch);
   const hasInvalidLinkedLessons = invalidLinkedSystemLessonIds.length > 0;
-  const hasSplitMergeLinkProblem = hasInvalidLinkedLessons || staleLinkedByPreviousResolution;
+  const hasSplitMergeLinkProblem = (hasInvalidLinkedLessons || staleLinkedByPreviousResolution) && !hasCurrentDirectMatch && !isCurrentlyLinkedBySources;
   const canLinkSplitMerge =
     row.status === "time_mismatch" ||
     row.status === "system_missing" ||

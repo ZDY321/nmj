@@ -139,9 +139,12 @@ export function ScheduleImportPanel({
   const splitMergeReviewLabel = (row: ImportPreviewLesson): string | undefined => {
     const rowKey = resolutionKey(row);
     const resolution = resolutions[rowKey];
+    const isCurrentlyLinked = row.systemLessonId && linkedSystemLessonIds.has(row.systemLessonId);
+    const isDirectMatched = row.status === "matched" || row.status === "attendance_mismatch";
+
     if (invalidSplitMergeRowKeys.has(rowKey)) return "拆分合并标记已失效";
-    if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId)) return "拆分合并标记已失效";
-    if (resolution?.linkedSystemLessonIds?.length && row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch")) return "合并需复核";
+    if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId) && !isCurrentlyLinked && !isDirectMatched) return "拆分合并标记已失效";
+    if (resolution?.linkedSystemLessonIds?.length && row.systemLessonId && isDirectMatched) return "合并需复核";
     return undefined;
   };
   const effectiveRows = useMemo(
