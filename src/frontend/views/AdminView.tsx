@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { AdminSummary, AdminUser, AiProviderConfig, AiProviderInput, AiProviderKind, FeedbackStatus, Notice, NoticeRecord, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
+import type { AdminSummary, AdminUser, AiProviderConfig, AiProviderInput, AiProviderKind, FeedbackStatus, Notice, NoticeRecord, TeacherProfile, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import {
@@ -149,7 +149,8 @@ export function AdminView({
   persistLoginAfterClose,
   onPersistLoginAfterCloseChange,
   onNoticeChange,
-  onClearData
+  onClearData,
+  onUpdateProfile
 }: {
   vault: TeacherVault;
   token: string;
@@ -158,6 +159,7 @@ export function AdminView({
   onPersistLoginAfterCloseChange: (persistAfterClose: boolean) => void;
   onNoticeChange: (notice: Notice) => void;
   onClearData: () => void;
+  onUpdateProfile: (patch: Partial<TeacherProfile>) => void;
 }) {
   const [title, setTitle] = useState(vault.notice.title);
   const [content, setContent] = useState(vault.notice.content);
@@ -767,6 +769,26 @@ export function AdminView({
               </div>
               <Button variant={registrationEnabled ? "destructive" : "default"} disabled={busy} onClick={toggleRegistration}>
                 {registrationEnabled ? "关闭注册" : "开启注册"}
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-3 rounded-[14px] border border-[#c7d2fe] bg-[#eef0ff] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="font-extrabold text-[#061226]">AI 排课助手</div>
+                <div className="mt-1 text-sm font-semibold text-[#64748b]">
+                  当前状态：{vault.profile.aiSchedulingEnabled ? "所有用户可见" : "仅管理员可见"}
+                </div>
+              </div>
+              <Button
+                variant={vault.profile.aiSchedulingEnabled ? "destructive" : "default"}
+                disabled={busy}
+                onClick={() => {
+                  const nextEnabled = !vault.profile.aiSchedulingEnabled;
+                  onUpdateProfile({ aiSchedulingEnabled: nextEnabled });
+                  setMessage(nextEnabled ? "AI 排课助手已对所有用户开启。" : "AI 排课助手已隐藏，仅管理员可见。");
+                }}
+              >
+                {vault.profile.aiSchedulingEnabled ? "隐藏功能" : "开启功能"}
               </Button>
             </div>
 

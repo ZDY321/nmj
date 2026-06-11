@@ -2756,6 +2756,11 @@ export function App() {
                     draft.notice = notice;
                   })
                 }
+                onUpdateProfile={(patch) =>
+                  updateVault((draft) => {
+                    draft.profile = { ...draft.profile, ...patch };
+                  })
+                }
                 onClearData={() => {
                   clearVault(username);
                   setVault(null);

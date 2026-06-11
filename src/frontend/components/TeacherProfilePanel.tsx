@@ -151,7 +151,7 @@ export function TeacherProfilePanel({
                 : "未设置默认课时费等级，新课程不会自动套用等级课时费。"}
             </div>
           </div>
-          <div className="space-y-2 lg:col-span-3">
+          <div className="space-y-2 lg:col-span-2">
             <label className="text-sm font-medium">个人备注</label>
             <Textarea
               value={vault.profile.note ?? ""}
@@ -169,6 +169,9 @@ export function TeacherProfilePanel({
               <option value="disabled">隐藏（仅管理员可见）</option>
               <option value="enabled">启用（所有用户可见）</option>
             </Select>
+            <div className="text-xs font-semibold text-[#64748b]">
+              控制"排课与课时"页面的"AI 排课助手"功能是否对所有用户可见
+            </div>
           </div>
         </div>
 
