@@ -211,7 +211,7 @@ export function ScheduleImportReconciliationRow({
         </>
       )}
 
-      {row.status !== "matched" && (
+      {!isMatched && (
         <div className="mt-3 grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
           {resolvedAsMatched && (
             <div className="rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-xs font-bold text-[#15803d]">
