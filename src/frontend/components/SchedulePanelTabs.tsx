@@ -1,15 +1,18 @@
 import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
 import type { SchedulePanel } from "@/frontend/lib/scheduleViewTypes";
+import type { UserRole } from "@/shared/types";
 
 type SchedulePanelTabsProps = {
   activePanel: SchedulePanel;
   deletedLessonCount: number;
   onChange: (panel: SchedulePanel) => void;
+  role: UserRole;
+  aiSchedulingEnabled?: boolean;
 };
 
-export function SchedulePanelTabs({ activePanel, deletedLessonCount, onChange }: SchedulePanelTabsProps) {
-  const items: Array<{ key: SchedulePanel; label: string }> = [
+export function SchedulePanelTabs({ activePanel, deletedLessonCount, onChange, role, aiSchedulingEnabled }: SchedulePanelTabsProps) {
+  const allItems: Array<{ key: SchedulePanel; label: string }> = [
     { key: "ai", label: "AI 排课助手" },
     { key: "schedule", label: "排课" },
     { key: "calendar", label: "日历查看" },
@@ -17,6 +20,8 @@ export function SchedulePanelTabs({ activePanel, deletedLessonCount, onChange }:
     { key: "studentStats", label: "学生课次统计" },
     { key: "trash", label: `回收站${deletedLessonCount > 0 ? ` ${deletedLessonCount}` : ""}` }
   ];
+
+  const items = allItems.filter(item => item.key !== "ai" || role === "admin" || aiSchedulingEnabled);
 
   return (
     <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">

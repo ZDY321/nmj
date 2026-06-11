@@ -1688,6 +1688,8 @@ export function ScheduleView({
         activePanel={schedulePanel}
         deletedLessonCount={deletedLessons.length}
         onChange={switchSchedulePanel}
+        role={role}
+        aiSchedulingEnabled={vault.profile.aiSchedulingEnabled}
       />
       {lessonReturnTarget?.kind === "view" && schedulePanel !== "records" && (
         <div className="flex flex-col gap-2 rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-4 py-3 text-sm font-semibold text-[#1557c2] sm:flex-row sm:items-center sm:justify-between">
@@ -1708,7 +1710,7 @@ export function ScheduleView({
         </div>
       )}
 
-      {schedulePanel === "ai" && (
+      {schedulePanel === "ai" && (role === "admin" || vault.profile.aiSchedulingEnabled) && (
         <ScheduleAiPanel
           aiActiveCourseCount={aiActiveCourseCount}
           aiActiveStudentCount={aiActiveStudentCount}
