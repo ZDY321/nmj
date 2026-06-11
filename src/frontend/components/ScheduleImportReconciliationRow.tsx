@@ -108,10 +108,10 @@ export function ScheduleImportReconciliationRow({
             {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
             {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
-            {resolvedByLinkedImport && <Badge variant="plum">被 {linkedBySources.length || 1} 条拆分合并关联</Badge>}
+            {resolvedByLinkedImport && <Badge variant="sage">✓ 已被 {linkedBySources.length} 条教务课拆分合并</Badge>}
             {resolution?.linkedSystemLessonIds?.length ? <Badge variant="plum">关联 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}
             {splitMergeNeedsReview && <Badge variant="amber">拆分合并需复核</Badge>}
-            {hasSplitMergeLinkProblem && <Badge variant="amber">拆分合并标记已失效</Badge>}
+            {hasSplitMergeLinkProblem && !resolvedByLinkedImport && <Badge variant="amber">拆分合并标记已失效</Badge>}
           </div>
           {canCollapseDetails && !detailsExpanded && (
             <>
@@ -188,14 +188,14 @@ export function ScheduleImportReconciliationRow({
           )}
 
           {linkedBySources.length > 0 && (
-            <div className="mt-3 rounded-[12px] border border-[#c7d2fe] bg-[#eef0ff] p-3">
-              <div className="text-xs font-extrabold text-[#5161d6]">这节云端课被以下教务课节拆分/合并关联</div>
+            <div className="mt-3 rounded-[12px] border border-[#86efac] bg-[#f0fdf4] p-3">
+              <div className="text-xs font-extrabold text-[#15803d]">✓ 这节云端课已被以下 {linkedBySources.length} 条教务课节拆分/合并关联</div>
               <div className="mt-2 space-y-1.5">
                 {linkedBySources.map((source) => (
-                  <div key={`${source.rowKey}-${source.lessonId}`} className="rounded-[9px] border border-[#dbe4ef] bg-white px-2.5 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                  <div key={`${source.rowKey}-${source.lessonId}`} className="rounded-[9px] border border-[#bbf7d0] bg-white px-2.5 py-2 text-xs font-semibold leading-5 text-[#64748b]">
                     <span className="font-extrabold text-[#061226]">{source.date} {source.startTime}-{source.endTime}</span>
                     {" · "}{source.matchedCourseId ? localCourseName(vault, source.matchedCourseId) : source.title}
-                    {source.resolutionNote ? <span className="block text-[#5161d6]">标注：{source.resolutionNote}</span> : null}
+                    {source.resolutionNote ? <span className="block text-[#15803d]">标注：{source.resolutionNote}</span> : null}
                   </div>
                 ))}
               </div>

@@ -885,7 +885,7 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
   let availableHours = 0;
   let courseDeductedHours = 0;
   let courseDeductionAmount = 0;
-  const breakdown = new Map<string, ObligationCourseDeduction>();
+  const breakdown = new Map<string, ObligationCourseDeduction & { firstDeductOrder: number }>();
   const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, month);
   const eligibleLessons = vault.lessons
     .filter((lesson) => monthOf(lesson.date) === month && lesson.type !== "trial" && completedHours(lesson) > 0)
@@ -911,7 +911,8 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
       lessonCount: 0,
       availableHours: 0,
       deductedHours: 0,
-      amount: 0
+      amount: 0,
+      firstDeductOrder: Number.POSITIVE_INFINITY
     };
     current.lessonCount += 1;
     current.availableHours += item.hours;
@@ -932,12 +933,15 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
     );
   });
 
-  sortedEligibleLessons.forEach((item) => {
+  sortedEligibleLessons.forEach((item, deductOrder) => {
     if (remainingHours <= 0.0001) return;
     const hoursToDeduct = Math.min(item.hours, remainingHours);
     const amountToDeduct = item.hourlyValue * hoursToDeduct;
     const current = breakdown.get(item.lesson.courseGroupId);
     if (current) {
+      if (current.deductedHours === 0) {
+        current.firstDeductOrder = deductOrder;
+      }
       current.deductedHours += hoursToDeduct;
       current.amount += amountToDeduct;
     }
@@ -948,7 +952,8 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
 
   const courseBreakdown = Array.from(breakdown.values())
     .map((item) => ({ ...item, amount: Math.round(item.amount) }))
-    .sort((a, b) => b.deductedHours - a.deductedHours || b.availableHours - a.availableHours || a.courseName.localeCompare(b.courseName));
+    .filter((item) => item.deductedHours > 0)
+    .sort((a, b) => a.firstDeductOrder - b.firstDeductOrder);
   const fallbackHours = mode === "manual"
     ? 0
     : Math.max(remainingHours, 0);
