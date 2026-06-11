@@ -226,7 +226,7 @@ export function CampusCourseSettingsPanel({
                   setCustomCourseTypeInput(event.target.value);
                   if (courseTypeMessage) setCourseTypeMessage("");
                 }}
-                placeholder="自定义班型，例如：小组课、冲刺课"
+                placeholder="自定义班级名称，例如：一对一、一对二、班课"
                 maxLength={24}
                 className={`h-10 border-[#fdba74] bg-white text-[#7c2d12] placeholder:text-[#d97706]/70 focus:border-[#ff8617] focus:ring-2 focus:ring-[#ff8617]/20 ${courseTypeMessage ? "border-[#fca5a5] bg-[#fff1f2]" : ""}`}
               />
