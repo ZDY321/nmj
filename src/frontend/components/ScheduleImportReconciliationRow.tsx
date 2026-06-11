@@ -108,11 +108,11 @@ export function ScheduleImportReconciliationRow({
             )}
             {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
-            {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
+            {resolvedAsMatched && !resolvedByLinkedImport && <Badge variant="sage">已计入已对应</Badge>}
             {resolvedByLinkedImport && <Badge variant="sage">✓ 已被 {linkedBySources.length} 条教务课拆分合并</Badge>}
-            {resolution?.linkedSystemLessonIds?.length ? <Badge variant="plum">关联 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}
+            {resolution?.linkedSystemLessonIds?.length && !resolvedByLinkedImport ? <Badge variant="plum">→ 合并到 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}
             {splitMergeNeedsReview && <Badge variant="amber">拆分合并需复核</Badge>}
-            {hasSplitMergeLinkProblem && !resolvedByLinkedImport && <Badge variant="amber">拆分合并标记已失效</Badge>}
+            {hasSplitMergeLinkProblem && <Badge variant="amber">拆分合并标记已失效</Badge>}
           </div>
           {canCollapseDetails && !detailsExpanded && (
             <>
@@ -141,6 +141,30 @@ export function ScheduleImportReconciliationRow({
           </Button>
         )}
       </div>
+
+      {canCollapseDetails && !detailsExpanded && (linkedLessons.length > 0 || resolution?.linkedSystemLessonIds?.length) && (
+        <div className="mt-2 flex items-center gap-2 text-xs">
+          {linkedLessons.length > 0 && (
+            <div className="flex-1 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 font-semibold text-[#5161d6]">
+              → 合并到 {linkedLessons.length} 节云端课
+            </div>
+          )}
+          {linkedBySources.length > 0 && (
+            <div className="flex-1 rounded-[10px] border border-[#86efac] bg-[#f0fdf4] px-2.5 py-1.5 font-semibold text-[#15803d]">
+              ✓ 被 {linkedBySources.length} 条教务课合并
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDetailsExpanded(true)}
+            className="h-7 shrink-0 text-xs"
+          >
+            管理
+          </Button>
+        </div>
+      )}
 
       {(!canCollapseDetails || detailsExpanded) && (
         <>
