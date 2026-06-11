@@ -118,6 +118,7 @@ export function ScheduleImportReconciliationRow({
             <>
               <div className="truncate text-sm font-extrabold leading-5 text-[#061226]">
                 {systemLesson && systemTimeLabel !== importTimeLabel ? `教务 ${importTimeLabel} · 云端 ${systemTimeLabel}` : importTimeLabel} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
+                {resolvedByLinkedImport && <span className="ml-2 text-[#15803d]">✓ 被合并</span>}
               </div>
               <div className="mt-1 truncate text-xs font-semibold leading-5 text-[#64748b]">
                 教务：{row.title} · 云端：{systemLesson ? localCourseName(vault, systemLesson.courseGroupId) : "未找到课节"}
@@ -142,18 +143,31 @@ export function ScheduleImportReconciliationRow({
         )}
       </div>
 
-      {canCollapseDetails && !detailsExpanded && (linkedLessons.length > 0 || resolution?.linkedSystemLessonIds?.length) && (
+      {canCollapseDetails && !detailsExpanded && (linkedLessons.length > 0 || linkedBySources.length > 0) && (
         <div className="mt-2 flex items-center gap-2 text-xs">
           {linkedLessons.length > 0 && (
             <div className="flex-1 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 font-semibold text-[#5161d6]">
-              → 合并到 {linkedLessons.length} 节云端课
+              已关联 {linkedLessons.map(l => `${l.date} ${l.startTime}`).join("、")}
             </div>
           )}
           {linkedBySources.length > 0 && (
             <div className="flex-1 rounded-[10px] border border-[#86efac] bg-[#f0fdf4] px-2.5 py-1.5 font-semibold text-[#15803d]">
-              ✓ 被 {linkedBySources.length} 条教务课合并
+              被 {linkedBySources.map(s => `${s.date} ${s.startTime}`).join("、")} 合并
             </div>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (linkedLessons.length > 0 || resolution?.linkedSystemLessonIds?.length) {
+                onResolutionChange({ linkedSystemLessonIds: [] });
+              }
+            }}
+            className="h-7 shrink-0 text-xs"
+          >
+            清除关联
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -161,7 +175,7 @@ export function ScheduleImportReconciliationRow({
             onClick={() => setDetailsExpanded(true)}
             className="h-7 shrink-0 text-xs"
           >
-            管理
+            重新选择
           </Button>
         </div>
       )}
