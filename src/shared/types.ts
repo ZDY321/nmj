@@ -532,6 +532,7 @@ export type ScheduleImportVaultState = {
   mappings: ScheduleImportMapping;
   resolutions?: ScheduleImportResolutionMap;
   reviews: ScheduleImportReviewRecord[];
+  splitMergeExcludedLessonIds?: string[];
   updatedAt: string;
 };
 

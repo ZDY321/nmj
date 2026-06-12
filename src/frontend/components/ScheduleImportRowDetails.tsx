@@ -19,6 +19,7 @@ export function ScheduleImportRowDetails({
   vault,
   courses,
   systemLesson,
+  linkedLessons = [],
   onMap,
   onOpenLesson
 }: {
@@ -26,6 +27,7 @@ export function ScheduleImportRowDetails({
   vault: TeacherVault;
   courses: CourseGroup[];
   systemLesson?: Lesson;
+  linkedLessons?: Lesson[];
   onMap: (courseId: string) => void;
   onOpenLesson?: (lesson: Lesson) => void;
 }) {
@@ -108,7 +110,22 @@ export function ScheduleImportRowDetails({
             <div className="mt-1 text-xs font-semibold leading-5 text-[#94a3b8]">
               应到：{row.systemExpectedStudentNames || studentNames(vault, systemLesson.expectedStudentIds) || "未设置学生"}
             </div>
+            {linkedLessons.length > 0 && (
+              <LinkedSystemLessons
+                vault={vault}
+                lessons={linkedLessons}
+                title="合并目标云端课节"
+                onOpenLesson={onOpenLesson}
+              />
+            )}
           </div>
+        ) : linkedLessons.length > 0 ? (
+          <LinkedSystemLessons
+            vault={vault}
+            lessons={linkedLessons}
+            title="已人工关联云端课节"
+            onOpenLesson={onOpenLesson}
+          />
         ) : (
           <div className="text-sm font-bold text-[#b45309]">云端课表没有对应课节</div>
         )}
@@ -193,6 +210,50 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
 function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): string {
   const students = studentNames(vault, course.studentIds) || "未关联学生";
   return `${localCourseName(vault, course.id)} · ${course.subject} · ${students}`;
+}
+
+function LinkedSystemLessons({
+  vault,
+  lessons,
+  title,
+  onOpenLesson
+}: {
+  vault: TeacherVault;
+  lessons: Lesson[];
+  title: string;
+  onOpenLesson?: (lesson: Lesson) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] p-2.5">
+      <div className="text-xs font-extrabold text-[#5161d6]">{title}</div>
+      <div className="mt-2 space-y-1.5">
+        {lessons.map((lesson) => (
+          <button
+            key={lesson.id}
+            type="button"
+            onClick={() => onOpenLesson?.(lesson)}
+            className="block w-full rounded-[9px] border border-[#dbe4ef] bg-white px-2.5 py-2 text-left text-xs font-semibold leading-5 text-[#64748b] transition-colors hover:border-[#93c5fd] hover:bg-[#f8fbff]"
+          >
+            <span className="font-extrabold text-[#061226]">{lesson.date} {lesson.startTime}-{lesson.endTime}</span>
+            {" · "}{localCourseName(vault, lesson.courseGroupId)}
+            {" · "}{courseSubject(vault, lesson.courseGroupId)}
+            {" · "}{courseTypeLabel(vault, lesson.type)}
+            {" · "}{campusName(vault, lesson.campusId)}
+            {" · "}{lessonDurationHours(lesson).toFixed(1)} 小时
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function lessonDurationHours(lesson: Pick<Lesson, "startTime" | "endTime">): number {
+  return Math.max(0, timeToMinutes(lesson.endTime) - timeToMinutes(lesson.startTime)) / 60;
+}
+
+function timeToMinutes(value: string): number {
+  const [hour = 0, minute = 0] = value.split(":").map(Number);
+  return hour * 60 + minute;
 }
 
 function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {

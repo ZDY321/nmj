@@ -32,6 +32,7 @@ export function buildNextScheduleImportState(
     selectedDate: string;
     rows: ImportPreviewLesson[];
     summary: ReturnType<typeof summarizeImportPreview>;
+    splitMergeExcludedLessonIds?: string[];
   }
 ): ScheduleImportVaultState {
   const now = new Date().toISOString();
@@ -44,6 +45,7 @@ export function buildNextScheduleImportState(
       review,
       ...(previous?.reviews ?? []).filter((item) => item.id !== review.id)
     ].slice(0, 20),
+    splitMergeExcludedLessonIds: context.splitMergeExcludedLessonIds ?? previous?.splitMergeExcludedLessonIds ?? [],
     updatedAt: now
   };
 }
@@ -133,12 +135,14 @@ function buildReviewRecord(
 export function buildScheduleImportStateWithoutReview(
   vault: TeacherVault,
   mapping: ScheduleImportMapping,
-  resolutions: ScheduleImportResolutionMap
+  resolutions: ScheduleImportResolutionMap,
+  splitMergeExcludedLessonIds?: string[]
 ): ScheduleImportVaultState {
   return {
     mappings: { ...mapping },
     resolutions: { ...resolutions },
     reviews: vault.scheduleImport?.reviews ?? [],
+    splitMergeExcludedLessonIds: splitMergeExcludedLessonIds ?? vault.scheduleImport?.splitMergeExcludedLessonIds ?? [],
     updatedAt: new Date().toISOString()
   };
 }

@@ -148,12 +148,17 @@ export function ScheduleImportPanel({
     if (invalidSplitMergeRowKeys.has(rowKey)) return "拆分合并标记已失效";
     if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId) && !isCurrentlyLinked && !isDirectMatched) return "拆分合并标记已失效";
     if (resolution?.linkedSystemLessonIds?.length && row.systemLessonId && isDirectMatched) return "合并需复核";
+    if (resolution?.status === "split_merge_ok" && resolution.linkedSystemLessonIds?.length) return `合并到 ${resolution.linkedSystemLessonIds.length} 节云端课`;
     if (row.status === "import_missing" && isCurrentlyLinked && linkedSourceCount > 0) return `由 ${linkedSourceCount} 条教务课合并`;
     return undefined;
   };
   const effectiveRows = useMemo(
     () => rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds)),
     [linkedSystemLessonIds, resolutions, rows]
+  );
+  const splitMergeExcludedLessonIds = useMemo(
+    () => splitMergePayrollExcludedLessonIds(rows, resolutions),
+    [resolutions, rows]
   );
   const summary = useMemo(() => summarizeImportPreview(effectiveRows), [effectiveRows]);
   const resolvedAsMatchedCount = useMemo(
@@ -282,7 +287,7 @@ export function ScheduleImportPanel({
       savedAt: new Date().toISOString()
     });
     if (onSaveScheduleImport) {
-      onSaveScheduleImport(buildScheduleImportStateWithoutReview(vault, nextMapping, resolutions));
+      onSaveScheduleImport(buildScheduleImportStateWithoutReview(vault, nextMapping, resolutions, splitMergeExcludedLessonIds));
       setMessage(courseId ? "课程映射已自动保存到云端加密档案，下次导入会直接复用。" : "课程映射已清除并同步到云端加密档案。");
     } else if (savedMappingOk) {
       setMessage(courseId ? "课程映射已自动保存到本机浏览器。" : "课程映射已清除。");
@@ -312,9 +317,10 @@ export function ScheduleImportPanel({
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) {
     const key = resolutionKey(row);
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
+    const nextSplitMergeExcludedLessonIds = splitMergePayrollExcludedLessonIds(rows, nextResolutions);
     setResolutions(nextResolutions);
     if (patch.status) {
-      onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(vault, mapping, nextResolutions));
+      onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(vault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds));
       const label = resolutionStatusLabel(patch.status);
       setMessage(
         resolutionMarksRowResolved(patch.status)
@@ -346,7 +352,8 @@ export function ScheduleImportPanel({
       selectedMonth: displayMonth,
       selectedDate,
       rows,
-      summary
+      summary,
+      splitMergeExcludedLessonIds
     });
     onSaveScheduleImport?.(nextScheduleImport);
     setSelectedReviewId(nextScheduleImport.reviews[0]?.id ?? "");
@@ -367,6 +374,7 @@ export function ScheduleImportPanel({
       mappings: { ...(previous.mappings ?? {}) },
       resolutions: { ...(previous.resolutions ?? {}) },
       reviews: nextReviews,
+      splitMergeExcludedLessonIds: previous.splitMergeExcludedLessonIds ?? [],
       updatedAt: new Date().toISOString()
     });
     setSelectedReviewId((current) => current === reviewId ? nextReviews[0]?.id ?? "" : current);
@@ -508,4 +516,15 @@ export function ScheduleImportPanel({
       {dialog}
     </Card>
   );
+}
+
+function splitMergePayrollExcludedLessonIds(rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): string[] {
+  const lessonIds = new Set<string>();
+  rows.forEach((row) => {
+    const resolution = resolutions[resolutionKey(row)];
+    if (resolution?.status !== "split_merge_ok" || !row.systemLessonId) return;
+    const mergeTargetLessonIds = (resolution.linkedSystemLessonIds ?? []).filter((lessonId) => lessonId && lessonId !== row.systemLessonId);
+    if (mergeTargetLessonIds.length > 0) lessonIds.add(row.systemLessonId);
+  });
+  return Array.from(lessonIds);
 }

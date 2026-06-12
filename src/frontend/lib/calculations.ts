@@ -15,6 +15,8 @@ import type {
   SalaryGradeStageRateConfig,
   SalaryGradeRuleConfig,
   SalaryGradeStage,
+  ScheduleImportResolution,
+  ScheduleImportSavedRow,
   TeacherVault
 } from "../../shared/types";
 
@@ -806,16 +808,25 @@ function completedHours(lesson: Lesson): number {
 }
 
 export function payrollExcludedSplitMergeLessonIds(vault: TeacherVault, month?: string): Set<string> {
+  if (vault.scheduleImport?.splitMergeExcludedLessonIds) {
+    return new Set(vault.scheduleImport.splitMergeExcludedLessonIds.filter((lessonId) => {
+      if (!month) return true;
+      return vault.lessons.find((lesson) => lesson.id === lessonId)?.date.startsWith(month);
+    }));
+  }
   const reviews = vault.scheduleImport?.reviews ?? [];
+  const currentResolutions = vault.scheduleImport?.resolutions;
   const lessonIds = new Set<string>();
   reviews
     .filter((review) => !month || review.month === month)
     .forEach((review) => {
       review.rows.forEach((row) => {
-        if (row.resolutionStatus !== "split_merge_ok" || !row.systemLessonId) return;
-        (row.linkedSystemLessonIds ?? []).forEach((lessonId) => {
-          if (lessonId !== row.systemLessonId) lessonIds.add(lessonId);
-        });
+        const resolution = currentResolutions
+          ? currentResolutions[savedScheduleImportRowResolutionKey(row)]
+          : savedRowResolution(row);
+        if (resolution?.status !== "split_merge_ok" || !row.systemLessonId) return;
+        const mergeTargetLessonIds = (resolution.linkedSystemLessonIds ?? []).filter((lessonId) => lessonId && lessonId !== row.systemLessonId);
+        if (mergeTargetLessonIds.length > 0) lessonIds.add(row.systemLessonId);
       });
     });
   return lessonIds;
@@ -823,6 +834,29 @@ export function payrollExcludedSplitMergeLessonIds(vault: TeacherVault, month?: 
 
 export function isPayrollExcludedSplitMergeLesson(lesson: Lesson, excludedLessonIds: Set<string>): boolean {
   return excludedLessonIds.has(lesson.id);
+}
+
+function savedRowResolution(row: ScheduleImportSavedRow): ScheduleImportResolution | undefined {
+  return row.resolutionStatus
+    ? {
+      status: row.resolutionStatus,
+      note: row.resolutionNote,
+      linkedSystemLessonIds: row.linkedSystemLessonIds,
+      updatedAt: row.resolutionUpdatedAt ?? ""
+    }
+    : undefined;
+}
+
+function savedScheduleImportRowResolutionKey(row: ScheduleImportSavedRow): string {
+  return [
+    row.systemLessonId || row.id,
+    row.fileName,
+    row.date,
+    row.startTime,
+    row.endTime,
+    row.matchedCourseId ?? "",
+    row.title
+  ].join("|");
 }
 
 function isLessonFullyMissedAndMakeupExempt(lesson: Lesson): boolean {

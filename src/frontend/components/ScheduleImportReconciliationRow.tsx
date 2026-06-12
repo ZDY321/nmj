@@ -86,8 +86,6 @@ export function ScheduleImportReconciliationRow({
     row.status === "import_missing";
   const showReviewControls = row.status !== "matched" || reviewed || Boolean(resolution?.linkedSystemLessonIds?.length);
   const showExpandedReviewControls = showReviewControls && (!canCollapseDetails || detailsExpanded);
-  const hiddenCurrentIssues = row.status !== "matched" && displayStatus === "matched" && row.issues.length > 0;
-  const issuePreview = row.issues.slice(0, 2).join("；");
   const clearLinkedLessonsPatch = (): Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">> => ({
     linkedSystemLessonIds: [],
     ...(resolutionStatus === "split_merge_ok" ? { status: "unreviewed", note: "" } : {})
@@ -119,7 +117,6 @@ export function ScheduleImportReconciliationRow({
             {resolvedByLinkedImport && <Badge variant="plum">由 {linkedBySources.length} 条教务课合并成此云端课</Badge>}
             {resolvedAsMatched && !resolvedByLinkedImport && <Badge variant="sage">已计入已对应</Badge>}
             {resolution?.linkedSystemLessonIds?.length && !resolvedByLinkedImport ? <Badge variant="plum">→ 合并到 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}
-            {hiddenCurrentIssues && <Badge variant="amber">当前对账差异</Badge>}
             {splitMergeNeedsReview && <Badge variant="amber">拆分合并需复核</Badge>}
             {hasSplitMergeLinkProblem && <Badge variant="amber">拆分合并标记已失效</Badge>}
           </div>
@@ -135,11 +132,6 @@ export function ScheduleImportReconciliationRow({
                 {row.note ? ` · 教务备注：${row.note}` : ""}
                 {systemLesson?.note ? ` · 云端备注：${systemLesson.note}` : ""}
               </div>
-              {hiddenCurrentIssues && (
-                <div className="mt-2 rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1.5 text-xs font-semibold leading-5 text-[#9a3412]">
-                  当前对账差异：{issuePreview}{row.issues.length > 2 ? ` 等 ${row.issues.length} 项` : ""}
-                </div>
-              )}
               {linkedBySources.length > 0 && (
                 <div className="mt-2 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 text-xs font-semibold leading-5 text-[#5161d6]">
                   由 {linkedBySources.map((source) => `${source.date} ${source.startTime}-${source.endTime}`).join("、")} 教务课合并成此云端课
@@ -162,17 +154,12 @@ export function ScheduleImportReconciliationRow({
         )}
       </div>
 
-      {canCollapseDetails && !detailsExpanded && (linkedLessons.length > 0 || linkedBySources.length > 0) && (
+      {canCollapseDetails && !detailsExpanded && linkedLessons.length > 0 && (
         <div className="mt-2 space-y-2">
           <div className="flex items-center gap-2 text-xs">
             {linkedLessons.length > 0 && (
               <div className="flex-1 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 font-semibold text-[#5161d6]">
-                已关联 {linkedLessons.map(l => `${l.date} ${l.startTime}`).join("、")}
-              </div>
-            )}
-            {linkedBySources.length > 0 && (
-              <div className="flex-1 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 font-semibold text-[#5161d6]">
-                由 {linkedBySources.map(s => `${s.date} ${s.startTime}`).join("、")} 教务课合并
+                已关联 {linkedLessons.map(l => `${l.date} ${l.startTime}-${l.endTime} ${localCourseName(vault, l.courseGroupId)}`).join("、")}
               </div>
             )}
             <Button
@@ -198,54 +185,6 @@ export function ScheduleImportReconciliationRow({
               {canLinkSplitMerge ? "重新选择" : "展开详情"}
             </Button>
           </div>
-          {canLinkSplitMerge && splitMergeCandidates.length > 0 && (
-            <div className="rounded-[10px] border border-[#dbe4ef] bg-white p-2">
-              <div className="mb-2 text-[11px] font-extrabold text-[#64748b]">快速选择云端课节：</div>
-              <div className="max-h-32 space-y-1.5 overflow-y-auto">
-                {splitMergeCandidates.slice(0, 5).map((candidate) => {
-                  const checked = Boolean(resolution?.linkedSystemLessonIds?.includes(candidate.id));
-                  const existingSystemLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
-                  return (
-                    <label
-                      key={candidate.id}
-                      className={`flex cursor-pointer items-center gap-2 rounded-[8px] border px-2 py-1.5 text-xs transition-colors ${
-                        checked ? "border-[#5161d6] bg-[#eef0ff]" : "border-[#e8eef6] bg-[#f8fbff] hover:bg-white"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) => {
-                          const current = new Set((resolution?.linkedSystemLessonIds ?? []).filter((id) => existingSystemLessonIds.has(id)));
-                          if (event.target.checked) {
-                            current.add(candidate.id);
-                          } else {
-                            current.delete(candidate.id);
-                          }
-                          const nextStatus = current.size > 0 ? "split_merge_ok" : resolutionStatus === "split_merge_ok" ? "unreviewed" : resolutionStatus;
-                          onResolutionChange({
-                            linkedSystemLessonIds: Array.from(current),
-                            status: nextStatus,
-                            ...(nextStatus === "unreviewed" ? { note: "" } : {})
-                          });
-                        }}
-                        className="h-3.5 w-3.5 shrink-0 accent-[#5161d6]"
-                      />
-                      <span className="min-w-0 flex-1 truncate font-semibold text-[#25324a]">
-                        {candidate.date} {candidate.startTime} · {localCourseName(vault, candidate.courseGroupId)}
-                      </span>
-                      <span className="shrink-0 text-[11px] font-bold text-[#64748b]">{candidate.scoreLabel}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {splitMergeCandidates.length > 5 && (
-                <div className="mt-2 text-center text-[11px] font-semibold text-[#64748b]">
-                  还有 {splitMergeCandidates.length - 5} 节，点击"重新选择"查看全部
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -256,6 +195,7 @@ export function ScheduleImportReconciliationRow({
             vault={vault}
             courses={courses}
             systemLesson={systemLesson}
+            linkedLessons={linkedLessons}
             onMap={onMap}
             onOpenLesson={onOpenLesson}
           />
@@ -264,26 +204,6 @@ export function ScheduleImportReconciliationRow({
             <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-white/70 p-3">
               <div className="mb-2 text-xs font-extrabold text-[#9a3412]">对账差异</div>
               <ScheduleImportIssueList issues={row.issues} />
-            </div>
-          )}
-
-          {linkedLessons.length > 0 && (
-            <div className="mt-3 rounded-[12px] border border-[#c7d2fe] bg-[#eef0ff] p-3">
-              <div className="text-xs font-extrabold text-[#5161d6]">本条拆分合并关联的云端课节</div>
-              <div className="mt-2 space-y-1.5">
-                {linkedLessons.map((lesson) => (
-                  <button
-                    key={lesson.id}
-                    type="button"
-                    onClick={() => onOpenLesson?.(lesson)}
-                    className="block w-full rounded-[9px] border border-[#dbe4ef] bg-white px-2.5 py-2 text-left text-xs font-semibold text-[#64748b] transition-colors hover:border-[#93c5fd] hover:bg-[#f8fbff]"
-                  >
-                    <span className="font-extrabold text-[#061226]">{lesson.date} {lesson.startTime}-{lesson.endTime}</span>
-                    {" · "}{localCourseName(vault, lesson.courseGroupId)}
-                    {" · "}{lessonDurationHours(lesson).toFixed(1)} 小时
-                  </button>
-                ))}
-              </div>
             </div>
           )}
 
