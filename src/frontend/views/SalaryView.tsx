@@ -20,7 +20,18 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { Lesson, SalaryAdjustment, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
-import { attendanceSummary, estimatedMonthlyIncome, lessonBillableHours, obligationSummary, salaryBreakdown, todayIso, yearlyTrend } from "@/frontend/lib/calculations";
+import {
+  attendanceSummary,
+  estimatedMonthlyIncome,
+  isPayrollExcludedSplitMergeLesson,
+  lessonBillableHours,
+  obligationSummary,
+  payrollCompletedLessonCount,
+  payrollExcludedSplitMergeLessonIds,
+  salaryBreakdown,
+  todayIso,
+  yearlyTrend
+} from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
   campusName,
@@ -81,6 +92,9 @@ export function SalaryView({
     ...vault.salaryAdjustments.map((adjustment) => adjustment.month.slice(0, 4))
   ])).sort((a, b) => b.localeCompare(a));
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
+  const payrollLessonCount = payrollCompletedLessonCount(vault, selectedMonth);
+  const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, selectedMonth);
+  const splitMergeExcludedCount = monthLessons.filter((lesson) => isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)).length;
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
   const totalHours = monthLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
   const recentLessons = [...monthLessons]
@@ -266,7 +280,9 @@ export function SalaryView({
                 <BarChart3 size={14} /> 年度变化
               </div>
               <CardTitle className="text-xl">按月收入趋势</CardTitle>
-              <CardDescription className="mt-2">包含基本工资、已完成课时费、补贴扣款和义务课时扣费</CardDescription>
+              <CardDescription className="mt-2">
+                包含基本工资、已完成课时费、补贴扣款和义务课时扣费；下方课节数为对账后的计薪口径，不等同于排课日历总节数。
+              </CardDescription>
             </div>
             <Select value={year} onChange={(event) => changeYear(event.target.value)} className="h-10 w-[112px]" aria-label="选择统计年份">
               {yearOptions.map((optionYear) => (
@@ -290,15 +306,17 @@ export function SalaryView({
                 >
                   <div className="text-xs font-bold text-[#64748b]">{monthNames[Number(item.month.slice(5)) - 1]}</div>
                   <div className="mt-2 break-words text-lg font-extrabold leading-tight text-[#061226]">{formatPrivateMoney(item.total, amountsVisible)}</div>
-                  <div className="mt-2 text-[11px] font-semibold text-[#64748b]">{item.count} 节课程</div>
+                  <div className="mt-2 text-[11px] font-semibold text-[#64748b]">{item.count} 节计薪课</div>
                 </button>
               ))}
             </div>
             <div className="mt-5">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-extrabold text-[#061226]">本年每月课次</div>
-                  <div className="mt-1 text-xs font-semibold text-[#64748b]">仅显示已发生或当前月份，避免未来月份干扰判断。</div>
+                  <div className="text-sm font-extrabold text-[#061226]">本年每月计薪课次</div>
+                  <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                    仅统计已完成/补课完成且进入工资统计的课节；教务 Excel 对账中拆分合并后不单独计费的云端课节会排除。
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-6">
@@ -327,15 +345,18 @@ export function SalaryView({
             <FileCheck2 size={14} /> 数据核对
           </div>
           <CardTitle>{selectedMonth} 教学数据与到课核对</CardTitle>
-          <CardDescription>点击上方年度趋势中的月份，可切换这里的核对月份；到课情况已合并在同一组数据卡片中。</CardDescription>
+          <CardDescription>
+            点击上方年度趋势中的月份，可切换这里的核对月份；排课总节数来自日历课表，计薪课节来自工资统计和教务 Excel 对账后的结果。
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-10">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-11">
             {[
               { label: "总收入", value: formatPrivateMoney(breakdown.total, amountsVisible) },
               { label: "预估本月收入", value: formatPrivateMoney(estimatedIncome, amountsVisible) },
               { label: "课时", value: `${(totalHours || completedThisMonth.length * 2).toFixed(1)} 小时` },
-              { label: "课程", value: `${monthLessons.length} 节` },
+              { label: "排课总节数", value: `${monthLessons.length} 节` },
+              { label: "计薪课节", value: `${payrollLessonCount} 节` },
               ...Object.entries(summary).map(([key, value]) => ({
                 label: attendanceLabels[key as keyof typeof attendanceLabels],
                 value: `${value}`
@@ -352,6 +373,10 @@ export function SalaryView({
                 <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
               </motion.div>
             ))}
+          </div>
+          <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-4 py-3 text-xs font-semibold leading-5 text-[#64748b]">
+            口径说明：排课日历统计所有本月课节；本页收入趋势里的课节数按计薪口径统计，只包含已完成/补课完成且未被对账拆分合并排除的课节。
+            {splitMergeExcludedCount > 0 ? ` 当前月份有 ${splitMergeExcludedCount} 节课因拆分合并对账标记为不单独计费。` : ""}
           </div>
 
           <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-6">

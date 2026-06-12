@@ -836,6 +836,17 @@ export function isPayrollExcludedSplitMergeLesson(lesson: Lesson, excludedLesson
   return excludedLessonIds.has(lesson.id);
 }
 
+export function isPayrollCountedCompletedLesson(lesson: Lesson, excludedLessonIds: Set<string>): boolean {
+  if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return false;
+  if (isPayrollExcludedSplitMergeLesson(lesson, excludedLessonIds)) return false;
+  return !isOriginalFullyMadeUp(lesson) && !isLessonFullyMissedAndMakeupExempt(lesson);
+}
+
+export function payrollCompletedLessonCount(vault: TeacherVault, month: string): number {
+  const excludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, month);
+  return vault.lessons.filter((lesson) => monthOf(lesson.date) === month && isPayrollCountedCompletedLesson(lesson, excludedLessonIds)).length;
+}
+
 function savedRowResolution(row: ScheduleImportSavedRow): ScheduleImportResolution | undefined {
   return row.resolutionStatus
     ? {
@@ -1096,11 +1107,10 @@ export function attendanceSummary(vault: TeacherVault, month: string): Record<At
 export function yearlyTrend(vault: TeacherVault, year: string): Array<{ month: string; total: number; count: number }> {
   return Array.from({ length: 12 }, (_, index) => {
     const month = `${year}-${String(index + 1).padStart(2, "0")}`;
-    const lessons = vault.lessons.filter((lesson) => monthOf(lesson.date) === month);
     return {
       month,
       total: salaryBreakdown(vault, month).total,
-      count: lessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed").length
+      count: payrollCompletedLessonCount(vault, month)
     };
   });
 }
