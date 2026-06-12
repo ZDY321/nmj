@@ -28,6 +28,7 @@ import {
   courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
+  lessonCampusId,
   lessonStatusLabels,
   lessonStatusVariant,
   sortLessons,
@@ -82,10 +83,6 @@ export function SalaryView({
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
   const totalHours = monthLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
-  function lessonCampusId(lesson: Lesson): string | undefined {
-    return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
-  }
-
   const recentLessons = [...monthLessons]
     .filter((lesson) => {
       const matchesDate =
@@ -95,7 +92,7 @@ export function SalaryView({
       const matchesStudent =
         !detailStudentFilter.trim() ||
         studentNames(vault, lesson.expectedStudentIds).toLowerCase().includes(detailStudentFilter.trim().toLowerCase());
-      const matchesCampus = detailCampusFilter === "all" || lessonCampusId(lesson) === detailCampusFilter;
+      const matchesCampus = detailCampusFilter === "all" || lessonCampusId(vault, lesson) === detailCampusFilter;
       const matchesStatus = detailStatusFilter === "all" || lesson.status === detailStatusFilter;
       return matchesDate && matchesCourse && matchesStudent && matchesCampus && matchesStatus;
     })
@@ -463,7 +460,7 @@ export function SalaryView({
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
                     <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
-                      <MapPin size={12} /> {campusName(vault, lessonCampusId(lesson))}
+                      <MapPin size={12} /> {campusName(vault, lessonCampusId(vault, lesson))}
                     </span>
                     <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">
                       {courseTypeLabel(vault, lesson.type)}
@@ -527,7 +524,7 @@ export function SalaryView({
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-1 whitespace-nowrap">
                         <MapPin size={13} className="text-[#94a3b8]" />
-                        {campusName(vault, lessonCampusId(lesson))}
+                        {campusName(vault, lessonCampusId(vault, lesson))}
                       </span>
                     </td>
                     <td className="px-4 py-3">

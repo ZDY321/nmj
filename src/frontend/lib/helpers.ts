@@ -26,6 +26,7 @@ import type {
   Weekday
 } from "@/shared/types";
 import { buildFeeSnapshot, getCourse, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
 export type ViewKey = "today" | "calendar" | "schedule" | "progress" | "students" | "grades" | "payroll" | "salary" | "admin";
@@ -355,6 +356,10 @@ export function campusName(vault: TeacherVault, campusId?: string): string {
   return findCampus(vault, campusId)?.name ?? "未设置校区";
 }
 
+export function lessonCampusId(vault: TeacherVault, lesson: Pick<Lesson, "campusId" | "courseGroupId">): string | undefined {
+  return lesson.campusId ?? getCourse(vault, lesson.courseGroupId)?.defaultCampusId;
+}
+
 export function studentNames(vault: TeacherVault, studentIds: string[]): string {
   return studentIds
     .map((id) => ({ id, name: findStudent(vault, id)?.name ?? "未知学生" }))
@@ -462,21 +467,8 @@ export function createLessonFromCourse(
   return lesson;
 }
 
-function clockMinutes(value: string): number {
-  const [hoursText, minutesText] = value.split(":");
-  const hours = Number(hoursText);
-  const minutes = Number(minutesText);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return Number.NaN;
-  return hours * 60 + minutes;
-}
-
 function lessonTimesOverlap(firstStart: string, firstEnd: string, secondStart: string, secondEnd: string): boolean {
-  const firstStartMinutes = clockMinutes(firstStart);
-  const firstEndMinutes = clockMinutes(firstEnd);
-  const secondStartMinutes = clockMinutes(secondStart);
-  const secondEndMinutes = clockMinutes(secondEnd);
-  if (![firstStartMinutes, firstEndMinutes, secondStartMinutes, secondEndMinutes].every(Number.isFinite)) return false;
-  return firstStartMinutes < secondEndMinutes && secondStartMinutes < firstEndMinutes;
+  return timeRangesOverlap(firstStart, firstEnd, secondStart, secondEnd);
 }
 
 export function buildScheduleSyncLessonsForDate(

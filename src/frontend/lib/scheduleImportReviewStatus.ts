@@ -4,25 +4,38 @@ import type { ImportMatchStatus } from "@/frontend/lib/scheduleImport";
 export type ResolutionFilter = `resolution:${ScheduleImportResolutionStatus}`;
 export type StatusFilter = "all" | ImportMatchStatus | ResolutionFilter;
 export type ScheduleImportBadgeVariant = "sage" | "amber" | "secondary" | "destructive" | "sky" | "yellow" | "plum";
-
-export const statusFilters: StatusFilter[] = [
-  "all",
-  "matched",
-  "attendance_mismatch",
-  "time_mismatch",
-  "course_mismatch",
-  "system_missing",
-  "import_missing",
-  "needs_mapping",
-  "resolution:accepted",
-  "resolution:time_variance_ok",
-  "resolution:split_merge_ok",
-  "resolution:excel_error",
-  "resolution:fixed",
-  "resolution:cloud_error"
-];
+export type StatusFilterOption = { label: string; value: StatusFilter; variant?: ScheduleImportBadgeVariant };
+export type MatchStatusFilterOption = { label: string; status: ImportMatchStatus; variant: ScheduleImportBadgeVariant };
+export type ResolutionStatusFilterOption = { label: string; status: ResolutionFilter; resolutionStatus: ScheduleImportResolutionStatus; variant: ScheduleImportBadgeVariant };
 
 export const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "excel_error", "cloud_error", "fixed", "accepted", "time_variance_ok", "split_merge_ok"];
+
+export const importMatchStatusFilterOptions: MatchStatusFilterOption[] = [
+  { label: "已对应", status: "matched", variant: "sage" },
+  { label: "到课异常", status: "attendance_mismatch", variant: "amber" },
+  { label: "时间不一致", status: "time_mismatch", variant: "yellow" },
+  { label: "课程不一致", status: "course_mismatch", variant: "destructive" },
+  { label: "云端缺少", status: "system_missing", variant: "amber" },
+  { label: "教务缺少", status: "import_missing", variant: "plum" },
+  { label: "待映射", status: "needs_mapping", variant: "secondary" }
+];
+
+export const resolutionStatusFilterOptions: ResolutionStatusFilterOption[] = [
+  { label: "确认无误", status: "resolution:accepted", resolutionStatus: "accepted", variant: "sky" },
+  { label: "已修正", status: "resolution:fixed", resolutionStatus: "fixed", variant: "sage" },
+  { label: "时间偏差正常", status: "resolution:time_variance_ok", resolutionStatus: "time_variance_ok", variant: "yellow" },
+  { label: "拆分合并正常", status: "resolution:split_merge_ok", resolutionStatus: "split_merge_ok", variant: "plum" },
+  { label: "教务表错误", status: "resolution:excel_error", resolutionStatus: "excel_error", variant: "amber" },
+  { label: "云端需修正", status: "resolution:cloud_error", resolutionStatus: "cloud_error", variant: "destructive" }
+];
+
+export const statusFilterOptions: StatusFilterOption[] = [
+  { label: "全部状态", value: "all" },
+  ...importMatchStatusFilterOptions.map((option) => ({ label: option.label, value: option.status, variant: option.variant })),
+  ...resolutionStatusFilterOptions.map((option) => ({ label: option.label, value: option.status, variant: option.variant }))
+];
+
+export const statusFilters: StatusFilter[] = statusFilterOptions.map((option) => option.value);
 
 export function resolutionMarksRowResolved(status?: ScheduleImportResolutionStatus): boolean {
   return status === "accepted" || status === "fixed" || status === "excel_error" || status === "time_variance_ok" || status === "split_merge_ok";

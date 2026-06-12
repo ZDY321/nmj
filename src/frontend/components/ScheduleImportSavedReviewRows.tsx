@@ -19,6 +19,7 @@ import {
   savedRowSystemLesson,
   savedRowSystemLessonLabel,
   statusLabel,
+  statusFilterOptions,
   statusSurfaceClass,
   statusVariant,
   type StatusFilter
@@ -60,20 +61,9 @@ export function ScheduleImportSavedReviewRows({
           ))}
         </Select>
         <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
-          <option value="all">全部状态</option>
-          <option value="matched">已对应</option>
-          <option value="attendance_mismatch">到课异常</option>
-          <option value="time_mismatch">时间不一致</option>
-          <option value="course_mismatch">课程不一致</option>
-          <option value="system_missing">云端缺少</option>
-          <option value="import_missing">教务缺少</option>
-          <option value="needs_mapping">待映射</option>
-          <option value="resolution:accepted">确认无误</option>
-          <option value="resolution:time_variance_ok">时间偏差正常</option>
-          <option value="resolution:split_merge_ok">拆分合并正常</option>
-          <option value="resolution:excel_error">教务表错误</option>
-          <option value="resolution:fixed">已修正</option>
-          <option value="resolution:cloud_error">云端需修正</option>
+          {statusFilterOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
         </Select>
         <label className="relative block">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />

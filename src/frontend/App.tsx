@@ -44,11 +44,13 @@ import {
   linkSyncedLessonsToPreviousLessons,
   lessonStudentIds,
   makeupNeededStudentIds,
+  navItems,
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
+import { normalizeTimeText, timeToMinutes, timesOverlap } from "@/frontend/lib/time";
 import type {
   Campus,
   AiScheduleSession,
@@ -1304,27 +1306,7 @@ export function App() {
     };
 
     const normalizeAiTime = (value: unknown): string | null => {
-      const raw = stringValue(value).replace(/[：.]/g, ":");
-      if (!raw) return null;
-      let hourText = "";
-      let minuteText = "";
-      const colonMatch = raw.match(/^(\d{1,2}):(\d{1,2})$/);
-      if (colonMatch) {
-        hourText = colonMatch[1];
-        minuteText = colonMatch[2];
-      } else if (/^\d{3,4}$/.test(raw)) {
-        hourText = raw.slice(0, -2);
-        minuteText = raw.slice(-2);
-      } else if (/^\d{1,2}$/.test(raw)) {
-        hourText = raw;
-        minuteText = "00";
-      } else {
-        return null;
-      }
-      const hour = Number(hourText);
-      const minute = Number(minuteText);
-      if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-      return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      return normalizeTimeText(stringValue(value));
     };
 
     const createScheduledLessonsFromAi = (
@@ -2785,14 +2767,7 @@ export function App() {
 }
 
 const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
-  { key: "today", label: viewTitles.today },
-  { key: "calendar", label: viewTitles.calendar },
-  { key: "schedule", label: viewTitles.schedule },
-  { key: "progress", label: viewTitles.progress },
-  { key: "students", label: viewTitles.students },
-  { key: "grades", label: viewTitles.grades },
-  { key: "payroll", label: viewTitles.payroll },
-  { key: "salary", label: viewTitles.salary }
+  ...navItems.map((item) => ({ key: item.key, label: item.label }))
 ];
 
 function noticeReadKey(username: string): string {
@@ -2895,15 +2870,7 @@ function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Less
 }
 
 function cloneFeeRule(rule: FeeRule): FeeRule {
-  return {
-    ...rule,
-    classFeeTiers: rule.classFeeTiers?.map((tier) => ({ ...tier })),
-    stageRates: rule.stageRates
-      ? Object.fromEntries(
-          Object.entries(rule.stageRates).map(([stage, rate]) => [stage, rate ? { ...rate } : rate])
-        ) as FeeRule["stageRates"]
-      : undefined
-  };
+  return structuredClone(rule);
 }
 
 function moveLessonsToTrash(vault: TeacherVault, lessons: Lesson[], source: DeletedLessonSource, reason?: string) {
@@ -3131,15 +3098,6 @@ function removeResolvedMakeupNames(note: string | undefined, vault: TeacherVault
     const studentName = vault.students.find((student) => student.id === studentId)?.name;
     return studentName ? current.replaceAll(studentName, "").replace(/、{2,}/g, "、").replace(/^、|、(?= 补 )/g, "").trim() : current;
   }, note);
-}
-
-function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
-  return timeToMinutes(aStart) < timeToMinutes(bEnd) && timeToMinutes(bStart) < timeToMinutes(aEnd);
-}
-
-function timeToMinutes(value: string): number {
-  const [hour, minute] = value.split(":").map(Number);
-  return hour * 60 + minute;
 }
 
 function isPlainRecordLocal(value: unknown): value is Record<string, unknown> {

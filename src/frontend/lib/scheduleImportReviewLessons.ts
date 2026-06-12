@@ -2,9 +2,11 @@ import type { CourseType, Lesson, ScheduleImportSavedRow, ScheduleImportResoluti
 import {
   courseName as localCourseName,
   courseTypeLabel,
+  lessonCampusId as sharedLessonCampusId,
   studentNames
 } from "@/frontend/lib/helpers";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
+import { durationHours, timeToMinutes } from "@/frontend/lib/time";
 
 export function splitMergeCandidateLessons(vault: TeacherVault, row: ImportPreviewLesson): Array<Lesson & { score: number; scoreLabel: string }> {
   const month = row.date.slice(0, 7);
@@ -165,11 +167,11 @@ export function summarizeLinkedLessons(linkedLessons: Lesson[], row: ImportPrevi
 }
 
 function importedRowDurationHours(row: Pick<ImportPreviewLesson, "startTime" | "endTime">): number {
-  return Math.max(0, timeToMinutes(row.endTime) - timeToMinutes(row.startTime)) / 60;
+  return durationHours(row.startTime, row.endTime);
 }
 
 export function lessonDurationHours(lesson: Pick<Lesson, "startTime" | "endTime">): number {
-  return Math.max(0, timeToMinutes(lesson.endTime) - timeToMinutes(lesson.startTime)) / 60;
+  return durationHours(lesson.startTime, lesson.endTime);
 }
 
 function timeGapMinutes(row: Pick<ImportPreviewLesson, "startTime" | "endTime">, lesson: Pick<Lesson, "startTime" | "endTime">): number {
@@ -181,11 +183,6 @@ function timeGapMinutes(row: Pick<ImportPreviewLesson, "startTime" | "endTime">,
   return Math.min(Math.abs(rowStart - lessonEnd), Math.abs(lessonStart - rowEnd));
 }
 
-function timeToMinutes(value: string): number {
-  const [hour = 0, minute = 0] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
 function daysBetween(a: string, b: string): number {
   const first = new Date(`${a}T00:00:00`).getTime();
   const second = new Date(`${b}T00:00:00`).getTime();
@@ -194,7 +191,7 @@ function daysBetween(a: string, b: string): number {
 }
 
 export function lessonCampusId(vault: TeacherVault, lesson: Lesson): string | undefined {
-  return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
+  return sharedLessonCampusId(vault, lesson);
 }
 
 export function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {

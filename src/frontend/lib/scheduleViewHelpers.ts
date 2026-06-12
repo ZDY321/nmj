@@ -1,6 +1,6 @@
 import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, WeekStart } from "@/shared/types";
-import { timeTextToMinutes } from "@/components/ui/time-text-input";
 import { formatAppDateTime, getCourse, lessonBillableHours, todayIso } from "@/frontend/lib/calculations";
+import { timeToMinutes as parseTimeToMinutes } from "@/frontend/lib/time";
 import {
   addDays,
   attendedStudentNamesForLesson,
@@ -279,7 +279,7 @@ export function isStudentStatsTimeRangeValid(startTime: string, endTime: string)
 }
 
 export function timeToMinutes(value: string): number {
-  return timeTextToMinutes(value);
+  return parseTimeToMinutes(value);
 }
 
 export function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {

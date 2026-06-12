@@ -5,6 +5,7 @@ import {
   campusName,
   compareByName,
   courseTypeOptionsForVault,
+  lessonCampusId,
   sortLessons,
   sortCampusesForProfile,
   sortCoursesByName,
@@ -59,10 +60,6 @@ export function usePayrollReviewData({
   );
   const effectiveObligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId;
 
-  function lessonCampusId(lesson: Lesson): string | undefined {
-    return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
-  }
-
   function matchesGradeFilter(lesson: Lesson): boolean {
     return (
       gradeFilter === "all" ||
@@ -71,7 +68,7 @@ export function usePayrollReviewData({
   }
 
   function matchesReviewFilters(lesson: Lesson, includeCampus: boolean): boolean {
-    const matchesCampus = !includeCampus || campusFilter === "all" || lessonCampusId(lesson) === campusFilter;
+    const matchesCampus = !includeCampus || campusFilter === "all" || lessonCampusId(vault, lesson) === campusFilter;
     const matchesType = typeFilter === "all" || lesson.type === typeFilter;
     const matchesStatus = statusFilter === "all" || lesson.status === statusFilter;
     return matchesCampus && matchesType && matchesStatus && matchesGradeFilter(lesson);
@@ -154,8 +151,7 @@ export function usePayrollReviewData({
     monthLessons.forEach((lesson) => {
       if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return;
       if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return;
-      const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
-      const campusId = lesson.campusId ?? course?.defaultCampusId;
+      const campusId = lessonCampusId(vault, lesson);
       const amount = completedAmount(lesson);
       if (lesson.status === "makeup_completed") {
         addDetail("makeup", campusId, amount);
@@ -181,7 +177,7 @@ export function usePayrollReviewData({
       .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
       .filter((lesson) => matchesReviewFilters(lesson, false));
     return campusOptions.map((campus) => {
-      const lessons = campusSummaryBaseLessons.filter((lesson) => lessonCampusId(lesson) === campus.id);
+      const lessons = campusSummaryBaseLessons.filter((lesson) => lessonCampusId(vault, lesson) === campus.id);
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
       const hours = lessons.reduce((sum, lesson) => {
         if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;

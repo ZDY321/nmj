@@ -11,6 +11,7 @@ import {
   courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
+  lessonCampusId,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
@@ -55,10 +56,6 @@ export function PayrollLessonDetailsCard({
   onStatusFilterChange: (value: LessonStatusFilter) => void;
   onOpenLesson?: (lesson: Lesson) => void;
 }) {
-  function lessonCampusId(lesson: Lesson): string | undefined {
-    return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
-  }
-
   function hasAttendanceException(lesson: Lesson): boolean {
     return lesson.attendance.some((entry) => entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending");
   }
@@ -137,7 +134,7 @@ export function PayrollLessonDetailsCard({
                     <Badge variant="secondary">{courseTypeLabel(vault, lesson.type)}</Badge>
                   </div>
                   <div className="mt-2 text-sm font-semibold text-[#475569]">
-                    {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lessonCampusId(lesson))}
+                    {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lessonCampusId(vault, lesson))}
                   </div>
                   <div className="mt-1 text-sm text-[#64748b]">{studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}</div>
                   {hasException && (

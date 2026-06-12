@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Input, type InputProps } from "@/components/ui/input";
+import { normalizeTimeText, timeToMinutes } from "@/frontend/lib/time";
 
 export interface TimeTextInputProps extends Omit<InputProps, "type" | "value" | "onChange"> {
   value: string;
@@ -58,39 +59,9 @@ const TimeTextInput = React.forwardRef<HTMLInputElement, TimeTextInputProps>(
 );
 TimeTextInput.displayName = "TimeTextInput";
 
-export function normalizeTimeText(value: string): string | null {
-  const raw = value.trim().replace(/[：.]/g, ":");
-  if (!raw) return null;
-
-  let hourText = "";
-  let minuteText = "";
-  const colonMatch = raw.match(/^(\d{1,2}):(\d{1,2})$/);
-  if (colonMatch) {
-    hourText = colonMatch[1];
-    minuteText = colonMatch[2];
-  } else if (/^\d{3,4}$/.test(raw)) {
-    hourText = raw.slice(0, -2);
-    minuteText = raw.slice(-2);
-  } else if (/^\d{1,2}$/.test(raw)) {
-    hourText = raw;
-    minuteText = "00";
-  } else {
-    return null;
-  }
-
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-    return null;
-  }
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
-
 export function timeTextToMinutes(value: string): number {
-  const normalized = normalizeTimeText(value);
-  if (!normalized) return Number.NaN;
-  const [hour, minute] = normalized.split(":").map(Number);
-  return hour * 60 + minute;
+  return timeToMinutes(value);
 }
 
+export { normalizeTimeText };
 export { TimeTextInput };

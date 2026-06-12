@@ -1,5 +1,7 @@
 import * as XLSX from "xlsx";
 import type { CourseGroup, CourseType, Lesson, TeacherVault } from "@/shared/types";
+import { lessonCampusId } from "@/frontend/lib/helpers";
+import { timesOverlap } from "@/frontend/lib/time";
 
 export type ImportedScheduleLesson = {
   id: string;
@@ -602,17 +604,8 @@ function normalizeTime(value: string): string | null {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
-function timeToMinutes(value: string): number {
-  const [hour, minute] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-function timeOverlaps(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
-  return timeToMinutes(aStart) < timeToMinutes(bEnd) && timeToMinutes(bStart) < timeToMinutes(aEnd);
-}
-
 function systemLessonCampusId(vault: TeacherVault, lesson: Lesson): string | undefined {
-  return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
+  return lessonCampusId(vault, lesson);
 }
 
 function activeSystemLessonsForDate(vault: TeacherVault, date: string, campusId?: string): Lesson[] {
@@ -633,7 +626,7 @@ function findExactSystemLesson(vault: TeacherVault, lesson: ImportedScheduleLess
 
 function findSameCourseDifferentTimeLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, courseId: string, campusId?: string): Lesson | undefined {
   const candidates = activeSystemLessonsForDate(vault, lesson.date, campusId).filter((item) => item.courseGroupId === courseId);
-  const overlapping = candidates.filter((item) => timeOverlaps(item.startTime, item.endTime, lesson.startTime, lesson.endTime));
+  const overlapping = candidates.filter((item) => timesOverlap(item.startTime, item.endTime, lesson.startTime, lesson.endTime));
   return preferredSystemLessonForImportedLesson(overlapping, lesson) ?? preferredSystemLessonForImportedLesson(candidates, lesson);
 }
 

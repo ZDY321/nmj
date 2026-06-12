@@ -19,6 +19,7 @@ import {
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
+  lessonCampusId,
   lessonStudentDisplay,
   lessonStudentIds,
   makeupNeededStudentIds,
@@ -37,6 +38,7 @@ import {
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { timeToMinutes } from "@/frontend/lib/time";
 
 type CalendarOverviewPage = "month" | "week";
 type WeekTimeRow = {
@@ -59,17 +61,6 @@ type CalendarOverviewFocusRequest = CalendarOverviewFocusState & { nonce: number
 
 function dateWithWeekday(date: string): string {
   return `${date} · ${fullWeekdayLabels[weekdayOfDateIso(date)]}`;
-}
-
-function timeToMinutes(value: string): number {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
-  if (!match) return Number.NaN;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-    return Number.NaN;
-  }
-  return hour * 60 + minute;
 }
 
 function formatTimeFromMinutes(minutes: number): string {
@@ -286,13 +277,9 @@ export function CalendarView({
     });
   }
 
-  function lessonCampusId(lesson: Lesson): string | undefined {
-    return lesson.campusId ?? vault.courseGroups.find((course) => course.id === lesson.courseGroupId)?.defaultCampusId;
-  }
-
   function matchesCalendarLessonFilter(lesson: Lesson): boolean {
     const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
-    const campusId = lessonCampusId(lesson);
+    const campusId = lessonCampusId(vault, lesson);
     const studentIds = lessonStudentIds(lesson);
     const searchable = [
       courseName(vault, lesson.courseGroupId),

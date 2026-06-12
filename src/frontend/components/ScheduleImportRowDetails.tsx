@@ -13,6 +13,7 @@ import {
   lessonStatusLabels,
   studentNames
 } from "@/frontend/lib/helpers";
+import { durationHours } from "@/frontend/lib/time";
 
 export function ScheduleImportRowDetails({
   row,
@@ -248,12 +249,7 @@ function LinkedSystemLessons({
 }
 
 function lessonDurationHours(lesson: Pick<Lesson, "startTime" | "endTime">): number {
-  return Math.max(0, timeToMinutes(lesson.endTime) - timeToMinutes(lesson.startTime)) / 60;
-}
-
-function timeToMinutes(value: string): number {
-  const [hour = 0, minute = 0] = value.split(":").map(Number);
-  return hour * 60 + minute;
+  return durationHours(lesson.startTime, lesson.endTime);
 }
 
 function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {
