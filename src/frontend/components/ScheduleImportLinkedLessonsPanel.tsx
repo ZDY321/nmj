@@ -31,6 +31,7 @@ export function ScheduleImportLinkedLessonsPanel({
   lessonDurationHours: (lesson: Pick<Lesson, "startTime" | "endTime">) => number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const selectedLinkCount = resolution?.linkedSystemLessonIds?.length ?? 0;
   const linkedSummaryLabel = `已关联 ${linkedLessonCount} 节 · 云端 ${systemHours.toFixed(1)}h / 教务 ${importHours.toFixed(1)}h`;
 
   return (
@@ -43,15 +44,31 @@ export function ScheduleImportLinkedLessonsPanel({
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          {linkedLessonCount > 0 && (
+          {selectedLinkCount > 0 && (
             <Badge variant="plum" className="max-w-full text-[10px]" title={linkedSummaryLabel}>
               <span className="block min-w-0 truncate">{linkedSummaryLabel}</span>
             </Badge>
           )}
-          <Button type="button" variant="outline" size="sm" className="h-8 w-fit shrink-0 px-2 text-xs" onClick={() => setExpanded((current) => !current)}>
-            <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
-            {expanded ? "收起" : "展开"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {selectedLinkCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-fit shrink-0 px-2 text-xs"
+                onClick={() => onChange({
+                  linkedSystemLessonIds: [],
+                  ...(resolutionStatus === "split_merge_ok" ? { status: "unreviewed", note: "" } : {})
+                })}
+              >
+                清除关联
+              </Button>
+            )}
+            <Button type="button" variant="outline" size="sm" className="h-8 w-fit shrink-0 px-2 text-xs" onClick={() => setExpanded((current) => !current)}>
+              <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
+              {expanded ? "收起" : "展开"}
+            </Button>
+          </div>
         </div>
       </div>
       {expanded && <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
@@ -76,12 +93,13 @@ export function ScheduleImportLinkedLessonsPanel({
                     current.delete(candidate.id);
                   }
                   const nextIds = Array.from(current);
+                  const nextStatus = nextIds.length > 0 ? "split_merge_ok" : resolutionStatus === "split_merge_ok" ? "unreviewed" : resolutionStatus;
                   onChange({
-                    status: nextIds.length > 0 ? "split_merge_ok" : resolutionStatus,
+                    status: nextStatus,
                     linkedSystemLessonIds: nextIds,
                     note: nextIds.length > 0
                       ? "已关联云端拆分/合并课节，人工确认按同一课程课时处理。"
-                      : resolution?.note
+                      : nextStatus === "unreviewed" ? "" : resolution?.note
                   });
                 }}
                 className="mt-1 h-4 w-4 accent-[#5161d6]"

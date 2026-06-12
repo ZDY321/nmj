@@ -141,10 +141,14 @@ export function ScheduleImportPanel({
     const resolution = resolutions[rowKey];
     const isCurrentlyLinked = row.systemLessonId && linkedSystemLessonIds.has(row.systemLessonId);
     const isDirectMatched = row.status === "matched" || row.status === "attendance_mismatch";
+    const linkedSourceCount = row.systemLessonId
+      ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId).length
+      : 0;
 
     if (invalidSplitMergeRowKeys.has(rowKey)) return "拆分合并标记已失效";
     if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId) && !isCurrentlyLinked && !isDirectMatched) return "拆分合并标记已失效";
     if (resolution?.linkedSystemLessonIds?.length && row.systemLessonId && isDirectMatched) return "合并需复核";
+    if (row.status === "import_missing" && isCurrentlyLinked && linkedSourceCount > 0) return `由 ${linkedSourceCount} 条教务课合并`;
     return undefined;
   };
   const effectiveRows = useMemo(

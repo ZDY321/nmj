@@ -84,6 +84,14 @@ export function ScheduleImportReconciliationRow({
     row.status === "system_missing" ||
     row.status === "course_mismatch" ||
     row.status === "import_missing";
+  const showReviewControls = row.status !== "matched" || reviewed || Boolean(resolution?.linkedSystemLessonIds?.length);
+  const showExpandedReviewControls = showReviewControls && (!canCollapseDetails || detailsExpanded);
+  const hiddenCurrentIssues = row.status !== "matched" && displayStatus === "matched" && row.issues.length > 0;
+  const issuePreview = row.issues.slice(0, 2).join("；");
+  const clearLinkedLessonsPatch = (): Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">> => ({
+    linkedSystemLessonIds: [],
+    ...(resolutionStatus === "split_merge_ok" ? { status: "unreviewed", note: "" } : {})
+  });
 
   useEffect(() => {
     if (canCollapseDetails) {
@@ -108,9 +116,10 @@ export function ScheduleImportReconciliationRow({
             )}
             {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
-            {resolvedByLinkedImport && <Badge variant="sage">✓ 被 {linkedBySources.length} 条教务课拆分合并</Badge>}
+            {resolvedByLinkedImport && <Badge variant="plum">由 {linkedBySources.length} 条教务课合并成此云端课</Badge>}
             {resolvedAsMatched && !resolvedByLinkedImport && <Badge variant="sage">已计入已对应</Badge>}
             {resolution?.linkedSystemLessonIds?.length && !resolvedByLinkedImport ? <Badge variant="plum">→ 合并到 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}
+            {hiddenCurrentIssues && <Badge variant="amber">当前对账差异</Badge>}
             {splitMergeNeedsReview && <Badge variant="amber">拆分合并需复核</Badge>}
             {hasSplitMergeLinkProblem && <Badge variant="amber">拆分合并标记已失效</Badge>}
           </div>
@@ -118,7 +127,7 @@ export function ScheduleImportReconciliationRow({
             <>
               <div className="truncate text-sm font-extrabold leading-5 text-[#061226]">
                 {systemLesson && systemTimeLabel !== importTimeLabel ? `教务 ${importTimeLabel} · 云端 ${systemTimeLabel}` : importTimeLabel} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
-                {resolvedByLinkedImport && <span className="ml-2 text-[#15803d]">✓ 被合并</span>}
+                {resolvedByLinkedImport && <span className="ml-2 text-[#5161d6]">由教务合并</span>}
               </div>
               <div className="mt-1 truncate text-xs font-semibold leading-5 text-[#64748b]">
                 教务：{row.title} · 云端：{systemLesson ? localCourseName(vault, systemLesson.courseGroupId) : "未找到课节"}
@@ -126,6 +135,16 @@ export function ScheduleImportReconciliationRow({
                 {row.note ? ` · 教务备注：${row.note}` : ""}
                 {systemLesson?.note ? ` · 云端备注：${systemLesson.note}` : ""}
               </div>
+              {hiddenCurrentIssues && (
+                <div className="mt-2 rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1.5 text-xs font-semibold leading-5 text-[#9a3412]">
+                  当前对账差异：{issuePreview}{row.issues.length > 2 ? ` 等 ${row.issues.length} 项` : ""}
+                </div>
+              )}
+              {linkedBySources.length > 0 && (
+                <div className="mt-2 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 text-xs font-semibold leading-5 text-[#5161d6]">
+                  由 {linkedBySources.map((source) => `${source.date} ${source.startTime}-${source.endTime}`).join("、")} 教务课合并成此云端课
+                </div>
+              )}
             </>
           )}
         </div>
@@ -152,8 +171,8 @@ export function ScheduleImportReconciliationRow({
               </div>
             )}
             {linkedBySources.length > 0 && (
-              <div className="flex-1 rounded-[10px] border border-[#86efac] bg-[#f0fdf4] px-2.5 py-1.5 font-semibold text-[#15803d]">
-                被 {linkedBySources.map(s => `${s.date} ${s.startTime}`).join("、")} 合并
+              <div className="flex-1 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 font-semibold text-[#5161d6]">
+                由 {linkedBySources.map(s => `${s.date} ${s.startTime}`).join("、")} 教务课合并
               </div>
             )}
             <Button
@@ -162,7 +181,7 @@ export function ScheduleImportReconciliationRow({
               size="sm"
               onClick={() => {
                 if (linkedLessons.length > 0 || resolution?.linkedSystemLessonIds?.length) {
-                  onResolutionChange({ linkedSystemLessonIds: [] });
+                  onResolutionChange(clearLinkedLessonsPatch());
                 }
               }}
               className="h-7 shrink-0 text-xs"
@@ -203,7 +222,12 @@ export function ScheduleImportReconciliationRow({
                           } else {
                             current.delete(candidate.id);
                           }
-                          onResolutionChange({ linkedSystemLessonIds: Array.from(current), status: current.size > 0 ? "split_merge_ok" : resolutionStatus });
+                          const nextStatus = current.size > 0 ? "split_merge_ok" : resolutionStatus === "split_merge_ok" ? "unreviewed" : resolutionStatus;
+                          onResolutionChange({
+                            linkedSystemLessonIds: Array.from(current),
+                            status: nextStatus,
+                            ...(nextStatus === "unreviewed" ? { note: "" } : {})
+                          });
                         }}
                         className="h-3.5 w-3.5 shrink-0 accent-[#5161d6]"
                       />
@@ -295,7 +319,7 @@ export function ScheduleImportReconciliationRow({
         </>
       )}
 
-      {!isMatched && (
+      {showExpandedReviewControls && (
         <div className="mt-3 grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
           {resolvedAsMatched && (
             <div className="rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-xs font-bold text-[#15803d]">
