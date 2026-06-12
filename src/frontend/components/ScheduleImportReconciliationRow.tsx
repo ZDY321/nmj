@@ -108,8 +108,8 @@ export function ScheduleImportReconciliationRow({
             )}
             {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
+            {resolvedByLinkedImport && <Badge variant="sage">✓ 被 {linkedBySources.length} 条教务课拆分合并</Badge>}
             {resolvedAsMatched && !resolvedByLinkedImport && <Badge variant="sage">已计入已对应</Badge>}
-            {resolvedByLinkedImport && <Badge variant="sage">✓ 已被 {linkedBySources.length} 条教务课拆分合并</Badge>}
             {resolution?.linkedSystemLessonIds?.length && !resolvedByLinkedImport ? <Badge variant="plum">→ 合并到 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}
             {splitMergeNeedsReview && <Badge variant="amber">拆分合并需复核</Badge>}
             {hasSplitMergeLinkProblem && <Badge variant="amber">拆分合并标记已失效</Badge>}
@@ -144,39 +144,84 @@ export function ScheduleImportReconciliationRow({
       </div>
 
       {canCollapseDetails && !detailsExpanded && (linkedLessons.length > 0 || linkedBySources.length > 0) && (
-        <div className="mt-2 flex items-center gap-2 text-xs">
-          {linkedLessons.length > 0 && (
-            <div className="flex-1 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 font-semibold text-[#5161d6]">
-              已关联 {linkedLessons.map(l => `${l.date} ${l.startTime}`).join("、")}
+        <div className="mt-2 space-y-2">
+          <div className="flex items-center gap-2 text-xs">
+            {linkedLessons.length > 0 && (
+              <div className="flex-1 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 font-semibold text-[#5161d6]">
+                已关联 {linkedLessons.map(l => `${l.date} ${l.startTime}`).join("、")}
+              </div>
+            )}
+            {linkedBySources.length > 0 && (
+              <div className="flex-1 rounded-[10px] border border-[#86efac] bg-[#f0fdf4] px-2.5 py-1.5 font-semibold text-[#15803d]">
+                被 {linkedBySources.map(s => `${s.date} ${s.startTime}`).join("、")} 合并
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (linkedLessons.length > 0 || resolution?.linkedSystemLessonIds?.length) {
+                  onResolutionChange({ linkedSystemLessonIds: [] });
+                }
+              }}
+              className="h-7 shrink-0 text-xs"
+            >
+              清除关联
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setDetailsExpanded(true)}
+              className="h-7 shrink-0 text-xs"
+            >
+              {canLinkSplitMerge ? "重新选择" : "展开详情"}
+            </Button>
+          </div>
+          {canLinkSplitMerge && splitMergeCandidates.length > 0 && (
+            <div className="rounded-[10px] border border-[#dbe4ef] bg-white p-2">
+              <div className="mb-2 text-[11px] font-extrabold text-[#64748b]">快速选择云端课节：</div>
+              <div className="max-h-32 space-y-1.5 overflow-y-auto">
+                {splitMergeCandidates.slice(0, 5).map((candidate) => {
+                  const checked = Boolean(resolution?.linkedSystemLessonIds?.includes(candidate.id));
+                  const existingSystemLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
+                  return (
+                    <label
+                      key={candidate.id}
+                      className={`flex cursor-pointer items-center gap-2 rounded-[8px] border px-2 py-1.5 text-xs transition-colors ${
+                        checked ? "border-[#5161d6] bg-[#eef0ff]" : "border-[#e8eef6] bg-[#f8fbff] hover:bg-white"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const current = new Set((resolution?.linkedSystemLessonIds ?? []).filter((id) => existingSystemLessonIds.has(id)));
+                          if (event.target.checked) {
+                            current.add(candidate.id);
+                          } else {
+                            current.delete(candidate.id);
+                          }
+                          onResolutionChange({ linkedSystemLessonIds: Array.from(current), status: current.size > 0 ? "split_merge_ok" : resolutionStatus });
+                        }}
+                        className="h-3.5 w-3.5 shrink-0 accent-[#5161d6]"
+                      />
+                      <span className="min-w-0 flex-1 truncate font-semibold text-[#25324a]">
+                        {candidate.date} {candidate.startTime} · {localCourseName(vault, candidate.courseGroupId)}
+                      </span>
+                      <span className="shrink-0 text-[11px] font-bold text-[#64748b]">{candidate.scoreLabel}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {splitMergeCandidates.length > 5 && (
+                <div className="mt-2 text-center text-[11px] font-semibold text-[#64748b]">
+                  还有 {splitMergeCandidates.length - 5} 节，点击"重新选择"查看全部
+                </div>
+              )}
             </div>
           )}
-          {linkedBySources.length > 0 && (
-            <div className="flex-1 rounded-[10px] border border-[#86efac] bg-[#f0fdf4] px-2.5 py-1.5 font-semibold text-[#15803d]">
-              被 {linkedBySources.map(s => `${s.date} ${s.startTime}`).join("、")} 合并
-            </div>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (linkedLessons.length > 0 || resolution?.linkedSystemLessonIds?.length) {
-                onResolutionChange({ linkedSystemLessonIds: [] });
-              }
-            }}
-            className="h-7 shrink-0 text-xs"
-          >
-            清除关联
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setDetailsExpanded(true)}
-            className="h-7 shrink-0 text-xs"
-          >
-            重新选择
-          </Button>
         </div>
       )}
 
