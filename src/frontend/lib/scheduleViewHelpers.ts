@@ -1,6 +1,7 @@
 import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import { formatAppDateTime, getCourse, lessonBillableHours, todayIso } from "@/frontend/lib/calculations";
 import { timeToMinutes as parseTimeToMinutes } from "@/frontend/lib/time";
+import { isPlainRecord } from "@/frontend/lib/typeGuards";
 import {
   addDays,
   attendedStudentNamesForLesson,
@@ -22,6 +23,8 @@ import {
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import type { CourseTypeFilter, LessonScope } from "@/frontend/lib/scheduleViewTypes";
+
+export { arrayValue, isPlainRecord, textValue } from "@/frontend/lib/typeGuards";
 
 export function offsetDate(offset: number): string {
   return addDays(todayIso(), offset);
@@ -134,23 +137,6 @@ export function aiChatEndpoint(baseUrl: string, provider?: AiProviderConfig): st
       ? "messages"
       : "chat/completions";
   return /\/v1$/i.test(normalized) ? `${normalized}/${path}` : `${normalized}/v1/${path}`;
-}
-
-export function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-export function arrayValue(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-export function textValue(value: unknown, fallback = "未填写"): string {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed || fallback;
-  }
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return fallback;
 }
 
 export function formatAiValue(value: unknown): string {

@@ -6,7 +6,6 @@ import type {
 } from "@/shared/types";
 import type { ImportMatchStatus, ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import { resolutionMarksRowResolved } from "@/frontend/lib/scheduleImportReviewStatus";
-import { normalizeLinkedSystemLessonIds } from "@/frontend/lib/scheduleImportReviewUtils";
 
 export type LinkedSystemLessonSource = {
   lessonId: string;
@@ -22,6 +21,12 @@ export type LinkedSystemLessonSource = {
   resolutionStatus: ScheduleImportResolutionStatus;
   resolutionNote?: string;
 };
+
+export function normalizeLinkedSystemLessonIds(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ids = Array.from(new Set(value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))));
+  return ids.length > 0 ? ids : undefined;
+}
 
 export function buildUpdatedResolutions(
   current: ScheduleImportResolutionMap,

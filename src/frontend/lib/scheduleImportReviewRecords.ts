@@ -6,7 +6,7 @@ import type {
   TeacherVault
 } from "@/shared/types";
 import { completedAmount } from "@/frontend/lib/calculations";
-import { formatPrivateMoney } from "@/frontend/lib/helpers";
+import { compareByName, formatPrivateMoney } from "@/frontend/lib/helpers";
 import {
   type ImportedScheduleLesson,
   type ImportPreviewLesson,
@@ -64,7 +64,7 @@ function buildReviewRecord(
   },
   savedAt: string
 ): ScheduleImportReviewRecord {
-  const fileNames = Array.from(new Set(context.rawLessons.map((lesson) => lesson.fileName))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  const fileNames = Array.from(new Set(context.rawLessons.map((lesson) => lesson.fileName))).sort(compareByName);
   const systemLessonSummary = summarizeSystemLessonsForReview(vault, context.rows, context.resolutions);
   return {
     id: `schedule-import-${savedAt}`,

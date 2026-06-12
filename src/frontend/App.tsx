@@ -48,9 +48,16 @@ import {
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
+import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
 import { clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
 import { normalizeTimeText, timeToMinutes, timesOverlap } from "@/frontend/lib/time";
+import {
+  arrayValue as arrayValueLocal,
+  isPlainRecord as isPlainRecordLocal,
+  numberValue,
+  stringValue
+} from "@/frontend/lib/typeGuards";
 import type {
   Campus,
   AiScheduleSession,
@@ -2922,16 +2929,9 @@ function shouldSyncLessonWithCourseDefaults(lesson: Lesson, scope: CourseLessonS
   return lesson.date >= todayIso();
 }
 
-function attendanceStatusForLessonSync(status: Lesson["status"]): AttendanceStatus {
-  if (status === "cancelled") return "cancelled";
-  if (status === "makeup_pending") return "makeup_pending";
-  if (status === "makeup_completed") return "makeup_completed";
-  return "attended";
-}
-
 function lessonAttendanceFromCourse(vault: TeacherVault, lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
   const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
-  const fallbackStatus = attendanceStatusForLessonSync(lesson.status);
+  const fallbackStatus = attendanceStatusForLessonStatus(lesson.status);
   return course.studentIds.map((studentId) => {
     const existing = existingByStudent.get(studentId);
     if (existing) {
@@ -3098,23 +3098,6 @@ function removeResolvedMakeupNames(note: string | undefined, vault: TeacherVault
     const studentName = vault.students.find((student) => student.id === studentId)?.name;
     return studentName ? current.replaceAll(studentName, "").replace(/、{2,}/g, "、").replace(/^、|、(?= 补 )/g, "").trim() : current;
   }, note);
-}
-
-function isPlainRecordLocal(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function arrayValueLocal(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function stringValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
-}
-
-function numberValue(value: unknown): number | undefined {
-  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value.trim()) : NaN;
-  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function feeModeLabel(mode: FeeRule["mode"]): string {

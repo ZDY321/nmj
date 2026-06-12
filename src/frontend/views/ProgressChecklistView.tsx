@@ -22,6 +22,7 @@ import { generateAiScheduleDraft, getUsableAiProviders } from "@/frontend/lib/cl
 import { todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import { formatChecklistItemLine, formatChecklistItemTitle, stripChecklistTitlePrefix } from "@/frontend/lib/progressChecklist";
+import { stringValue } from "@/frontend/lib/typeGuards";
 import {
   campusName,
   compareByName,
@@ -1002,8 +1003,4 @@ function buildChecklistAiInstruction(prompt: string): string {
     "4. title 字段不要自作主张加任务动作。用户要求生成试卷名字时，title 只写“2020年连云港中考物理试卷”这类名称，不要写“完成2020年连云港中考物理试卷并订正错因”。",
     "5. 如果无法确认具体试卷题号，不要编造题号；按用户指定年份、地区和科目生成试卷名称即可。"
   ].join("\n");
-}
-
-function stringValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
 }

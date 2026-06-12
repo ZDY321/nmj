@@ -10,6 +10,7 @@ import type { CourseGroup, Lesson, TeacherVault, WeekStart } from "@/shared/type
 import {
   addDays,
   calendarDates,
+  compareByName,
   courseName,
   courseTypeLabel,
   campusName,
@@ -38,6 +39,7 @@ import {
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
 import { timeToMinutes } from "@/frontend/lib/time";
 
 type CalendarOverviewPage = "month" | "week";
@@ -140,7 +142,7 @@ export function CalendarView({
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const gradeOptions = Array.from(
     new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))
-  ).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  ).sort(compareByName);
   const subjectOptions = subjectOptionsForVault(vault);
   const days = calendarDates(month, weekStartPreference);
   const visibleLessons = vault.lessons;
@@ -202,16 +204,9 @@ export function CalendarView({
     selectCalendarDate(addDays(selectedDate, days));
   }
 
-  function attendanceStatusForLessonRefresh(status: Lesson["status"]) {
-    if (status === "cancelled") return "cancelled";
-    if (status === "makeup_pending") return "makeup_pending";
-    if (status === "makeup_completed") return "makeup_completed";
-    return "attended";
-  }
-
   function attendanceFromCurrentCourse(lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
     const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
-    const fallbackStatus = attendanceStatusForLessonRefresh(lesson.status);
+    const fallbackStatus = attendanceStatusForLessonStatus(lesson.status);
     return course.studentIds.map((studentId) => {
       const existing = existingByStudent.get(studentId);
       if (existing) {

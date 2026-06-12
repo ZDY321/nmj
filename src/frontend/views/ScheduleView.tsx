@@ -247,7 +247,7 @@ export function ScheduleView({
   const calendarViewCampusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const calendarViewGradeOptions = Array.from(
     new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))
-  ).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  ).sort(compareByName);
   const calendarViewSubjectOptions = subjectOptionsForVault(vault);
   const syncSourceLessons = vault.lessons
     .filter((lesson) => lesson.date === syncSourceDate)

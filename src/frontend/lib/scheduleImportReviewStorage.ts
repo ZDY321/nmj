@@ -9,7 +9,8 @@ import {
   statusFilters,
   type StatusFilter
 } from "@/frontend/lib/scheduleImportReviewStatus";
-import { isRecord, normalizeLinkedSystemLessonIds } from "@/frontend/lib/scheduleImportReviewUtils";
+import { normalizeLinkedSystemLessonIds } from "@/frontend/lib/scheduleImportReviewMatching";
+import { isRecord } from "@/frontend/lib/typeGuards";
 
 export type SavedScheduleImportWorkspace = {
   rawLessons: ImportedScheduleLesson[];

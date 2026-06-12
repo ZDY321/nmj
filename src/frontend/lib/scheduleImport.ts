@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import type { CourseGroup, CourseType, Lesson, TeacherVault } from "@/shared/types";
-import { lessonCampusId } from "@/frontend/lib/helpers";
+import { compareByName, lessonCampusId } from "@/frontend/lib/helpers";
 import { timesOverlap } from "@/frontend/lib/time";
 
 export type ImportedScheduleLesson = {
@@ -353,7 +353,7 @@ function groupedSummary(rows: ImportPreviewLesson[], keyFor: (row: ImportPreview
     if (row.status === "matched") item.selected += 1;
     map.set(key, item);
   });
-  return Array.from(map.values()).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, "zh-Hans-CN"));
+  return Array.from(map.values()).sort((a, b) => b.count - a.count || compareByName(a.key, b.key));
 }
 
 function groupImportedLessonsByDate(lessons: ImportedScheduleLesson[]): Array<{ date: string; lessons: ImportedScheduleLesson[] }> {
@@ -453,7 +453,8 @@ function formatMergedDailyLesson(lesson: ImportedScheduleLesson): string {
 }
 
 function compareImportedLessons(a: ImportedScheduleLesson, b: ImportedScheduleLesson): number {
-  return `${a.date} ${a.startTime} ${a.endTime} ${a.campusName} ${a.title}`.localeCompare(`${b.date} ${b.startTime} ${b.endTime} ${b.campusName} ${b.title}`, "zh-Hans-CN");
+  const dateTimeOrder = `${a.date} ${a.startTime} ${a.endTime}`.localeCompare(`${b.date} ${b.startTime} ${b.endTime}`);
+  return dateTimeOrder || compareByName(a.campusName, b.campusName) || compareByName(a.title, b.title);
 }
 
 function isActualImportedLesson(lesson: ImportedScheduleLesson): boolean {

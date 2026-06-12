@@ -1,6 +1,7 @@
 import type { Lesson, TeacherVault } from "@/shared/types";
 import {
   campusName,
+  compareByName,
   sortLessons,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -80,7 +81,7 @@ export function summarizeFiles(lessons: ImportedScheduleLesson[]): ScheduleImpor
   });
   return Array.from(map.values())
     .map((item) => ({ ...item, months: Array.from(item.months).sort() }))
-    .sort((a, b) => a.fileName.localeCompare(b.fileName, "zh-Hans-CN"));
+    .sort((a, b) => compareByName(a.fileName, b.fileName));
 }
 
 export function buildDefaultCampusOverrides(vault: TeacherVault, lessons: ImportedScheduleLesson[], current: ScheduleImportMapping): ScheduleImportMapping {

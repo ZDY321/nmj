@@ -188,7 +188,7 @@ function normalizedCustomCourseTypes(customCourseTypes: CustomCourseTypeOption[]
 
 function sortCourseTypeOptions<T extends { value: string; label: string }>(options: T[]): T[] {
   return [...options].sort(
-    (a, b) => a.label.localeCompare(b.label, "zh-Hans-CN") || a.value.localeCompare(b.value)
+    (a, b) => compareByName(a.label, b.label) || a.value.localeCompare(b.value)
   );
 }
 

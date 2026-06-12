@@ -92,7 +92,7 @@ export function StudentsView({
   const allManagedCourseTypes: Array<{ value: CourseType; label: string }> = [
     ...builtInCourseTypeOptions.map((item) => ({ value: item.value as CourseType, label: courseTypeLabel(vault, item.value) })),
     ...customCourseTypes.map((item) => ({ value: item.id as CourseType, label: item.label }))
-  ].sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN") || a.value.localeCompare(b.value));
+  ].sort((a, b) => compareByName(a.label, b.label) || a.value.localeCompare(b.value));
   const managedCourseTypes = allManagedCourseTypes.filter((item) => !disabledCourseTypes.has(item.value));
   const preferredCampusId = campusOptions[0]?.id ?? "";
   const [campusNameInput, setCampusNameInput] = useState("");
