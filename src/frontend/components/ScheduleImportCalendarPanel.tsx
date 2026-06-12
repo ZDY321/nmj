@@ -40,9 +40,10 @@ export function ScheduleImportCalendarPanel({
   rowAttentionLabel?: (row: ImportPreviewLesson) => string | undefined;
   renderRow: (row: ImportPreviewLesson) => ReactNode;
 }) {
-  const selectedDateHasProblems = selectedDateRows.some((row) =>
-    effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" || Boolean(rowAttentionLabel?.(row))
-  );
+  const rowHasProblem = (row: ImportPreviewLesson): boolean =>
+    effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" ||
+    attentionLabelMarksProblem(rowAttentionLabel?.(row));
+  const selectedDateHasProblems = selectedDateRows.some(rowHasProblem);
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -57,7 +58,7 @@ export function ScheduleImportCalendarPanel({
             const dayRows = filteredRows.filter((row) => row.date === date);
             const isSelected = selectedDate === date;
             const isCurrentMonth = date.startsWith(displayMonth);
-            const hasProblems = dayRows.some((row) => effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" || Boolean(rowAttentionLabel?.(row)));
+            const hasProblems = dayRows.some(rowHasProblem);
             const reviewedDayCount = dayRows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
             return (
               <button
@@ -90,9 +91,10 @@ export function ScheduleImportCalendarPanel({
                     const rowReviewed = isReviewedResolution(resolutions[resolutionKey(row)]);
                     const rowStatus = effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds);
                     const attentionLabel = rowAttentionLabel?.(row);
+                    const attentionIsProblem = attentionLabelMarksProblem(attentionLabel);
                     const rowPrefix = rowReviewed ? rowStatus === "matched" ? "已确认 · " : "已标 · " : "";
                     return (
-                      <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${attentionLabel ? "bg-[#fff3e4] text-[#9a3412] ring-1 ring-[#fdba74]" : statusPillClass(rowStatus, rowReviewed && rowStatus !== "matched")}`}>
+                      <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${attentionLabel ? attentionLabelClass(attentionIsProblem) : statusPillClass(rowStatus, rowReviewed && rowStatus !== "matched")}`}>
                         {attentionLabel ? `${attentionLabel} · ` : rowPrefix}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
                       </span>
                     );
@@ -133,4 +135,14 @@ export function ScheduleImportCalendarPanel({
       </div>
     </div>
   );
+}
+
+function attentionLabelMarksProblem(label: string | undefined): boolean {
+  return label === "拆分合并标记已失效" || label === "合并需复核";
+}
+
+function attentionLabelClass(problem: boolean): string {
+  return problem
+    ? "bg-[#fff3e4] text-[#9a3412] ring-1 ring-[#fdba74]"
+    : "bg-[#eef0ff] text-[#5161d6] ring-1 ring-[#c7d2fe]";
 }
