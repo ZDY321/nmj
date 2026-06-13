@@ -31,6 +31,7 @@ import { ScheduleView } from "@/frontend/views/ScheduleView";
 import { SalaryView } from "@/frontend/views/SalaryView";
 import { StudentsView } from "@/frontend/views/StudentsView";
 import { TodayView } from "@/frontend/views/TodayView";
+import { TodoView } from "@/frontend/views/TodoView";
 import { buildFeeSnapshot, currentAppHour, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, salaryGradeRateForStage, salaryGradeRuleById, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
@@ -2606,10 +2607,17 @@ export function App() {
                 selectedDate={selectedDate}
                 amountsVisible={amountsVisible}
                 onUpdateLesson={updateLesson}
+                onOpenTodos={() => setView("todos")}
+                onOpenLessonInRecords={openTodayLessonInScheduleRecords}
+              />
+            )}
+            {!onboardingVisible && view === "todos" && (
+              <TodoView
+                vault={vault}
+                selectedDate={selectedDate}
                 onAddTodo={addTodo}
                 onUpdateTodo={updateTodo}
                 onDeleteTodo={deleteTodo}
-                onOpenLessonInRecords={openTodayLessonInScheduleRecords}
               />
             )}
             {!onboardingVisible && view === "calendar" && (

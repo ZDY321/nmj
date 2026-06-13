@@ -5,6 +5,7 @@ import {
   CalendarDays,
   BarChart3,
   FileCheck2,
+  NotebookPen,
   ShieldCheck,
   Users,
   WalletCards
@@ -29,10 +30,11 @@ import { buildFeeSnapshot, getCourse, monthOf, salaryBreakdown, todayIso } from 
 import { timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
-export type ViewKey = "today" | "calendar" | "schedule" | "progress" | "students" | "grades" | "payroll" | "salary" | "admin";
+export type ViewKey = "today" | "todos" | "calendar" | "schedule" | "progress" | "students" | "grades" | "payroll" | "salary" | "admin";
 
 export const viewTitles: Record<ViewKey, string> = {
   today: "今日提醒",
+  todos: "待办事项",
   calendar: "日历总览",
   progress: "进度与作业",
   schedule: "排课与课时",
@@ -45,6 +47,7 @@ export const viewTitles: Record<ViewKey, string> = {
 
 export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: string }> = [
   { key: "today", icon: Bell, label: "今日提醒" },
+  { key: "todos", icon: NotebookPen, label: "待办事项" },
   { key: "calendar", icon: CalendarCheck, label: "日历总览" },
   { key: "schedule", icon: CalendarDays, label: "排课与课时" },
   { key: "progress", icon: BookOpen, label: "进度与作业" },

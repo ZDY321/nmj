@@ -1,27 +1,18 @@
-import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   BookOpen,
   CalendarDays,
-  ChevronDown,
   Clock3,
   MapPin,
   NotebookPen,
-  Pencil,
-  Plus,
-  Save,
-  Trash2,
   Users,
-  X,
   XCircle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import type { Lesson, TeacherVault, TodoItem } from "@/shared/types";
-import { makeId } from "@/frontend/lib/crypto";
+import type { Lesson, TeacherVault } from "@/shared/types";
 import { formatAppDateLabel, getCourse } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
@@ -46,27 +37,16 @@ export function TodayView({
   selectedDate,
   amountsVisible,
   onUpdateLesson,
-  onAddTodo,
-  onUpdateTodo,
-  onDeleteTodo,
+  onOpenTodos,
   onOpenLessonInRecords
 }: {
   vault: TeacherVault;
   selectedDate: string;
   amountsVisible: boolean;
   onUpdateLesson: (lesson: Lesson) => void;
-  onAddTodo: (todo: TodoItem) => void;
-  onUpdateTodo: (todo: TodoItem) => void;
-  onDeleteTodo: (todoId: string) => void;
+  onOpenTodos: () => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
-  const [todoTitle, setTodoTitle] = useState("");
-  const [todoDueDate, setTodoDueDate] = useState(selectedDate);
-  const [editingTodoId, setEditingTodoId] = useState("");
-  const [editingTodoTitle, setEditingTodoTitle] = useState("");
-  const [editingTodoDueDate, setEditingTodoDueDate] = useState("");
-  const [todoPanelOpen, setTodoPanelOpen] = useState(false);
-  const { confirm, dialog } = useConfirmDialog();
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
   const waitingLessons = selectedDateLessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "draft");
@@ -83,62 +63,15 @@ export function TodayView({
     return `${a.dueDate ?? "9999-99-99"} ${a.createdAt}`.localeCompare(`${b.dueDate ?? "9999-99-99"} ${b.createdAt}`);
   });
   const openTodoCount = todos.filter((todo) => todo.status === "open").length;
+  const dueSelectedDateTodoCount = todos.filter((todo) => todo.status === "open" && todo.dueDate === selectedDate).length;
   const selectedDateLabel = formatAppDateLabel(selectedDate, {
     month: "long",
     day: "numeric",
     weekday: "long"
   });
 
-  function addTodo() {
-    const title = todoTitle.trim();
-    if (!title) return;
-    onAddTodo({
-      id: makeId("todo"),
-      title,
-      dueDate: todoDueDate || undefined,
-      status: "open",
-      priority: "normal",
-      createdAt: new Date().toISOString()
-    });
-    setTodoTitle("");
-  }
-
-  function startEditTodo(todo: TodoItem) {
-    setEditingTodoId(todo.id);
-    setEditingTodoTitle(todo.title);
-    setEditingTodoDueDate(todo.dueDate ?? "");
-  }
-
-  function cancelEditTodo() {
-    setEditingTodoId("");
-    setEditingTodoTitle("");
-    setEditingTodoDueDate("");
-  }
-
-  function saveTodo(todo: TodoItem) {
-    const title = editingTodoTitle.trim();
-    if (!title) return;
-    onUpdateTodo({
-      ...todo,
-      title,
-      dueDate: editingTodoDueDate || undefined
-    });
-    cancelEditTodo();
-  }
-
-  function askDeleteTodo(todo: TodoItem) {
-    confirm({
-      title: `删除待办「${todo.title}」？`,
-      description: todo.dueDate ? `截止日期：${todo.dueDate}` : "删除后这条待办不会再显示。",
-      confirmLabel: "删除",
-      tone: "danger",
-      onConfirm: () => onDeleteTodo(todo.id)
-    });
-  }
-
   return (
     <div className="space-y-6">
-      {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[ 
           { label: isToday(selectedDate) ? "今日课程" : "选中日期课程", value: `${selectedDateLessons.length} 节`, icon: CalendarDays },
@@ -186,127 +119,29 @@ export function TodayView({
       </Card>
 
       <Card className="overflow-hidden">
-        <CardHeader className={todoPanelOpen ? "border-b border-[#e8eef6] pb-5" : "pb-5"}>
+        <CardHeader className="pb-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                 <NotebookPen size={14} /> 待办事项
               </div>
-              <CardTitle className="text-xl">今天要跟进的事</CardTitle>
+              <CardTitle className="text-xl">待跟进事项</CardTitle>
+              <CardDescription className="mt-2">
+                {dueSelectedDateTodoCount > 0
+                  ? `${selectedDateLabel} 有 ${dueSelectedDateTodoCount} 条待办到期。`
+                  : `${selectedDateLabel} 没有到期待办。`}
+              </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={openTodoCount ? "amber" : "secondary"} className="w-fit">
                 {openTodoCount ? `${openTodoCount} 条待办` : "已清空"}
               </Badge>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setTodoPanelOpen((open) => !open)}
-                aria-expanded={todoPanelOpen}
-                className="border-[#dbe4ef]"
-              >
-                <ChevronDown size={14} className={`transition-transform ${todoPanelOpen ? "rotate-180" : ""}`} />
-                {todoPanelOpen ? "收起" : "展开"}
+              <Button type="button" size="sm" variant="outline" onClick={onOpenTodos} className="border-[#dbe4ef]">
+                <NotebookPen size={14} /> 进入待办页面
               </Button>
             </div>
           </div>
         </CardHeader>
-        <AnimatePresence initial={false}>
-          {todoPanelOpen && (
-            <motion.div
-              key="todo-panel"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <CardContent className="space-y-4 p-4 sm:p-6">
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_auto]">
-                  <Input value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} placeholder="例如：联系家长确认补课时间" />
-                  <Input type="date" value={todoDueDate} onChange={(event) => setTodoDueDate(event.target.value)} />
-                  <Button type="button" onClick={addTodo}>
-                    <Plus size={15} /> 添加待办
-                  </Button>
-                </div>
-                <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
-                  {todos.map((todo) => {
-                    const isEditingTodo = editingTodoId === todo.id;
-                    return (
-                      <div
-                        key={todo.id}
-                        className={`flex flex-col gap-3 rounded-[14px] border p-3 sm:flex-row sm:items-center sm:justify-between ${
-                          todo.status === "done" ? "border-[#dbe4ef] bg-[#f8fbff] opacity-70" : "border-[#fed7aa] bg-[#fff7ed]"
-                        }`}
-                      >
-                        {isEditingTodo ? (
-                          <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_180px]">
-                            <Input
-                              value={editingTodoTitle}
-                              onChange={(event) => setEditingTodoTitle(event.target.value)}
-                              placeholder="待办内容"
-                              className="bg-white"
-                            />
-                            <Input
-                              type="date"
-                              value={editingTodoDueDate}
-                              onChange={(event) => setEditingTodoDueDate(event.target.value)}
-                              className="bg-white"
-                            />
-                          </div>
-                        ) : (
-                          <label className="flex min-w-0 flex-1 items-start gap-3">
-                            <input
-                              type="checkbox"
-                              checked={todo.status === "done"}
-                              onChange={(event) => onUpdateTodo({ ...todo, status: event.target.checked ? "done" : "open" })}
-                              className="mt-1 h-4 w-4 accent-[#ff8617]"
-                            />
-                            <span className="min-w-0">
-                              <span className={`block text-sm font-extrabold ${todo.status === "done" ? "text-[#64748b] line-through" : "text-[#061226]"}`}>
-                                {todo.title}
-                              </span>
-                              <span className="mt-1 block text-xs font-semibold text-[#64748b]">
-                                {todo.dueDate ? `截止：${todo.dueDate}` : "未设置截止日期"}
-                              </span>
-                            </span>
-                          </label>
-                        )}
-                        <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
-                          {isEditingTodo ? (
-                            <>
-                              <Button type="button" size="sm" onClick={() => saveTodo(todo)} disabled={!editingTodoTitle.trim()}>
-                                <Save size={14} /> 保存
-                              </Button>
-                              <Button type="button" size="sm" variant="outline" onClick={cancelEditTodo}>
-                                <X size={14} /> 取消
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button type="button" size="sm" variant="outline" onClick={() => startEditTodo(todo)}>
-                                <Pencil size={14} /> 编辑
-                              </Button>
-                              <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)}>
-                                <Trash2 size={14} /> 删除
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {todos.length === 0 && (
-                    <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
-                      暂无待办事项
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </Card>
 
       <Card className="overflow-hidden">
