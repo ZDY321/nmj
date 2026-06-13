@@ -4,6 +4,7 @@ import {
   BookOpen,
   CalendarDays,
   Clock3,
+  FileText,
   MapPin,
   NotebookPen,
   Users,
@@ -13,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { Lesson, TeacherVault, TodoItem } from "@/shared/types";
+import type { Lesson, MemoItem, TeacherVault, TodoItem } from "@/shared/types";
+import { MemoView } from "@/frontend/views/MemoView";
 import { TodoView } from "@/frontend/views/TodoView";
 import { formatAppDateLabel, getCourse } from "@/frontend/lib/calculations";
 import {
@@ -34,7 +36,7 @@ import {
   studentNames
 } from "@/frontend/lib/helpers";
 
-type TodaySubPage = "lessons" | "todos";
+type TodaySubPage = "lessons" | "todos" | "memos";
 
 export function TodayView({
   vault,
@@ -44,6 +46,8 @@ export function TodayView({
   onAddTodo,
   onUpdateTodo,
   onDeleteTodo,
+  onSaveMemo,
+  onDeleteMemo,
   onOpenLessonInRecords
 }: {
   vault: TeacherVault;
@@ -53,6 +57,8 @@ export function TodayView({
   onAddTodo: (todo: TodoItem) => void;
   onUpdateTodo: (todo: TodoItem) => void;
   onDeleteTodo: (todoId: string) => void;
+  onSaveMemo: (memo: MemoItem) => void;
+  onDeleteMemo: (memoId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
   const [subPage, setSubPage] = useState<TodaySubPage>("lessons");
@@ -73,6 +79,7 @@ export function TodayView({
   });
   const openTodoCount = todos.filter((todo) => todo.status === "open").length;
   const dueSelectedDateTodoCount = todos.filter((todo) => todo.status === "open" && todo.dueDate === selectedDate).length;
+  const memoCount = vault.memoItems?.length ?? 0;
   const selectedDateLabel = formatAppDateLabel(selectedDate, {
     month: "long",
     day: "numeric",
@@ -81,11 +88,12 @@ export function TodayView({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {[ 
           { label: isToday(selectedDate) ? "今日课程" : "选中日期课程", value: `${selectedDateLessons.length} 节`, icon: CalendarDays },
           { label: "待上课", value: `${waitingLessons.length} 节`, icon: Clock3 },
           { label: "待办事项", value: `${openTodoCount} 条`, icon: NotebookPen },
+          { label: "备忘录", value: `${memoCount} 条`, icon: FileText },
           { label: "已取消", value: `${cancelledLessons.length} 条`, icon: XCircle }
         ].map((item) => {
           const Icon = item.icon;
@@ -108,7 +116,8 @@ export function TodayView({
       <div className="flex flex-wrap gap-2 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-2">
         {[
           { key: "lessons" as TodaySubPage, label: "课程提醒", count: selectedDateLessons.length },
-          { key: "todos" as TodaySubPage, label: "待办事项", count: openTodoCount }
+          { key: "todos" as TodaySubPage, label: "待办事项", count: openTodoCount },
+          { key: "memos" as TodaySubPage, label: "备忘录", count: memoCount }
         ].map((item) => {
           const active = subPage === item.key;
           return (
@@ -138,6 +147,12 @@ export function TodayView({
           onAddTodo={onAddTodo}
           onUpdateTodo={onUpdateTodo}
           onDeleteTodo={onDeleteTodo}
+        />
+      ) : subPage === "memos" ? (
+        <MemoView
+          vault={vault}
+          onSaveMemo={onSaveMemo}
+          onDeleteMemo={onDeleteMemo}
         />
       ) : (
         <>

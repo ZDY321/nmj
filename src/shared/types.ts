@@ -359,6 +359,14 @@ export type TodoItem = {
   createdAt: string;
 };
 
+export type MemoItem = {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type StudentProgressStatus = "on_track" | "review_needed" | "behind" | "ahead";
 
 export type StudentHomeworkStatus = "unassigned" | "assigned" | "checked" | "partial" | "missing";
@@ -558,6 +566,7 @@ export type TeacherVault = {
   deletedLessons?: DeletedLesson[];
   salaryAdjustments: SalaryAdjustment[];
   todoItems?: TodoItem[];
+  memoItems?: MemoItem[];
   studentProgressRecords?: StudentProgressRecord[];
   progressChecklistTemplates?: ProgressChecklistTemplate[];
   progressChecklistCompletions?: ProgressChecklistCompletion[];

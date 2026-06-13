@@ -40,6 +40,7 @@ export function createEmptyVault(displayName = ""): TeacherVault {
     deletedLessons: [],
     salaryAdjustments: [],
     todoItems: [],
+    memoItems: [],
     studentProgressRecords: [],
     gradeRecords: []
   };
@@ -210,6 +211,15 @@ export function createSampleVault(): TeacherVault {
         status: "open",
         priority: "high",
         createdAt: "2026-05-10T00:00:00.000Z"
+      }
+    ],
+    memoItems: [
+      {
+        id: "memo_parent_followup",
+        title: "家长沟通备忘",
+        content: "月底核对前重点看请假、补课和拆分合并课节，确认后再做工资统计。",
+        createdAt: "2026-05-10T00:00:00.000Z",
+        updatedAt: "2026-05-10T00:00:00.000Z"
       }
     ],
     studentProgressRecords: [

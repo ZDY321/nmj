@@ -71,6 +71,7 @@ import type {
   FeeRule,
   GradeRecord,
   Lesson,
+  MemoItem,
   ProgressChecklistCompletion,
   ProgressChecklistTemplate,
   SalaryAdjustment,
@@ -1719,6 +1720,22 @@ export function App() {
     });
   }
 
+  function saveMemo(memo: MemoItem) {
+    updateVault((draft) => {
+      const memos = draft.memoItems ?? [];
+      const exists = memos.some((item) => item.id === memo.id);
+      draft.memoItems = exists
+        ? memos.map((item) => (item.id === memo.id ? memo : item))
+        : [memo, ...memos];
+    });
+  }
+
+  function deleteMemo(memoId: string) {
+    updateVault((draft) => {
+      draft.memoItems = (draft.memoItems ?? []).filter((memo) => memo.id !== memoId);
+    });
+  }
+
   function saveStudentProgressRecord(record: StudentProgressRecord) {
     updateVault((draft) => {
       const records = draft.studentProgressRecords ?? [];
@@ -2609,6 +2626,8 @@ export function App() {
                 onAddTodo={addTodo}
                 onUpdateTodo={updateTodo}
                 onDeleteTodo={deleteTodo}
+                onSaveMemo={saveMemo}
+                onDeleteMemo={deleteMemo}
                 onOpenLessonInRecords={openTodayLessonInScheduleRecords}
               />
             )}
