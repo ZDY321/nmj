@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -12,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { Lesson, TeacherVault } from "@/shared/types";
+import type { Lesson, TeacherVault, TodoItem } from "@/shared/types";
+import { TodoView } from "@/frontend/views/TodoView";
 import { formatAppDateLabel, getCourse } from "@/frontend/lib/calculations";
 import {
   attendanceLabels,
@@ -32,21 +34,28 @@ import {
   studentNames
 } from "@/frontend/lib/helpers";
 
+type TodaySubPage = "lessons" | "todos";
+
 export function TodayView({
   vault,
   selectedDate,
   amountsVisible,
   onUpdateLesson,
-  onOpenTodos,
+  onAddTodo,
+  onUpdateTodo,
+  onDeleteTodo,
   onOpenLessonInRecords
 }: {
   vault: TeacherVault;
   selectedDate: string;
   amountsVisible: boolean;
   onUpdateLesson: (lesson: Lesson) => void;
-  onOpenTodos: () => void;
+  onAddTodo: (todo: TodoItem) => void;
+  onUpdateTodo: (todo: TodoItem) => void;
+  onDeleteTodo: (todoId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
+  const [subPage, setSubPage] = useState<TodaySubPage>("lessons");
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const selectedDateLessons = vault.lessons.filter((lesson) => lesson.date === selectedDate).sort(sortLessons);
   const waitingLessons = selectedDateLessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "draft");
@@ -96,6 +105,42 @@ export function TodayView({
         })}
       </div>
 
+      <div className="flex flex-wrap gap-2 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-2">
+        {[
+          { key: "lessons" as TodaySubPage, label: "课程提醒", count: selectedDateLessons.length },
+          { key: "todos" as TodaySubPage, label: "待办事项", count: openTodoCount }
+        ].map((item) => {
+          const active = subPage === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setSubPage(item.key)}
+              className={`flex min-h-10 items-center gap-2 rounded-[10px] px-4 text-sm font-extrabold transition-colors ${
+                active
+                  ? "bg-white text-[#1557c2] shadow-[0_8px_20px_rgba(15,35,66,0.08)] ring-1 ring-[#bfdbfe]"
+                  : "text-[#64748b] hover:bg-white/70 hover:text-[#061226]"
+              }`}
+            >
+              {item.label}
+              <span className={`rounded-full px-2 py-0.5 text-[11px] ${active ? "bg-[#eaf2ff] text-[#1557c2]" : "bg-white text-[#64748b]"}`}>
+                {item.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {subPage === "todos" ? (
+        <TodoView
+          vault={vault}
+          selectedDate={selectedDate}
+          onAddTodo={onAddTodo}
+          onUpdateTodo={onUpdateTodo}
+          onDeleteTodo={onDeleteTodo}
+        />
+      ) : (
+        <>
       <Card className="overflow-hidden">
         <CardContent className="p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -136,8 +181,8 @@ export function TodayView({
               <Badge variant={openTodoCount ? "amber" : "secondary"} className="w-fit">
                 {openTodoCount ? `${openTodoCount} 条待办` : "已清空"}
               </Badge>
-              <Button type="button" size="sm" variant="outline" onClick={onOpenTodos} className="border-[#dbe4ef]">
-                <NotebookPen size={14} /> 进入待办页面
+              <Button type="button" size="sm" variant="outline" onClick={() => setSubPage("todos")} className="border-[#dbe4ef]">
+                <NotebookPen size={14} /> 查看待办事项
               </Button>
             </div>
           </div>
@@ -292,6 +337,8 @@ export function TodayView({
           )}
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   );
 }
