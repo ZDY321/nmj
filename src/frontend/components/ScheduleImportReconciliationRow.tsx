@@ -8,7 +8,7 @@ import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIss
 import { ScheduleImportLinkedLessonsPanel } from "@/frontend/components/ScheduleImportLinkedLessonsPanel";
 import { ScheduleImportRowDetails } from "@/frontend/components/ScheduleImportRowDetails";
 import type { CourseGroup, Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
-import { courseName as localCourseName, courseTimeRangeBillingLabel, lessonStatusLabels, lessonTimeRangeBillingLabel } from "@/frontend/lib/helpers";
+import { courseName as localCourseName, courseTimeRangeBillingLabel, lessonAttendanceNoteText, lessonStatusLabels, lessonTimeRangeBillingLabel } from "@/frontend/lib/helpers";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import {
   effectiveRowStatus,
@@ -57,6 +57,7 @@ export function ScheduleImportReconciliationRow({
   const importCourseId = row.matchedCourseId ?? row.mappedCourseId;
   const importTimeLabel = courseTimeRangeBillingLabel(vault, row, importCourseId);
   const systemTimeLabel = systemLesson ? lessonTimeRangeBillingLabel(vault, systemLesson) : "";
+  const systemAttendanceNoteText = systemLesson ? lessonAttendanceNoteText(vault, systemLesson) : "";
   const resolutionStatus = resolution?.status ?? "unreviewed";
   const reviewed = isReviewedResolution(resolution);
   const displayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
@@ -133,6 +134,7 @@ export function ScheduleImportReconciliationRow({
                 {row.presentCount !== undefined && row.expectedCount !== undefined ? ` · 教务实到/应到 ${row.presentCount}/${row.expectedCount}` : ""}
                 {row.note ? ` · 教务备注：${row.note}` : ""}
                 {systemLesson?.note ? ` · 云端备注：${systemLesson.note}` : ""}
+                {systemAttendanceNoteText ? ` · ${systemAttendanceNoteText}` : ""}
               </div>
               {linkedBySources.length > 0 && (
                 <div className="mt-2 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 text-xs font-semibold leading-5 text-[#5161d6]">

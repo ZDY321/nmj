@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIssueList";
 import type { ScheduleImportSavedRow, ScheduleImportReviewRecord, TeacherVault } from "@/shared/types";
-import { courseName as localCourseName, courseSubject, courseTimeRangeBillingLabel, lessonStatusLabels, lessonTimeRangeBillingLabel } from "@/frontend/lib/helpers";
+import { courseName as localCourseName, courseSubject, courseTimeRangeBillingLabel, lessonAttendanceNoteText, lessonStatusLabels, lessonTimeRangeBillingLabel } from "@/frontend/lib/helpers";
 import {
   courseTypeLabelSafe,
   effectiveSavedRowStatus,
@@ -113,6 +113,7 @@ function SavedReviewRowCard({
   const systemCourseId = systemLesson?.courseGroupId ?? row.matchedCourseId;
   const importTimeLabel = courseTimeRangeBillingLabel(vault, row, row.matchedCourseId ?? row.mappedCourseId);
   const systemTimeLabel = systemLesson ? lessonTimeRangeBillingLabel(vault, systemLesson) : "";
+  const systemAttendanceNoteText = systemLesson ? lessonAttendanceNoteText(vault, systemLesson) : "";
   const usesCurrentSystemLesson = Boolean(systemLesson && row.systemLessonLabel && systemLessonLabel !== row.systemLessonLabel);
   return (
     <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(rowStatus, reviewed && !resolvedAsMatched)}`}>
@@ -193,6 +194,11 @@ function SavedReviewRowCard({
           {systemAttendance.note && (
             <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
               云端备注：{systemAttendance.note}
+            </div>
+          )}
+          {systemAttendanceNoteText && (
+            <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
+              {systemAttendanceNoteText}
             </div>
           )}
           <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">

@@ -123,7 +123,7 @@ export function ScheduleCalendarDetailDialog({
                         <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#7f1d1d]">{lesson.note}</div>
                       )}
                       {attendanceNoteText && (
-                        <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#9a3412]">学生备注：{attendanceNoteText}</div>
+                        <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#9a3412]">{attendanceNoteText}</div>
                       )}
                     </div>
                   );

@@ -860,7 +860,7 @@ export function StudentsView({
   }
 
   function courseFeeSummary(course: CourseGroup): string {
-    const classBillingText = courseUsesClassBilling(course, vault) ? "；班课例：实际 110 分钟，计费 2 小时，义务课时按计费时长扣减" : "";
+    const classBillingText = courseUsesClassBilling(course, vault) ? "\n班课例：实际 110 分钟，计费 2 小时，义务课时按计费时长扣减" : "";
     if (course.feeRule.mode === "salary_grade") {
       const rule = resolveSalaryGradeRule(vault, course.feeRule);
       if (!rule) return "课时费等级：未设置默认等级";

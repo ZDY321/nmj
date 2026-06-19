@@ -162,7 +162,7 @@ export function CourseEditDialog({
                   </div>
                   {editingCourse.feeRule.mode === "salary_grade" && (
                     <div className="space-y-2 rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
-                      <div className="rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
+                      <div className="whitespace-pre-line rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
                         {courseFeeSummary(editingCourse)}
                       </div>
                       {resolveSalaryGradeRule(vault, editingCourse.feeRule)
@@ -187,7 +187,7 @@ export function CourseEditDialog({
                       当前关联 {editingCourse.studentIds.length} 人，{salaryGradeStageForStudentIds(vault, editingCourse.studentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, editingCourse.studentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length, editingCourse.type, salaryGradeStageForStudentIds(vault, editingCourse.studentIds)), amountsVisible)}，{courseBillingHint(vault, editingCourse)}
                     </div>
                   </div>
-                  <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
+                  <div className="whitespace-pre-line rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
                     {courseFeeSummary(editingCourse)}
                   </div>
                   {normalizedClassFeeTiers(editingCourse.feeRule).slice(0, 1).map((tier) => (
@@ -233,7 +233,7 @@ export function CourseEditDialog({
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-[#64748b]">试听单次费用</label>
                   <div className="text-xs font-semibold text-[#64748b]">按单次试听计费，不按上课时长相乘。</div>
-                  <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
+                  <div className="whitespace-pre-line rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
                     {courseFeeSummary(editingCourse)}
                   </div>
                   <SensitiveAmountField visible={amountsVisible}>
@@ -249,7 +249,7 @@ export function CourseEditDialog({
               ) : editingCourse.feeRule.mode === "hourly" ? (
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-[#64748b]">每小时费用</label>
-                  <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
+                  <div className="whitespace-pre-line rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
                     {courseFeeSummary(editingCourse)}
                   </div>
                   <SensitiveAmountField visible={amountsVisible}>

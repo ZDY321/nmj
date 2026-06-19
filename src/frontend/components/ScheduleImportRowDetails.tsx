@@ -11,6 +11,7 @@ import {
   courseSubject,
   courseTimeRangeBillingLabel,
   courseTypeLabel,
+  lessonAttendanceNoteText,
   lessonTimeRangeBillingLabel,
   lessonStatusLabels,
   studentNames
@@ -33,6 +34,7 @@ export function ScheduleImportRowDetails({
   onMap: (courseId: string) => void;
   onOpenLesson?: (lesson: Lesson) => void;
 }) {
+  const systemAttendanceNoteText = systemLesson ? lessonAttendanceNoteText(vault, systemLesson) : "";
   return (
     <div className="grid grid-cols-1 gap-3">
       <div className="rounded-[12px] border border-[#e8eef6] bg-white/80 p-3">
@@ -104,6 +106,11 @@ export function ScheduleImportRowDetails({
             {systemLesson.note && (
               <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
                 云端备注：{systemLesson.note}
+              </div>
+            )}
+            {systemAttendanceNoteText && (
+              <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
+                {systemAttendanceNoteText}
               </div>
             )}
             <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">

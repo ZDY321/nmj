@@ -168,7 +168,7 @@ export function CourseArchiveListPanel({
                       <span className="text-xs text-(--color-muted-foreground)">
                         {courseTypeLabel(vault, course.type)} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
                       </span>
-                      <span className="mt-1 block text-xs font-bold text-[#1557c2]">
+                      <span className="mt-1 block whitespace-pre-line text-xs font-bold text-[#1557c2]">
                         {courseFeeSummary(course)}
                       </span>
                     </div>
