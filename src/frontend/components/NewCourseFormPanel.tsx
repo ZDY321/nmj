@@ -171,6 +171,9 @@ export function NewCourseFormPanel({
                         const rule = resolveSalaryGradeRule(vault, courseFeeRule);
                         if (!rule) return "";
                         const stage = salaryGradeStageForStudentIds(vault, courseStudentIds);
+                        if (!amountsVisible) {
+                          return `跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}`;
+                        }
                         const rate = salaryGradeRateForStage(rule, stage);
                         return `跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。`
                       })()
