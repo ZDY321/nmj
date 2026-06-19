@@ -13,6 +13,7 @@ import {
   formatPrivateMoney,
   isMakeupAttendanceStatus,
   lessonStudentIds,
+  lessonTimeRangeLabel,
   studentNames
 } from "@/frontend/lib/helpers";
 import { attendanceSurfaceClass } from "@/frontend/lib/scheduleViewHelpers";
@@ -135,7 +136,7 @@ export function ScheduleLessonAttendancePanel({
                 onClick={() => onOpenLesson(makeupLesson)}
               >
                 <Link2 size={13} />
-                {dateWithWeekday(makeupLesson.date)} {makeupLesson.startTime}-{makeupLesson.endTime} · {attendedStudentNamesForLesson(vault, makeupLesson) || studentNames(vault, makeupLesson.expectedStudentIds)}
+                {dateWithWeekday(makeupLesson.date)} {lessonTimeRangeLabel(makeupLesson)} · {attendedStudentNamesForLesson(vault, makeupLesson) || studentNames(vault, makeupLesson.expectedStudentIds)}
               </Button>
             ))}
           </div>
@@ -291,7 +292,7 @@ export function ScheduleLessonAttendancePanel({
                 className="h-10 bg-white pl-9"
                 value={attendanceStudentFilter}
                 onChange={(event) => setAttendanceStudentFilter(event.target.value)}
-                placeholder="搜索姓名、年级、校区、试听或到课状态"
+                placeholder="搜索姓名、年级、校区、备注、试听或到课状态"
               />
             </label>
             {selected.type === "class" && (

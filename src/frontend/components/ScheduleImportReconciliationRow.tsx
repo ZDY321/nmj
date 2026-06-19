@@ -8,13 +8,12 @@ import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIss
 import { ScheduleImportLinkedLessonsPanel } from "@/frontend/components/ScheduleImportLinkedLessonsPanel";
 import { ScheduleImportRowDetails } from "@/frontend/components/ScheduleImportRowDetails";
 import type { CourseGroup, Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
-import { courseName as localCourseName, lessonStatusLabels } from "@/frontend/lib/helpers";
+import { courseName as localCourseName, lessonStatusLabels, lessonTimeRangeLabel } from "@/frontend/lib/helpers";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import {
   effectiveRowStatus,
   isReviewedResolution,
   lessonCampusId,
-  lessonDurationHours,
   linkedLessonsForResolution,
   quickResolutionActionsForRow,
   resolutionStatusLabel,
@@ -55,8 +54,8 @@ export function ScheduleImportReconciliationRow({
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
 }) {
   const systemLesson = row.systemLessonId ? vault.lessons.find((lesson) => lesson.id === row.systemLessonId) : undefined;
-  const importTimeLabel = `${row.startTime}-${row.endTime}`;
-  const systemTimeLabel = systemLesson ? `${systemLesson.startTime}-${systemLesson.endTime}` : "";
+  const importTimeLabel = lessonTimeRangeLabel(row);
+  const systemTimeLabel = systemLesson ? lessonTimeRangeLabel(systemLesson) : "";
   const resolutionStatus = resolution?.status ?? "unreviewed";
   const reviewed = isReviewedResolution(resolution);
   const displayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
@@ -84,6 +83,8 @@ export function ScheduleImportReconciliationRow({
     row.status === "system_missing" ||
     row.status === "course_mismatch" ||
     row.status === "import_missing";
+  const suggestScheduleCourseId = row.matchedCourseId ?? row.mappedCourseId;
+  const canSuggestSchedule = Boolean(onSuggestSchedule) && row.status !== "import_missing" && !systemLesson;
   const showReviewControls = row.status !== "matched" || reviewed || Boolean(resolution?.linkedSystemLessonIds?.length);
   const showExpandedReviewControls = showReviewControls && (!canCollapseDetails || detailsExpanded);
   const clearLinkedLessonsPatch = (): Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">> => ({
@@ -134,7 +135,7 @@ export function ScheduleImportReconciliationRow({
               </div>
               {linkedBySources.length > 0 && (
                 <div className="mt-2 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 text-xs font-semibold leading-5 text-[#5161d6]">
-                  由 {linkedBySources.map((source) => `${source.date} ${source.startTime}-${source.endTime}`).join("、")} 教务课合并成此云端课
+                  由 {linkedBySources.map((source) => `${source.date} ${lessonTimeRangeLabel(source)}`).join("、")} 教务课合并成此云端课
                 </div>
               )}
             </>
@@ -159,7 +160,7 @@ export function ScheduleImportReconciliationRow({
           <div className="flex items-center gap-2 text-xs">
             {linkedLessons.length > 0 && (
               <div className="flex-1 rounded-[10px] border border-[#c7d2fe] bg-[#eef0ff] px-2.5 py-1.5 font-semibold text-[#5161d6]">
-                已关联 {linkedLessons.map(l => `${l.date} ${l.startTime}-${l.endTime} ${localCourseName(vault, l.courseGroupId)}`).join("、")}
+                已关联 {linkedLessons.map(l => `${l.date} ${lessonTimeRangeLabel(l)} ${localCourseName(vault, l.courseGroupId)}`).join("、")}
               </div>
             )}
             <Button
@@ -221,7 +222,7 @@ export function ScheduleImportReconciliationRow({
               <div className="mt-2 space-y-1.5">
                 {linkedBySources.map((source) => (
                   <div key={`${source.rowKey}-${source.lessonId}`} className="rounded-[9px] border border-[#bbf7d0] bg-white px-2.5 py-2 text-xs font-semibold leading-5 text-[#64748b]">
-                    <span className="font-extrabold text-[#061226]">{source.date} {source.startTime}-{source.endTime}</span>
+                    <span className="font-extrabold text-[#061226]">{source.date} {lessonTimeRangeLabel(source)}</span>
                     {" · "}{source.matchedCourseId ? localCourseName(vault, source.matchedCourseId) : source.title}
                     {source.resolutionNote ? <span className="block text-[#15803d]">标注：{source.resolutionNote}</span> : null}
                   </div>
@@ -248,20 +249,21 @@ export function ScheduleImportReconciliationRow({
           )}
           {quickResolutionActions.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {row.status === "system_missing" && onSuggestSchedule && (
+              {canSuggestSchedule && (
                 <Button
                   type="button"
                   variant="default"
                   size="sm"
                   onClick={() =>
-                    onSuggestSchedule({
+                    onSuggestSchedule?.({
                       date: row.date,
                       startTime: row.startTime,
                       endTime: row.endTime,
-                      courseGroupId: row.matchedCourseId ?? row.mappedCourseId
+                      courseGroupId: suggestScheduleCourseId
                     })
                   }
-                  disabled={!row.matchedCourseId && !row.mappedCourseId}
+                  disabled={!suggestScheduleCourseId}
+                  title={suggestScheduleCourseId ? "按这条教务课的日期和时间去排课" : "请先把这条教务课映射到课程档案，再建议排课"}
                 >
                   建议排课
                 </Button>
@@ -290,7 +292,6 @@ export function ScheduleImportReconciliationRow({
               candidates={splitMergeCandidates}
               onChange={onResolutionChange}
               lessonCampusId={lessonCampusId}
-              lessonDurationHours={lessonDurationHours}
             />
           )}
           <div className="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)]">

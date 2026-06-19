@@ -6,7 +6,8 @@ import {
   courseName,
   courseTypeLabel,
   formatPrivateMoney,
-  lessonStudentDisplay
+  lessonStudentDisplay,
+  lessonTimeRangeLabel
 } from "@/frontend/lib/helpers";
 
 export type ScheduleCalendarGridProps = {
@@ -90,7 +91,7 @@ export function ScheduleCalendarGrid({
               const makeupMarker = makeupMarkerForLesson(lesson);
               return (
                 <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-(--color-muted-foreground) sm:block">
-                  {lesson.startTime} {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
+                  {lessonTimeRangeLabel(lesson)} · {courseTypeLabel(vault, lesson.type)} · {courseName(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
                   {makeupMarker ? ` · ${makeupMarker}` : ""}
                 </span>
               );

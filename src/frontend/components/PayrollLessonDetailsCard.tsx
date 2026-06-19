@@ -11,10 +11,12 @@ import {
   courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
+  lessonAttendanceNoteText,
   lessonCampusId,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
+  lessonTimeRangeLabel,
   studentNames
 } from "@/frontend/lib/helpers";
 import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
@@ -90,7 +92,7 @@ export function PayrollLessonDetailsCard({
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">学生筛选</label>
-            <Input value={studentFilter} onChange={(event) => onStudentFilterChange(event.target.value)} placeholder="输入学生名" />
+            <Input value={studentFilter} onChange={(event) => onStudentFilterChange(event.target.value)} placeholder="输入学生名或备注" />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">状态筛选</label>
@@ -113,6 +115,7 @@ export function PayrollLessonDetailsCard({
         </div>
         {detailLessons.map((lesson, index) => {
           const hasException = hasAttendanceException(lesson);
+          const attendanceNoteText = lessonAttendanceNoteText(vault, lesson);
           return (
             <motion.button
               key={lesson.id}
@@ -134,7 +137,7 @@ export function PayrollLessonDetailsCard({
                     <Badge variant="secondary">{courseTypeLabel(vault, lesson.type)}</Badge>
                   </div>
                   <div className="mt-2 text-sm font-semibold text-[#475569]">
-                    {lesson.date} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lessonCampusId(vault, lesson))}
+                    {lesson.date} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lessonCampusId(vault, lesson))}
                   </div>
                   <div className="mt-1 text-sm text-[#64748b]">{studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}</div>
                   {hasException && (
@@ -151,6 +154,11 @@ export function PayrollLessonDetailsCard({
                   {lesson.note && (
                     <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-sm font-semibold text-[#7f1d1d]">
                       备注：{lesson.note}
+                    </div>
+                  )}
+                  {attendanceNoteText && (
+                    <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-sm font-semibold text-[#9a3412]">
+                      学生备注：{attendanceNoteText}
                     </div>
                   )}
                 </div>

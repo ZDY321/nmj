@@ -23,6 +23,7 @@ import {
   findStudent,
   formatPrivateMoney,
   lessonStatusLabels,
+  lessonTimeRangeLabel,
   previousLesson,
   sortCampusesForProfile,
   sortCoursesByName,
@@ -324,7 +325,7 @@ export function LessonsView({
                     </div>
                     <div className="min-w-0">
                       <span className="text-sm font-medium block truncate">{courseName(vault, lesson.courseGroupId)}</span>
-                      <span className="text-xs text-(--color-muted-foreground)">{courseSubject(vault, lesson.courseGroupId)} · {lesson.date} · {lesson.startTime}-{lesson.endTime}</span>
+                      <span className="text-xs text-(--color-muted-foreground)">{courseSubject(vault, lesson.courseGroupId)} · {lesson.date} · {lessonTimeRangeLabel(lesson)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -348,7 +349,7 @@ export function LessonsView({
               <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle>课程详情</CardTitle>
-                  <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {selected.date} · {selected.startTime}-{selected.endTime}</CardDescription>
+                  <CardDescription>{courseSubject(vault, selected.courseGroupId)} · {selected.date} · {lessonTimeRangeLabel(selected)}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -414,7 +415,7 @@ export function LessonsView({
                     </p>
                     {selectedPreviousLesson && (
                       <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
+                        来源：{selectedPreviousLesson.date} · {lessonTimeRangeLabel(selectedPreviousLesson)} · 点击查看详情
                       </div>
                     )}
                   </button>
@@ -432,7 +433,7 @@ export function LessonsView({
                     </p>
                     {selectedPreviousLesson && (
                       <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                        来源：{selectedPreviousLesson.date} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
+                        来源：{selectedPreviousLesson.date} · {lessonTimeRangeLabel(selectedPreviousLesson)} · 点击查看详情
                       </div>
                     )}
                   </button>

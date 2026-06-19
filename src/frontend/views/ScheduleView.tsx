@@ -544,6 +544,7 @@ export function ScheduleView({
           campusName(vault, student?.defaultCampusId),
           student?.note ?? "",
           attendanceLabels[entry.status],
+          entry.note ?? "",
           entry.temporary ? "临时加入" : "",
           (entry.trial ?? student?.temporaryTrial) ? "试听 试听学生" : ""
         ].join(" ").toLowerCase();

@@ -26,7 +26,7 @@ import type {
   Weekday
 } from "@/shared/types";
 import { buildFeeSnapshot, getCourse, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
-import { timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
+import { durationHours, timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
 export type ViewKey = "today" | "calendar" | "schedule" | "progress" | "students" | "grades" | "payroll" | "salary" | "admin";
@@ -366,6 +366,37 @@ export function studentNames(vault: TeacherVault, studentIds: string[]): string 
     .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id))
     .map((item) => item.name)
     .join("、");
+}
+
+export function lessonAttendanceNotes(vault: TeacherVault, lesson: Pick<Lesson, "attendance">): Array<{ studentId: string; studentName: string; note: string }> {
+  return lesson.attendance
+    .map((entry) => ({
+      studentId: entry.studentId,
+      studentName: findStudent(vault, entry.studentId)?.name ?? "未知学生",
+      note: entry.note?.trim() ?? ""
+    }))
+    .filter((item) => Boolean(item.note))
+    .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
+}
+
+export function lessonAttendanceNoteText(vault: TeacherVault, lesson: Pick<Lesson, "attendance">): string {
+  return lessonAttendanceNotes(vault, lesson)
+    .map((item) => `${item.studentName}：${item.note}`)
+    .join("；");
+}
+
+export function formatDurationHours(hours: number): string {
+  if (!Number.isFinite(hours) || hours <= 0) return "0 小时";
+  const rounded = Math.round(hours * 100) / 100;
+  return `${String(rounded).replace(/\.0+$|(\.\d*[1-9])0+$/, "$1")} 小时`;
+}
+
+export function lessonDurationText(lesson: Pick<Lesson, "startTime" | "endTime">): string {
+  return formatDurationHours(durationHours(lesson.startTime, lesson.endTime));
+}
+
+export function lessonTimeRangeLabel(lesson: Pick<Lesson, "startTime" | "endTime">): string {
+  return `${lesson.startTime}-${lesson.endTime} · 时长 ${lessonDurationText(lesson)}`;
 }
 
 export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "type" | "expectedStudentIds" | "attendance" | "linkedOriginalLessonId">): string {

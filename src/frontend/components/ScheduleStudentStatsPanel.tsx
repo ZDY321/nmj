@@ -13,7 +13,8 @@ import {
   courseTypeOptionsForVault,
   formatPrivateMoney,
   lessonStatusLabels,
-  lessonStatusVariant
+  lessonStatusVariant,
+  lessonTimeRangeLabel
 } from "@/frontend/lib/helpers";
 import {
   isStudentStatsDateRangeValid,
@@ -236,7 +237,7 @@ export function ScheduleStudentStatsPanel({
                       <div className="min-w-0">
                         <div className="truncate text-base font-extrabold text-[#061226]">{row.courseName}</div>
                         <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                          {row.date} · {row.startTime}-{row.endTime} · {row.campusName}
+                          {row.date} · {lessonTimeRangeLabel(row)} · {row.campusName}
                         </div>
                       </div>
                       <Badge variant="secondary" className="text-[10px]">{row.subject}</Badge>
@@ -351,7 +352,7 @@ export function ScheduleStudentStatsPanel({
                           <div className="min-w-0">
                             <div className="truncate font-extrabold text-[#061226]">{detail.courseName}</div>
                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              <span>{detail.date} · {detail.startTime}-{detail.endTime} · {detail.campusName}</span>
+                              <span>{detail.date} · {lessonTimeRangeLabel(detail)} · {detail.campusName}</span>
                               <Badge variant="secondary" className="text-[10px]">
                                 {detail.subject}
                               </Badge>
@@ -362,6 +363,9 @@ export function ScheduleStudentStatsPanel({
                                 {lessonStatusLabels[detail.status]}
                               </Badge>
                             </div>
+                            {detail.note && (
+                              <div className="mt-1 truncate text-[#9a3412]">备注：{detail.note}</div>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-2 md:justify-end">
                             <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{detail.hours.toFixed(1)} 小时</span>

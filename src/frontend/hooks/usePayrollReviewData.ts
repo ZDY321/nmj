@@ -5,7 +5,9 @@ import {
   campusName,
   compareByName,
   courseTypeOptionsForVault,
+  lessonAttendanceNoteText,
   lessonCampusId,
+  lessonStudentIds,
   sortLessons,
   sortCampusesForProfile,
   sortCoursesByName,
@@ -96,9 +98,14 @@ export function usePayrollReviewData({
           (!detailStartDateFilter || lesson.date >= detailStartDateFilter) &&
           (!detailEndDateFilter || lesson.date <= detailEndDateFilter);
         const matchesCourse = detailCourseFilter === "all" || lesson.courseGroupId === detailCourseFilter;
+        const studentSearchTerms = detailStudentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const studentSearchText = [
+          studentNames(vault, lessonStudentIds(lesson)),
+          lessonAttendanceNoteText(vault, lesson)
+        ].join(" ").toLowerCase();
         const matchesStudent =
-          !detailStudentFilter.trim() ||
-          studentNames(vault, lesson.expectedStudentIds).toLowerCase().includes(detailStudentFilter.trim().toLowerCase());
+          studentSearchTerms.length === 0 ||
+          studentSearchTerms.every((term) => studentSearchText.includes(term));
         const matchesStatus = detailStatusFilter === "all" || lesson.status === detailStatusFilter;
         return matchesDate && matchesCourse && matchesStudent && matchesStatus;
       })

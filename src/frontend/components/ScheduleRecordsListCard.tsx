@@ -13,6 +13,7 @@ import {
   courseTypeLabel,
   courseTypeOptionsForVault,
   formatPrivateMoney,
+  lessonTimeRangeLabel,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant
@@ -224,7 +225,7 @@ export function ScheduleRecordsListCard({
                 <div className="min-w-0">
                   <span className="block truncate text-sm font-medium">{courseName(vault, lesson.courseGroupId)}</span>
                   <span className="text-xs text-(--color-muted-foreground)">
-                    {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {dateWithWeekday(lesson.date)} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                    {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {dateWithWeekday(lesson.date)} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)}
                   </span>
                 </div>
               </div>

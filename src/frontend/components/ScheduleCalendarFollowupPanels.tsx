@@ -17,6 +17,7 @@ import {
   lessonStatusSurfaceClass,
   lessonStatusVariant,
   lessonStudentDisplay,
+  lessonTimeRangeLabel,
   studentNames
 } from "@/frontend/lib/helpers";
 
@@ -113,7 +114,7 @@ export function ScheduleCalendarFollowupPanels({
                         {makeupMarker && <Badge variant="yellow" className="text-[10px]">{makeupMarker}</Badge>}
                       </div>
                       <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
+                        {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
                       </div>
                     </button>
                     <Button type="button" size="sm" variant="destructive" onClick={() => onDeleteLesson(lesson)}>
@@ -165,7 +166,7 @@ export function ScheduleCalendarFollowupPanels({
                   <div className="min-w-0">
                     <div className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</div>
                     <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                      {courseSubject(vault, lesson.courseGroupId)} · 原课：{dateWithWeekday(lesson.date)} · {lesson.startTime}-{lesson.endTime} · {campusName(vault, lesson.campusId)}
+                      {courseSubject(vault, lesson.courseGroupId)} · 原课：{dateWithWeekday(lesson.date)} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge variant="amber" className="px-2 py-0.5 text-[10px]">
@@ -227,7 +228,7 @@ export function ScheduleCalendarFollowupPanels({
                           {courseName(vault, lesson.courseGroupId)} · {attendedStudentNamesForLesson(vault, lesson) || studentNames(vault, lesson.expectedStudentIds)}
                         </div>
                         <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                          {courseSubject(vault, lesson.courseGroupId)} · 原课：{optionalDateWithWeekday(original?.date ?? lesson.makeupOriginalDate)} · 补课：{optionalDateWithWeekday(lesson.makeupScheduledDate ?? lesson.date)} · {lesson.startTime}-{lesson.endTime}
+                          {courseSubject(vault, lesson.courseGroupId)} · 原课：{optionalDateWithWeekday(original?.date ?? lesson.makeupOriginalDate)} · 补课：{optionalDateWithWeekday(lesson.makeupScheduledDate ?? lesson.date)} · {lessonTimeRangeLabel(lesson)}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Badge variant={lessonStatusVariant(lesson.status)} className="px-2 py-0.5 text-[10px]">

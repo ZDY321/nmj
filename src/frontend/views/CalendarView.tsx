@@ -17,12 +17,14 @@ import {
   formatPrivateMoney,
   courseSubject,
   findStudent,
+  lessonAttendanceNoteText,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
   lessonCampusId,
   lessonStudentDisplay,
   lessonStudentIds,
+  lessonTimeRangeLabel,
   makeupNeededStudentIds,
   monthShift,
   orderedWeekdayLabels,
@@ -282,6 +284,7 @@ export function CalendarView({
       campusName(vault, campusId),
       studentNames(vault, studentIds),
       lesson.note ?? "",
+      lessonAttendanceNoteText(vault, lesson),
       ...studentIds.map((studentId) => {
         const student = findStudent(vault, studentId);
         return [student?.name ?? "", student?.grade ?? "", student?.note ?? ""].join(" ");
@@ -616,46 +619,54 @@ export function CalendarView({
                                   <span className="block min-h-[48px]" />
                                 ) : (
                                   <span className="flex flex-col gap-2">
-                                    {cellLessons.map((lesson) => (
-                                      <button
-                                        key={lesson.id}
-                                        type="button"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          selectCalendarDate(date);
-                                          onOpenLessonInRecords?.(lesson, buildReturnFocus({ selectedDate: date, month: date.slice(0, 7) }));
-                                        }}
-                                        className={`block w-full rounded-[10px] border p-2 text-left text-xs transition-all hover:border-[#1557c2] ${lessonStatusSurfaceClass(lesson.status)}`}
-                                      >
-                                        <span className="mb-1 block text-[11px] font-extrabold text-[#1557c2]">
-                                          {lesson.startTime}-{lesson.endTime}
-                                        </span>
-                                        <span className="flex min-w-0 items-center justify-between gap-2">
-                                          <strong className="truncate">{courseName(vault, lesson.courseGroupId)}</strong>
-                                          <span className="flex shrink-0 gap-1">
-                                            {makeupMarkerForLesson(lesson) && (
-                                              <Badge variant="yellow" className="text-[10px]">
-                                                {makeupMarkerForLesson(lesson)}
+                                    {cellLessons.map((lesson) => {
+                                      const attendanceNoteText = lessonAttendanceNoteText(vault, lesson);
+                                      return (
+                                        <button
+                                          key={lesson.id}
+                                          type="button"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            selectCalendarDate(date);
+                                            onOpenLessonInRecords?.(lesson, buildReturnFocus({ selectedDate: date, month: date.slice(0, 7) }));
+                                          }}
+                                          className={`block w-full rounded-[10px] border p-2 text-left text-xs transition-all hover:border-[#1557c2] ${lessonStatusSurfaceClass(lesson.status)}`}
+                                        >
+                                          <span className="mb-1 block text-[11px] font-extrabold text-[#1557c2]">
+                                            {lessonTimeRangeLabel(lesson)}
+                                          </span>
+                                          <span className="flex min-w-0 items-center justify-between gap-2">
+                                            <strong className="truncate">{courseName(vault, lesson.courseGroupId)}</strong>
+                                            <span className="flex shrink-0 gap-1">
+                                              {makeupMarkerForLesson(lesson) && (
+                                                <Badge variant="yellow" className="text-[10px]">
+                                                  {makeupMarkerForLesson(lesson)}
+                                                </Badge>
+                                              )}
+                                              <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">
+                                                {lessonStatusLabels[lesson.status]}
                                               </Badge>
-                                            )}
-                                            <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">
-                                              {lessonStatusLabels[lesson.status]}
-                                            </Badge>
+                                            </span>
                                           </span>
-                                        </span>
-                                        <span className="mt-1 block truncate font-semibold">
-                                          {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}
-                                        </span>
-                                        <span className="mt-0.5 block truncate text-[11px] font-semibold opacity-80">
-                                          {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
-                                        </span>
-                                        {lesson.note && (
-                                          <span className="mt-1 block truncate text-[11px] font-semibold text-[#7f1d1d]">
-                                            备注：{lesson.note}
+                                          <span className="mt-1 block truncate font-semibold">
+                                            {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}
                                           </span>
-                                        )}
-                                      </button>
-                                    ))}
+                                          <span className="mt-0.5 block truncate text-[11px] font-semibold opacity-80">
+                                            {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
+                                          </span>
+                                          {lesson.note && (
+                                            <span className="mt-1 block truncate text-[11px] font-semibold text-[#7f1d1d]">
+                                              备注：{lesson.note}
+                                            </span>
+                                          )}
+                                          {attendanceNoteText && (
+                                            <span className="mt-1 block truncate text-[11px] font-semibold text-[#9a3412]">
+                                              学生备注：{attendanceNoteText}
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
                                   </span>
                                 )}
                               </div>
@@ -706,47 +717,55 @@ export function CalendarView({
               {selectedLessons.length === 0 && (
                 <p className="text-sm text-(--color-muted-foreground) text-center py-6">这一天还没有课程</p>
               )}
-              {selectedLessons.map((lesson) => (
-                <motion.button
-                  key={lesson.id}
-                  type="button"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => onOpenLessonInRecords?.(lesson, buildReturnFocus())}
-                  className={`flex w-full flex-col gap-3 rounded-[12px] border p-3 text-left transition-all hover:border-[#1557c2] sm:flex-row sm:items-center sm:justify-between ${lessonStatusSurfaceClass(lesson.status)}`}
-                >
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <strong className="block truncate text-sm">
-                      {lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}
-                    </strong>
-                      <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
-                        {lessonStatusLabels[lesson.status]}
-                      </Badge>
-                      {makeupMarkerForLesson(lesson) && (
-                        <Badge variant="yellow" className="shrink-0 text-[10px]">
-                          {makeupMarkerForLesson(lesson)}
+              {selectedLessons.map((lesson) => {
+                const attendanceNoteText = lessonAttendanceNoteText(vault, lesson);
+                return (
+                  <motion.button
+                    key={lesson.id}
+                    type="button"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onClick={() => onOpenLessonInRecords?.(lesson, buildReturnFocus())}
+                    className={`flex w-full flex-col gap-3 rounded-[12px] border p-3 text-left transition-all hover:border-[#1557c2] sm:flex-row sm:items-center sm:justify-between ${lessonStatusSurfaceClass(lesson.status)}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <strong className="block truncate text-sm">
+                        {lessonTimeRangeLabel(lesson)} · {courseName(vault, lesson.courseGroupId)}
+                      </strong>
+                        <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
+                          {lessonStatusLabels[lesson.status]}
                         </Badge>
-                      )}
-                      <Badge variant="secondary" className="shrink-0 text-[10px]">
-                        {courseSubject(vault, lesson.courseGroupId)}
-                      </Badge>
-                      <Badge variant="secondary" className="shrink-0 text-[10px]">
-                        {courseTypeLabel(vault, lesson.type)}
-                      </Badge>
-                    </div>
-                    <span className="text-xs text-(--color-muted-foreground)">
-                      {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
-                    </span>
-                    {lesson.note && (
-                      <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#7f1d1d]">
-                        {lesson.note}
+                        {makeupMarkerForLesson(lesson) && (
+                          <Badge variant="yellow" className="shrink-0 text-[10px]">
+                            {makeupMarkerForLesson(lesson)}
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="shrink-0 text-[10px]">
+                          {courseSubject(vault, lesson.courseGroupId)}
+                        </Badge>
+                        <Badge variant="secondary" className="shrink-0 text-[10px]">
+                          {courseTypeLabel(vault, lesson.type)}
+                        </Badge>
                       </div>
-                    )}
-                  </div>
-                  <span className="shrink-0 text-sm font-bold text-[#1557c2] sm:ml-3">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</span>
-                </motion.button>
-              ))}
+                      <span className="text-xs text-(--color-muted-foreground)">
+                        {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
+                      </span>
+                      {lesson.note && (
+                        <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#7f1d1d]">
+                          {lesson.note}
+                        </div>
+                      )}
+                      {attendanceNoteText && (
+                        <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#9a3412]">
+                          学生备注：{attendanceNoteText}
+                        </div>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-sm font-bold text-[#1557c2] sm:ml-3">{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}</span>
+                  </motion.button>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

@@ -13,6 +13,7 @@ import {
   findStudent,
   formatDateIso,
   isMakeupAttendanceStatus,
+  lessonAttendanceNoteText,
   lessonStatusLabels,
   lessonStudentIds,
   makeupNeededStudentIds,
@@ -287,6 +288,7 @@ export function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {
     lessonStatusLabels[lesson.status],
     studentNames(vault, lesson.expectedStudentIds),
     lesson.note ?? "",
+    lessonAttendanceNoteText(vault, lesson),
     ...studentFields
   ].join(" ").toLowerCase();
 }
@@ -375,6 +377,7 @@ export function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], no
       status: Lesson["status"];
       hours: number;
       amount: number;
+      note: string;
     }>;
   }>();
 
@@ -384,7 +387,15 @@ export function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], no
     lessonStudentIds(lesson).forEach((studentId) => {
       const student = findStudent(vault, studentId);
       const studentName = student?.name ?? "未知学生";
-      if (normalizedNameFilter && !studentName.toLowerCase().includes(normalizedNameFilter)) return;
+      const attendance = lesson.attendance.find((entry) => entry.studentId === studentId);
+      const attendanceNote = attendance?.note?.trim() ?? "";
+      const searchable = [
+        studentName,
+        student?.grade ?? "",
+        student?.note ?? "",
+        attendanceNote
+      ].join(" ").toLowerCase();
+      if (normalizedNameFilter && !searchable.includes(normalizedNameFilter)) return;
       const current = rows.get(studentId) ?? {
         studentId,
         studentName,
@@ -426,7 +437,8 @@ export function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], no
         endTime: lesson.endTime,
         status: lesson.status,
         hours,
-        amount
+        amount,
+        note: attendanceNote
       });
       rows.set(studentId, current);
     });
@@ -499,8 +511,15 @@ function isOneOnOneStatsLesson(vault: TeacherVault, lesson: Lesson): boolean {
 
 export function filteredStudentIdsForStats(vault: TeacherVault, lesson: Lesson, normalizedNameFilter: string): string[] {
   return lessonStudentIds(lesson).filter((studentId) => {
-    const studentName = findStudent(vault, studentId)?.name ?? "未知学生";
-    return !normalizedNameFilter || studentName.toLowerCase().includes(normalizedNameFilter);
+    const student = findStudent(vault, studentId);
+    const attendance = lesson.attendance.find((entry) => entry.studentId === studentId);
+    const searchable = [
+      student?.name ?? "未知学生",
+      student?.grade ?? "",
+      student?.note ?? "",
+      attendance?.note ?? ""
+    ].join(" ").toLowerCase();
+    return !normalizedNameFilter || searchable.includes(normalizedNameFilter);
   });
 }
 
@@ -521,6 +540,7 @@ export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson
     campusName(vault, campusId),
     studentNames(vault, studentIds),
     lesson.note ?? "",
+    lessonAttendanceNoteText(vault, lesson),
     ...studentIds.map((studentId) => {
       const student = findStudent(vault, studentId);
       return [student?.name ?? "", student?.grade ?? "", student?.note ?? ""].join(" ");

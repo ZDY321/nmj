@@ -39,9 +39,12 @@ import {
   courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
+  lessonAttendanceNoteText,
   lessonCampusId,
+  lessonStudentIds,
   lessonStatusLabels,
   lessonStatusVariant,
+  lessonTimeRangeLabel,
   sortLessons,
   sortCampusesForProfile,
   sortCoursesByName,
@@ -103,9 +106,14 @@ export function SalaryView({
         (!detailStartDateFilter || lesson.date >= detailStartDateFilter) &&
         (!detailEndDateFilter || lesson.date <= detailEndDateFilter);
       const matchesCourse = detailCourseFilter === "all" || lesson.courseGroupId === detailCourseFilter;
+      const studentSearchTerms = detailStudentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const studentSearchText = [
+        studentNames(vault, lessonStudentIds(lesson)),
+        lessonAttendanceNoteText(vault, lesson)
+      ].join(" ").toLowerCase();
       const matchesStudent =
-        !detailStudentFilter.trim() ||
-        studentNames(vault, lesson.expectedStudentIds).toLowerCase().includes(detailStudentFilter.trim().toLowerCase());
+        studentSearchTerms.length === 0 ||
+        studentSearchTerms.every((term) => studentSearchText.includes(term));
       const matchesCampus = detailCampusFilter === "all" || lessonCampusId(vault, lesson) === detailCampusFilter;
       const matchesStatus = detailStatusFilter === "all" || lesson.status === detailStatusFilter;
       return matchesDate && matchesCourse && matchesStudent && matchesCampus && matchesStatus;
@@ -399,7 +407,7 @@ export function SalaryView({
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">学生筛选</label>
-              <Input value={detailStudentFilter} onChange={(event) => setDetailStudentFilter(event.target.value)} placeholder="输入学生名" />
+              <Input value={detailStudentFilter} onChange={(event) => setDetailStudentFilter(event.target.value)} placeholder="输入学生名或备注" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">校区筛选</label>
@@ -466,7 +474,7 @@ export function SalaryView({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 text-xs font-bold text-[#64748b]">
                         <CalendarDays size={14} className="shrink-0 text-[#94a3b8]" />
-                        {lesson.date} · {lesson.startTime}-{lesson.endTime}
+                        {lesson.date} · {lessonTimeRangeLabel(lesson)}
                       </div>
                       <div className="mt-1 break-words text-base font-extrabold text-[#061226]">
                         {courseName(vault, lesson.courseGroupId)}
@@ -494,6 +502,11 @@ export function SalaryView({
                   {lesson.note && (
                     <div className="mt-3 rounded-[12px] border border-[#fecaca] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#b91c1c]">
                       {lesson.note}
+                    </div>
+                  )}
+                  {lessonAttendanceNoteText(vault, lesson) && (
+                    <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
+                      学生备注：{lessonAttendanceNoteText(vault, lesson)}
                     </div>
                   )}
                 </button>
@@ -542,7 +555,7 @@ export function SalaryView({
                       </div>
                       <div className="mt-1 text-xs text-[#64748b]">{courseSubject(vault, lesson.courseGroupId)}</div>
                       <div className="mt-1 text-xs text-[#64748b]">
-                        {lesson.startTime}-{lesson.endTime} · {courseTypeLabel(vault, lesson.type)}
+                        {lessonTimeRangeLabel(lesson)} · {courseTypeLabel(vault, lesson.type)}
                       </div>
                     </td>
                     <td className="max-w-[200px] truncate px-4 py-3">{studentNames(vault, lesson.expectedStudentIds)}</td>
@@ -558,6 +571,11 @@ export function SalaryView({
                       </Badge>
                       {lesson.note && (
                         <div className="mt-1 max-w-[180px] truncate text-xs font-semibold text-[#b91c1c]">{lesson.note}</div>
+                      )}
+                      {lessonAttendanceNoteText(vault, lesson) && (
+                        <div className="mt-1 max-w-[180px] truncate text-xs font-semibold text-[#9a3412]">
+                          学生备注：{lessonAttendanceNoteText(vault, lesson)}
+                        </div>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-[#061226]">

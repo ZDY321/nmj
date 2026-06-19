@@ -34,6 +34,7 @@ import {
   lessonStatusLabels,
   lessonStatusVariant,
   lessonStudentIds,
+  lessonTimeRangeLabel,
   sortCampusesForProfile,
   sortCoursesByName,
   sortLessons,
@@ -590,7 +591,7 @@ export function ProgressView({
                                   <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
                                     {cell.lesson && (
                                       <Badge variant="secondary" className="flex items-center gap-1 text-[10px]">
-                                        <Clock3 size={10} /> {cell.lesson.startTime}-{cell.lesson.endTime}
+                                        <Clock3 size={10} /> {lessonTimeRangeLabel(cell.lesson)}
                                       </Badge>
                                     )}
                                     <Badge variant="destructive" className="text-[10px]">已取消</Badge>
@@ -625,7 +626,7 @@ export function ProgressView({
                                   <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
                                     {cell.lesson && (
                                       <Badge variant="secondary" className="flex items-center gap-1 text-[10px]">
-                                        <Clock3 size={10} /> {cell.lesson.startTime}-{cell.lesson.endTime}
+                                        <Clock3 size={10} /> {lessonTimeRangeLabel(cell.lesson)}
                                       </Badge>
                                     )}
                                     <Badge variant={progressStatusVariant(cell.progressStatus)} className="text-[10px]">{progressStatusLabels[cell.progressStatus]}</Badge>
@@ -715,7 +716,7 @@ export function ProgressView({
                   >
                     {selectedLessons.slice().reverse().map((lesson) => (
                       <option key={lesson.id} value={lesson.id}>
-                        {lesson.date} · {lesson.startTime}-{lesson.endTime} · {lessonStatusLabels[lesson.status]}
+                        {lesson.date} · {lessonTimeRangeLabel(lesson)} · {lessonStatusLabels[lesson.status]}
                       </option>
                     ))}
                   </Select>

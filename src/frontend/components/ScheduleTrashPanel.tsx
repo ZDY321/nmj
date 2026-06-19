@@ -12,7 +12,8 @@ import {
   courseTypeLabel,
   lessonStatusLabels,
   lessonStatusVariant,
-  lessonStudentDisplay
+  lessonStudentDisplay,
+  lessonTimeRangeLabel
 } from "@/frontend/lib/helpers";
 import {
   canRestoreDeletedLesson,
@@ -184,7 +185,7 @@ export function ScheduleTrashPanel({
                         {missingCourse && <Badge variant="destructive" className="text-[10px]">课程档案缺失</Badge>}
                       </div>
                       <div className="mt-2 grid grid-cols-1 gap-2 text-sm font-semibold text-[#64748b] md:grid-cols-2">
-                        <div>{dateWithWeekday(lesson.date)} · {lesson.startTime}-{lesson.endTime}</div>
+                        <div>{dateWithWeekday(lesson.date)} · {lessonTimeRangeLabel(lesson)}</div>
                         <div>{campusName(vault, lesson.campusId ?? course?.defaultCampusId)} · {lessonStudentDisplay(vault, lesson)}</div>
                         <div>删除时间：{formatAppDateTime(item.deletedAt)}</div>
                         <div>删除原因：{item.reason ?? "未记录"}</div>

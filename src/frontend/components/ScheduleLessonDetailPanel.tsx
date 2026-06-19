@@ -25,6 +25,7 @@ import {
   courseTypeLabel,
   formatPrivateMoney,
   lessonStatusLabels,
+  lessonTimeRangeLabel,
   studentNames
 } from "@/frontend/lib/helpers";
 import type { LessonReturnTarget } from "@/frontend/lib/scheduleViewTypes";
@@ -182,7 +183,7 @@ export function ScheduleLessonDetailPanel({
             <CardTitle>课程详情</CardTitle>
             <CardDescription className="space-y-1 leading-5">
               <span className="block">{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)}</span>
-              <span className="block">{dateWithWeekday(selected.date)} · {selected.startTime}-{selected.endTime}</span>
+              <span className="block">{dateWithWeekday(selected.date)} · {lessonTimeRangeLabel(selected)}</span>
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -330,7 +331,7 @@ export function ScheduleLessonDetailPanel({
               </p>
               {selectedPreviousLesson && (
                 <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                  来源：{dateWithWeekday(selectedPreviousLesson.date)} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
+                  来源：{dateWithWeekday(selectedPreviousLesson.date)} · {lessonTimeRangeLabel(selectedPreviousLesson)} · 点击查看详情
                 </div>
               )}
             </button>
@@ -348,7 +349,7 @@ export function ScheduleLessonDetailPanel({
               </p>
               {selectedPreviousLesson && (
                 <div className="mt-3 text-xs font-semibold text-[#64748b]">
-                  来源：{dateWithWeekday(selectedPreviousLesson.date)} · {selectedPreviousLesson.startTime}-{selectedPreviousLesson.endTime} · 点击查看详情
+                  来源：{dateWithWeekday(selectedPreviousLesson.date)} · {lessonTimeRangeLabel(selectedPreviousLesson)} · 点击查看详情
                 </div>
               )}
             </button>

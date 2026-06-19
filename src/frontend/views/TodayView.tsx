@@ -27,9 +27,11 @@ import {
   findStudent,
   formatPrivateMoney,
   isToday,
+  lessonAttendanceNotes,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
+  lessonTimeRangeLabel,
   previousLesson,
   sortCampusesForProfile,
   sortLessons,
@@ -235,6 +237,7 @@ export function TodayView({
               const previousHomeworkText = previous?.content.homework.trim() || "";
               const campusTone = campusColorClass(campusOptions.findIndex((campus) => campus.id === lesson.campusId));
               const course = getCourse(vault, lesson.courseGroupId);
+              const attendanceNotes = lessonAttendanceNotes(vault, lesson);
               return (
                 <motion.article
                   key={lesson.id}
@@ -250,7 +253,7 @@ export function TodayView({
                       </h3>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-[#64748b]">
                         <span className="flex items-center gap-1 rounded-full bg-[#f3f7fb] px-2.5 py-1">
-                          <Clock3 size={13} /> {lesson.startTime}-{lesson.endTime}
+                          <Clock3 size={13} /> {lessonTimeRangeLabel(lesson)}
                         </span>
                         <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 ${campusTone}`}>
                           <MapPin size={13} /> {campusName(vault, lesson.campusId)}
@@ -298,6 +301,15 @@ export function TodayView({
                           </span>
                         ))}
                       </div>
+                      {attendanceNotes.length > 0 && (
+                        <div className="mt-3 space-y-1">
+                          {attendanceNotes.map((item) => (
+                            <div key={item.studentId} className="rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
+                              {item.studentName}：{item.note}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-[14px] border border-[#e8eef6] bg-[#f8fbff] p-4">
                       <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">

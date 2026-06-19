@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
-import { campusName, courseName as localCourseName, courseSubject, courseTypeLabel, lessonStatusLabels, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseName as localCourseName, courseSubject, courseTypeLabel, lessonStatusLabels, lessonTimeRangeLabel, studentNames } from "@/frontend/lib/helpers";
 
 type SplitMergeCandidate = Lesson & { score: number; scoreLabel: string };
 
@@ -16,8 +16,7 @@ export function ScheduleImportLinkedLessonsPanel({
   systemHours,
   candidates,
   onChange,
-  lessonCampusId,
-  lessonDurationHours
+  lessonCampusId
 }: {
   vault: TeacherVault;
   resolution?: ScheduleImportResolution;
@@ -28,7 +27,6 @@ export function ScheduleImportLinkedLessonsPanel({
   candidates: SplitMergeCandidate[];
   onChange: (patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) => void;
   lessonCampusId: (vault: TeacherVault, lesson: Lesson) => string | undefined;
-  lessonDurationHours: (lesson: Pick<Lesson, "startTime" | "endTime">) => number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const selectedLinkCount = resolution?.linkedSystemLessonIds?.length ?? 0;
@@ -107,7 +105,7 @@ export function ScheduleImportLinkedLessonsPanel({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-xs font-extrabold text-[#061226]">
-                    {candidate.date} {candidate.startTime}-{candidate.endTime}
+                    {candidate.date} {lessonTimeRangeLabel(candidate)}
                   </span>
                   <Badge variant={candidate.score >= 4 ? "sage" : candidate.score >= 2 ? "yellow" : "secondary"} className="text-[10px]">
                     {candidate.scoreLabel}
@@ -122,7 +120,7 @@ export function ScheduleImportLinkedLessonsPanel({
                   {localCourseName(vault, candidate.courseGroupId)} · {courseSubject(vault, candidate.courseGroupId)} · {courseTypeLabel(vault, candidate.type)} · {campusName(vault, lessonCampusId(vault, candidate))}
                 </div>
                 <div className="mt-0.5 text-[11px] font-semibold leading-5 text-[#94a3b8]">
-                  {studentNames(vault, candidate.expectedStudentIds) || "未设置学生"} · {lessonDurationHours(candidate).toFixed(1)} 小时
+                  {studentNames(vault, candidate.expectedStudentIds) || "未设置学生"}
                 </div>
               </div>
             </label>

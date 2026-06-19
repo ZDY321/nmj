@@ -10,6 +10,7 @@ import {
   courseName,
   courseSubject,
   courseTypeLabel,
+  lessonTimeRangeLabel,
   lessonStatusLabels
 } from "@/frontend/lib/helpers";
 import { isOrderedDateRange, timesOverlap } from "@/frontend/lib/scheduleViewHelpers";
@@ -180,7 +181,7 @@ export function ScheduleCalendarSyncPanel({
                           className="mt-1 h-4 w-4 accent-[#ff8617]"
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate font-extrabold">{lesson.startTime}-{lesson.endTime} · {courseName(vault, lesson.courseGroupId)}</span>
+                          <span className="block truncate font-extrabold">{lessonTimeRangeLabel(lesson)} · {courseName(vault, lesson.courseGroupId)}</span>
                           <span className="mt-1 block text-xs font-semibold">
                             {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)} · {lessonStatusLabels[lesson.status]}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期会覆盖" : ""}
                           </span>
