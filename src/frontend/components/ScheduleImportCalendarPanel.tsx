@@ -43,7 +43,8 @@ export function ScheduleImportCalendarPanel({
   const rowHasProblem = (row: ImportPreviewLesson): boolean =>
     effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" ||
     attentionLabelMarksProblem(rowAttentionLabel?.(row));
-  const selectedDateHasProblems = selectedDateRows.some(rowHasProblem);
+  const selectedDateProblemCount = selectedDateRows.filter(rowHasProblem).length;
+  const selectedDateHasProblems = selectedDateProblemCount > 0;
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -119,7 +120,7 @@ export function ScheduleImportCalendarPanel({
               <div className="mt-1 text-xs font-semibold text-[#64748b]">当前筛选 {selectedDateRows.length} 条</div>
             </div>
             <Badge variant={selectedDateHasProblems ? "amber" : "sage"}>
-              {selectedDateHasProblems ? "有差异" : "已对应"}
+              {selectedDateHasProblems ? `有差异 ${selectedDateProblemCount} 节` : "已对应"}
             </Badge>
           </div>
         </div>
