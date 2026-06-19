@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
-import { calculateClassHeadcountFee, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, courseUsesClassBilling, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
 import { formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
@@ -157,7 +157,7 @@ export function CourseEditDialog({
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">课时费规则</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                      常规课程默认跟随教师档案里的课时费等级；保存后只会同步未来待上课课节，已完成课时保留原金额快照。
+                      常规课程默认跟随教师档案里的课时费等级；保存后只会同步未来待上课课节，已完成课时保留原金额快照。{courseBillingHint(vault, editingCourse)}
                     </div>
                   </div>
                   {editingCourse.feeRule.mode === "salary_grade" && (
@@ -184,7 +184,7 @@ export function CourseEditDialog({
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                      当前关联 {editingCourse.studentIds.length} 人，{salaryGradeStageForStudentIds(vault, editingCourse.studentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, editingCourse.studentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length, editingCourse.type, salaryGradeStageForStudentIds(vault, editingCourse.studentIds)), amountsVisible)}，实际按「上课时长 / 2」折算。
+                      当前关联 {editingCourse.studentIds.length} 人，{salaryGradeStageForStudentIds(vault, editingCourse.studentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, editingCourse.studentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length, editingCourse.type, salaryGradeStageForStudentIds(vault, editingCourse.studentIds)), amountsVisible)}，{courseBillingHint(vault, editingCourse)}
                     </div>
                   </div>
                   <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
@@ -402,4 +402,10 @@ export function CourseEditDialog({
       )}
     </AnimatePresence>
   );
+}
+
+function courseBillingHint(vault: TeacherVault, course: CourseGroup): string {
+  return courseUsesClassBilling(course, vault)
+    ? "班课按计费时长统计；例：10:10-12:00 实际 110 分钟，计费 2 小时，义务课时按 2 小时扣减。"
+    : "实际课时费按「上课时长 / 2」折算。";
 }

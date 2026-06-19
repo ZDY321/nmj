@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
-import { campusName, courseName as localCourseName, courseSubject, courseTypeLabel, lessonStatusLabels, lessonTimeRangeLabel, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseName as localCourseName, courseSubject, courseTypeLabel, lessonStatusLabels, lessonTimeRangeBillingLabel, studentNames } from "@/frontend/lib/helpers";
 
 type SplitMergeCandidate = Lesson & { score: number; scoreLabel: string };
 
@@ -105,7 +105,7 @@ export function ScheduleImportLinkedLessonsPanel({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-xs font-extrabold text-[#061226]">
-                    {candidate.date} {lessonTimeRangeLabel(candidate)}
+                    {candidate.date} {lessonTimeRangeBillingLabel(vault, candidate)}
                   </span>
                   <Badge variant={candidate.score >= 4 ? "sage" : candidate.score >= 2 ? "yellow" : "secondary"} className="text-[10px]">
                     {candidate.scoreLabel}

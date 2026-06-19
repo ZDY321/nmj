@@ -9,8 +9,9 @@ import {
   campusName,
   courseName as localCourseName,
   courseSubject,
+  courseTimeRangeBillingLabel,
   courseTypeLabel,
-  lessonTimeRangeLabel,
+  lessonTimeRangeBillingLabel,
   lessonStatusLabels,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -44,7 +45,7 @@ export function ScheduleImportRowDetails({
           <>
             <div className="text-sm font-extrabold leading-5 text-[#061226]">{row.title}</div>
             <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-              {lessonTimeRangeLabel(row)} · {row.campusName || "未识别校区"} · {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
+              {courseTimeRangeBillingLabel(vault, row, row.matchedCourseId ?? row.mappedCourseId)} · {row.campusName || "未识别校区"} · {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
               {row.teacher ? ` · 教师：${row.teacher}` : ""}
               {row.room ? ` · 教室：${row.room}` : ""}
             </div>
@@ -89,7 +90,7 @@ export function ScheduleImportRowDetails({
           <div>
             <div className="text-sm font-extrabold leading-5 text-[#061226]">{localCourseName(vault, systemLesson.courseGroupId)}</div>
             <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-              {lessonTimeRangeLabel(systemLesson)} · {courseSubject(vault, systemLesson.courseGroupId)} · {courseTypeLabel(vault, systemLesson.type)} · {campusName(vault, systemLesson.campusId)}
+              {lessonTimeRangeBillingLabel(vault, systemLesson)} · {courseSubject(vault, systemLesson.courseGroupId)} · {courseTypeLabel(vault, systemLesson.type)} · {campusName(vault, systemLesson.campusId)}
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Badge variant={systemLesson.status === "cancelled" ? "destructive" : "secondary"} className="text-[10px]">
@@ -235,7 +236,7 @@ function LinkedSystemLessons({
             onClick={() => onOpenLesson?.(lesson)}
             className="block w-full rounded-[9px] border border-[#dbe4ef] bg-white px-2.5 py-2 text-left text-xs font-semibold leading-5 text-[#64748b] transition-colors hover:border-[#93c5fd] hover:bg-[#f8fbff]"
           >
-            <span className="font-extrabold text-[#061226]">{lesson.date} {lessonTimeRangeLabel(lesson)}</span>
+            <span className="font-extrabold text-[#061226]">{lesson.date} {lessonTimeRangeBillingLabel(vault, lesson)}</span>
             {" · "}{localCourseName(vault, lesson.courseGroupId)}
             {" · "}{courseSubject(vault, lesson.courseGroupId)}
             {" · "}{courseTypeLabel(vault, lesson.type)}

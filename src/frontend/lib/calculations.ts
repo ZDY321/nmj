@@ -93,18 +93,43 @@ export function normalizedClassHoursBetween(startTime: string, endTime: string):
   return Math.max(Math.round(hours * 2) / 2, 0.5);
 }
 
+export function usesClassBillingHours(type: CourseType, rule?: FeeRule): boolean {
+  return type === "class" || classHeadcountBaseStudentCountForRule(type, rule) > 1;
+}
+
+export function courseTypeUsesClassBilling(vault: TeacherVault | undefined, type: CourseType, rule?: FeeRule): boolean {
+  if (usesClassBillingHours(type, rule)) return true;
+  return vault ? classHeadcountBaseStudentCountForRule(type, feeRuleForCourseType(vault, type)) > 1 : false;
+}
+
+export function courseUsesClassBilling(course: Pick<CourseGroup, "type" | "feeRule">, vault?: TeacherVault): boolean {
+  return courseTypeUsesClassBilling(vault, course.type, course.feeRule);
+}
+
 export function billableHoursForLesson(lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
-  if (lesson.type === "class" || rule?.mode === "class_headcount") {
+  if (usesClassBillingHours(lesson.type, rule)) {
+    return normalizedClassHoursBetween(lesson.startTime, lesson.endTime);
+  }
+  return hoursBetween(lesson.startTime, lesson.endTime);
+}
+
+export function billableHoursForCourseLesson(course: Pick<CourseGroup, "type" | "feeRule">, lesson: Pick<Lesson, "startTime" | "endTime">, vault?: TeacherVault): number {
+  if (courseUsesClassBilling(course, vault)) {
     return normalizedClassHoursBetween(lesson.startTime, lesson.endTime);
   }
   return hoursBetween(lesson.startTime, lesson.endTime);
 }
 
 export function lessonBillableHours(lesson: Lesson): number {
-  if (lesson.type === "class") {
-    return billableHoursForLesson(lesson);
-  }
   return Number.isFinite(lesson.feeSnapshot.hours) ? Math.max(lesson.feeSnapshot.hours ?? 0, 0) : billableHoursForLesson(lesson);
+}
+
+export function lessonBillableHoursForVault(vault: TeacherVault, lesson: Lesson): number {
+  const course = getCourse(vault, lesson.courseGroupId);
+  if (course && courseUsesClassBilling(course, vault)) {
+    return billableHoursForCourseLesson(course, lesson, vault);
+  }
+  return lessonBillableHours(lesson);
 }
 
 function isPresentAttendanceEntry(lesson: Lesson, entry: Lesson["attendance"][number]): boolean {
@@ -444,6 +469,10 @@ export function lessonDurationMultiplier(lesson: Pick<Lesson, "startTime" | "end
   return billableHoursForLesson(lesson, rule) / lessonFeeUnitHours;
 }
 
+export function lessonDurationMultiplierForCourse(course: Pick<CourseGroup, "type" | "feeRule">, lesson: Pick<Lesson, "startTime" | "endTime">, vault?: TeacherVault): number {
+  return billableHoursForCourseLesson(course, lesson, vault) / lessonFeeUnitHours;
+}
+
 export function proratedLessonUnitAmount(unitAmount: number, lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
   return nonNegativeNumber(unitAmount) * lessonDurationMultiplier(lesson, rule);
 }
@@ -519,13 +548,16 @@ function nonNegativeInteger(value: number | undefined, fallback = 0): number {
   return Math.floor(nonNegativeNumber(value, fallback));
 }
 
+function lessonWithCourseType(lesson: Lesson, course?: Pick<CourseGroup, "type">): Lesson {
+  return course && lesson.type !== course.type ? { ...lesson, type: course.type } : lesson;
+}
+
 function hasCustomTemporaryFee(entry: Lesson["attendance"][number]): boolean {
   return entry.temporaryFee !== undefined && Number.isFinite(entry.temporaryFee);
 }
 
-function temporaryFeeOverrideDelta(rule: FeeRule, lesson: Lesson, stage?: SalaryGradeStage): number {
+function temporaryFeeOverrideDelta(rule: FeeRule, lesson: Lesson, stage?: SalaryGradeStage, durationMultiplier = lessonDurationMultiplier(lesson, rule)): number {
   const presentStudentCount = presentCount(lesson);
-  const multiplier = lessonDurationMultiplier(lesson, rule);
   return lesson.attendance.reduce((sum, entry) => {
     if (!entry.temporary || entry.trial || !hasCustomTemporaryFee(entry)) return sum;
     const customFee = nonNegativeNumber(entry.temporaryFee);
@@ -536,14 +568,19 @@ function temporaryFeeOverrideDelta(rule: FeeRule, lesson: Lesson, stage?: Salary
     const defaultIncrement = (
       calculateClassHeadcountFee(rule, presentStudentCount, lesson.type, stage) -
       calculateClassHeadcountFee(rule, countWithoutEntry, lesson.type, stage)
-    ) * multiplier;
+    ) * durationMultiplier;
     return sum + customFee - defaultIncrement;
   }, 0);
 }
 
-function salaryGradeTemporaryFeeOverrideDelta(rule: SalaryGradeRule, lesson: Lesson, stage?: SalaryGradeStage, baseStudentCount = classHeadcountBaseStudentCountForCourseType(lesson.type)): number {
+function salaryGradeTemporaryFeeOverrideDelta(
+  rule: SalaryGradeRule,
+  lesson: Lesson,
+  stage?: SalaryGradeStage,
+  baseStudentCount = classHeadcountBaseStudentCountForCourseType(lesson.type),
+  durationMultiplier = lessonDurationMultiplier(lesson)
+): number {
   const presentStudentCount = presentCount(lesson);
-  const multiplier = lessonDurationMultiplier(lesson);
   return lesson.attendance.reduce((sum, entry) => {
     if (!entry.temporary || entry.trial || !hasCustomTemporaryFee(entry)) return sum;
     const customFee = nonNegativeNumber(entry.temporaryFee);
@@ -555,20 +592,29 @@ function salaryGradeTemporaryFeeOverrideDelta(rule: SalaryGradeRule, lesson: Les
       (
         salaryGradeAmountForCount(rule, lesson.type, presentStudentCount, stage, baseStudentCount) -
         salaryGradeAmountForCount(rule, lesson.type, countWithoutEntry, stage, baseStudentCount)
-      ) * multiplier;
+      ) * durationMultiplier;
     return sum + customFee - defaultIncrement;
   }, 0);
 }
 
 export function temporaryFeeTotal(lesson: Lesson, rule?: FeeRule, vault?: TeacherVault): number {
+  const course = vault ? getCourse(vault, lesson.courseGroupId) : undefined;
+  const billingLesson = lessonWithCourseType(lesson, course);
+  const durationMultiplier = course ? lessonDurationMultiplierForCourse(course, lesson, vault) : lessonDurationMultiplier(billingLesson, rule);
   if (rule?.mode === "class_headcount") {
-    const course = vault ? getCourse(vault, lesson.courseGroupId) : undefined;
-    return temporaryFeeOverrideDelta(rule, lesson, vault ? salaryGradeStageForLesson(vault, course, lesson) : undefined);
+    return temporaryFeeOverrideDelta(rule, billingLesson, vault ? salaryGradeStageForLesson(vault, course, lesson) : undefined, durationMultiplier);
   }
   if (rule?.mode === "salary_grade" && vault) {
     const gradeRule = resolveSalaryGradeRule(vault, rule);
-    const course = getCourse(vault, lesson.courseGroupId);
-    if (gradeRule) return salaryGradeTemporaryFeeOverrideDelta(gradeRule, lesson, salaryGradeStageForLesson(vault, course, lesson), classHeadcountBaseStudentCountForRule(lesson.type, feeRuleForCourseType(vault, lesson.type)));
+    if (gradeRule) {
+      return salaryGradeTemporaryFeeOverrideDelta(
+        gradeRule,
+        billingLesson,
+        salaryGradeStageForLesson(vault, course, lesson),
+        classHeadcountBaseStudentCountForRule(billingLesson.type, feeRuleForCourseType(vault, billingLesson.type)),
+        durationMultiplier
+      );
+    }
   }
   return lesson.attendance.reduce((sum, entry) => sum + nonNegativeNumber(entry.temporaryFee), 0);
 }
@@ -634,12 +680,16 @@ export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: Fee
   if (isOriginalFullyMadeUp(lesson) || isLessonFullyMissedAndMakeupExempt(lesson)) {
     return 0;
   }
+  const billingCourse = course ?? (vault ? getCourse(vault, lesson.courseGroupId) : undefined);
+  const billingLesson = lessonWithCourseType(lesson, billingCourse);
+  const billableHours = billingCourse ? billableHoursForCourseLesson(billingCourse, lesson, vault) : billableHoursForLesson(billingLesson, rule);
+  const durationMultiplier = billableHours / lessonFeeUnitHours;
   const extraFee = extraFeeTotal(lesson, rule, vault);
-  if (lesson.type === "trial") {
+  if (billingLesson.type === "trial") {
     return Math.round(fixedFeeForRule(rule) + extraFee);
   }
   if (rule.mode === "hourly") {
-    return Math.round((rule.hourlyRate ?? 0) * billableHoursForLesson(lesson, rule) + extraFee);
+    return Math.round((rule.hourlyRate ?? 0) * billableHours + extraFee);
   }
 
   if (rule.mode === "fixed") {
@@ -649,14 +699,14 @@ export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: Fee
   if (rule.mode === "salary_grade") {
     const gradeRule = vault ? resolveSalaryGradeRule(vault, rule) : salaryGradeRuleById(rule.salaryGradeId);
     if (!gradeRule) return Math.round(extraFee);
-    const salaryStage = vault ? salaryGradeStageForLesson(vault, course ?? getCourse(vault, lesson.courseGroupId), lesson) : undefined;
-    const baseStudentCount = vault ? classHeadcountBaseStudentCountForRule(lesson.type, feeRuleForCourseType(vault, lesson.type)) : classHeadcountBaseStudentCountForCourseType(lesson.type);
-    const unitAmount = salaryGradeAmountForCount(gradeRule, lesson.type, presentCount(lesson), salaryStage, baseStudentCount);
-    return Math.round(proratedLessonUnitAmount(unitAmount, lesson, rule) + extraFee);
+    const salaryStage = vault ? salaryGradeStageForLesson(vault, billingCourse, lesson) : undefined;
+    const baseStudentCount = vault ? classHeadcountBaseStudentCountForRule(billingLesson.type, feeRuleForCourseType(vault, billingLesson.type)) : classHeadcountBaseStudentCountForCourseType(billingLesson.type);
+    const unitAmount = salaryGradeAmountForCount(gradeRule, billingLesson.type, presentCount(lesson), salaryStage, baseStudentCount);
+    return Math.round(nonNegativeNumber(unitAmount) * durationMultiplier + extraFee);
   }
 
-  const salaryStage = vault ? salaryGradeStageForLesson(vault, course ?? getCourse(vault, lesson.courseGroupId), lesson) : undefined;
-  return Math.round(proratedLessonUnitAmount(calculateClassHeadcountFee(rule, presentCount(lesson), lesson.type, salaryStage), lesson, rule) + extraFee);
+  const salaryStage = vault ? salaryGradeStageForLesson(vault, billingCourse, lesson) : undefined;
+  return Math.round(nonNegativeNumber(calculateClassHeadcountFee(rule, presentCount(lesson), billingLesson.type, salaryStage)) * durationMultiplier + extraFee);
 }
 
 export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
@@ -718,7 +768,7 @@ export function getCourse(vault: TeacherVault, courseId: string): CourseGroup | 
 export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesson: Lesson): FeeSnapshot {
   const presentStudentCount = presentCount(lesson);
   const trialStudentCount = namedTrialStudentCount(lesson) + (lesson.trialStudentCount ?? 0);
-  const hours = billableHoursForLesson(lesson, course.feeRule);
+  const hours = billableHoursForCourseLesson(course, lesson, vault);
   const durationMultiplier = hours / lessonFeeUnitHours;
   const common = {
     presentStudentCount,
@@ -783,7 +833,7 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
     lessonUnitHours: course.feeRule.mode === "class_headcount" ? lessonFeeUnitHours : undefined,
     durationMultiplier: course.feeRule.mode === "class_headcount" ? durationMultiplier : undefined,
     unitAmount,
-    amount: calculateFeeWithVault(vault, course.feeRule, lesson)
+    amount: calculateFeeWithVault(vault, course.feeRule, lesson, course)
   };
 }
 
@@ -797,14 +847,14 @@ export function completedAmount(lesson: Lesson): number {
   return lesson.feeSnapshot.amount;
 }
 
-function completedHours(lesson: Lesson): number {
+function completedHours(lesson: Lesson, vault?: TeacherVault): number {
   if (lesson.status !== "completed" && lesson.status !== "makeup_completed") {
     return 0;
   }
   if (isOriginalFullyMadeUp(lesson) || isLessonFullyMissedAndMakeupExempt(lesson)) {
     return 0;
   }
-  return lessonBillableHours(lesson);
+  return vault ? lessonBillableHoursForVault(vault, lesson) : lessonBillableHours(lesson);
 }
 
 export function payrollExcludedSplitMergeLessonIds(vault: TeacherVault, month?: string): Set<string> {
@@ -933,11 +983,11 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
   const breakdown = new Map<string, ObligationCourseDeduction & { firstDeductOrder: number }>();
   const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, month);
   const eligibleLessons = vault.lessons
-    .filter((lesson) => monthOf(lesson.date) === month && lesson.type !== "trial" && completedHours(lesson) > 0)
+    .filter((lesson) => monthOf(lesson.date) === month && lesson.type !== "trial" && completedHours(lesson, vault) > 0)
     .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
     .map((lesson) => {
       const lessonCourse = getCourse(vault, lesson.courseGroupId);
-      const lessonHours = completedHours(lesson);
+      const lessonHours = completedHours(lesson, vault);
       const lessonAmount = completedAmount(lesson);
       return {
         lesson,
@@ -1033,9 +1083,10 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
     (totals, lesson) => {
       if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return totals;
       const amount = completedAmount(lesson);
+      const course = getCourse(vault, lesson.courseGroupId);
       if (lesson.status === "makeup_completed") {
         totals.makeup += amount;
-      } else if (lesson.type === "class") {
+      } else if (course ? courseUsesClassBilling(course, vault) : lesson.type === "class") {
         totals.classLessons += amount;
       } else if (lesson.type === "full_time") {
         totals.fullTime += amount;

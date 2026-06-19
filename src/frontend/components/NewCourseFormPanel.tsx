@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
-import { calculateClassHeadcountFee, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, courseTypeUsesClassBilling, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
 import { campusName, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
@@ -94,6 +94,11 @@ export function NewCourseFormPanel({
   supportsSalaryGradeFee,
   vault
 }: NewCourseFormPanelProps) {
+  const usesClassBilling = courseTypeUsesClassBilling(vault, courseType, courseFeeRule);
+  const classBillingHint = usesClassBilling
+    ? "班课按计费时长统计；例：10:10-12:00 实际 110 分钟，计费 2 小时，义务课时按 2 小时扣减。"
+    : "实际课时费按「上课时长 / 2」折算。";
+
   return (
     <Card className="h-fit overflow-hidden">
       <CardHeader>
@@ -156,7 +161,7 @@ export function NewCourseFormPanel({
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm font-extrabold text-[#061226]">课时费规则</div>
                 <div className="text-xs font-semibold text-[#64748b]">
-                  默认跟随教师档案里的课时费等级；金额按学生年级阶段自动对应，实际课时费按「上课时长 / 2」折算。
+                  默认跟随教师档案里的课时费等级；金额按学生年级阶段自动对应。{classBillingHint}
                 </div>
               </div>
               {courseFeeRule.mode === "salary_grade" && (
@@ -180,7 +185,7 @@ export function NewCourseFormPanel({
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                 <div className="text-xs font-semibold text-[#64748b]">
-                  当前关联 {courseStudentIds.length} 人，{salaryGradeStageForStudentIds(vault, courseStudentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, courseStudentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length, courseType, salaryGradeStageForStudentIds(vault, courseStudentIds)), amountsVisible)}，实际按「上课时长 / 2」折算
+                  当前关联 {courseStudentIds.length} 人，{salaryGradeStageForStudentIds(vault, courseStudentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, courseStudentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length, courseType, salaryGradeStageForStudentIds(vault, courseStudentIds)), amountsVisible)}，{classBillingHint}
                 </div>
               </div>
               {normalizedClassFeeTiers(courseFeeRule).slice(0, 1).map((tier) => (

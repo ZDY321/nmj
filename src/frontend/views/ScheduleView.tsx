@@ -13,7 +13,7 @@ import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsLi
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { buildFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, lessonDurationMultiplier, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -1368,16 +1368,16 @@ export function ScheduleView({
     const entryIsPresent = entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed");
     if (!entryIsPresent) return 0;
     const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
-    const multiplier = lessonDurationMultiplier(lesson, course.feeRule);
+    const multiplier = lessonDurationMultiplierForCourse(course, lesson, vault);
     const stage = salaryGradeStageForLesson(vault, course, lesson);
     if (course.feeRule.mode === "salary_grade") {
       const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
       if (!gradeRule) return undefined;
-      const baseStudentCount = classHeadcountBaseStudentCountForRule(lesson.type, feeRuleForCourseType(vault, lesson.type));
-      return Math.round((salaryGradeAmountForCount(gradeRule, lesson.type, presentStudentCount, stage, baseStudentCount) - salaryGradeAmountForCount(gradeRule, lesson.type, countWithoutEntry, stage, baseStudentCount)) * multiplier);
+      const baseStudentCount = classHeadcountBaseStudentCountForRule(course.type, feeRuleForCourseType(vault, course.type));
+      return Math.round((salaryGradeAmountForCount(gradeRule, course.type, presentStudentCount, stage, baseStudentCount) - salaryGradeAmountForCount(gradeRule, course.type, countWithoutEntry, stage, baseStudentCount)) * multiplier);
     }
     if (course.feeRule.mode !== "class_headcount") return undefined;
-    return Math.round((calculateClassHeadcountFee(course.feeRule, presentStudentCount, lesson.type, stage) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry, lesson.type, stage)) * multiplier);
+    return Math.round((calculateClassHeadcountFee(course.feeRule, presentStudentCount, course.type, stage) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry, course.type, stage)) * multiplier);
   }
 
   function updateTrialStats(patch: Pick<Partial<Lesson>, "trialStudentCount" | "trialFee">) {

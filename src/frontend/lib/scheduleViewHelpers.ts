@@ -1,5 +1,5 @@
 import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, WeekStart } from "@/shared/types";
-import { formatAppDateTime, getCourse, lessonBillableHours, todayIso } from "@/frontend/lib/calculations";
+import { formatAppDateTime, getCourse, lessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { timeToMinutes as parseTimeToMinutes } from "@/frontend/lib/time";
 import { isPlainRecord } from "@/frontend/lib/typeGuards";
 import {
@@ -382,7 +382,7 @@ export function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], no
   }>();
 
   lessons.forEach((lesson) => {
-    const hours = lessonBillableHours(lesson);
+    const hours = lessonBillableHoursForVault(vault, lesson);
     const amount = lesson.feeSnapshot.amount;
     lessonStudentIds(lesson).forEach((studentId) => {
       const student = findStudent(vault, studentId);
@@ -462,7 +462,7 @@ export function buildStudentStatsGroupedLessonRows(vault: TeacherVault, lessons:
     .map((lesson) => {
       const filteredStudentIds = filteredStudentIdsForStats(vault, lesson, normalizedNameFilter);
       if (filteredStudentIds.length === 0) return null;
-      const hours = lessonBillableHours(lesson);
+      const hours = lessonBillableHoursForVault(vault, lesson);
       return {
         kind: "grouped" as const,
         groupId: `lesson-${lesson.id}`,
@@ -768,7 +768,7 @@ export function buildScheduleAiContext(
         status: lesson.status,
         statusLabel: lessonStatusLabels[lesson.status],
         students: studentNames(vault, lessonStudentIds(lesson)),
-        hours: lessonBillableHours(lesson),
+        hours: lessonBillableHoursForVault(vault, lesson),
         feeAmount: hasKnownFee ? amount : null,
         feeKnown: hasKnownFee
       };

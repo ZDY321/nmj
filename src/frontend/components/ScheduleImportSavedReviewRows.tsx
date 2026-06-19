@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIssueList";
 import type { ScheduleImportSavedRow, ScheduleImportReviewRecord, TeacherVault } from "@/shared/types";
-import { courseName as localCourseName, courseSubject, lessonStatusLabels, lessonTimeRangeLabel } from "@/frontend/lib/helpers";
+import { courseName as localCourseName, courseSubject, courseTimeRangeBillingLabel, lessonStatusLabels, lessonTimeRangeBillingLabel } from "@/frontend/lib/helpers";
 import {
   courseTypeLabelSafe,
   effectiveSavedRowStatus,
@@ -111,8 +111,8 @@ function SavedReviewRowCard({
   const systemLessonLabel = savedRowSystemLessonLabel(vault, row);
   const systemAttendance = savedRowSystemAttendance(vault, row);
   const systemCourseId = systemLesson?.courseGroupId ?? row.matchedCourseId;
-  const importTimeLabel = lessonTimeRangeLabel(row);
-  const systemTimeLabel = systemLesson ? lessonTimeRangeLabel(systemLesson) : "";
+  const importTimeLabel = courseTimeRangeBillingLabel(vault, row, row.matchedCourseId ?? row.mappedCourseId);
+  const systemTimeLabel = systemLesson ? lessonTimeRangeBillingLabel(vault, systemLesson) : "";
   const usesCurrentSystemLesson = Boolean(systemLesson && row.systemLessonLabel && systemLessonLabel !== row.systemLessonLabel);
   return (
     <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(rowStatus, reviewed && !resolvedAsMatched)}`}>
@@ -148,7 +148,7 @@ function SavedReviewRowCard({
           </div>
           <div className="text-sm font-extrabold leading-5 text-[#061226]">{row.status === "import_missing" ? "教务 Excel 没有对应课节" : row.title}</div>
           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-            {lessonTimeRangeLabel(row)} · {row.campusName || "未识别校区"} · {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
+            {courseTimeRangeBillingLabel(vault, row, row.matchedCourseId ?? row.mappedCourseId)} · {row.campusName || "未识别校区"} · {row.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, row.courseTypeHint)}
             {row.teacher ? ` · 教师：${row.teacher}` : ""}
             {row.room ? ` · 教室：${row.room}` : ""}
           </div>
@@ -178,7 +178,7 @@ function SavedReviewRowCard({
           </div>
           <div className="text-sm font-extrabold leading-5 text-[#061226]">{systemLessonLabel || "云端课表没有对应课节"}</div>
           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-            {systemLesson ? `${lessonTimeRangeLabel(systemLesson)} · ` : ""}{systemCourseId ? `课程档案：${localCourseName(vault, systemCourseId)}` : "未映射课程档案"}
+            {systemLesson ? `${lessonTimeRangeBillingLabel(vault, systemLesson)} · ` : ""}{systemCourseId ? `课程档案：${localCourseName(vault, systemCourseId)}` : "未映射课程档案"}
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {systemAttendance.status && (
@@ -210,7 +210,7 @@ function SavedReviewRowCard({
           <div className="mt-2 space-y-1.5">
             {linkedLessons.map((lesson) => (
               <div key={lesson.id} className="rounded-[9px] border border-[#dbe4ef] bg-white px-2.5 py-2 text-xs font-semibold text-[#64748b]">
-                <span className="font-extrabold text-[#061226]">{lesson.date} {lessonTimeRangeLabel(lesson)}</span>
+                <span className="font-extrabold text-[#061226]">{lesson.date} {lessonTimeRangeBillingLabel(vault, lesson)}</span>
                 {" · "}{localCourseName(vault, lesson.courseGroupId)}
                 {" · "}{courseSubject(vault, lesson.courseGroupId)}
               </div>

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
-import { completedAmount, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, lessonBillableHours, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
+import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, lessonBillableHoursForVault, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
 import {
   campusName,
   compareByName,
@@ -127,9 +127,9 @@ export function usePayrollReviewData({
   const campusHours = useMemo(
     () => filteredLessons.reduce((sum, lesson) => {
       if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;
-      return sum + lessonBillableHours(lesson);
+      return sum + lessonBillableHoursForVault(vault, lesson);
     }, 0),
-    [filteredLessons]
+    [filteredLessons, vault]
   );
   const obligationDeductionApplies = campusFilter === "all" || campusFilter === effectiveObligationCampusId;
   const campusDeduction = obligationDeductionApplies ? currentCampusObligation.amount : 0;
@@ -160,9 +160,10 @@ export function usePayrollReviewData({
       if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return;
       const campusId = lessonCampusId(vault, lesson);
       const amount = completedAmount(lesson);
+      const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
       if (lesson.status === "makeup_completed") {
         addDetail("makeup", campusId, amount);
-      } else if (lesson.type === "class") {
+      } else if (course ? courseUsesClassBilling(course, vault) : lesson.type === "class") {
         addDetail("classLessons", campusId, amount);
       } else if (lesson.type === "full_time") {
         addDetail("fullTime", campusId, amount);
@@ -188,7 +189,7 @@ export function usePayrollReviewData({
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
       const hours = lessons.reduce((sum, lesson) => {
         if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;
-        return sum + lessonBillableHours(lesson);
+        return sum + lessonBillableHoursForVault(vault, lesson);
       }, 0);
       const obligation = campus.id === effectiveObligationCampusId ? obligationSummary(vault, selectedMonth, campus.id).amount : 0;
       return {

@@ -25,7 +25,7 @@ import type {
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { buildFeeSnapshot, getCourse, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForCourseLesson, buildFeeSnapshot, courseUsesClassBilling, getCourse, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { durationHours, timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
@@ -397,6 +397,24 @@ export function lessonDurationText(lesson: Pick<Lesson, "startTime" | "endTime">
 
 export function lessonTimeRangeLabel(lesson: Pick<Lesson, "startTime" | "endTime">): string {
   return `${lesson.startTime}-${lesson.endTime} · 时长 ${lessonDurationText(lesson)}`;
+}
+
+export function courseTimeRangeBillingLabel(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime">, courseId?: string): string {
+  const course = courseId ? getCourse(vault, courseId) : undefined;
+  if (!course || !courseUsesClassBilling(course, vault)) {
+    return lessonTimeRangeLabel(lesson);
+  }
+  return `${lesson.startTime}-${lesson.endTime} · 班课计费按 ${formatDurationHours(billableHoursForCourseLesson(course, lesson, vault))}计算`;
+}
+
+export function lessonTimeRangeBillingLabel(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime" | "courseGroupId">): string {
+  return courseTimeRangeBillingLabel(vault, lesson, lesson.courseGroupId);
+}
+
+export function lessonBillingSummary(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime" | "courseGroupId">): string | undefined {
+  const course = getCourse(vault, lesson.courseGroupId);
+  if (!course || !courseUsesClassBilling(course, vault)) return undefined;
+  return `班课计费按 ${formatDurationHours(billableHoursForCourseLesson(course, lesson, vault))}计算`;
 }
 
 export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "type" | "expectedStudentIds" | "attendance" | "linkedOriginalLessonId">): string {

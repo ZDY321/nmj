@@ -24,7 +24,7 @@ import {
   attendanceSummary,
   estimatedMonthlyIncome,
   isPayrollExcludedSplitMergeLesson,
-  lessonBillableHours,
+  lessonBillableHoursForVault,
   obligationSummary,
   payrollCompletedLessonCount,
   payrollExcludedSplitMergeLessonIds,
@@ -99,7 +99,7 @@ export function SalaryView({
   const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, selectedMonth);
   const splitMergeExcludedCount = monthLessons.filter((lesson) => isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)).length;
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
-  const totalHours = monthLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
+  const totalHours = monthLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
   const recentLessons = [...monthLessons]
     .filter((lesson) => {
       const matchesDate =
@@ -124,7 +124,7 @@ export function SalaryView({
   const filteredPendingLessons = recentLessons.filter((lesson) => isPendingLessonStatus(lesson.status));
   const filteredCancelledLessons = recentLessons.filter((lesson) => lesson.status === "cancelled");
   const filteredTotalAmount = recentLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
-  const filteredTotalHours = recentLessons.reduce((sum, lesson) => sum + lessonBillableHours(lesson), 0);
+  const filteredTotalHours = recentLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
   const filteredMissedAttendanceCount = recentLessons.reduce(
     (sum, lesson) => sum + lesson.attendance.filter((entry) => isMissedAttendanceStatus(entry.status)).length,
     0

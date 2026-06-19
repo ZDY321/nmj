@@ -5,6 +5,7 @@ import {
   lessonCampusId as sharedLessonCampusId,
   studentNames
 } from "@/frontend/lib/helpers";
+import { billableHoursForCourseLesson, lessonBillableHoursForVault } from "@/frontend/lib/calculations";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import { durationHours, timeToMinutes } from "@/frontend/lib/time";
 
@@ -159,14 +160,17 @@ export function savedRowSystemAttendance(
   };
 }
 
-export function summarizeLinkedLessons(linkedLessons: Lesson[], row: ImportPreviewLesson): { importHours: number; systemHours: number } {
+export function summarizeLinkedLessons(vault: TeacherVault, linkedLessons: Lesson[], row: ImportPreviewLesson): { importHours: number; systemHours: number } {
   return {
-    importHours: importedRowDurationHours(row),
-    systemHours: linkedLessons.reduce((sum, lesson) => sum + lessonDurationHours(lesson), 0)
+    importHours: importedRowDurationHours(vault, row),
+    systemHours: linkedLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0)
   };
 }
 
-function importedRowDurationHours(row: Pick<ImportPreviewLesson, "startTime" | "endTime">): number {
+function importedRowDurationHours(vault: TeacherVault, row: Pick<ImportPreviewLesson, "startTime" | "endTime" | "matchedCourseId" | "mappedCourseId">): number {
+  const courseId = row.matchedCourseId ?? row.mappedCourseId;
+  const course = courseId ? vault.courseGroups.find((item) => item.id === courseId) : undefined;
+  if (course) return billableHoursForCourseLesson(course, row, vault);
   return durationHours(row.startTime, row.endTime);
 }
 
