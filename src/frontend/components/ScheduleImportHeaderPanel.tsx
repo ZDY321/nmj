@@ -84,21 +84,31 @@ export function ScheduleImportHeaderPanel({
       </CardHeader>
 
       <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
-        <button
-          type="button"
-          onClick={() => setImportSetupExpanded((current) => !current)}
-          className="flex w-full items-center justify-between gap-3 text-left"
-        >
-          <span className="flex min-w-0 items-center gap-2 text-sm font-extrabold text-[#061226]">
-            <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件与对应校区
-          </span>
-          <span className="flex shrink-0 items-center gap-2">
-            <Badge variant="secondary" className="text-[10px]">{fileSummaries.length} 个文件</Badge>
-            {allFilesMapped && <Badge variant="sage" className="text-[10px]">校区已对应</Badge>}
-            {hasUnmappedFiles && <Badge variant="amber" className="text-[10px]">待选择校区</Badge>}
-            <ChevronDown size={16} className={`text-[#64748b] transition-transform ${importSetupExpanded ? "rotate-180" : ""}`} />
-          </span>
-        </button>
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <button
+            type="button"
+            onClick={() => setImportSetupExpanded((current) => !current)}
+            className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+          >
+            <span className="flex min-w-0 items-center gap-2 text-sm font-extrabold text-[#061226]">
+              <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件与对应校区
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <Badge variant="secondary" className="text-[10px]">{fileSummaries.length} 个文件</Badge>
+              {allFilesMapped && <Badge variant="sage" className="text-[10px]">校区已对应</Badge>}
+              {hasUnmappedFiles && <Badge variant="amber" className="text-[10px]">待选择校区</Badge>}
+              <ChevronDown size={16} className={`text-[#64748b] transition-transform ${importSetupExpanded ? "rotate-180" : ""}`} />
+            </span>
+          </button>
+          <div className="flex flex-wrap gap-2 lg:shrink-0">
+            <Button type="button" size="sm" variant="outline" className="h-8 bg-[#f8fbff] text-xs" disabled={rowCount === 0} onClick={onSave}>
+              <Save size={14} /> 保存对账
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="h-8 bg-[#f8fbff] text-xs" disabled={rawLessonCount === 0} onClick={onExport}>
+              <Download size={14} /> 合并导出所有校区
+            </Button>
+          </div>
+        </div>
 
         {!importSetupExpanded && (
           <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
@@ -128,14 +138,6 @@ export function ScheduleImportHeaderPanel({
                       }}
                     />
                   </label>
-                  <Button type="button" variant="outline" disabled={rowCount === 0} onClick={onSave}>
-                    <Save size={15} /> 保存对账
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button type="button" variant="outline" disabled={rawLessonCount === 0} onClick={onExport}>
-                    <Download size={15} /> 合并导出所有校区
-                  </Button>
                   <Button type="button" variant="outline" disabled={rawLessonCount === 0} onClick={onClear}>
                     <X size={15} /> 清空
                   </Button>

@@ -52,40 +52,42 @@ export function ScheduleImportStatusControls({
     ...option,
     value: resolutionCounts[option.resolutionStatus]
   }));
+  const errorResolutionCards = resolutionCards.filter((item) => item.resolutionStatus === "excel_error" || item.resolutionStatus === "cloud_error");
+  const normalResolutionCards = resolutionCards.filter((item) => item.resolutionStatus !== "excel_error" && item.resolutionStatus !== "cloud_error");
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-        {statusCards.map((item) => (
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9">
+        {[...statusCards, ...errorResolutionCards].map((item) => (
           <button
-            key={item.label}
+            key={item.status}
             type="button"
-          aria-pressed={statusFilter === item.status}
+            aria-pressed={statusFilter === item.status}
             onClick={() => onStatusToggle(item.status)}
-            className={`rounded-[12px] border px-3 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-[#93c5fd] hover:bg-[#f8fbff] hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
+            className={`min-h-[58px] rounded-[10px] border px-2.5 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-[#93c5fd] hover:bg-[#f8fbff] hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
               statusFilter === item.status ? "border-[#1557c2] bg-[#eaf2ff] ring-2 ring-[#bfdbfe]" : "border-[#e8eef6] bg-white"
             }`}
           >
             <Badge variant={item.variant} className="text-[10px]">{item.label}</Badge>
-            <div className="mt-2 text-xl font-extrabold text-[#061226]">{item.value}</div>
-            {item.hint && <div className="mt-1 text-[10px] font-bold text-[#64748b]">{item.hint}</div>}
+            <div className="mt-1 text-lg font-extrabold leading-6 text-[#061226]">{item.value}</div>
+            {"hint" in item && item.hint && <div className="mt-0.5 truncate text-[10px] font-bold text-[#64748b]">{item.hint}</div>}
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-        {resolutionCards.map((item) => (
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-4">
+        {normalResolutionCards.map((item) => (
           <button
             key={item.status}
             type="button"
-          aria-pressed={statusFilter === item.status}
+            aria-pressed={statusFilter === item.status}
             onClick={() => onStatusToggle(item.status)}
-            className={`rounded-[12px] border px-3 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-[#93c5fd] hover:bg-[#f8fbff] hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
+            className={`min-h-[58px] rounded-[10px] border px-2.5 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-[#93c5fd] hover:bg-[#f8fbff] hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
               statusFilter === item.status ? "border-[#1557c2] bg-[#eaf2ff] ring-2 ring-[#bfdbfe]" : "border-[#e8eef6] bg-white"
             }`}
           >
             <Badge variant={item.variant} className="text-[10px]">{item.label}</Badge>
-            <div className="mt-2 text-xl font-extrabold text-[#061226]">{item.value}</div>
+            <div className="mt-1 text-lg font-extrabold leading-6 text-[#061226]">{item.value}</div>
           </button>
         ))}
       </div>

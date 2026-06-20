@@ -8,8 +8,10 @@ type ConfirmOptions = {
   description?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  secondaryLabel?: string;
   tone?: "danger" | "normal";
   onConfirm: () => void;
+  onSecondary?: () => void;
 };
 
 export function useConfirmDialog() {
@@ -62,6 +64,18 @@ export function useConfirmDialog() {
               <Button type="button" variant="outline" onClick={close}>
                 {options.cancelLabel ?? "取消"}
               </Button>
+              {options.onSecondary && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    options.onSecondary?.();
+                    close();
+                  }}
+                >
+                  {options.secondaryLabel ?? "保存后继续"}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant={options.tone === "danger" ? "destructive" : "default"}

@@ -57,7 +57,6 @@ import {
   resolutionMarksRowResolved,
   resolutionStatusLabel,
   savedReviewEffectiveCounts,
-  savedReviewNeedsAttention,
   savedReviewTitle,
   statusPillClass,
   summarizeFiles,
@@ -191,7 +190,13 @@ export function ScheduleImportPanel({
   const reviewedCount = rows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
   const savedReviews = vault.scheduleImport?.reviews ?? [];
   const selectedReview = savedReviews.find((review) => review.id === selectedReviewId) ?? savedReviews[0];
-  const selectedReviewCounts = selectedReview ? savedReviewEffectiveCounts(selectedReview) : undefined;
+  const savedReviewLiveCounts = useMemo(
+    () => new Map(savedReviews.map((review) => [review.id, liveSavedReviewEffectiveCounts(vault, review)])),
+    [savedReviews, vault]
+  );
+  const selectedReviewCounts = selectedReview ? savedReviewLiveCounts.get(selectedReview.id) ?? savedReviewEffectiveCounts(selectedReview) : undefined;
+  const reviewNeedsAttentionForDisplay = (review: ScheduleImportReviewRecord): number =>
+    needsAttentionFromSavedReviewCounts(savedReviewLiveCounts.get(review.id) ?? savedReviewEffectiveCounts(review));
 
   useEffect(() => {
     setMapping((current) => {
@@ -475,7 +480,7 @@ export function ScheduleImportPanel({
           expanded={savedReviewsExpanded}
           selectedReviewMatchedCount={selectedReviewCounts?.matched}
           reviewTitle={savedReviewTitle}
-          reviewNeedsAttention={savedReviewNeedsAttention}
+          reviewNeedsAttention={reviewNeedsAttentionForDisplay}
           formatReviewNumber={formatSavedReviewNumber}
           formatReviewAmount={formatSavedReviewAmount}
           onToggleExpanded={() => setSavedReviewsExpanded((current) => !current)}
@@ -486,9 +491,14 @@ export function ScheduleImportPanel({
           onLoadReview={(review) => {
             confirm({
               title: "导入保存对账到核对列表？",
-              description: "会用这条保存对账恢复下方可编辑核对列表、课程映射和处理标注；当前下方导入现场会被替换，但已保存对账记录不会删除。",
-              confirmLabel: "导入",
+              description: "会用这条保存对账恢复下方可编辑核对列表、课程映射和处理标注；当前下方导入现场会被替换，但已保存对账记录不会删除。当前现场还需要保留时，请选择“保存后导入”。",
+              confirmLabel: "直接导入",
+              secondaryLabel: "保存后导入",
               cancelLabel: "取消",
+              onSecondary: () => {
+                if (rows.length > 0) saveMapping();
+                loadSavedReviewIntoWorkspace(review);
+              },
               onConfirm: () => loadSavedReviewIntoWorkspace(review)
             });
           }}
@@ -611,6 +621,32 @@ function rawLessonsFromSavedReview(review: ScheduleImportReviewRecord): Imported
         warnings: row.warnings ?? []
       }];
     });
+}
+
+function liveSavedReviewEffectiveCounts(vault: TeacherVault, review: ScheduleImportReviewRecord): ReturnType<typeof savedReviewEffectiveCounts> {
+  const rawLessons = rawLessonsFromSavedReview(review);
+  if (rawLessons.length === 0) return savedReviewEffectiveCounts(review);
+  const previewRows = buildImportPreview(vault, rawLessons, review.mapping ?? {}, review.fileCampusOverrides ?? {});
+  const rows = [...previewRows, ...buildLocalOnlyRows(vault, previewRows, rawLessons)];
+  const resolutions = review.resolutions && Object.keys(review.resolutions).length > 0
+    ? review.resolutions
+    : resolutionsFromSavedReviewRows(review.rows);
+  const linkedSystemLessonIds = linkedSystemLessonIdsFromRows(rows, resolutions);
+  const effectiveRows = rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds));
+  const summary = summarizeImportPreview(effectiveRows);
+  return {
+    matched: summary.matched,
+    attendanceMismatch: summary.attendanceMismatch,
+    timeMismatch: summary.timeMismatch,
+    courseMismatch: summary.courseMismatch,
+    systemMissing: summary.systemMissing,
+    importMissing: summary.importMissing,
+    needsMapping: summary.needsMapping
+  };
+}
+
+function needsAttentionFromSavedReviewCounts(counts: ReturnType<typeof savedReviewEffectiveCounts>): number {
+  return counts.attendanceMismatch + counts.timeMismatch + counts.courseMismatch + counts.systemMissing + counts.importMissing + counts.needsMapping;
 }
 
 function resolutionsFromSavedReviewRows(rows: ScheduleImportSavedRow[]): ScheduleImportResolutionMap {
