@@ -167,7 +167,6 @@ export function CourseEditDialog({
                       </div>
                       {resolveSalaryGradeRule(vault, editingCourse.feeRule)
                         ? (() => {
-                            if (!amountsVisible) return null;
                             const rule = resolveSalaryGradeRule(vault, editingCourse.feeRule);
                             if (!rule) return "";
                             const stage = salaryGradeStageForStudentIds(vault, editingCourse.studentIds);
