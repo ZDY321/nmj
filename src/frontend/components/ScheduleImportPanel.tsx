@@ -11,6 +11,8 @@ import type {
   Lesson,
   ScheduleImportResolution,
   ScheduleImportResolutionMap,
+  ScheduleImportReviewRecord,
+  ScheduleImportSavedRow,
   ScheduleImportVaultState,
   TeacherVault
 } from "@/shared/types";
@@ -381,6 +383,48 @@ export function ScheduleImportPanel({
     setMessage("已删除这条保存的对账结果，课程映射和差异标注仍保留。");
   }
 
+  function loadSavedReviewIntoWorkspace(review: ScheduleImportReviewRecord) {
+    const nextRawLessons = rawLessonsFromSavedReview(review);
+    if (nextRawLessons.length === 0) {
+      setMessage("这条保存的对账没有可恢复的教务 Excel 课节，无法导入到核对列表。");
+      return;
+    }
+    const nextMapping = { ...(review.mapping ?? {}) };
+    const nextResolutions = review.resolutions && Object.keys(review.resolutions).length > 0
+      ? { ...review.resolutions }
+      : resolutionsFromSavedReviewRows(review.rows);
+    const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
+    const nextSelectedMonth = review.month || nextRawLessons[0]?.date.slice(0, 7) || todayIso().slice(0, 7);
+    const nextSelectedDate = review.selectedDate || nextRawLessons[0]?.date || `${nextSelectedMonth}-01`;
+
+    setRawLessons(nextRawLessons);
+    setMapping(nextMapping);
+    setResolutions(nextResolutions);
+    setFileCampusOverrides(nextFileCampusOverrides);
+    setSelectedMonth(nextSelectedMonth);
+    setSelectedDate(nextSelectedDate);
+    setCampusFilter("all");
+    setStatusFilter("all");
+    setSearch("");
+    setSelectedReviewId(review.id);
+    setSavedReviewsExpanded(false);
+
+    writeSavedMapping(storageScope, nextMapping);
+    writeSavedWorkspace(storageScope, {
+      rawLessons: nextRawLessons,
+      mapping: nextMapping,
+      resolutions: nextResolutions,
+      fileCampusOverrides: nextFileCampusOverrides,
+      selectedMonth: nextSelectedMonth,
+      selectedDate: nextSelectedDate,
+      campusFilter: "all",
+      statusFilter: "all",
+      search: "",
+      savedAt: new Date().toISOString()
+    });
+    setMessage(`已将「${savedReviewTitle(review)}」导入到下方核对列表，可以继续修改课程映射和处理标注。`);
+  }
+
   function clearImport() {
     setRawLessons([]);
     setFileCampusOverrides({});
@@ -438,6 +482,15 @@ export function ScheduleImportPanel({
           onSelectReview={(reviewId) => {
             setSelectedReviewId(reviewId);
             setSavedReviewsExpanded(true);
+          }}
+          onLoadReview={(review) => {
+            confirm({
+              title: "导入保存对账到核对列表？",
+              description: "会用这条保存对账恢复下方可编辑核对列表、课程映射和处理标注；当前下方导入现场会被替换，但已保存对账记录不会删除。",
+              confirmLabel: "导入",
+              cancelLabel: "取消",
+              onConfirm: () => loadSavedReviewIntoWorkspace(review)
+            });
           }}
           onDeleteReview={(review) => {
             confirm({
@@ -527,4 +580,59 @@ function splitMergePayrollExcludedLessonIds(rows: ImportPreviewLesson[], resolut
     if (mergeTargetLessonIds.length > 0) lessonIds.add(row.systemLessonId);
   });
   return Array.from(lessonIds);
+}
+
+function rawLessonsFromSavedReview(review: ScheduleImportReviewRecord): ImportedScheduleLesson[] {
+  const seen = new Set<string>();
+  return review.rows
+    .filter((row) => row.fileName !== "云端课表" && !row.id.startsWith("local-only-"))
+    .flatMap((row) => {
+      const key = [row.id, row.fileName, row.date, row.startTime, row.endTime, row.title].join("|");
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{
+        id: row.id,
+        fileName: row.fileName,
+        campusName: row.campusName,
+        date: row.date,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        title: row.title,
+        subjectHint: row.subjectHint,
+        courseTypeHint: row.courseTypeHint,
+        studentNameHint: row.studentNameHint,
+        teacher: row.teacher,
+        assistant: row.assistant,
+        room: row.room,
+        presentCount: row.presentCount,
+        expectedCount: row.expectedCount,
+        note: row.note,
+        rawText: row.rawText ?? "",
+        warnings: row.warnings ?? []
+      }];
+    });
+}
+
+function resolutionsFromSavedReviewRows(rows: ScheduleImportSavedRow[]): ScheduleImportResolutionMap {
+  return Object.fromEntries(rows.flatMap((row) => {
+    if (!row.resolutionStatus || row.resolutionStatus === "unreviewed") return [];
+    return [[resolutionKeyForSavedRow(row), {
+      status: row.resolutionStatus,
+      note: row.resolutionNote,
+      linkedSystemLessonIds: row.linkedSystemLessonIds,
+      updatedAt: row.resolutionUpdatedAt ?? new Date().toISOString()
+    } satisfies ScheduleImportResolution]];
+  }));
+}
+
+function resolutionKeyForSavedRow(row: ScheduleImportSavedRow): string {
+  return [
+    row.systemLessonId || row.id,
+    row.fileName,
+    row.date,
+    row.startTime,
+    row.endTime,
+    row.matchedCourseId ?? "",
+    row.title
+  ].join("|");
 }

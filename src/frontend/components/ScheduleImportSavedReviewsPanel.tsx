@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, Upload, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { ScheduleImportReviewRecord, TeacherVault } from "@/shared/types";
 
 export function ScheduleImportSavedReviewsPanel({
@@ -16,6 +17,7 @@ export function ScheduleImportSavedReviewsPanel({
   formatReviewAmount,
   onToggleExpanded,
   onSelectReview,
+  onLoadReview,
   onDeleteReview,
   renderRows
 }: {
@@ -31,6 +33,7 @@ export function ScheduleImportSavedReviewsPanel({
   formatReviewAmount: (value: number | undefined, visible: boolean) => string;
   onToggleExpanded: () => void;
   onSelectReview: (reviewId: string) => void;
+  onLoadReview: (review: ScheduleImportReviewRecord) => void;
   onDeleteReview: (review: ScheduleImportReviewRecord) => void;
   renderRows: (review: ScheduleImportReviewRecord, vault: TeacherVault) => ReactNode;
 }) {
@@ -48,7 +51,7 @@ export function ScheduleImportSavedReviewsPanel({
             <ChevronDown size={16} className={`text-[#64748b] transition-transform ${expanded ? "rotate-180" : ""}`} />
             已保存对账
           </button>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">最近保留 {reviews.length} 次；保存结果可展开查看或删除。</div>
+          <div className="mt-1 text-xs font-semibold text-[#64748b]">最近保留 {reviews.length} 次；保存结果可展开查看、导入继续核对或删除。</div>
         </div>
         <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
           {reviews.slice(0, 8).map((review) => (
@@ -81,14 +84,19 @@ export function ScheduleImportSavedReviewsPanel({
       </div>
       {expanded && selectedReview && (
         <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="sky">{selectedReview.month}</Badge>
-            <Badge variant="secondary">{selectedReview.rawLessonCount} 节教务</Badge>
-            <Badge variant="secondary">云端 {formatReviewNumber(selectedReview.summary.systemLessonCount)} 节</Badge>
-            <Badge variant="sage">已完成 {formatReviewNumber(selectedReview.summary.systemCompletedLessonCount)} 节</Badge>
-            <Badge variant="secondary">课时费 {formatReviewAmount(selectedReview.summary.systemCompletedAmount, amountsVisible)}</Badge>
-            <Badge variant="sage">已对应 {selectedReviewMatchedCount ?? selectedReview.summary.matched}</Badge>
-            <Badge variant={reviewNeedsAttention(selectedReview) > 0 ? "amber" : "secondary"}>待核对 {reviewNeedsAttention(selectedReview)}</Badge>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="sky">{selectedReview.month}</Badge>
+              <Badge variant="secondary">{selectedReview.rawLessonCount} 节教务</Badge>
+              <Badge variant="secondary">云端 {formatReviewNumber(selectedReview.summary.systemLessonCount)} 节</Badge>
+              <Badge variant="sage">已完成 {formatReviewNumber(selectedReview.summary.systemCompletedLessonCount)} 节</Badge>
+              <Badge variant="secondary">课时费 {formatReviewAmount(selectedReview.summary.systemCompletedAmount, amountsVisible)}</Badge>
+              <Badge variant="sage">已对应 {selectedReviewMatchedCount ?? selectedReview.summary.matched}</Badge>
+              <Badge variant={reviewNeedsAttention(selectedReview) > 0 ? "amber" : "secondary"}>待核对 {reviewNeedsAttention(selectedReview)}</Badge>
+            </div>
+            <Button type="button" size="sm" variant="outline" className="h-8 w-fit shrink-0 bg-white text-xs" onClick={() => onLoadReview(selectedReview)}>
+              <Upload size={14} /> 导入到核对列表
+            </Button>
           </div>
           {renderRows(selectedReview, vault)}
         </div>

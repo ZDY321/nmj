@@ -87,6 +87,9 @@ export function ScheduleImportReconciliationRow({
     row.status === "import_missing";
   const suggestScheduleCourseId = row.matchedCourseId ?? row.mappedCourseId;
   const canSuggestSchedule = Boolean(onSuggestSchedule) && row.status !== "import_missing" && !systemLesson;
+  const suggestScheduleDisabledReason = canSuggestSchedule && !suggestScheduleCourseId
+    ? "请先把这条教务课映射到课程档案，再建议排课"
+    : "";
   const showReviewControls = row.status !== "matched" || reviewed || Boolean(resolution?.linkedSystemLessonIds?.length);
   const showExpandedReviewControls = showReviewControls && (!canCollapseDetails || detailsExpanded);
   const clearLinkedLessonsPatch = (): Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">> => ({
@@ -253,23 +256,30 @@ export function ScheduleImportReconciliationRow({
           {quickResolutionActions.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {canSuggestSchedule && (
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  onClick={() =>
-                    onSuggestSchedule?.({
-                      date: row.date,
-                      startTime: row.startTime,
-                      endTime: row.endTime,
-                      courseGroupId: suggestScheduleCourseId
-                    })
-                  }
-                  disabled={!suggestScheduleCourseId}
-                  title={suggestScheduleCourseId ? "按这条教务课的日期和时间去排课" : "请先把这条教务课映射到课程档案，再建议排课"}
-                >
-                  建议排课
-                </Button>
+                <div className="flex flex-col gap-1">
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={() =>
+                      onSuggestSchedule?.({
+                        date: row.date,
+                        startTime: row.startTime,
+                        endTime: row.endTime,
+                        courseGroupId: suggestScheduleCourseId
+                      })
+                    }
+                    disabled={!suggestScheduleCourseId}
+                    title={suggestScheduleCourseId ? "按这条教务课的日期和时间去排课" : suggestScheduleDisabledReason}
+                  >
+                    建议排课
+                  </Button>
+                  {suggestScheduleDisabledReason && (
+                    <span className="max-w-[220px] text-[11px] font-semibold leading-4 text-[#b45309]">
+                      {suggestScheduleDisabledReason}
+                    </span>
+                  )}
+                </div>
               )}
               {quickResolutionActions.map((action) => (
                 <Button
