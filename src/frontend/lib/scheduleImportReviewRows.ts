@@ -88,7 +88,7 @@ export function buildDefaultCampusOverrides(vault: TeacherVault, lessons: Import
   const next = { ...current };
   summarizeFiles(lessons).forEach((file) => {
     if (next[file.fileName]) return;
-    const campus = findCampusByName(vault, file.sourceCampus);
+    const campus = findCampusByName(vault, [file.sourceCampus, file.fileName]);
     if (campus) next[file.fileName] = campus.id;
   });
   return next;
@@ -106,10 +106,18 @@ export function applyCampusOverridesToLessons(
   });
 }
 
-function findCampusByName(vault: TeacherVault, name: string) {
-  const normalized = normalizeText(name);
-  if (!normalized) return undefined;
-  return vault.campuses.find((campus) => normalizeText(campus.name) === normalized || normalizeText(campus.id) === normalized);
+function findCampusByName(vault: TeacherVault, values: string | string[]) {
+  const normalizedValues = (Array.isArray(values) ? values : [values])
+    .map(normalizeText)
+    .filter(Boolean);
+  if (normalizedValues.length === 0) return undefined;
+  const campuses = [...vault.campuses].sort((a, b) => normalizeText(b.name).length - normalizeText(a.name).length);
+  return campuses.find((campus) => {
+    const campusKeys = [campus.name, campus.id].map(normalizeText).filter(Boolean);
+    return campusKeys.some((campusKey) =>
+      normalizedValues.some((value) => value === campusKey || value.includes(campusKey) || campusKey.includes(value))
+    );
+  });
 }
 
 function normalizeText(value: string): string {

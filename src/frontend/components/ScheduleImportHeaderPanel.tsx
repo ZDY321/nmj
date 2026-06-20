@@ -158,8 +158,8 @@ export function ScheduleImportHeaderPanel({
               </div>
               <div className="mt-3 rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2]">
                 <div className="font-extrabold text-[#061226]">文件名识别规则</div>
-                <div>校区名写在中文或英文括号里，并和“档案信息”的校区名称一致，例如“2026-05-课表（城南校区）.xlsx”或“校宝课表(城南校区)-2026.xlsx”。</div>
-                <div>文件名建议包含年份，例如“2026”；没有年份时会按当前年份解析。多个括号同时存在时，优先识别带“校区、中心、分校、教学点”的括号内容。</div>
+                <div>文件名中包含“档案信息”的校区名称即可自动识别；写在中文或英文括号里也可以，例如“2026-05-课表（城南校区）.xlsx”或“校宝课表导出2026-06-20（外国语校区鹏成教育）.xlsx”。</div>
+                <div>文件名建议包含年份，例如“2026”；没有年份时会按当前年份解析。多个括号同时存在时，优先识别带“校区、中心、分校、教学点”的括号内容；没有括号时会从完整文件名匹配校区关键词。</div>
               </div>
             </div>
 
