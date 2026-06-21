@@ -484,7 +484,6 @@ function importedCourseTypeLabel(type: CourseType | "unknown"): string {
     one_on_two: "一对二",
     class: "班课",
     trial: "试听",
-    full_time: "全日制",
     unknown: "未知班型"
   };
   return labels[type] ?? type;

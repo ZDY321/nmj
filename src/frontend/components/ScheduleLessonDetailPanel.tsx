@@ -277,7 +277,7 @@ export function ScheduleLessonDetailPanel({
                 <TimeTextInput value={selected.endTime} onValueChange={onSelectedEndTimeChange} />
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium">状态</label>
               <Select value={selected.status} onChange={(event) => onSelectedStatusChange(event.target.value as Lesson["status"])}>
                 {Object.entries(lessonStatusLabels).map(([key, value]) => (
@@ -296,7 +296,7 @@ export function ScheduleLessonDetailPanel({
               />
               <div className="rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
                 <div>实际时长 {selectedActualHours.toFixed(2)}h · 建议计费 {selectedSuggestedBillingHours.toFixed(1)}h</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span>{selected.feeSnapshot.manualHours ? "当前使用手动计费课时，重算金额会保留这个课时。" : "当前按时间和课程规则自动建议计费课时。"}</span>
                   {selected.feeSnapshot.manualHours && (
                     <Button type="button" variant="outline" size="sm" className="h-7 bg-white text-xs" onClick={onResetBillingHoursToSuggested}>

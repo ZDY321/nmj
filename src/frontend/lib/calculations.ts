@@ -97,6 +97,14 @@ export function usesClassBillingHours(type: CourseType, rule?: FeeRule): boolean
   return type === "class" || classHeadcountBaseStudentCountForRule(type, rule) > 1;
 }
 
+export function usesStandardBillingHours(type: CourseType): boolean {
+  return type !== "trial";
+}
+
+export function courseTypeUsesStandardBillingHours(type: CourseType): boolean {
+  return usesStandardBillingHours(type);
+}
+
 export function courseTypeUsesClassBilling(vault: TeacherVault | undefined, type: CourseType, rule?: FeeRule): boolean {
   if (usesClassBillingHours(type, rule)) return true;
   return vault ? classHeadcountBaseStudentCountForRule(type, feeRuleForCourseType(vault, type)) > 1 : false;
@@ -107,14 +115,18 @@ export function courseUsesClassBilling(course: Pick<CourseGroup, "type" | "feeRu
 }
 
 export function billableHoursForLesson(lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
-  if (usesClassBillingHours(lesson.type, rule)) {
+  if (usesStandardBillingHours(lesson.type)) {
     return normalizedClassHoursBetween(lesson.startTime, lesson.endTime);
   }
   return hoursBetween(lesson.startTime, lesson.endTime);
 }
 
+export function courseUsesStandardBillingHours(course: Pick<CourseGroup, "type">): boolean {
+  return usesStandardBillingHours(course.type);
+}
+
 export function billableHoursForCourseLesson(course: Pick<CourseGroup, "type" | "feeRule">, lesson: Pick<Lesson, "startTime" | "endTime">, vault?: TeacherVault): number {
-  if (courseUsesClassBilling(course, vault)) {
+  if (courseUsesStandardBillingHours(course)) {
     return normalizedClassHoursBetween(lesson.startTime, lesson.endTime);
   }
   return hoursBetween(lesson.startTime, lesson.endTime);
@@ -723,10 +735,7 @@ export function defaultFeeRuleForCourseType(type: CourseType): FeeRule {
   if (type === "trial") {
     return { mode: "fixed", fixedFee: 0 };
   }
-  if (type !== "full_time") {
-    return classHeadcountFeeRuleForCourseType(type);
-  }
-  return { mode: "hourly", hourlyRate: 0 };
+  return classHeadcountFeeRuleForCourseType(type);
 }
 
 export function fixedFeeForRule(rule: FeeRule): number {
@@ -737,12 +746,6 @@ export function backupFeeRuleForCourseType(type: CourseType, feeRule?: FeeRule):
   const sourceRule = feeRule ?? defaultFeeRuleForCourseType(type);
   if (type === "trial") {
     return { mode: "fixed", fixedFee: fixedFeeForRule(sourceRule) };
-  }
-  if (type === "full_time") {
-    return {
-      mode: "hourly",
-      hourlyRate: sourceRule.mode === "hourly" ? nonNegativeNumber(sourceRule.hourlyRate) : fixedFeeForRule(sourceRule)
-    };
   }
   if (sourceRule.mode === "class_headcount") {
     const explicitTiers = (sourceRule.classFeeTiers ?? []).filter((tier) => Number.isFinite(tier.minStudents));
@@ -1121,14 +1124,12 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
         totals.makeup += amount;
       } else if (course ? courseUsesClassBilling(course, vault) : lesson.type === "class") {
         totals.classLessons += amount;
-      } else if (lesson.type === "full_time") {
-        totals.fullTime += amount;
       } else {
         totals.oneOnOne += amount;
       }
       return totals;
     },
-    { oneOnOne: 0, classLessons: 0, fullTime: 0, makeup: 0 }
+    { oneOnOne: 0, classLessons: 0, makeup: 0 }
   );
 
   const adjustments = monthAdjustments.reduce((sum, item) => sum + item.amount, 0);
@@ -1138,7 +1139,6 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
     baseSalary: vault.profile.baseSalary,
     oneOnOne: lessonTotals.oneOnOne,
     classLessons: lessonTotals.classLessons,
-    fullTime: lessonTotals.fullTime,
     makeup: lessonTotals.makeup,
     adjustments,
     obligationDeduction,
@@ -1146,7 +1146,6 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
       vault.profile.baseSalary +
       lessonTotals.oneOnOne +
       lessonTotals.classLessons +
-      lessonTotals.fullTime +
       lessonTotals.makeup +
       adjustments -
       obligationDeduction

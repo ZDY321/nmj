@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
-import { calculateClassHeadcountFee, courseUsesClassBilling, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, courseUsesStandardBillingHours, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
 import { formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
@@ -405,7 +405,8 @@ export function CourseEditDialog({
 }
 
 function courseBillingHint(vault: TeacherVault, course: CourseGroup): string {
-  return courseUsesClassBilling(course, vault)
-    ? "班课按计费时长统计；例：10:10-12:00 实际 110 分钟，计费 2 小时，义务课时按 2 小时扣减。"
-    : "实际课时费按「上课时长 / 2」折算。";
+  if (course.type === "trial") return "试听按单次固定金额计费。";
+  return courseUsesStandardBillingHours(course)
+    ? "按标准课时统计；例：10:10-12:00 实际 110 分钟，默认计费 2 小时，可在课节详情手动改为 1 小时等拆课课时。"
+    : "按实际上课时长折算。";
 }

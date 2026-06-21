@@ -29,7 +29,6 @@ export type PayrollTypeCountCard = {
 export type PayrollOverviewCampusAmounts = {
   oneOnOne: PayrollCampusAmountDetail[];
   classLessons: PayrollCampusAmountDetail[];
-  fullTime: PayrollCampusAmountDetail[];
   makeup: PayrollCampusAmountDetail[];
 };
 
@@ -110,7 +109,6 @@ export function PayrollOverviewGrid({
               { label: "课时费总计", value: lessonFeeTotal },
               { label: "一对一", value: breakdown.oneOnOne, details: lessonCampusAmounts.oneOnOne },
               { label: "班课", value: breakdown.classLessons, details: lessonCampusAmounts.classLessons },
-              { label: "全日制", value: breakdown.fullTime, details: lessonCampusAmounts.fullTime },
               { label: "补课", value: breakdown.makeup, details: lessonCampusAmounts.makeup },
               { label: "其他加减项", value: breakdown.adjustments },
               { label: "义务课时扣费", value: -breakdown.obligationDeduction }

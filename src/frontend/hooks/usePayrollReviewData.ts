@@ -16,7 +16,7 @@ import {
 
 export type PayrollCourseTypeFilter = "all" | CourseType;
 export type PayrollLessonStatusFilter = "all" | Lesson["status"];
-type OverviewCampusKey = "oneOnOne" | "classLessons" | "fullTime" | "makeup";
+type OverviewCampusKey = "oneOnOne" | "classLessons" | "makeup";
 
 type PayrollCampusAmountDetail = {
   key: string;
@@ -114,7 +114,7 @@ export function usePayrollReviewData({
   );
 
   const breakdown = useMemo(() => salaryBreakdown(vault, selectedMonth), [selectedMonth, vault]);
-  const lessonFeeTotal = breakdown.oneOnOne + breakdown.classLessons + breakdown.fullTime + breakdown.makeup;
+  const lessonFeeTotal = breakdown.oneOnOne + breakdown.classLessons + breakdown.makeup;
   const estimatedIncome = useMemo(() => estimatedMonthlyIncome(vault, selectedMonth), [selectedMonth, vault]);
   const currentCampusObligation = useMemo(
     () => campusFilter === "all" ? obligationSummary(vault, selectedMonth) : obligationSummary(vault, selectedMonth, campusFilter),
@@ -139,7 +139,6 @@ export function usePayrollReviewData({
     const buckets: Record<OverviewCampusKey, Record<string, PayrollCampusAmountDetail>> = {
       oneOnOne: {},
       classLessons: {},
-      fullTime: {},
       makeup: {}
     };
 
@@ -165,8 +164,6 @@ export function usePayrollReviewData({
         addDetail("makeup", campusId, amount);
       } else if (course ? courseUsesClassBilling(course, vault) : lesson.type === "class") {
         addDetail("classLessons", campusId, amount);
-      } else if (lesson.type === "full_time") {
-        addDetail("fullTime", campusId, amount);
       } else {
         addDetail("oneOnOne", campusId, amount);
       }
@@ -175,7 +172,6 @@ export function usePayrollReviewData({
     return {
       oneOnOne: Object.values(buckets.oneOnOne).sort((a, b) => b.amount - a.amount),
       classLessons: Object.values(buckets.classLessons).sort((a, b) => b.amount - a.amount),
-      fullTime: Object.values(buckets.fullTime).sort((a, b) => b.amount - a.amount),
       makeup: Object.values(buckets.makeup).sort((a, b) => b.amount - a.amount)
     };
   }, [monthLessons, splitMergeExcludedLessonIds, vault]);

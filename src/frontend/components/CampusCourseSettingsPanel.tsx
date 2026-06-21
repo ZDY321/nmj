@@ -413,8 +413,8 @@ export function CampusCourseSettingsPanel({
                 ) : (
                   <div className="rounded-[12px] border border-[#e8eef6] bg-white p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-sm font-extrabold text-[#061226]">全日制每小时费用</div>
-                      <div className="text-xs font-semibold text-[#64748b]">仅全日制按开始和结束时间使用每小时费用折算。</div>
+                      <div className="text-sm font-extrabold text-[#061226]">按小时费用</div>
+                      <div className="text-xs font-semibold text-[#64748b]">使用开始和结束时间折算课时费。</div>
                     </div>
                     <SensitiveAmountField visible={amountsVisible} className="h-9">
                       <Input
@@ -442,5 +442,5 @@ export function CampusCourseSettingsPanel({
 }
 
 function usesSalaryGradeByDefault(type: CourseType): boolean {
-  return type !== "trial" && type !== "full_time";
+  return type !== "trial";
 }

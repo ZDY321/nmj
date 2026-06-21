@@ -90,7 +90,7 @@ export type UserStatus =
   | "delete_scheduled"
   | "deleted";
 
-export type BuiltInCourseType = "one_on_one" | "one_on_two" | "class" | "trial" | "full_time";
+export type BuiltInCourseType = "one_on_one" | "one_on_two" | "class" | "trial";
 
 export type CustomCourseType = `custom_${string}`;
 
@@ -649,7 +649,6 @@ export type SalaryBreakdown = {
   baseSalary: number;
   oneOnOne: number;
   classLessons: number;
-  fullTime: number;
   makeup: number;
   adjustments: number;
   obligationDeduction: number;

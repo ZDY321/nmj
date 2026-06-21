@@ -161,9 +161,8 @@ export function SalaryView({
         <MetricCard label="基本工资" value={formatPrivateMoney(breakdown.baseSalary, amountsVisible)} hint="月固定项" variant={1} index={0} showSparkline={false} />
         <MetricCard label="一对一" value={formatPrivateMoney(breakdown.oneOnOne, amountsVisible)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
         <MetricCard label="班课" value={formatPrivateMoney(breakdown.classLessons, amountsVisible)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
-        <MetricCard label="全日制" value={formatPrivateMoney(breakdown.fullTime, amountsVisible)} hint="已完成课程" variant={4} index={3} showSparkline={false} />
-        <MetricCard label="合计" value={formatPrivateMoney(breakdown.total, amountsVisible)} hint="含补贴/扣款" variant={1} index={4} showSparkline={false} />
-        <MetricCard label="预估本月收入" value={formatPrivateMoney(estimatedIncome, amountsVisible)} hint="含本月待上课课节预估" variant={2} index={5} showSparkline={false} />
+        <MetricCard label="合计" value={formatPrivateMoney(breakdown.total, amountsVisible)} hint="含补贴/扣款" variant={1} index={3} showSparkline={false} />
+        <MetricCard label="预估本月收入" value={formatPrivateMoney(estimatedIncome, amountsVisible)} hint="含本月待上课课节预估" variant={2} index={4} showSparkline={false} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -183,7 +182,6 @@ export function SalaryView({
                   { label: "基本工资", value: breakdown.baseSalary, icon: Banknote, color: "text-[#061226] bg-[#eef0ff]" },
                   { label: "一对一", value: breakdown.oneOnOne, icon: Users, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
-                  { label: "全日制", value: breakdown.fullTime, icon: CalendarDays, color: "text-[#5161d6] bg-[#eef0ff]" },
                   { label: "补课", value: breakdown.makeup, icon: Clock, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "其他加减项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" },
                   { label: "义务课时扣费", value: -breakdown.obligationDeduction, icon: FileCheck2, color: "text-[#b91c1c] bg-[#fff1f2]", danger: true },

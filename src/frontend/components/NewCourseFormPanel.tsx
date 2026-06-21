@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
-import { calculateClassHeadcountFee, courseTypeUsesClassBilling, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
+import { calculateClassHeadcountFee, courseTypeUsesStandardBillingHours, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
 import { campusName, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
@@ -94,10 +94,12 @@ export function NewCourseFormPanel({
   supportsSalaryGradeFee,
   vault
 }: NewCourseFormPanelProps) {
-  const usesClassBilling = courseTypeUsesClassBilling(vault, courseType, courseFeeRule);
-  const classBillingHint = usesClassBilling
-    ? "班课按计费时长统计；例：10:10-12:00 实际 110 分钟，计费 2 小时，义务课时按 2 小时扣减。"
-    : "实际课时费按「上课时长 / 2」折算。";
+  const usesStandardBilling = courseTypeUsesStandardBillingHours(courseType);
+  const classBillingHint = courseType === "trial"
+    ? "试听按单次固定金额计费。"
+    : usesStandardBilling
+      ? "按标准课时统计；例：10:10-12:00 实际 110 分钟，默认计费 2 小时，可在课节详情手动改为 1 小时等拆课课时。"
+      : "按实际上课时长折算。";
 
   return (
     <Card className="h-fit overflow-hidden">
@@ -250,7 +252,7 @@ export function NewCourseFormPanel({
             <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-end">
               <div>
                 <div className="text-sm font-extrabold text-[#061226]">课程费用</div>
-                <div className="mt-1 text-xs font-semibold text-[#64748b]">全日制按开始和结束时间自动折算课时费。</div>
+                <div className="mt-1 text-xs font-semibold text-[#64748b]">按开始和结束时间自动折算课时费。</div>
               </div>
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-[#64748b]">每小时费用</label>

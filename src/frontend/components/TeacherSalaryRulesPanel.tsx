@@ -164,7 +164,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
                     {vault.profile.defaultSalaryGradeId === rule.id && <Badge variant="sky">默认</Badge>}
                     {rule.custom && <Badge variant="plum">自定义</Badge>}
                   </div>
-                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节；非班课按实际时长折算，班课常规 110 分钟按 2 小时计费；班课人头加价从第 6 人开始，非班课从第 2 人开始。</div>
+                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节；非试听课默认按标准课时统计，拆课时可在课节详情手动调整计费课时；班课人头加价从第 6 人开始，非班课从第 2 人开始。</div>
                 </div>
                 <div className="grid grid-cols-[minmax(160px,220px)_auto] gap-2">
                   <div>

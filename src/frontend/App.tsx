@@ -717,7 +717,7 @@ export function App() {
       };
       draft.courseGroups = draft.courseGroups.map((course) => {
         if (course.type !== courseType) return course;
-        if (course.type === "trial" || course.type === "full_time") return course;
+        if (course.type === "trial") return course;
         return {
           ...course,
           feeRule: cloneFeeRule(defaultSalaryFeeRule)
@@ -3137,7 +3137,7 @@ function feeModeLabel(mode: FeeRule["mode"]): string {
 }
 
 function defaultFeeRuleForVaultCourseType(vault: TeacherVault, type: CourseType): FeeRule {
-  if (type !== "trial" && type !== "full_time") {
+  if (type !== "trial") {
     return {
       mode: "salary_grade",
       salaryGradeSource: "teacher_default",
@@ -3248,7 +3248,7 @@ function normalizeAiCourseType(value: unknown, vault: TeacherVault | null = null
   if (normalized === "one_on_two" || normalized === "一对二") return "one_on_two";
   if (normalized === "class" || normalized === "班课" || normalized === "多人班课") return "class";
   if (normalized === "trial" || normalized === "试听") return "trial";
-  if (normalized === "full_time" || normalized === "全职" || normalized === "全日制") return "full_time";
+  if (normalized === "full_time" || normalized === "全职" || normalized === "全日制") return "class";
   const matchedCustomType = vault?.preferences?.customCourseTypes?.find((item) =>
     item.id.toLowerCase() === normalized || item.label.trim().toLowerCase() === normalized
   );

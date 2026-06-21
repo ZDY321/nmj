@@ -591,7 +591,7 @@ export function StudentsView({
   }
 
   function supportsSalaryGradeFee(type: CourseType): boolean {
-    return type !== "trial" && type !== "full_time";
+    return type !== "trial";
   }
 
   function feeModeValue(rule: FeeRule): "salary_default" | "salary_specific" | "custom" {
@@ -847,7 +847,7 @@ export function StudentsView({
     const current = feeRuleForCourseType(vault, type);
     const backupRule = backupFeeRuleForCourseType(type, current);
     const tier = backupRule.mode === "class_headcount" ? normalizedClassFeeTiers(backupRule)[0] : undefined;
-    const nextRule = type === "trial" || type === "full_time"
+    const nextRule = type === "trial"
       ? defaultFeeRuleForCourseType(type)
       : defaultFeeRuleForCustomTemplate(
           (tier?.minStudents ?? classHeadcountBaseStudentCountForRule(type, backupRule)) > 1 ? "class" : "non_class",
@@ -1714,7 +1714,7 @@ function stageRatesFromTierForCourseType(type: CourseType, tier: ClassFeeTier): 
 }
 
 function normalizeCourseFeeRuleForType(type: CourseType, feeRule: FeeRule): FeeRule {
-  if (type === "trial" || type === "full_time") return backupFeeRuleForCourseType(type, feeRule);
+  if (type === "trial") return backupFeeRuleForCourseType(type, feeRule);
   if (feeRule.mode === "salary_grade") {
     return {
       mode: "salary_grade",
