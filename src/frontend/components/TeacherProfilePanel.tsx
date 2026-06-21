@@ -146,7 +146,7 @@ export function TeacherProfilePanel({
               {selectedProfileSalaryGrade
                 ? (() => {
                     const referenceRate = salaryGradeRateForStage(selectedProfileSalaryGrade, "junior_3");
-                    return `保底 5 节/月，每节 2 小时；课时费按课程学生年级阶段取表，初三参考：一对一 ${formatPrivateMoney(referenceRate.oneOnOneFee, amountsVisible)}；班课底费 ${formatPrivateMoney(referenceRate.classBaseFee, amountsVisible)}；人头加价 ${formatPrivateMoney(referenceRate.headcountIncrementFee, amountsVisible)}。`;
+                    return `义务课时 5 节/月，每节 2 小时；课时费按课程学生年级阶段取表，初三参考：一对一 ${formatPrivateMoney(referenceRate.oneOnOneFee, amountsVisible)}；班课底费 ${formatPrivateMoney(referenceRate.classBaseFee, amountsVisible)}；人头加价 ${formatPrivateMoney(referenceRate.headcountIncrementFee, amountsVisible)}。`;
                   })()
                 : "未设置默认课时费等级，新课程不会自动套用等级课时费。"}
             </div>

@@ -137,7 +137,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           {[
             { label: "当前默认等级", value: defaultRule ? salaryGradeLabel(defaultRule) : "未设置" },
-            { label: "保底节数", value: defaultRule ? `${defaultRule.guaranteedLessonCount} 节/月` : "未设置" },
+            { label: "义务课时节数", value: defaultRule ? `${defaultRule.guaranteedLessonCount} 节/月` : "未设置" },
             { label: "标准课时长", value: defaultRule ? `${defaultRule.lessonHours} 小时/节` : "未设置" },
             { label: "当前底薪", value: formatPrivateMoney(vault.profile.baseSalary, amountsVisible) }
           ].map((item) => (
