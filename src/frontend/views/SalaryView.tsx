@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Banknote,
@@ -52,6 +52,13 @@ import {
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import {
+  lessonDetailSortDirectionOptions,
+  lessonDetailSortFieldOptions,
+  sortLessonDetails,
+  type LessonDetailSortDirection,
+  type LessonDetailSortField
+} from "@/frontend/lib/lessonDetailSort";
 
 const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 type YearTrendItem = ReturnType<typeof yearlyTrend>[number];
@@ -79,6 +86,8 @@ export function SalaryView({
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailCampusFilter, setDetailCampusFilter] = useState("all");
   const [detailStatusFilter, setDetailStatusFilter] = useState<"all" | Lesson["status"]>("all");
+  const [detailSortField, setDetailSortField] = useState<LessonDetailSortField>("date");
+  const [detailSortDirection, setDetailSortDirection] = useState<LessonDetailSortDirection>("desc");
   const { confirm, dialog } = useConfirmDialog();
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseOptions = sortCoursesByName(vault.courseGroups);
@@ -118,8 +127,11 @@ export function SalaryView({
       const matchesStatus = detailStatusFilter === "all" || lesson.status === detailStatusFilter;
       return matchesDate && matchesCourse && matchesStudent && matchesCampus && matchesStatus;
     })
-    .sort(sortLessons)
-    .reverse();
+    .sort(sortLessons);
+  const sortedRecentLessons = useMemo(
+    () => sortLessonDetails(vault, recentLessons, { field: detailSortField, direction: detailSortDirection }),
+    [detailSortDirection, detailSortField, recentLessons, vault]
+  );
   const filteredCompletedLessons = recentLessons.filter((lesson) => isCompletedLessonStatus(lesson.status));
   const filteredPendingLessons = recentLessons.filter((lesson) => isPendingLessonStatus(lesson.status));
   const filteredCancelledLessons = recentLessons.filter((lesson) => lesson.status === "cancelled");
@@ -385,7 +397,7 @@ export function SalaryView({
             {splitMergeExcludedCount > 0 ? ` 当前月份有 ${splitMergeExcludedCount} 节课因拆分合并对账标记为不单独计费。` : ""}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-8">
             <div className="space-y-2">
               <label className="text-sm font-medium">开始日期</label>
               <Input type="date" value={detailStartDateFilter} onChange={(event) => setDetailStartDateFilter(event.target.value)} />
@@ -425,6 +437,22 @@ export function SalaryView({
                 ))}
               </Select>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">排序方式</label>
+              <Select value={detailSortField} onChange={(event) => setDetailSortField(event.target.value as LessonDetailSortField)}>
+                {lessonDetailSortFieldOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">排序方向</label>
+              <Select value={detailSortDirection} onChange={(event) => setDetailSortDirection(event.target.value as LessonDetailSortDirection)}>
+                {lessonDetailSortDirectionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </div>
           </div>
 
           <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4 shadow-[0_10px_24px_rgba(15,35,66,0.04)]">
@@ -459,7 +487,7 @@ export function SalaryView({
 
           {recentLessons.length > 0 && (
             <div className="space-y-3 md:hidden">
-              {recentLessons.map((lesson) => (
+              {sortedRecentLessons.map((lesson) => (
                 <button
                   key={lesson.id}
                   type="button"
@@ -525,7 +553,7 @@ export function SalaryView({
                 </tr>
               </thead>
               <tbody>
-                {recentLessons.map((lesson) => (
+                {sortedRecentLessons.map((lesson) => (
                   <tr
                     key={lesson.id}
                     role="button"

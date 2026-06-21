@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -5,6 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { completedAmount, type ObligationLessonDeduction } from "@/frontend/lib/calculations";
+import {
+  lessonDetailSortDirectionOptions,
+  lessonDetailSortFieldOptions,
+  sortLessonDetails,
+  type LessonDetailSortDirection,
+  type LessonDetailSortField
+} from "@/frontend/lib/lessonDetailSort";
 import {
   campusName,
   courseName,
@@ -60,6 +68,13 @@ export function PayrollLessonDetailsCard({
   onStatusFilterChange: (value: LessonStatusFilter) => void;
   onOpenLesson?: (lesson: Lesson) => void;
 }) {
+  const [sortField, setSortField] = useState<LessonDetailSortField>("date");
+  const [sortDirection, setSortDirection] = useState<LessonDetailSortDirection>("asc");
+  const sortedDetailLessons = useMemo(
+    () => sortLessonDetails(vault, detailLessons, { field: sortField, direction: sortDirection, amountForLesson: completedAmount }),
+    [detailLessons, sortDirection, sortField, vault]
+  );
+
   function hasAttendanceException(lesson: Lesson): boolean {
     return lesson.attendance.some((entry) => entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending");
   }
@@ -75,7 +90,7 @@ export function PayrollLessonDetailsCard({
         <CardDescription>这里展示课程记录与课时费明细，可在当前月份、校区、类型、状态和年级基础上继续筛选。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-7">
           <div className="space-y-2">
             <label className="text-sm font-medium">开始日期</label>
             <Input type="date" value={startDateFilter} onChange={(event) => onStartDateChange(event.target.value)} />
@@ -106,6 +121,22 @@ export function PayrollLessonDetailsCard({
               ))}
             </Select>
           </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">排序方式</label>
+            <Select value={sortField} onChange={(event) => setSortField(event.target.value as LessonDetailSortField)}>
+              {lessonDetailSortFieldOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">排序方向</label>
+            <Select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as LessonDetailSortDirection)}>
+              {lessonDetailSortDirectionOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </Select>
+          </div>
         </div>
         <div className="flex flex-col gap-2 rounded-[14px] border border-[#e8eef6] bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -116,7 +147,7 @@ export function PayrollLessonDetailsCard({
           </div>
           <Badge variant="secondary" className="w-fit">{detailLessons.length} 条记录</Badge>
         </div>
-        {detailLessons.map((lesson, index) => {
+        {sortedDetailLessons.map((lesson, index) => {
           const hasException = hasAttendanceException(lesson);
           const attendanceNoteText = lessonAttendanceNoteText(vault, lesson);
           const obligationDeduction = obligationDeductionByLessonId.get(lesson.id);
