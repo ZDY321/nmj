@@ -395,7 +395,7 @@ export function lessonDurationText(lesson: Pick<Lesson, "startTime" | "endTime">
 }
 
 export function lessonTimeRangeLabel(lesson: Pick<Lesson, "startTime" | "endTime">): string {
-  return `${lesson.startTime}-${lesson.endTime} · 时长 ${lessonDurationText(lesson)}`;
+  return `${lesson.startTime}-${lesson.endTime} · 实际时长 ${lessonDurationText(lesson)}`;
 }
 
 export function courseTimeRangeBillingLabel(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime"> & Partial<Pick<Lesson, "feeSnapshot">>, courseId?: string): string {
