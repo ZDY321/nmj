@@ -113,10 +113,10 @@ function findCampusByName(vault: TeacherVault, values: string | string[]) {
   if (normalizedValues.length === 0) return undefined;
   const campuses = [...vault.campuses].sort((a, b) => normalizeText(b.name).length - normalizeText(a.name).length);
   const matches = campuses.flatMap((campus) => {
-    const campusNameKey = normalizeText(campus.name);
+    const campusKeywords = campusNameKeywords(campus.name);
     const campusIdKey = normalizeText(campus.id);
     return normalizedValues.flatMap((value, valueIndex) => {
-      const nameScore = campusNameMatchScore(campusNameKey, value);
+      const nameScore = campusNameMatchScore(campusKeywords, value);
       const idScore = campusIdKey && value === campusIdKey ? 1000 : 0;
       const score = Math.max(nameScore, idScore);
       return score > 0 ? [{ campus, score, valueIndex }] : [];
@@ -138,10 +138,19 @@ function normalizeText(value: string): string {
     .replace(/[【】\[\]{}（）()_\-—–·.,，。:：]/g, "");
 }
 
-function campusNameMatchScore(campusKey: string, value: string): number {
-  if (!campusKey || !value) return 0;
-  if (value === campusKey) return 900 + campusKey.length;
-  if (value.includes(campusKey) && campusKey.length >= 2) return 700 + campusKey.length;
-  if (campusKey.includes(value) && value.length >= 3) return 600 + value.length;
+function campusNameKeywords(campusName: string): string[] {
+  const fullName = normalizeText(campusName);
+  const shortName = normalizeText(campusName.replace(/(?:校区|分校|校|中心|教学点)$/g, ""));
+  const markerPrefix = normalizeText(campusName.match(/^(.+?)(?:校区|分校|校|中心|教学点)/)?.[1] ?? "");
+  return Array.from(new Set([fullName, shortName, markerPrefix]))
+    .filter((keyword) => keyword.length >= 2);
+}
+
+function campusNameMatchScore(campusKeywords: string[], value: string): number {
+  if (campusKeywords.length === 0 || !value) return 0;
+  const exactKeyword = campusKeywords.find((keyword) => value === keyword);
+  if (exactKeyword) return 900 + exactKeyword.length;
+  const includedKeyword = campusKeywords.find((keyword) => value.includes(keyword));
+  if (includedKeyword) return 700 + includedKeyword.length;
   return 0;
 }

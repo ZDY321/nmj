@@ -195,7 +195,7 @@ export function ScheduleImportHeaderPanel({
               </div>
               <div className="mt-3 rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2]">
                 <div className="font-extrabold text-[#061226]">文件名识别规则</div>
-                <div>不需要必须放在括号内；文件名中包含“档案信息”的校区名称即可自动识别。括号只是可选写法，例如“2026-05-课表-城南校区.xlsx”或“校宝课表导出2026-06-20（外国语校区鹏成教育）.xlsx”。</div>
+                <div>文件名中包含“档案信息”里的校区名称关键词即可自动识别，例如“2026-05-课表-延安校区.xlsx”“校宝课表导出2026-06-20（外国语校区鹏成教育）.xlsx”或“2026-05-课表延安.xlsx”。</div>
               </div>
             </div>
 
