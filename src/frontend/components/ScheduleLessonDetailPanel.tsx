@@ -25,7 +25,6 @@ import {
   courseTypeLabel,
   formatPrivateMoney,
   lessonStatusLabels,
-  lessonTimeRangeBillingLabel,
   lessonTimeRangeLabel,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -194,7 +193,8 @@ export function ScheduleLessonDetailPanel({
             <CardTitle>课程详情</CardTitle>
             <CardDescription className="space-y-1 leading-5">
               <span className="block">{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)}</span>
-              <span className="block">{dateWithWeekday(selected.date)} · {lessonTimeRangeBillingLabel(vault, selected)}</span>
+              <span className="block">{dateWithWeekday(selected.date)} · {selected.startTime}-{selected.endTime}</span>
+              <span className="block">实际时长 {selectedActualHours.toFixed(2)}h · {selected.feeSnapshot.manualHours ? "手动计费课时" : "计费课时"} {selectedBillingHours.toFixed(1)}h</span>
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
