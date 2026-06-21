@@ -827,9 +827,9 @@ export function AdminView({
                   className="mt-1 h-4 w-4 shrink-0 accent-[#ff8617]"
                 />
                 <span className="min-w-0">
-                  <span className="block text-sm font-extrabold">关闭标签页后保持登录</span>
+                  <span className="block text-sm font-extrabold">信任此设备 30 天</span>
                   <span className="mt-1 block text-xs font-semibold leading-5 text-[#9a3412]">
-                    仅建议在自己的手机或电脑上开启。关闭后会按当前安全方式，下次打开需要重新输入账号和密码。
+                    仅建议在自己的手机或电脑上开启。关闭后可自动恢复解锁，到期、退出或删除本地缓存后需要重新输入数据密码。
                   </span>
                 </span>
               </label>

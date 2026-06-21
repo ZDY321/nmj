@@ -71,6 +71,7 @@ export function ScheduleImportPanel({
   onOpenLesson,
   onSuggestSchedule,
   onSaveScheduleImport,
+  scheduleImportState,
   storageScope
 }: {
   vault: TeacherVault;
@@ -78,11 +79,17 @@ export function ScheduleImportPanel({
   onOpenLesson?: (lesson: Lesson) => void;
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
   onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
+  scheduleImportState?: ScheduleImportVaultState | null;
   storageScope?: string;
 }) {
   const savedWorkspace = useMemo(() => readSavedWorkspace(storageScope), [storageScope]);
-  const cloudMapping = vault.scheduleImport?.mappings ?? {};
-  const cloudResolutions = vault.scheduleImport?.resolutions ?? {};
+  const persistedScheduleImport = scheduleImportState ?? vault.scheduleImport;
+  const scheduleImportVault = useMemo<TeacherVault>(
+    () => ({ ...vault, scheduleImport: persistedScheduleImport ?? undefined }),
+    [persistedScheduleImport, vault]
+  );
+  const cloudMapping = { ...(persistedScheduleImport?.mappings ?? {}), ...(vault.scheduleImport?.mappings ?? {}) };
+  const cloudResolutions = { ...(persistedScheduleImport?.resolutions ?? {}), ...(vault.scheduleImport?.resolutions ?? {}) };
   const savedMapping = useMemo(() => ({ ...readSavedMapping(storageScope), ...cloudMapping, ...savedWorkspace.mapping }), [cloudMapping, savedWorkspace.mapping, storageScope]);
   const savedResolutions = useMemo(() => ({ ...cloudResolutions, ...savedWorkspace.resolutions }), [cloudResolutions, savedWorkspace.resolutions]);
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>(savedWorkspace.rawLessons);
@@ -96,7 +103,7 @@ export function ScheduleImportPanel({
   const [campusFilter, setCampusFilter] = useState(savedWorkspace.campusFilter || "all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(savedWorkspace.statusFilter);
   const [search, setSearch] = useState(savedWorkspace.search);
-  const [selectedReviewId, setSelectedReviewId] = useState(vault.scheduleImport?.reviews[0]?.id ?? "");
+  const [selectedReviewId, setSelectedReviewId] = useState(persistedScheduleImport?.reviews[0]?.id ?? "");
   const [savedReviewsExpanded, setSavedReviewsExpanded] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
 
@@ -188,7 +195,7 @@ export function ScheduleImportPanel({
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference);
   const needsAttention = summary.attendanceMismatch + summary.timeMismatch + summary.courseMismatch + summary.systemMissing + summary.importMissing + summary.needsMapping;
   const reviewedCount = rows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
-  const savedReviews = vault.scheduleImport?.reviews ?? [];
+  const savedReviews = persistedScheduleImport?.reviews ?? [];
   const selectedReview = savedReviews.find((review) => review.id === selectedReviewId) ?? savedReviews[0];
   const savedReviewLiveCounts = useMemo(
     () => new Map(savedReviews.map((review) => [review.id, liveSavedReviewEffectiveCounts(vault, review)])),
@@ -207,7 +214,7 @@ export function ScheduleImportPanel({
       return merged;
     });
     setResolutions((current) => ({ ...cloudResolutions, ...current }));
-  }, [vault.scheduleImport?.updatedAt]);
+  }, [persistedScheduleImport?.updatedAt, vault.scheduleImport?.updatedAt]);
 
   useEffect(() => {
     if (!selectedReviewId && savedReviews[0]) {
@@ -294,7 +301,7 @@ export function ScheduleImportPanel({
       savedAt: new Date().toISOString()
     });
     if (onSaveScheduleImport) {
-      onSaveScheduleImport(buildScheduleImportStateWithoutReview(vault, nextMapping, resolutions, splitMergeExcludedLessonIds));
+      onSaveScheduleImport(buildScheduleImportStateWithoutReview(scheduleImportVault, nextMapping, resolutions, splitMergeExcludedLessonIds));
       setMessage(courseId ? "课程映射已自动保存到云端加密档案，下次导入会直接复用。" : "课程映射已清除并同步到云端加密档案。");
     } else if (savedMappingOk) {
       setMessage(courseId ? "课程映射已自动保存到本机浏览器。" : "课程映射已清除。");
@@ -327,7 +334,7 @@ export function ScheduleImportPanel({
     const nextSplitMergeExcludedLessonIds = splitMergePayrollExcludedLessonIds(rows, nextResolutions);
     setResolutions(nextResolutions);
     if (patch.status) {
-      onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(vault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds));
+      onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds));
       const label = resolutionStatusLabel(patch.status);
       setMessage(
         resolutionMarksRowResolved(patch.status)
@@ -351,7 +358,7 @@ export function ScheduleImportPanel({
       search,
       savedAt: new Date().toISOString()
     });
-    const nextScheduleImport = buildNextScheduleImportState(vault, {
+    const nextScheduleImport = buildNextScheduleImportState(scheduleImportVault, {
       rawLessons,
       mapping,
       resolutions,
@@ -374,7 +381,7 @@ export function ScheduleImportPanel({
   }
 
   function deleteSavedReview(reviewId: string) {
-    const previous = vault.scheduleImport;
+    const previous = persistedScheduleImport;
     if (!previous) return;
     const nextReviews = previous.reviews.filter((review) => review.id !== reviewId);
     onSaveScheduleImport?.({
@@ -439,10 +446,10 @@ export function ScheduleImportPanel({
     setCampusFilter("all");
   }
 
-  function downloadMergedSchedule() {
+  async function downloadMergedSchedule() {
     if (rawLessons.length === 0) return;
     try {
-      const summary = downloadMergedScheduleWorkbook(applyCampusOverridesToLessons(vault, rawLessons, fileCampusOverrides));
+      const summary = await downloadMergedScheduleWorkbook(applyCampusOverridesToLessons(vault, rawLessons, fileCampusOverrides));
       setMessage(`已合并导出 ${summary.fileCount} 个文件、${summary.dayCount} 天、${summary.lessonCount} 节；实际开课 ${summary.actualLessonCount} 节，有学生未到 ${summary.absentLessonCount} 节。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "合并导出失败，请重新选择教务 Excel 后再试。");

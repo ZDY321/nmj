@@ -5,6 +5,11 @@ import {
   type ScheduleImportMapping
 } from "@/frontend/lib/scheduleImport";
 import {
+  legacyMappingStorageKey,
+  scopedScheduleImportStorageKey,
+  workspaceStorageKey
+} from "@/frontend/lib/scheduleImportReviewLocalState";
+import {
   resolutionStatuses,
   statusFilters,
   type StatusFilter
@@ -32,9 +37,6 @@ export type ScheduleImportFileSummary = {
   months: string[];
 };
 
-const legacyMappingStorageKey = "teacher-schedule-import-mapping-v1";
-const workspaceStorageKey = "teacher-schedule-import-workspace-v1";
-
 function emptySavedWorkspace(): SavedScheduleImportWorkspace {
   return {
     rawLessons: [],
@@ -47,11 +49,6 @@ function emptySavedWorkspace(): SavedScheduleImportWorkspace {
     statusFilter: "all",
     search: ""
   };
-}
-
-function scopedStorageKey(baseKey: string, scope?: string): string {
-  const normalizedScope = scope?.trim();
-  return normalizedScope ? `${baseKey}:${encodeURIComponent(normalizedScope)}` : baseKey;
 }
 
 function normalizeMapping(value: unknown): ScheduleImportMapping {
@@ -89,7 +86,7 @@ function normalizeStatusFilter(value: unknown): StatusFilter {
 
 export function readSavedWorkspace(scope?: string): SavedScheduleImportWorkspace {
   try {
-    const raw = localStorage.getItem(scopedStorageKey(workspaceStorageKey, scope));
+    const raw = localStorage.getItem(scopedScheduleImportStorageKey(workspaceStorageKey, scope));
     if (!raw) return emptySavedWorkspace();
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return emptySavedWorkspace();
@@ -112,7 +109,7 @@ export function readSavedWorkspace(scope?: string): SavedScheduleImportWorkspace
 
 export function writeSavedWorkspace(scope: string | undefined, workspace: SavedScheduleImportWorkspace): boolean {
   try {
-    localStorage.setItem(scopedStorageKey(workspaceStorageKey, scope), JSON.stringify(workspace));
+    localStorage.setItem(scopedScheduleImportStorageKey(workspaceStorageKey, scope), JSON.stringify(workspace));
     return true;
   } catch {
     return false;
@@ -121,7 +118,7 @@ export function writeSavedWorkspace(scope: string | undefined, workspace: SavedS
 
 export function readSavedMapping(scope?: string): ScheduleImportMapping {
   try {
-    const raw = localStorage.getItem(scopedStorageKey(legacyMappingStorageKey, scope)) ?? localStorage.getItem(legacyMappingStorageKey);
+    const raw = localStorage.getItem(scopedScheduleImportStorageKey(legacyMappingStorageKey, scope)) ?? localStorage.getItem(legacyMappingStorageKey);
     return raw ? normalizeMapping(JSON.parse(raw)) : {};
   } catch {
     return {};
@@ -130,7 +127,7 @@ export function readSavedMapping(scope?: string): ScheduleImportMapping {
 
 export function writeSavedMapping(scope: string | undefined, mapping: ScheduleImportMapping): boolean {
   try {
-    localStorage.setItem(scopedStorageKey(legacyMappingStorageKey, scope), JSON.stringify(mapping));
+    localStorage.setItem(scopedScheduleImportStorageKey(legacyMappingStorageKey, scope), JSON.stringify(mapping));
     return true;
   } catch {
     return false;

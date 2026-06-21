@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 import {
   Bold,
   Clock3,
@@ -32,6 +31,27 @@ import { makeId } from "@/frontend/lib/crypto";
 import type { MemoItem, TeacherVault } from "@/shared/types";
 
 type MarkdownEditorMode = "edit" | "split" | "preview";
+type MarkdownRendererProps = {
+  content: string;
+  components: Components;
+};
+
+const MarkdownRenderer = lazy(async () => {
+  const [{ default: ReactMarkdown }, { default: remarkGfm }] = await Promise.all([
+    import("react-markdown"),
+    import("remark-gfm")
+  ]);
+
+  return {
+    default: function MarkdownRendererContent({ content, components }: MarkdownRendererProps) {
+      return (
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {content}
+        </ReactMarkdown>
+      );
+    }
+  };
+});
 
 export function MemoView({
   vault,
@@ -356,14 +376,22 @@ function MarkdownPreview({ content }: { content: string }) {
   return (
     <div className="min-h-[420px] overflow-auto rounded-[12px] border border-[#dbe4ef] bg-white p-4">
       {source ? (
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {source}
-        </ReactMarkdown>
+        <Suspense fallback={<MarkdownPreviewLoading />}>
+          <MarkdownRenderer content={source} components={markdownComponents} />
+        </Suspense>
       ) : (
         <div className="flex min-h-[360px] items-center justify-center rounded-[10px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] text-sm font-semibold text-[#64748b]">
           暂无可预览内容
         </div>
       )}
+    </div>
+  );
+}
+
+function MarkdownPreviewLoading() {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center rounded-[10px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] text-sm font-semibold text-[#64748b]">
+      正在加载预览
     </div>
   );
 }

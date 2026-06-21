@@ -3,6 +3,7 @@ import { ChevronDown, Upload, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ScheduleImportReviewRecord, TeacherVault } from "@/shared/types";
+import { savedScheduleImportReviewLimit } from "@/frontend/lib/scheduleImportReview";
 
 export function ScheduleImportSavedReviewsPanel({
   vault,
@@ -51,7 +52,7 @@ export function ScheduleImportSavedReviewsPanel({
             <ChevronDown size={16} className={`text-[#64748b] transition-transform ${expanded ? "rotate-180" : ""}`} />
             已保存对账
           </button>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">最近保留 {reviews.length} 次；保存结果可展开查看、导入继续核对或删除。</div>
+          <div className="mt-1 text-xs font-semibold text-[#64748b]">最多保留最近 {savedScheduleImportReviewLimit} 次，当前 {reviews.length} 次；保存结果可展开查看、导入继续核对或删除。</div>
         </div>
         <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
           {reviews.slice(0, 8).map((review) => (

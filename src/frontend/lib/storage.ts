@@ -1,5 +1,5 @@
 import type { CloudSession, EncryptedBox, Notice, TeacherVault, UserDeletionState, UserRole, UserStatus } from "../../shared/types";
-import { apiRequest, getLoginNotice } from "./cloud";
+import { ApiError, apiRequest, getLoginNotice } from "./cloud";
 import {
   createPasswordSalt,
   decryptJson,
@@ -28,6 +28,11 @@ type VaultMetaResponse = {
   updatedAt: string;
 };
 
+type EncryptedDocumentResponse = {
+  encrypted_payload: string;
+  updated_at: string;
+};
+
 export type LocalAccount = {
   id?: string;
   username: string;
@@ -51,6 +56,11 @@ export type AuthenticatedVault = {
 
 export type CloudVaultResult = {
   vault: TeacherVault;
+  updatedAt: string;
+};
+
+export type EncryptedDocumentResult<T> = {
+  value: T | null;
   updatedAt: string;
 };
 
@@ -309,6 +319,51 @@ export async function saveVault(
   }
 
   return {};
+}
+
+export async function loadEncryptedDocumentWithVersion<T>(
+  token: string,
+  password: string,
+  docType: string,
+  docKey: string
+): Promise<EncryptedDocumentResult<T>> {
+  try {
+    const document = await apiRequest<EncryptedDocumentResponse>(
+      `/api/encrypted-documents/${encodeURIComponent(docType)}/${encodeURIComponent(docKey)}`,
+      { token }
+    );
+    const box = JSON.parse(document.encrypted_payload) as EncryptedBox;
+    return {
+      value: await decryptJson<T>(box, password),
+      updatedAt: document.updated_at
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return { value: null, updatedAt: "" };
+    }
+    throw error;
+  }
+}
+
+export async function saveEncryptedDocument<T>(
+  token: string,
+  password: string,
+  docType: string,
+  docKey: string,
+  value: T
+): Promise<{ updatedAt: string }> {
+  const encrypted = await encryptJson(value, password);
+  const result = await apiRequest<{ ok: boolean; updatedAt: string }>(
+    `/api/encrypted-documents/${encodeURIComponent(docType)}/${encodeURIComponent(docKey)}`,
+    {
+      method: "PUT",
+      token,
+      body: JSON.stringify({
+        encryptedPayload: JSON.stringify(encrypted)
+      })
+    }
+  );
+  return { updatedAt: result.updatedAt };
 }
 
 export async function logoutCloud(token: string): Promise<void> {

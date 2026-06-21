@@ -150,6 +150,29 @@ const jsonHeaders = {
   "content-type": "application/json; charset=utf-8"
 };
 
+const staticSecurityHeaders = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'"
+  ].join("; "),
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY"
+};
+
 const defaultNotice: Notice = {
   enabled: true,
   title: "系统提示",
@@ -177,6 +200,15 @@ function json(data: unknown, status = 200): Response {
 
 function notFound(): Response {
   return json({ error: "Not found" }, 404);
+}
+
+async function serveStaticAsset(request: Request, env: Env): Promise<Response> {
+  const response = await env.ASSETS.fetch(request);
+  const secured = new Response(response.body, response);
+  for (const [name, value] of Object.entries(staticSecurityHeaders)) {
+    secured.headers.set(name, value);
+  }
+  return secured;
 }
 
 function normalizeUsername(username: string): string {
@@ -2345,7 +2377,7 @@ export default {
       }
     }
 
-    return env.ASSETS.fetch(request);
+    return serveStaticAsset(request, env);
   },
 
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {

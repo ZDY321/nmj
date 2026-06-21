@@ -10,14 +10,19 @@ import type { CourseType, Lesson, ScheduleImportVaultState, TeacherVault } from 
 import { todayIso } from "@/frontend/lib/calculations";
 import { campusName, formatPrivateMoney } from "@/frontend/lib/helpers";
 import { usePayrollReviewData } from "@/frontend/hooks/usePayrollReviewData";
+import { loadEncryptedDocumentWithVersion, saveEncryptedDocument } from "@/frontend/lib/storage";
 
 type TypeFilter = "all" | CourseType;
 type LessonStatusFilter = "all" | Lesson["status"];
 type PayrollPanel = "review" | "reconcile";
+const scheduleImportArchiveDocType = "schedule_import_reviews";
+const scheduleImportArchiveDocKey = "primary";
 
 export function PayrollReviewView({
   vault,
   amountsVisible,
+  token,
+  password,
   panelFocus,
   storageScope,
   onSaveScheduleImport,
@@ -27,6 +32,8 @@ export function PayrollReviewView({
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
+  token?: string;
+  password?: string;
   panelFocus?: { panel: PayrollPanel; nonce: number } | null;
   storageScope?: string;
   onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
@@ -45,6 +52,8 @@ export function PayrollReviewView({
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailStatusFilter, setDetailStatusFilter] = useState<LessonStatusFilter>("all");
   const [payrollPanel, setPayrollPanel] = useState<PayrollPanel>(() => panelFocus?.panel ?? "review");
+  const [scheduleImportArchive, setScheduleImportArchive] = useState<ScheduleImportVaultState | null>(vault.scheduleImport ?? null);
+  const [scheduleImportArchiveError, setScheduleImportArchiveError] = useState("");
 
   const {
     campusOptions,
@@ -86,6 +95,65 @@ export function PayrollReviewView({
     }
   }, [panelFocus?.nonce]);
 
+  useEffect(() => {
+    if (!token || !password) {
+      setScheduleImportArchive(vault.scheduleImport ?? null);
+      setScheduleImportArchiveError("");
+      return;
+    }
+    let cancelled = false;
+    setScheduleImportArchiveError("");
+    loadEncryptedDocumentWithVersion<ScheduleImportVaultState>(
+      token,
+      password,
+      scheduleImportArchiveDocType,
+      scheduleImportArchiveDocKey
+    )
+      .then(({ value }) => {
+        if (cancelled) return;
+        const fallback = vault.scheduleImport ?? null;
+        const nextArchive = value ?? fallback;
+        setScheduleImportArchive(nextArchive);
+        if (!value && fallback?.reviews.length) {
+          void saveEncryptedDocument(
+            token,
+            password,
+            scheduleImportArchiveDocType,
+            scheduleImportArchiveDocKey,
+            fallback
+          )
+            .then(() => setScheduleImportArchiveError(""))
+            .catch(() => setScheduleImportArchiveError("旧核对历史迁移到独立云端文档失败；当前页面仍可查看，稍后再次进入会重试。"));
+          onSaveScheduleImport?.(scheduleImportMainState(fallback));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setScheduleImportArchive(vault.scheduleImport ?? null);
+          setScheduleImportArchiveError("核对历史云端文档读取失败，当前显示主档案里的本地兼容数据。");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [password, token]);
+
+  function saveScheduleImportState(state: ScheduleImportVaultState): void {
+    setScheduleImportArchive(state);
+    onSaveScheduleImport?.(scheduleImportMainState(state));
+    if (token && password) {
+      void saveEncryptedDocument(
+        token,
+        password,
+        scheduleImportArchiveDocType,
+        scheduleImportArchiveDocKey,
+        state
+      )
+        .then(() => setScheduleImportArchiveError(""))
+        .catch(() => setScheduleImportArchiveError("核对历史明细未能同步到独立云端文档；课程映射和拆分/合并标记已保存到主档案。"));
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
@@ -109,14 +177,22 @@ export function PayrollReviewView({
       </div>
 
       {payrollPanel === "reconcile" ? (
+        <>
+        {scheduleImportArchiveError && (
+          <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] px-4 py-3 text-sm font-bold text-[#9a3412]">
+            {scheduleImportArchiveError}
+          </div>
+        )}
         <ScheduleImportPanel
           vault={vault}
           amountsVisible={amountsVisible}
           storageScope={storageScope}
-          onSaveScheduleImport={onSaveScheduleImport}
+          scheduleImportState={scheduleImportArchive}
+          onSaveScheduleImport={saveScheduleImportState}
           onOpenLesson={onOpenReconcileLessonInCalendar}
           onSuggestSchedule={onSuggestSchedule}
         />
+        </>
       ) : (
       <>
       <PayrollReviewFiltersCard
@@ -201,4 +277,11 @@ export function PayrollReviewView({
       )}
     </div>
   );
+}
+
+function scheduleImportMainState(state: ScheduleImportVaultState): ScheduleImportVaultState {
+  return {
+    ...state,
+    reviews: []
+  };
 }

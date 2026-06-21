@@ -47,7 +47,8 @@ export {
   formatSavedReviewNumber,
   savedReviewEffectiveCounts,
   savedReviewNeedsAttention,
-  savedReviewTitle
+  savedReviewTitle,
+  savedScheduleImportReviewLimit
 } from "@/frontend/lib/scheduleImportReviewRecords";
 export {
   courseTypeLabelSafe,

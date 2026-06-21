@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -22,15 +22,6 @@ import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { OnboardingGuide } from "@/frontend/components/OnboardingGuide";
 import { Sidebar } from "@/frontend/components/Sidebar";
-import { AdminView } from "@/frontend/views/AdminView";
-import { CalendarView } from "@/frontend/views/CalendarView";
-import { GradesView } from "@/frontend/views/GradesView";
-import { PayrollReviewView } from "@/frontend/views/PayrollReviewView";
-import { ProgressView } from "@/frontend/views/ProgressView";
-import { ScheduleView } from "@/frontend/views/ScheduleView";
-import { SalaryView } from "@/frontend/views/SalaryView";
-import { StudentsView } from "@/frontend/views/StudentsView";
-import { TodayView } from "@/frontend/views/TodayView";
 import { buildFeeSnapshot, currentAppHour, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, salaryGradeRateForStage, salaryGradeRuleById, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
@@ -49,8 +40,17 @@ import {
 } from "@/frontend/lib/helpers";
 import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
-import { clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
+import { clearStoredSession, clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
+import { clearSavedScheduleImportLocalState } from "@/frontend/lib/scheduleImportReviewLocalState";
+import {
+  clearUnlockedSession,
+  readPersistentLoginPreference,
+  readUnlockedSession,
+  writePersistentLoginPreference,
+  writeUnlockedSession,
+  type UnlockedSession
+} from "@/frontend/lib/unlockSession";
 import { normalizeTimeText, timeToMinutes, timesOverlap } from "@/frontend/lib/time";
 import {
   arrayValue as arrayValueLocal,
@@ -88,22 +88,15 @@ import type {
   WeekStart
 } from "@/shared/types";
 
-type UnlockedSession = {
-  username: string;
-  password: string;
-  token: string;
-  role: UserRole;
-  deletion: UserDeletionState | null;
-  vault: TeacherVault;
-  selectedDate: string;
-  cloudVersion?: string;
-  persistAfterClose?: boolean;
-};
-
-type StoredUnlockedSession = {
-  raw: string;
-  persistAfterClose: boolean;
-};
+const AdminView = lazy(() => import("@/frontend/views/AdminView").then((module) => ({ default: module.AdminView })));
+const CalendarView = lazy(() => import("@/frontend/views/CalendarView").then((module) => ({ default: module.CalendarView })));
+const GradesView = lazy(() => import("@/frontend/views/GradesView").then((module) => ({ default: module.GradesView })));
+const PayrollReviewView = lazy(() => import("@/frontend/views/PayrollReviewView").then((module) => ({ default: module.PayrollReviewView })));
+const ProgressView = lazy(() => import("@/frontend/views/ProgressView").then((module) => ({ default: module.ProgressView })));
+const ScheduleView = lazy(() => import("@/frontend/views/ScheduleView").then((module) => ({ default: module.ScheduleView })));
+const SalaryView = lazy(() => import("@/frontend/views/SalaryView").then((module) => ({ default: module.SalaryView })));
+const StudentsView = lazy(() => import("@/frontend/views/StudentsView").then((module) => ({ default: module.StudentsView })));
+const TodayView = lazy(() => import("@/frontend/views/TodayView").then((module) => ({ default: module.TodayView })));
 
 type CalendarOverviewFocusState = {
   selectedDate: string;
@@ -137,8 +130,6 @@ type ScheduleCalendarFocus = {
   } | null;
 };
 
-const unlockedSessionKey = "teacher-salary-tracker:unlocked-session";
-const persistentLoginPreferencePrefix = "teacher-salary-tracker:persistent-login:";
 const syncCheckIntervalSeconds = 90;
 
 export function App() {
@@ -196,7 +187,7 @@ export function App() {
       ...next
     };
     if (!session.username || !session.password || !session.token || !session.vault) return;
-    writeUnlockedSession(session);
+    void writeUnlockedSession(session);
   }
 
   async function login(nextUsername: string, nextPassword: string, nextPersistLoginAfterClose: boolean) {
@@ -265,6 +256,52 @@ export function App() {
       writePersistentLoginPreference(username, nextPersistLoginAfterClose);
     }
     rememberUnlockedSession({ persistAfterClose: nextPersistLoginAfterClose });
+  }
+
+  function resetUnlockedWorkspaceState() {
+    setUsername("");
+    setPassword("");
+    setToken("");
+    setRole("teacher");
+    setDeletion(null);
+    setVault(null);
+    setAmountsVisible(false);
+    setPersistLoginAfterClose(false);
+    setCloudVersion("");
+    setRemoteCloudVersion("");
+    cloudVersionRef.current = "";
+    setSyncState("idle");
+    setSyncMessage("");
+    setSyncCountdownSeconds(syncCheckIntervalSeconds);
+    setSaveState("idle");
+    setAiScheduleSession(null);
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setOnboardingVisible(false);
+    clearUnlockedSession();
+  }
+
+  function signOut() {
+    const currentToken = token;
+    clearStoredSession();
+    if (currentToken) {
+      void logoutCloud(currentToken);
+    }
+    resetUnlockedWorkspaceState();
+  }
+
+  function clearCurrentLocalCache() {
+    const currentUsername = username;
+    const currentToken = token;
+    clearStoredSession();
+    if (currentToken) {
+      void logoutCloud(currentToken);
+    }
+    if (currentUsername) {
+      clearVault(currentUsername);
+      clearSavedScheduleImportLocalState(currentUsername);
+    }
+    resetUnlockedWorkspaceState();
   }
 
   async function persist(nextVault: TeacherVault, options: { force?: boolean } = {}) {
@@ -1851,16 +1888,18 @@ export function App() {
   }
 
   useEffect(() => {
-    const stored = readUnlockedSession();
-    if (stored) {
+    let cancelled = false;
+
+    async function restoreUnlockedSession() {
       try {
-        const session = JSON.parse(stored.raw) as UnlockedSession;
+        const session = await readUnlockedSession();
+        if (!session || cancelled) return;
         if (!session.username || !session.password || !session.token || !session.vault) {
           clearUnlockedSession();
         } else {
           const today = todayIso();
           const cachedCloudVersion = session.cloudVersion ?? "";
-          const restoredPersistLoginAfterClose = Boolean(session.persistAfterClose ?? stored.persistAfterClose);
+          const restoredPersistLoginAfterClose = Boolean(session.persistAfterClose);
           setUsername(session.username);
           setPassword(session.password);
           setToken(session.token);
@@ -1871,7 +1910,7 @@ export function App() {
           setSelectedDate(today);
           setPersistLoginAfterClose(restoredPersistLoginAfterClose);
           writePersistentLoginPreference(session.username, restoredPersistLoginAfterClose);
-          writeUnlockedSession({
+          void writeUnlockedSession({
             ...session,
             selectedDate: today,
             cloudVersion: cachedCloudVersion,
@@ -1885,7 +1924,8 @@ export function App() {
               setRemoteCloudVersion("");
               setSyncState("idle");
               setSyncMessage("");
-              writeUnlockedSession({
+              if (cancelled) return;
+              void writeUnlockedSession({
                 ...session,
                 vault: cloud.vault,
                 selectedDate: today,
@@ -1893,16 +1933,30 @@ export function App() {
                 persistAfterClose: restoredPersistLoginAfterClose
               });
             })
-            .catch(() => {
+            .catch((error) => {
+              if (cancelled) return;
+              if (isSessionRejected(error)) {
+                clearVault(session.username);
+                clearSavedScheduleImportLocalState(session.username);
+                clearStoredSession();
+                resetUnlockedWorkspaceState();
+                return;
+              }
               setSyncState("error");
               setSyncMessage("云端数据读取失败，当前显示本机缓存。");
             });
         }
       } catch {
         clearUnlockedSession();
+      } finally {
+        if (!cancelled) setBootstrapped(true);
       }
     }
-    setBootstrapped(true);
+
+    void restoreUnlockedSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -2401,21 +2455,7 @@ export function App() {
               </label>
 
               <div className="hidden items-center gap-2 md:flex">
-                <Button variant="outline" className="h-[58px] rounded-[16px]" onClick={() => {
-                  if (token) {
-                    void logoutCloud(token);
-                  }
-                  setVault(null);
-                  setAmountsVisible(false);
-                  setPassword("");
-                  setToken("");
-                  setDeletion(null);
-                  setCloudVersion("");
-                  setRemoteCloudVersion("");
-                  setSyncState("idle");
-                  setSyncMessage("");
-                  clearUnlockedSession();
-                }}>
+                <Button variant="outline" className="h-[58px] rounded-[16px]" onClick={signOut}>
                   <LogOut size={18} /> 退出
                 </Button>
               </div>
@@ -2626,173 +2666,167 @@ export function App() {
                 onDismiss={dismissOnboarding}
               />
             )}
-            {!onboardingVisible && view === "today" && (
-              <TodayView
-                vault={vault}
-                selectedDate={selectedDate}
-                amountsVisible={amountsVisible}
-                onUpdateLesson={updateLesson}
-                onAddTodo={addTodo}
-                onUpdateTodo={updateTodo}
-                onDeleteTodo={deleteTodo}
-                onSaveMemo={saveMemo}
-                onDeleteMemo={deleteMemo}
-                onOpenLessonInRecords={openTodayLessonInScheduleRecords}
-              />
-            )}
-            {!onboardingVisible && view === "calendar" && (
-              <CalendarView
-                vault={vault}
-                amountsVisible={amountsVisible}
-                onUpdateLessons={updateLessons}
-                onWeekStartChange={updateWeekStart}
-                onOpenLessonInRecords={openCalendarLessonInScheduleRecords}
-                focusRequest={calendarOverviewFocus}
-              />
-            )}
-            {!onboardingVisible && view === "schedule" && (
-              <ScheduleView
-                vault={vault}
-                amountsVisible={amountsVisible}
-                onAddLesson={addLesson}
-                onAddLessons={addLessons}
-                onAddLessonAndUpdateLesson={addLessonAndUpdateLesson}
-                onUpdateLesson={updateLesson}
-                onUpdateLessons={updateLessons}
-                onDeleteLesson={deleteLesson}
-                onRestoreDeletedLessons={restoreDeletedLessons}
-                onPermanentlyDeleteDeletedLessons={permanentlyDeleteDeletedLessons}
-                onAddCustomTimePreset={addCustomTimePreset}
-                onDeleteCustomTimePreset={deleteCustomTimePreset}
-                onGenerateDrafts={generateDrafts}
-                onWeekStartChange={updateWeekStart}
-                role={role}
-                token={token}
-                calendarFocus={scheduleCalendarFocus}
-                aiSession={aiScheduleSession}
-                onAiSessionChange={updateAiScheduleSession}
-                onApplyAiDraft={applyAiScheduleDraft}
-                onReturnToView={returnToViewFromSchedule}
-              />
-            )}
-            {!onboardingVisible && view === "progress" && (
-              <ProgressView
-                vault={vault}
-                token={token}
-                onSaveProgressRecord={saveStudentProgressRecord}
-                onSaveProgressRecords={saveStudentProgressRecords}
-                onDeleteProgressRecord={deleteStudentProgressRecord}
-                onSaveChecklistTemplate={saveProgressChecklistTemplate}
-                onDeleteChecklistTemplate={deleteProgressChecklistTemplate}
-                onSaveChecklistCompletion={saveProgressChecklistCompletion}
-                onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
-                onOpenLessonInRecords={openProgressLessonInScheduleRecords}
-              />
-            )}
-            {!onboardingVisible && view === "students" && (
-              <StudentsView
-                vault={vault}
-                amountsVisible={amountsVisible}
-                onAddCampus={(campus) =>
-                  updateVault((draft) => {
-                    draft.campuses.push(campus);
-                  })
-                }
-                onUpdateCampus={updateCampus}
-                onDeleteCampus={deleteCampus}
-                onAddStudent={(student) =>
-                  updateVault((draft) => {
-                    draft.students.push(student);
-                  })
-                }
-                onUpdateStudent={updateStudent}
-                onDeleteStudent={deleteStudent}
-                onUpdateProfile={updateProfile}
-                onAddCourse={(course) =>
-                  updateVault((draft) => {
-                    draft.courseGroups.push(course);
-                  })
-                }
-                onUpdateCourse={updateCourse}
-                onSyncCoursesToLessons={syncCoursesToLessons}
-                onDeleteCourse={deleteCourse}
-                onAddCustomCourseType={addCustomCourseType}
-                onUpdateCustomCourseType={updateCustomCourseType}
-                onDeleteCustomCourseType={deleteCustomCourseType}
-                onUpdateCourseTypeLabel={updateCourseTypeLabel}
-                onDeleteCourseType={deleteCourseType}
-                onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
-                onSyncCourseTypeFeeRuleToCourses={syncCourseTypeFeeRuleToCourses}
-                onAddSubject={addSubject}
-                onUpdateSubject={updateSubject}
-                onDeleteSubject={deleteSubject}
-                onTransferStudentCourse={transferStudentCourse}
-                onOpenSchedule={() => changeView("schedule")}
-              />
-            )}
-            {!onboardingVisible && view === "grades" && (
-              <GradesView
-                vault={vault}
-                onAddGradeRecord={addGradeRecord}
-                onDeleteGradeRecord={deleteGradeRecord}
-              />
-            )}
-            {!onboardingVisible && view === "payroll" && (
-              <PayrollReviewView
-                vault={vault}
-                amountsVisible={amountsVisible}
-                panelFocus={payrollReviewFocus}
-                storageScope={username}
-                onSaveScheduleImport={(state) =>
-                  updateVault((draft) => {
-                    draft.scheduleImport = state;
-                  })
-                }
-                onOpenReviewLessonInCalendar={openPayrollReviewLessonInScheduleRecords}
-                onOpenReconcileLessonInCalendar={openPayrollReconcileLessonInScheduleRecords}
-                onSuggestSchedule={openPayrollSuggestedScheduleInCalendar}
-              />
-            )}
-            {!onboardingVisible && view === "salary" && (
-              <SalaryView
-                vault={vault}
-                amountsVisible={amountsVisible}
-                onAddAdjustment={addSalaryAdjustment}
-                onDeleteAdjustment={deleteSalaryAdjustment}
-                onOpenLessonInCalendar={openLessonInCalendar}
-              />
-            )}
-            {!onboardingVisible && view === "admin" && role === "admin" && (
-              <AdminView
-                vault={vault}
-                token={token}
-                adminUsername={username}
-                persistLoginAfterClose={persistLoginAfterClose}
-                onPersistLoginAfterCloseChange={updatePersistLoginAfterClose}
-                onNoticeChange={(notice) =>
-                  updateVault((draft) => {
-                    draft.notice = notice;
-                  })
-                }
-                onUpdateProfile={(patch) =>
-                  updateVault((draft) => {
-                    draft.profile = { ...draft.profile, ...patch };
-                  })
-                }
-                onClearData={() => {
-                  clearVault(username);
-                  setVault(null);
-                  setAmountsVisible(false);
-                  setPassword("");
-                  setToken("");
-                  setDeletion(null);
-                  setCloudVersion("");
-                  setRemoteCloudVersion("");
-                  setSyncState("idle");
-                  setSyncMessage("");
-                  clearUnlockedSession();
-                }}
-              />
+            {!onboardingVisible && (
+              <Suspense fallback={<ViewLoading />}>
+                {view === "today" && (
+                  <TodayView
+                    vault={vault}
+                    selectedDate={selectedDate}
+                    amountsVisible={amountsVisible}
+                    onUpdateLesson={updateLesson}
+                    onAddTodo={addTodo}
+                    onUpdateTodo={updateTodo}
+                    onDeleteTodo={deleteTodo}
+                    onSaveMemo={saveMemo}
+                    onDeleteMemo={deleteMemo}
+                    onOpenLessonInRecords={openTodayLessonInScheduleRecords}
+                  />
+                )}
+                {view === "calendar" && (
+                  <CalendarView
+                    vault={vault}
+                    amountsVisible={amountsVisible}
+                    onUpdateLessons={updateLessons}
+                    onWeekStartChange={updateWeekStart}
+                    onOpenLessonInRecords={openCalendarLessonInScheduleRecords}
+                    focusRequest={calendarOverviewFocus}
+                  />
+                )}
+                {view === "schedule" && (
+                  <ScheduleView
+                    vault={vault}
+                    amountsVisible={amountsVisible}
+                    onAddLesson={addLesson}
+                    onAddLessons={addLessons}
+                    onAddLessonAndUpdateLesson={addLessonAndUpdateLesson}
+                    onUpdateLesson={updateLesson}
+                    onUpdateLessons={updateLessons}
+                    onDeleteLesson={deleteLesson}
+                    onRestoreDeletedLessons={restoreDeletedLessons}
+                    onPermanentlyDeleteDeletedLessons={permanentlyDeleteDeletedLessons}
+                    onAddCustomTimePreset={addCustomTimePreset}
+                    onDeleteCustomTimePreset={deleteCustomTimePreset}
+                    onGenerateDrafts={generateDrafts}
+                    onWeekStartChange={updateWeekStart}
+                    role={role}
+                    token={token}
+                    calendarFocus={scheduleCalendarFocus}
+                    aiSession={aiScheduleSession}
+                    onAiSessionChange={updateAiScheduleSession}
+                    onApplyAiDraft={applyAiScheduleDraft}
+                    onReturnToView={returnToViewFromSchedule}
+                  />
+                )}
+                {view === "progress" && (
+                  <ProgressView
+                    vault={vault}
+                    token={token}
+                    onSaveProgressRecord={saveStudentProgressRecord}
+                    onSaveProgressRecords={saveStudentProgressRecords}
+                    onDeleteProgressRecord={deleteStudentProgressRecord}
+                    onSaveChecklistTemplate={saveProgressChecklistTemplate}
+                    onDeleteChecklistTemplate={deleteProgressChecklistTemplate}
+                    onSaveChecklistCompletion={saveProgressChecklistCompletion}
+                    onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
+                    onOpenLessonInRecords={openProgressLessonInScheduleRecords}
+                  />
+                )}
+                {view === "students" && (
+                  <StudentsView
+                    vault={vault}
+                    amountsVisible={amountsVisible}
+                    onAddCampus={(campus) =>
+                      updateVault((draft) => {
+                        draft.campuses.push(campus);
+                      })
+                    }
+                    onUpdateCampus={updateCampus}
+                    onDeleteCampus={deleteCampus}
+                    onAddStudent={(student) =>
+                      updateVault((draft) => {
+                        draft.students.push(student);
+                      })
+                    }
+                    onUpdateStudent={updateStudent}
+                    onDeleteStudent={deleteStudent}
+                    onUpdateProfile={updateProfile}
+                    onAddCourse={(course) =>
+                      updateVault((draft) => {
+                        draft.courseGroups.push(course);
+                      })
+                    }
+                    onUpdateCourse={updateCourse}
+                    onSyncCoursesToLessons={syncCoursesToLessons}
+                    onDeleteCourse={deleteCourse}
+                    onAddCustomCourseType={addCustomCourseType}
+                    onUpdateCustomCourseType={updateCustomCourseType}
+                    onDeleteCustomCourseType={deleteCustomCourseType}
+                    onUpdateCourseTypeLabel={updateCourseTypeLabel}
+                    onDeleteCourseType={deleteCourseType}
+                    onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
+                    onSyncCourseTypeFeeRuleToCourses={syncCourseTypeFeeRuleToCourses}
+                    onAddSubject={addSubject}
+                    onUpdateSubject={updateSubject}
+                    onDeleteSubject={deleteSubject}
+                    onTransferStudentCourse={transferStudentCourse}
+                    onOpenSchedule={() => changeView("schedule")}
+                  />
+                )}
+                {view === "grades" && (
+                  <GradesView
+                    vault={vault}
+                    onAddGradeRecord={addGradeRecord}
+                    onDeleteGradeRecord={deleteGradeRecord}
+                  />
+                )}
+                {view === "payroll" && (
+                  <PayrollReviewView
+                    vault={vault}
+                    amountsVisible={amountsVisible}
+                    token={token}
+                    password={password}
+                    panelFocus={payrollReviewFocus}
+                    storageScope={username}
+                    onSaveScheduleImport={(state) =>
+                      updateVault((draft) => {
+                        draft.scheduleImport = state;
+                      })
+                    }
+                    onOpenReviewLessonInCalendar={openPayrollReviewLessonInScheduleRecords}
+                    onOpenReconcileLessonInCalendar={openPayrollReconcileLessonInScheduleRecords}
+                    onSuggestSchedule={openPayrollSuggestedScheduleInCalendar}
+                  />
+                )}
+                {view === "salary" && (
+                  <SalaryView
+                    vault={vault}
+                    amountsVisible={amountsVisible}
+                    onAddAdjustment={addSalaryAdjustment}
+                    onDeleteAdjustment={deleteSalaryAdjustment}
+                    onOpenLessonInCalendar={openLessonInCalendar}
+                  />
+                )}
+                {view === "admin" && role === "admin" && (
+                  <AdminView
+                    vault={vault}
+                    token={token}
+                    adminUsername={username}
+                    persistLoginAfterClose={persistLoginAfterClose}
+                    onPersistLoginAfterCloseChange={updatePersistLoginAfterClose}
+                    onNoticeChange={(notice) =>
+                      updateVault((draft) => {
+                        draft.notice = notice;
+                      })
+                    }
+                    onUpdateProfile={(patch) =>
+                      updateVault((draft) => {
+                        draft.profile = { ...draft.profile, ...patch };
+                      })
+                    }
+                    onClearData={clearCurrentLocalCache}
+                  />
+                )}
+              </Suspense>
             )}
           </motion.div>
         </AnimatePresence>
@@ -2805,6 +2839,14 @@ export function App() {
 const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
   ...navItems.map((item) => ({ key: item.key, label: item.label }))
 ];
+
+function ViewLoading() {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-sm font-bold text-[#64748b]">
+      正在加载...
+    </div>
+  );
+}
 
 function noticeReadKey(username: string): string {
   return `teacher-salary-tracker:notice-read:${username}`;
@@ -2837,46 +2879,8 @@ function shouldShowOnboarding(vault: TeacherVault): boolean {
   );
 }
 
-function persistentLoginPreferenceKey(username: string): string {
-  return `${persistentLoginPreferencePrefix}${encodeURIComponent(username)}`;
-}
-
-function readPersistentLoginPreference(username: string): boolean {
-  if (!username.trim()) return false;
-  return localStorage.getItem(persistentLoginPreferenceKey(username.trim())) === "true";
-}
-
-function writePersistentLoginPreference(username: string, persistAfterClose: boolean): void {
-  if (!username.trim()) return;
-  localStorage.setItem(persistentLoginPreferenceKey(username.trim()), persistAfterClose ? "true" : "false");
-}
-
-function readUnlockedSession(): StoredUnlockedSession | null {
-  const sessionSession = sessionStorage.getItem(unlockedSessionKey);
-  if (sessionSession) {
-    return { raw: sessionSession, persistAfterClose: false };
-  }
-  const persistentSession = localStorage.getItem(unlockedSessionKey);
-  if (persistentSession) {
-    return { raw: persistentSession, persistAfterClose: true };
-  }
-  return null;
-}
-
-function writeUnlockedSession(session: UnlockedSession): void {
-  const serialized = JSON.stringify(session);
-  if (session.persistAfterClose) {
-    localStorage.setItem(unlockedSessionKey, serialized);
-    sessionStorage.removeItem(unlockedSessionKey);
-    return;
-  }
-  sessionStorage.setItem(unlockedSessionKey, serialized);
-  localStorage.removeItem(unlockedSessionKey);
-}
-
-function clearUnlockedSession(): void {
-  sessionStorage.removeItem(unlockedSessionKey);
-  localStorage.removeItem(unlockedSessionKey);
+function isSessionRejected(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
 }
 
 function greetingFor(date: Date): string {

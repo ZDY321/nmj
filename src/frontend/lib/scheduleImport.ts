@@ -1,7 +1,13 @@
-import * as XLSX from "xlsx";
+import type { WorkSheet } from "xlsx";
 import type { CourseGroup, CourseType, Lesson, TeacherVault } from "@/shared/types";
 import { compareByName, lessonCampusId } from "@/frontend/lib/helpers";
 import { timesOverlap } from "@/frontend/lib/time";
+
+type XlsxModule = typeof import("xlsx");
+
+function loadXlsx(): Promise<XlsxModule> {
+  return import("xlsx");
+}
 
 export type ImportedScheduleLesson = {
   id: string;
@@ -174,6 +180,7 @@ export function parseScheduleCell(
 }
 
 export async function parseScheduleWorkbookFile(file: File): Promise<ImportedScheduleLesson[]> {
+  const XLSX = await loadXlsx();
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: "array" });
   const campusName = parseCampusFromFileName(file.name) ?? "";
@@ -287,11 +294,12 @@ export function summarizeImportPreview(rows: ImportPreviewLesson[]): ScheduleImp
   };
 }
 
-export function downloadMergedScheduleWorkbook(lessons: ImportedScheduleLesson[]): MergedScheduleExportSummary {
+export async function downloadMergedScheduleWorkbook(lessons: ImportedScheduleLesson[]): Promise<MergedScheduleExportSummary> {
   if (lessons.length === 0) {
     throw new Error("请先选择要合并的教务 Excel。");
   }
 
+  const XLSX = await loadXlsx();
   const sortedLessons = [...lessons].sort(compareImportedLessons);
   const dayGroups = groupImportedLessonsByDate(sortedLessons);
   const summary: MergedScheduleExportSummary = {
@@ -318,8 +326,8 @@ export function downloadMergedScheduleWorkbook(lessons: ImportedScheduleLesson[]
     { hpt: 8 },
     { hpt: 22 }
   ];
-  styleMergedSheetHeader(dailySheet, 1, 5);
-  styleMergedSheetHeader(dailySheet, 3, 8);
+  styleMergedSheetHeader(dailySheet, 1, 5, XLSX);
+  styleMergedSheetHeader(dailySheet, 3, 8, XLSX);
   XLSX.utils.book_append_sheet(workbook, dailySheet, "每日合并");
 
   const detailSheet = XLSX.utils.aoa_to_sheet(buildMergedDetailRows(sortedLessons));
@@ -343,7 +351,7 @@ export function downloadMergedScheduleWorkbook(lessons: ImportedScheduleLesson[]
     { wch: 50 }
   ];
   detailSheet["!rows"] = [{ hpt: 22 }];
-  styleMergedSheetHeader(detailSheet, 1, 17);
+  styleMergedSheetHeader(detailSheet, 1, 17, XLSX);
   XLSX.utils.book_append_sheet(workbook, detailSheet, "课程明细");
   XLSX.writeFile(workbook, `教务课表合并_${mergedExportDateRange(sortedLessons)}.xlsx`);
   return summary;
@@ -431,7 +439,7 @@ function buildMergedDetailRows(lessons: ImportedScheduleLesson[]): Array<Array<s
   ];
 }
 
-function styleMergedSheetHeader(sheet: XLSX.WorkSheet, rowNumber: number, columnCount: number) {
+function styleMergedSheetHeader(sheet: WorkSheet, rowNumber: number, columnCount: number, XLSX: XlsxModule) {
   for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
     const cellAddress = XLSX.utils.encode_cell({ r: rowNumber - 1, c: columnIndex });
     const cell = sheet[cellAddress];

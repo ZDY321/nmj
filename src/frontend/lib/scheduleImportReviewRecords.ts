@@ -21,6 +21,9 @@ import {
   resolutionKey
 } from "@/frontend/lib/scheduleImportReviewMatching";
 
+export const savedScheduleImportReviewLimit = 6;
+const savedScheduleImportRawTextLimit = 240;
+
 export function buildNextScheduleImportState(
   vault: TeacherVault,
   context: {
@@ -44,7 +47,7 @@ export function buildNextScheduleImportState(
     reviews: [
       review,
       ...(previous?.reviews ?? []).filter((item) => item.id !== review.id)
-    ].slice(0, 20),
+    ].slice(0, savedScheduleImportReviewLimit),
     splitMergeExcludedLessonIds: context.splitMergeExcludedLessonIds ?? previous?.splitMergeExcludedLessonIds ?? [],
     updatedAt: now
   };
@@ -109,7 +112,7 @@ function buildReviewRecord(
         presentCount: row.presentCount,
         expectedCount: row.expectedCount,
         note: row.note,
-        rawText: row.rawText ? row.rawText.slice(0, 600) : "",
+        rawText: row.rawText ? row.rawText.slice(0, savedScheduleImportRawTextLimit) : "",
         warnings: row.warnings,
         matchedCourseId: row.matchedCourseId,
         mappedCourseId: row.mappedCourseId,
@@ -141,7 +144,7 @@ export function buildScheduleImportStateWithoutReview(
   return {
     mappings: { ...mapping },
     resolutions: { ...resolutions },
-    reviews: vault.scheduleImport?.reviews ?? [],
+    reviews: (vault.scheduleImport?.reviews ?? []).slice(0, savedScheduleImportReviewLimit),
     splitMergeExcludedLessonIds: splitMergeExcludedLessonIds ?? vault.scheduleImport?.splitMergeExcludedLessonIds ?? [],
     updatedAt: new Date().toISOString()
   };
