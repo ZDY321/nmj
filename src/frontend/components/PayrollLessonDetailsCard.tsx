@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { completedAmount } from "@/frontend/lib/calculations";
+import { completedAmount, type ObligationLessonDeduction } from "@/frontend/lib/calculations";
 import {
   campusName,
   courseName,
@@ -28,6 +28,7 @@ export function PayrollLessonDetailsCard({
   amountsVisible,
   courseOptions,
   detailLessons,
+  obligationLessonDeductions,
   filteredLessonCount,
   startDateFilter,
   endDateFilter,
@@ -45,6 +46,7 @@ export function PayrollLessonDetailsCard({
   amountsVisible: boolean;
   courseOptions: CourseGroup[];
   detailLessons: Lesson[];
+  obligationLessonDeductions: ObligationLessonDeduction[];
   filteredLessonCount: number;
   startDateFilter: string;
   endDateFilter: string;
@@ -61,6 +63,7 @@ export function PayrollLessonDetailsCard({
   function hasAttendanceException(lesson: Lesson): boolean {
     return lesson.attendance.some((entry) => entry.status === "leave_requested" || entry.status === "absent" || entry.status === "makeup_pending");
   }
+  const obligationDeductionByLessonId = new Map(obligationLessonDeductions.map((item) => [item.lessonId, item]));
 
   return (
     <Card className="overflow-hidden">
@@ -116,6 +119,7 @@ export function PayrollLessonDetailsCard({
         {detailLessons.map((lesson, index) => {
           const hasException = hasAttendanceException(lesson);
           const attendanceNoteText = lessonAttendanceNoteText(vault, lesson);
+          const obligationDeduction = obligationDeductionByLessonId.get(lesson.id);
           return (
             <motion.button
               key={lesson.id}
@@ -135,6 +139,11 @@ export function PayrollLessonDetailsCard({
                     <Badge variant="secondary">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                     <Badge variant={lessonStatusVariant(lesson.status)}>{lessonStatusLabels[lesson.status]}</Badge>
                     <Badge variant="secondary">{courseTypeLabel(vault, lesson.type)}</Badge>
+                    {obligationDeduction && (
+                      <Badge variant="destructive">
+                        义务扣除 {obligationDeduction.deductedHours.toFixed(1)}h · {formatPrivateMoney(obligationDeduction.amount, amountsVisible)}
+                      </Badge>
+                    )}
                   </div>
                   <div className="mt-2 text-sm font-semibold text-[#475569]">
                     {lesson.date} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lessonCampusId(vault, lesson))}

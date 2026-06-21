@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { ChevronDown, Download, FileSpreadsheet, MapPin, RefreshCw, Save, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,10 +58,40 @@ export function ScheduleImportHeaderPanel({
   const hasUnmappedFiles = fileSummaries.some((file) => !fileCampusOverrides[file.fileName]);
   const allFilesMapped = fileSummaries.length > 0 && !hasUnmappedFiles;
   const [importSetupExpanded, setImportSetupExpanded] = useState(() => !allFilesMapped);
+  const [draggingFiles, setDraggingFiles] = useState(false);
 
   useEffect(() => {
     setImportSetupExpanded(!allFilesMapped);
   }, [allFilesMapped, fileSummaryKey]);
+
+  function handleDragEnter(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!loading) setDraggingFiles(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = loading ? "none" : "copy";
+    if (!loading) setDraggingFiles(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDraggingFiles(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingFiles(false);
+    if (loading || event.dataTransfer.files.length === 0) return;
+    onFilesSelected(event.dataTransfer.files);
+  }
 
   return (
     <>
@@ -118,15 +148,22 @@ export function ScheduleImportHeaderPanel({
 
         {importSetupExpanded && (
           <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
-            <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+            <div
+              className={`rounded-[14px] border bg-[#f8fbff] p-4 transition-colors ${draggingFiles ? "border-[#1557c2] ring-2 ring-[#bfdbfe]" : "border-[#dbe4ef]"}`}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
                 <FileSpreadsheet size={16} className="text-[#1557c2]" /> 教务 Excel 文件
               </div>
               <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-3 text-xs font-extrabold text-[#1557c2] transition-colors hover:bg-[#eaf2ff] sm:px-4 sm:text-sm">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
+                  <label className={`flex min-h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed px-3 py-3 text-center text-xs font-extrabold transition-colors sm:px-4 sm:text-sm ${draggingFiles ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#bfdbfe] bg-white text-[#1557c2] hover:bg-[#eaf2ff]"}`}>
                     {loading ? <RefreshCw size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-                    导入 Excel
+                    <span>{draggingFiles ? "松开导入 Excel" : "拖拽或选择 Excel"}</span>
+                    <span className="text-[11px] font-bold text-[#64748b]">支持 .xls / .xlsx 多文件</span>
                     <input
                       type="file"
                       accept=".xls,.xlsx"
@@ -159,7 +196,6 @@ export function ScheduleImportHeaderPanel({
               <div className="mt-3 rounded-[12px] border border-[#bfdbfe] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2]">
                 <div className="font-extrabold text-[#061226]">文件名识别规则</div>
                 <div>不需要必须放在括号内；文件名中包含“档案信息”的校区名称即可自动识别。括号只是可选写法，例如“2026-05-课表-城南校区.xlsx”或“校宝课表导出2026-06-20（外国语校区鹏成教育）.xlsx”。</div>
-                <div>文件名建议包含年份，例如“2026”；没有年份时会按当前年份解析。多个括号同时存在时，会优先看带“校区、中心、分校、教学点”的括号内容，同时也会从完整文件名匹配校区关键词。</div>
               </div>
             </div>
 

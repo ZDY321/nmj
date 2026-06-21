@@ -112,14 +112,36 @@ function findCampusByName(vault: TeacherVault, values: string | string[]) {
     .filter(Boolean);
   if (normalizedValues.length === 0) return undefined;
   const campuses = [...vault.campuses].sort((a, b) => normalizeText(b.name).length - normalizeText(a.name).length);
-  return campuses.find((campus) => {
-    const campusKeys = [campus.name, campus.id].map(normalizeText).filter(Boolean);
-    return campusKeys.some((campusKey) =>
-      normalizedValues.some((value) => value === campusKey || value.includes(campusKey) || campusKey.includes(value))
-    );
+  const matches = campuses.flatMap((campus) => {
+    const campusNameKey = normalizeText(campus.name);
+    const campusIdKey = normalizeText(campus.id);
+    return normalizedValues.flatMap((value, valueIndex) => {
+      const nameScore = campusNameMatchScore(campusNameKey, value);
+      const idScore = campusIdKey && value === campusIdKey ? 1000 : 0;
+      const score = Math.max(nameScore, idScore);
+      return score > 0 ? [{ campus, score, valueIndex }] : [];
+    });
   });
+  return matches.sort((a, b) =>
+    b.score - a.score ||
+    a.valueIndex - b.valueIndex ||
+    normalizeText(b.campus.name).length - normalizeText(a.campus.name).length ||
+    compareByName(a.campus.name, b.campus.name)
+  )[0]?.campus;
 }
 
 function normalizeText(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, "");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[【】\[\]{}（）()_\-—–·.,，。:：]/g, "");
+}
+
+function campusNameMatchScore(campusKey: string, value: string): number {
+  if (!campusKey || !value) return 0;
+  if (value === campusKey) return 900 + campusKey.length;
+  if (value.includes(campusKey) && campusKey.length >= 2) return 700 + campusKey.length;
+  if (campusKey.includes(value) && value.length >= 3) return 600 + value.length;
+  return 0;
 }

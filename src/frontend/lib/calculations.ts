@@ -955,6 +955,7 @@ export type ObligationSummary = {
   fallbackHours: number;
   fallbackAmount: number;
   courseBreakdown: ObligationCourseDeduction[];
+  lessonDeductions: ObligationLessonDeduction[];
   amount: number;
 };
 
@@ -963,6 +964,14 @@ export type ObligationCourseDeduction = {
   courseName: string;
   lessonCount: number;
   availableHours: number;
+  deductedHours: number;
+  amount: number;
+};
+
+export type ObligationLessonDeduction = {
+  lessonId: string;
+  courseId: string;
+  courseName: string;
   deductedHours: number;
   amount: number;
 };
@@ -981,6 +990,7 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
   let courseDeductedHours = 0;
   let courseDeductionAmount = 0;
   const breakdown = new Map<string, ObligationCourseDeduction & { firstDeductOrder: number }>();
+  const lessonDeductions: ObligationLessonDeduction[] = [];
   const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, month);
   const eligibleLessons = vault.lessons
     .filter((lesson) => monthOf(lesson.date) === month && lesson.type !== "trial" && completedHours(lesson, vault) > 0)
@@ -1040,6 +1050,13 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
       current.deductedHours += hoursToDeduct;
       current.amount += amountToDeduct;
     }
+    lessonDeductions.push({
+      lessonId: item.lesson.id,
+      courseId: item.lesson.courseGroupId,
+      courseName: item.course?.name ?? "未知课程",
+      deductedHours: hoursToDeduct,
+      amount: Math.round(amountToDeduct)
+    });
     courseDeductedHours += hoursToDeduct;
     courseDeductionAmount += amountToDeduct;
     remainingHours -= hoursToDeduct;
@@ -1070,6 +1087,7 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
     fallbackHours,
     fallbackAmount,
     courseBreakdown,
+    lessonDeductions: mode === "manual" ? [] : lessonDeductions,
     amount: mode === "manual" ? manualAmount : autoAmount
   };
 }

@@ -21,7 +21,8 @@ export function PayrollReviewView({
   panelFocus,
   storageScope,
   onSaveScheduleImport,
-  onOpenLessonInCalendar,
+  onOpenReviewLessonInCalendar,
+  onOpenReconcileLessonInCalendar,
   onSuggestSchedule
 }: {
   vault: TeacherVault;
@@ -29,7 +30,8 @@ export function PayrollReviewView({
   panelFocus?: { panel: PayrollPanel; nonce: number } | null;
   storageScope?: string;
   onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
-  onOpenLessonInCalendar?: (lesson: Lesson) => void;
+  onOpenReviewLessonInCalendar?: (lesson: Lesson) => void;
+  onOpenReconcileLessonInCalendar?: (lesson: Lesson) => void;
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
 }) {
   const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
@@ -112,7 +114,7 @@ export function PayrollReviewView({
           amountsVisible={amountsVisible}
           storageScope={storageScope}
           onSaveScheduleImport={onSaveScheduleImport}
-          onOpenLesson={onOpenLessonInCalendar}
+          onOpenLesson={onOpenReconcileLessonInCalendar}
           onSuggestSchedule={onSuggestSchedule}
         />
       ) : (
@@ -180,6 +182,7 @@ export function PayrollReviewView({
         amountsVisible={amountsVisible}
         courseOptions={courseOptions}
         detailLessons={detailLessons}
+        obligationLessonDeductions={obligationDeductionApplies ? currentCampusObligation.lessonDeductions : []}
         filteredLessonCount={filteredLessons.length}
         startDateFilter={detailStartDateFilter}
         endDateFilter={detailEndDateFilter}
@@ -191,7 +194,7 @@ export function PayrollReviewView({
         onCourseFilterChange={setDetailCourseFilter}
         onStudentFilterChange={setDetailStudentFilter}
         onStatusFilterChange={setDetailStatusFilter}
-        onOpenLesson={onOpenLessonInCalendar}
+        onOpenLesson={onOpenReviewLessonInCalendar}
       />
 
       </>

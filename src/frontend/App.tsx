@@ -2150,6 +2150,15 @@ export function App() {
     openLessonInScheduleRecords(lesson, { kind: "view", view: "progress", label: "返回进度与作业" });
   }
 
+  function openPayrollReviewLessonInScheduleRecords(lesson: Lesson) {
+    openLessonInScheduleRecords(lesson, {
+      kind: "view",
+      view: "payroll",
+      label: "返回工资核对",
+      payrollPanel: "review"
+    });
+  }
+
   function openPayrollReconcileLessonInScheduleRecords(lesson: Lesson) {
     openLessonInScheduleRecords(lesson, {
       kind: "view",
@@ -2739,7 +2748,8 @@ export function App() {
                     draft.scheduleImport = state;
                   })
                 }
-                onOpenLessonInCalendar={openPayrollReconcileLessonInScheduleRecords}
+                onOpenReviewLessonInCalendar={openPayrollReviewLessonInScheduleRecords}
+                onOpenReconcileLessonInCalendar={openPayrollReconcileLessonInScheduleRecords}
                 onSuggestSchedule={openPayrollSuggestedScheduleInCalendar}
               />
             )}

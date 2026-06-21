@@ -81,11 +81,16 @@ const subjectHints = ["语文", "数学", "英语", "物理", "化学", "生物"
 export function parseCampusFromFileName(fileName: string): string | undefined {
   const baseName = fileName.replace(/\.[^.]+$/, "");
   const groups = Array.from(baseName.matchAll(/[（(]([^）)]+)[）)]/g))
-    .map((match) => match[1]?.trim())
+    .map((match) => cleanCampusNameCandidate(match[1] ?? ""))
     .filter((value): value is string => Boolean(value));
-  if (groups.length === 0) return undefined;
-  const candidates = groups.filter((value) => !/^\d{4}(?:[-_/年]\d{1,2})?(?:[-_/月]\d{1,2}日?)?$/.test(value) && !/^(副本|copy|备份|课表|课程表)$/i.test(value));
-  return candidates.find((value) => /校区|中心|分校|教学点/.test(value)) ?? candidates[0] ?? groups[0];
+  const groupCandidates = groups.filter(isCampusNameCandidate);
+  const nameCandidates = extractCampusCandidatesFromBaseName(baseName);
+  const candidates = [
+    ...groupCandidates.filter((value) => /校区|中心|分校|教学点/.test(value)),
+    ...groupCandidates,
+    ...nameCandidates
+  ];
+  return firstUniqueCandidate(candidates);
 }
 
 export function parseExportYearFromFileName(fileName: string): number | undefined {
@@ -603,6 +608,50 @@ function normalizeTime(value: string): string | null {
   const minute = Number(match[2]);
   if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 23 || minute > 59) return null;
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function extractCampusCandidatesFromBaseName(baseName: string): string[] {
+  const withoutGroups = baseName.replace(/[（(][^）)]+[）)]/g, " ");
+  const cleaned = cleanCampusNameCandidate(
+    withoutGroups
+      .replace(/(^|[^\d])20\d{2}(?:[-_/年.]\d{1,2})?(?:[-_/月.]\d{1,2}日?)?/g, "$1 ")
+      .replace(/\d{1,2}月\d{1,2}日/g, " ")
+      .replace(/校宝|教务|课程表|课表|导出|档案信息|excel|xlsx?|副本|备份|copy/gi, " ")
+      .replace(/[【】\[\]{}（）()]+/g, " ")
+      .replace(/[_\-—–·.,，。]+/g, " ")
+  );
+  if (!cleaned) return [];
+  return cleaned
+    .split(/[、,，;；\s]+/)
+    .map(cleanCampusNameCandidate)
+    .filter(isCampusNameCandidate);
+}
+
+function firstUniqueCandidate(candidates: string[]): string | undefined {
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const normalized = normalizeText(candidate);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    return candidate;
+  }
+  return undefined;
+}
+
+function cleanCampusNameCandidate(value: string): string {
+  return value
+    .trim()
+    .replace(/^[\s_\-—–·.,，。:：]+|[\s_\-—–·.,，。:：]+$/g, "")
+    .replace(/\s+/g, "");
+}
+
+function isCampusNameCandidate(value: string): boolean {
+  const normalized = normalizeText(value);
+  if (normalized.length < 2) return false;
+  if (/^\d+$/.test(normalized)) return false;
+  if (/^\d{4}(?:[-_/年.]?\d{1,2})?(?:[-_/月.]?\d{1,2}日?)?$/.test(value.trim())) return false;
+  if (/^(副本|copy|备份|课表|课程表|教务|导出|excel|xlsx?|校宝)$/i.test(value.trim())) return false;
+  return /[\u4e00-\u9fa5a-z0-9]/i.test(value);
 }
 
 function systemLessonCampusId(vault: TeacherVault, lesson: Lesson): string | undefined {
