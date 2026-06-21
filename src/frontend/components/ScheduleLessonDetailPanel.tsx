@@ -65,19 +65,23 @@ type ScheduleLessonDetailPanelProps = {
   onSelectedStartTimeChange: (time: string) => void;
   onSelectedStatusChange: (status: Lesson["status"]) => void;
   onRecalculateSelectedFee: () => void;
+  onResetBillingHoursToSuggested: () => void;
   onToggleAttendancePanel: () => void;
   onToggleDetailMakeupStudent: (studentId: string) => void;
   onToggleMakeupArrangement: () => void;
   onUpdateAttendance: (studentId: string, status: AttendanceStatus) => void;
   onUpdateAttendanceMakeupExempt: (studentId: string, makeupExempt: boolean) => void;
   onUpdateAttendanceNote: (studentId: string, note: string) => void;
+  onUpdateBillingHours: (hours: number) => void;
   onUpdateSelected: (patch: Partial<Lesson>, shouldRecalculate?: boolean) => void;
   onUpdateTemporaryFee: (studentId: string, fee: number | undefined) => void;
   onUpdateTrialStats: (patch: Pick<Partial<Lesson>, "trialStudentCount" | "trialFee">) => void;
   scheduledMakeupLessonForStudent: (originalLessonId: string, studentId: string) => Lesson | undefined;
   selected: Lesson;
   selectedAttendanceEntries: Lesson["attendance"];
+  selectedActualHours: number;
   selectedAttendedStudentCount: number;
+  selectedBillingHours: number;
   selectedCalculatedAmount: number;
   selectedCalculatedPresentCount: number;
   selectedCourse: CourseGroup | undefined;
@@ -90,6 +94,7 @@ type ScheduleLessonDetailPanelProps = {
   selectedPreviousHomework: string;
   selectedPreviousLesson: Lesson | undefined;
   selectedPreviousTaught: string;
+  selectedSuggestedBillingHours: number;
   selectedTemporaryStudent: Student | undefined;
   selectedWholeLessonPending: boolean;
   setAttendanceStudentFilter: (value: string) => void;
@@ -137,19 +142,23 @@ export function ScheduleLessonDetailPanel({
   onSelectedStartTimeChange,
   onSelectedStatusChange,
   onRecalculateSelectedFee,
+  onResetBillingHoursToSuggested,
   onToggleAttendancePanel,
   onToggleDetailMakeupStudent,
   onToggleMakeupArrangement,
   onUpdateAttendance,
   onUpdateAttendanceMakeupExempt,
   onUpdateAttendanceNote,
+  onUpdateBillingHours,
   onUpdateSelected,
   onUpdateTemporaryFee,
   onUpdateTrialStats,
   scheduledMakeupLessonForStudent,
   selected,
   selectedAttendanceEntries,
+  selectedActualHours,
   selectedAttendedStudentCount,
+  selectedBillingHours,
   selectedCalculatedAmount,
   selectedCalculatedPresentCount,
   selectedCourse,
@@ -162,6 +171,7 @@ export function ScheduleLessonDetailPanel({
   selectedPreviousHomework,
   selectedPreviousLesson,
   selectedPreviousTaught,
+  selectedSuggestedBillingHours,
   selectedTemporaryStudent,
   selectedWholeLessonPending,
   setAttendanceStudentFilter,
@@ -274,6 +284,27 @@ export function ScheduleLessonDetailPanel({
                   <option key={key} value={key}>{value}</option>
                 ))}
               </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">计费课时</label>
+              <Input
+                type="number"
+                min={0}
+                step={0.5}
+                value={selectedBillingHours}
+                onChange={(event) => onUpdateBillingHours(Number(event.target.value))}
+              />
+              <div className="rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                <div>实际时长 {selectedActualHours.toFixed(2)}h · 建议计费 {selectedSuggestedBillingHours.toFixed(1)}h</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span>{selected.feeSnapshot.manualHours ? "当前使用手动计费课时，重算金额会保留这个课时。" : "当前按时间和课程规则自动建议计费课时。"}</span>
+                  {selected.feeSnapshot.manualHours && (
+                    <Button type="button" variant="outline" size="sm" className="h-7 bg-white text-xs" onClick={onResetBillingHoursToSuggested}>
+                      按时间建议
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">金额</label>

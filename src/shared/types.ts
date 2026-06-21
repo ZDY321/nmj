@@ -269,6 +269,7 @@ export type FeeSnapshot = {
   trialStudentCount?: number;
   trialFee?: number;
   hours?: number;
+  manualHours?: boolean;
   manualAdjustment?: number;
   amount: number;
 };

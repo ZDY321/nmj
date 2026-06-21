@@ -399,22 +399,27 @@ export function lessonTimeRangeLabel(lesson: Pick<Lesson, "startTime" | "endTime
   return `${lesson.startTime}-${lesson.endTime} · 时长 ${lessonDurationText(lesson)}`;
 }
 
-export function courseTimeRangeBillingLabel(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime">, courseId?: string): string {
+export function courseTimeRangeBillingLabel(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime"> & Partial<Pick<Lesson, "feeSnapshot">>, courseId?: string): string {
   const course = courseId ? getCourse(vault, courseId) : undefined;
   if (!course || !courseUsesClassBilling(course, vault)) {
     return lessonTimeRangeLabel(lesson);
   }
-  return `${lesson.startTime}-${lesson.endTime} · 班课计费按 ${formatDurationHours(billableHoursForCourseLesson(course, lesson, vault))}计算`;
+  const hasSnapshotHours = lesson.feeSnapshot && Number.isFinite(lesson.feeSnapshot.hours);
+  const hours = hasSnapshotHours ? Math.max(lesson.feeSnapshot?.hours ?? 0, 0) : billableHoursForCourseLesson(course, lesson, vault);
+  const prefix = lesson.feeSnapshot?.manualHours ? "手动计费" : "班课计费按";
+  return `${lesson.startTime}-${lesson.endTime} · ${prefix} ${formatDurationHours(hours)}计算`;
 }
 
-export function lessonTimeRangeBillingLabel(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime" | "courseGroupId">): string {
+export function lessonTimeRangeBillingLabel(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime" | "courseGroupId"> & Partial<Pick<Lesson, "feeSnapshot">>): string {
   return courseTimeRangeBillingLabel(vault, lesson, lesson.courseGroupId);
 }
 
-export function lessonBillingSummary(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime" | "courseGroupId">): string | undefined {
+export function lessonBillingSummary(vault: TeacherVault, lesson: Pick<Lesson, "startTime" | "endTime" | "courseGroupId"> & Partial<Pick<Lesson, "feeSnapshot">>): string | undefined {
   const course = getCourse(vault, lesson.courseGroupId);
   if (!course || !courseUsesClassBilling(course, vault)) return undefined;
-  return `班课计费按 ${formatDurationHours(billableHoursForCourseLesson(course, lesson, vault))}计算`;
+  const hasSnapshotHours = lesson.feeSnapshot && Number.isFinite(lesson.feeSnapshot.hours);
+  const hours = hasSnapshotHours ? Math.max(lesson.feeSnapshot?.hours ?? 0, 0) : billableHoursForCourseLesson(course, lesson, vault);
+  return `${lesson.feeSnapshot?.manualHours ? "手动计费" : "班课计费按"} ${formatDurationHours(hours)}计算`;
 }
 
 export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "type" | "expectedStudentIds" | "attendance" | "linkedOriginalLessonId">): string {

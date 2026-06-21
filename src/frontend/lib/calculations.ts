@@ -126,10 +126,14 @@ export function lessonBillableHours(lesson: Lesson): number {
 
 export function lessonBillableHoursForVault(vault: TeacherVault, lesson: Lesson): number {
   const course = getCourse(vault, lesson.courseGroupId);
-  if (course && courseUsesClassBilling(course, vault)) {
-    return billableHoursForCourseLesson(course, lesson, vault);
-  }
-  return lessonBillableHours(lesson);
+  const snapshotHours = lesson.feeSnapshot.hours;
+  if (Number.isFinite(snapshotHours)) return Math.max(snapshotHours ?? 0, 0);
+  return course ? billableHoursForCourseLesson(course, lesson, vault) : billableHoursForLesson(lesson);
+}
+
+export function suggestedLessonBillableHoursForVault(vault: TeacherVault, lesson: Lesson): number {
+  const course = getCourse(vault, lesson.courseGroupId);
+  return course ? billableHoursForCourseLesson(course, lesson, vault) : billableHoursForLesson(lesson);
 }
 
 function isPresentAttendanceEntry(lesson: Lesson, entry: Lesson["attendance"][number]): boolean {
@@ -465,12 +469,16 @@ export function salaryGradeAmountForCount(rule: SalaryGradeRule, courseType: Cou
 
 export const lessonFeeUnitHours = 2;
 
-export function lessonDurationMultiplier(lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
-  return billableHoursForLesson(lesson, rule) / lessonFeeUnitHours;
+export function lessonDurationMultiplier(lesson: Pick<Lesson, "startTime" | "endTime" | "type"> & Partial<Pick<Lesson, "feeSnapshot">>, rule?: FeeRule): number {
+  return (lesson.feeSnapshot && Number.isFinite(lesson.feeSnapshot.hours)
+    ? Math.max(lesson.feeSnapshot.hours ?? 0, 0)
+    : billableHoursForLesson(lesson, rule)) / lessonFeeUnitHours;
 }
 
-export function lessonDurationMultiplierForCourse(course: Pick<CourseGroup, "type" | "feeRule">, lesson: Pick<Lesson, "startTime" | "endTime">, vault?: TeacherVault): number {
-  return billableHoursForCourseLesson(course, lesson, vault) / lessonFeeUnitHours;
+export function lessonDurationMultiplierForCourse(course: Pick<CourseGroup, "type" | "feeRule">, lesson: Pick<Lesson, "startTime" | "endTime"> & Partial<Pick<Lesson, "feeSnapshot">>, vault?: TeacherVault): number {
+  return (lesson.feeSnapshot && Number.isFinite(lesson.feeSnapshot.hours)
+    ? Math.max(lesson.feeSnapshot.hours ?? 0, 0)
+    : billableHoursForCourseLesson(course, lesson, vault)) / lessonFeeUnitHours;
 }
 
 export function proratedLessonUnitAmount(unitAmount: number, lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
@@ -682,7 +690,9 @@ export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: Fee
   }
   const billingCourse = course ?? (vault ? getCourse(vault, lesson.courseGroupId) : undefined);
   const billingLesson = lessonWithCourseType(lesson, billingCourse);
-  const billableHours = billingCourse ? billableHoursForCourseLesson(billingCourse, lesson, vault) : billableHoursForLesson(billingLesson, rule);
+  const billableHours = Number.isFinite(lesson.feeSnapshot.hours)
+    ? Math.max(lesson.feeSnapshot.hours ?? 0, 0)
+    : billingCourse ? billableHoursForCourseLesson(billingCourse, lesson, vault) : billableHoursForLesson(billingLesson, rule);
   const durationMultiplier = billableHours / lessonFeeUnitHours;
   const extraFee = extraFeeTotal(lesson, rule, vault);
   if (billingLesson.type === "trial") {
@@ -768,14 +778,19 @@ export function getCourse(vault: TeacherVault, courseId: string): CourseGroup | 
 export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesson: Lesson): FeeSnapshot {
   const presentStudentCount = presentCount(lesson);
   const trialStudentCount = namedTrialStudentCount(lesson) + (lesson.trialStudentCount ?? 0);
-  const hours = billableHoursForCourseLesson(course, lesson, vault);
+  const suggestedHours = billableHoursForCourseLesson(course, lesson, vault);
+  const existingHours = lesson.feeSnapshot.hours;
+  const manualHours = lesson.feeSnapshot.manualHours === true && Number.isFinite(existingHours);
+  const hours = manualHours ? Math.max(existingHours ?? 0, 0) : suggestedHours;
+  const lessonForCalculation = { ...lesson, feeSnapshot: { ...lesson.feeSnapshot, hours } };
   const durationMultiplier = hours / lessonFeeUnitHours;
   const common = {
     presentStudentCount,
     trialStudentCount,
     trialFee: lesson.trialFee ?? 0,
     hours,
-    manualAdjustment: extraFeeTotal(lesson, course.feeRule, vault)
+    manualHours: manualHours ? true : undefined,
+    manualAdjustment: extraFeeTotal(lessonForCalculation, course.feeRule, vault)
   };
 
   if (course.feeRule.mode === "salary_grade") {
@@ -799,7 +814,7 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
       lessonUnitHours: lessonFeeUnitHours,
       durationMultiplier,
       unitAmount,
-      amount: calculateFeeWithVault(vault, course.feeRule, lesson, course)
+      amount: calculateFeeWithVault(vault, course.feeRule, lessonForCalculation, course)
     };
   }
 
@@ -833,7 +848,7 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
     lessonUnitHours: course.feeRule.mode === "class_headcount" ? lessonFeeUnitHours : undefined,
     durationMultiplier: course.feeRule.mode === "class_headcount" ? durationMultiplier : undefined,
     unitAmount,
-    amount: calculateFeeWithVault(vault, course.feeRule, lesson, course)
+    amount: calculateFeeWithVault(vault, course.feeRule, lessonForCalculation, course)
   };
 }
 

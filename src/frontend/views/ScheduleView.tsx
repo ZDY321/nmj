@@ -13,7 +13,7 @@ import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsLi
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { buildFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -491,6 +491,9 @@ export function ScheduleView({
   const selectedRecalculatedLesson = selected ? recalculateLessonFee(selected) : undefined;
   const selectedCalculatedAmount = selectedRecalculatedLesson?.feeSnapshot.amount ?? selected?.feeSnapshot.amount ?? 0;
   const selectedCalculatedPresentCount = selectedRecalculatedLesson?.feeSnapshot.presentStudentCount ?? (selected ? presentCount(selected) : 0);
+  const selectedActualHours = selected ? hoursBetween(selected.startTime, selected.endTime) : 0;
+  const selectedSuggestedBillingHours = selected ? suggestedLessonBillableHoursForVault(vault, selected) : 0;
+  const selectedBillingHours = selected?.feeSnapshot.hours ?? selectedSuggestedBillingHours;
   const selectedScheduledMakeupStudentIds = selected ? activeMakeupStudentIdsForOriginal(selected.id) : new Set<string>();
   const selectedLinkedMakeupLessons = selected && !selected.linkedOriginalLessonId ? activeMakeupLessonsByOriginal[selected.id] ?? [] : [];
   const selectedMakeupCandidateStudentIds = selected
@@ -1143,6 +1146,28 @@ export function ScheduleView({
   function recalculateSelectedFee() {
     if (!selected) return;
     onUpdateLesson(recalculateLessonFee(selected));
+  }
+
+  function updateSelectedBillingHours(hours: number) {
+    if (!selected) return;
+    const nextHours = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
+    onUpdateLesson(recalculateLessonFee({
+      ...selected,
+      feeSnapshot: {
+        ...selected.feeSnapshot,
+        hours: nextHours,
+        manualHours: true
+      }
+    }));
+  }
+
+  function resetSelectedBillingHoursToSuggested() {
+    if (!selected) return;
+    const { manualHours: _manualHours, hours: _hours, ...restSnapshot } = selected.feeSnapshot;
+    onUpdateLesson(recalculateLessonFee({
+      ...selected,
+      feeSnapshot: restSnapshot
+    }));
   }
 
   function updateSelectedStatus(status: Lesson["status"]) {
@@ -2083,19 +2108,23 @@ export function ScheduleView({
             onSelectedStartTimeChange={updateSelectedStartTime}
             onSelectedStatusChange={updateSelectedStatus}
             onRecalculateSelectedFee={recalculateSelectedFee}
+            onResetBillingHoursToSuggested={resetSelectedBillingHoursToSuggested}
             onToggleAttendancePanel={() => setAttendancePanelOpen((open) => !open)}
             onToggleDetailMakeupStudent={toggleDetailMakeupStudent}
             onToggleMakeupArrangement={() => setMakeupArrangementOpen((open) => !open)}
             onUpdateAttendance={updateAttendance}
             onUpdateAttendanceMakeupExempt={updateAttendanceMakeupExempt}
             onUpdateAttendanceNote={updateAttendanceNote}
+            onUpdateBillingHours={updateSelectedBillingHours}
             onUpdateSelected={updateSelected}
             onUpdateTemporaryFee={updateTemporaryFee}
             onUpdateTrialStats={updateTrialStats}
             scheduledMakeupLessonForStudent={scheduledMakeupLessonForStudent}
             selected={selected}
             selectedAttendanceEntries={selectedAttendanceEntries}
+            selectedActualHours={selectedActualHours}
             selectedAttendedStudentCount={selectedAttendedStudentCount}
+            selectedBillingHours={selectedBillingHours}
             selectedCalculatedAmount={selectedCalculatedAmount}
             selectedCalculatedPresentCount={selectedCalculatedPresentCount}
             selectedCourse={selectedCourse}
@@ -2108,6 +2137,7 @@ export function ScheduleView({
             selectedPreviousHomework={selectedPreviousHomework}
             selectedPreviousLesson={selectedPreviousLesson}
             selectedPreviousTaught={selectedPreviousTaught}
+            selectedSuggestedBillingHours={selectedSuggestedBillingHours}
             selectedTemporaryStudent={selectedTemporaryStudent}
             selectedWholeLessonPending={selectedWholeLessonPending}
             setAttendanceStudentFilter={setAttendanceStudentFilter}
