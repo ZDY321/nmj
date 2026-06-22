@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -22,12 +23,10 @@ export function useConfirmDialog() {
 
   const close = useCallback(() => setOptions(null), []);
 
-  const dialog = (
-    <>
-      {options && (
+  const dialogContent = options ? (
         <div className="app-fade-in fixed inset-0 z-[70] flex items-center justify-center bg-[#061226]/36 p-4 backdrop-blur-sm">
           <div
-            className="w-full max-w-[430px] overflow-hidden rounded-[20px] border border-[#dbe4ef] bg-white shadow-[0_28px_80px_rgba(6,18,38,0.24)]"
+            className="app-modal-panel w-full max-w-[430px] overflow-hidden rounded-[20px] border border-[#dbe4ef] bg-white shadow-[0_28px_80px_rgba(6,18,38,0.24)]"
           >
             <div className="flex items-start gap-4 p-5">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#fff3e4] text-[#f97316]">
@@ -59,8 +58,8 @@ export function useConfirmDialog() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    options.onSecondary?.();
                     close();
+                    options.onSecondary?.();
                   }}
                 >
                   {options.secondaryLabel ?? "保存后继续"}
@@ -70,8 +69,8 @@ export function useConfirmDialog() {
                 type="button"
                 variant={options.tone === "danger" ? "destructive" : "default"}
                 onClick={() => {
-                  options.onConfirm();
                   close();
+                  options.onConfirm();
                 }}
               >
                 {options.confirmLabel ?? "确认"}
@@ -79,9 +78,9 @@ export function useConfirmDialog() {
             </div>
           </div>
         </div>
-      )}
-    </>
-  );
+  ) : null;
+
+  const dialog = typeof document === "undefined" ? dialogContent : createPortal(dialogContent, document.body);
 
   return { confirm, dialog };
 }

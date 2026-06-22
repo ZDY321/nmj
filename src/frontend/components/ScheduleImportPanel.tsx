@@ -57,6 +57,7 @@ import {
   resolutionMarksRowResolved,
   resolutionStatusLabel,
   savedReviewEffectiveCounts,
+  savedScheduleImportReviewLimit,
   savedReviewTitle,
   statusPillClass,
   summarizeFiles,
@@ -344,7 +345,7 @@ export function ScheduleImportPanel({
     }
   }
 
-  function saveMapping() {
+  function performSaveMapping(afterSave?: () => void) {
     const savedMappingOk = writeSavedMapping(storageScope, mapping);
     const savedWorkspaceOk = writeSavedWorkspace(storageScope, {
       rawLessons,
@@ -376,8 +377,29 @@ export function ScheduleImportPanel({
         ? "课程映射和本次对账结果已保存到云端加密档案，换浏览器登录后也会复用。"
         : savedMappingOk && savedWorkspaceOk
           ? "课程映射和当前对账现场已保存到本机浏览器。"
-        : "保存失败：浏览器本地存储空间可能不足，请减少导入文件后再试。"
+          : "保存失败：浏览器本地存储空间可能不足，请减少导入文件后再试。"
     );
+    afterSave?.();
+  }
+
+  function requestSaveMapping(afterSave?: () => void) {
+    if (savedReviews.length >= savedScheduleImportReviewLimit) {
+      const oldestReview = savedReviews[savedScheduleImportReviewLimit - 1] ?? savedReviews[savedReviews.length - 1];
+      const oldestReviewText = oldestReview ? `：「${savedReviewTitle(oldestReview)}」` : "";
+      confirm({
+        title: "保存新的对账记录？",
+        description: `当前最多保留最近 ${savedScheduleImportReviewLimit} 次保存对账。继续保存会删除最早的一条保存记录${oldestReviewText}。`,
+        confirmLabel: "继续保存",
+        cancelLabel: "取消",
+        onConfirm: () => performSaveMapping(afterSave)
+      });
+      return;
+    }
+    performSaveMapping(afterSave);
+  }
+
+  function saveMapping() {
+    requestSaveMapping();
   }
 
   function deleteSavedReview(reviewId: string) {
@@ -503,7 +525,10 @@ export function ScheduleImportPanel({
               secondaryLabel: "保存后导入",
               cancelLabel: "取消",
               onSecondary: () => {
-                if (rows.length > 0) saveMapping();
+                if (rows.length > 0) {
+                  requestSaveMapping(() => loadSavedReviewIntoWorkspace(review));
+                  return;
+                }
                 loadSavedReviewIntoWorkspace(review);
               },
               onConfirm: () => loadSavedReviewIntoWorkspace(review)

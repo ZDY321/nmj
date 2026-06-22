@@ -131,10 +131,17 @@ export function ScheduleImportHeaderPanel({
             </span>
           </button>
           <div className="flex flex-wrap gap-2 lg:shrink-0">
-            <Button type="button" size="sm" variant="outline" className="h-8 bg-[#f8fbff] text-xs" disabled={rowCount === 0} onClick={onSave}>
+            <Button type="button" size="sm" className="h-8 text-xs" disabled={rowCount === 0} onClick={onSave}>
               <Save size={14} /> 保存对账
             </Button>
-            <Button type="button" size="sm" variant="outline" className="h-8 bg-[#f8fbff] text-xs" disabled={rawLessonCount === 0} onClick={onExport}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 border-[#1557c2] bg-[#1557c2] text-xs text-white shadow-[0_10px_18px_rgba(21,87,194,0.18)] hover:border-[#0f4ba8] hover:bg-[#0f4ba8]"
+              disabled={rawLessonCount === 0}
+              onClick={onExport}
+            >
               <Download size={14} /> 合并导出所有校区
             </Button>
           </div>
