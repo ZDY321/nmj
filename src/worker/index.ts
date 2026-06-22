@@ -16,6 +16,12 @@ import type {
   UserRole,
   UserStatus
 } from "../shared/types";
+import {
+  aiEndpointUrl,
+  aiProviderProtocol,
+  normalizeAiBaseUrl
+} from "../shared/aiEndpoint";
+import { handleApiRoutes, type ApiRouteHandlers } from "./router";
 
 type Env = {
   DB: D1Database;
@@ -1082,31 +1088,6 @@ async function updateFeedback(request: Request, env: Env, actor: AuthContext, fe
   return updated ? json(feedbackFromRow(updated)) : notFound();
 }
 
-function normalizeAiBaseUrl(baseUrl: string): string {
-  return baseUrl
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/\/+$/, "")
-    .replace(/\/v1\/chat\/completions$/i, "")
-    .replace(/\/chat\/completions$/i, "")
-    .replace(/\/v1\/responses$/i, "")
-    .replace(/\/responses$/i, "")
-    .replace(/\/v1\/messages$/i, "")
-    .replace(/\/messages$/i, "")
-    .replace(/\/+$/, "");
-}
-
-function endpointUrl(baseUrl: string, path: "chat/completions" | "responses" | "messages"): string {
-  const normalized = normalizeAiBaseUrl(baseUrl);
-  return /\/v1$/i.test(normalized) ? `${normalized}/${path}` : `${normalized}/v1/${path}`;
-}
-
-function aiProviderProtocol(provider: AiProviderRow | { provider: string }): "openai" | "openai_response" | "anthropic" {
-  if (provider.provider === "openai_response") return "openai_response";
-  if (provider.provider === "anthropic") return "anthropic";
-  return "openai";
-}
-
 function numberInRange(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -1623,7 +1604,7 @@ async function callOpenAiChatCompletions(
   provider: AiProviderRow,
   messages: Array<{ role: "system" | "user"; content: string }>
 ): Promise<AiCallResult> {
-  const requestUrl = endpointUrl(provider.base_url, "chat/completions");
+  const requestUrl = aiEndpointUrl(provider.base_url, "chat/completions");
   const requestBody = (options: { jsonMode: boolean; maxTokenField: "max_tokens" | "max_completion_tokens" | null; includeTemperature: boolean }) => ({
     model: provider.model,
     messages,
@@ -1683,7 +1664,7 @@ async function callOpenAiResponses(
   provider: AiProviderRow,
   messages: Array<{ role: "system" | "user"; content: string }>
 ): Promise<AiCallResult> {
-  const requestUrl = endpointUrl(provider.base_url, "responses");
+  const requestUrl = aiEndpointUrl(provider.base_url, "responses");
   const systemMessage = messages.find((message) => message.role === "system")?.content ?? "";
   const input = messages.filter((message) => message.role !== "system");
   const requestBody = (useJsonMode: boolean) => ({
@@ -1743,7 +1724,7 @@ async function callAnthropicMessages(
   provider: AiProviderRow,
   messages: Array<{ role: "system" | "user"; content: string }>
 ): Promise<AiCallResult> {
-  const requestUrl = endpointUrl(provider.base_url, "messages");
+  const requestUrl = aiEndpointUrl(provider.base_url, "messages");
   const systemMessage = messages.find((message) => message.role === "system")?.content ?? "";
   const anthropicMessages = messages.filter((message) => message.role !== "system");
   const response = await fetch(requestUrl, {
@@ -2136,215 +2117,50 @@ async function addDeletionEvent(
     .run();
 }
 
-async function handleAdminRequest(request: Request, env: Env): Promise<Response | null> {
-  const url = new URL(request.url);
-  const { pathname } = url;
 
-  if (isAuthorizedLegacyAdminRequest(request, env)) {
-    if (request.method === "PUT" && pathname === "/api/admin/login-notice") {
-      return updateLoginNotice(request, env);
-    }
-    if (request.method === "PUT" && pathname === "/api/admin/registration") {
-      return updateRegistrationSetting(request, env);
-    }
-    if (request.method === "POST" && pathname === "/api/admin/deletions/run-due") {
-      return runDueDeletions(env);
-    }
-  }
 
-  const context = await requireAuth(request, env);
-  if (context instanceof Response) {
-    return context;
-  }
-  const adminError = requireAdmin(context);
-  if (adminError) {
-    return adminError;
-  }
 
-  if (request.method === "GET" && pathname === "/api/admin/summary") {
-    return adminSummary(env);
-  }
 
-  if (request.method === "GET" && pathname === "/api/admin/users") {
-    return listUsers(env);
-  }
-
-  if (request.method === "PUT" && pathname === "/api/admin/login-notice") {
-    return updateLoginNotice(request, env);
-  }
-
-  if (request.method === "GET" && pathname === "/api/admin/login-notices") {
-    return listLoginNotices(env);
-  }
-
-  if (request.method === "POST" && pathname === "/api/admin/login-notices") {
-    return createLoginNotice(request, env);
-  }
-
-  const noticeMatch = /^\/api\/admin\/login-notices\/([^/]+)$/.exec(pathname);
-  if (noticeMatch) {
-    if (request.method !== "PATCH") return notFound();
-    return updateLoginNoticeRecord(request, env, decodeURIComponent(noticeMatch[1]));
-  }
-
-  if (request.method === "PUT" && pathname === "/api/admin/registration") {
-    return updateRegistrationSetting(request, env);
-  }
-
-  if (request.method === "POST" && pathname === "/api/admin/deletions/run-due") {
-    return runDueDeletions(env);
-  }
-
-  if (request.method === "GET" && pathname === "/api/admin/feedback") {
-    return listFeedback(env);
-  }
-
-  if (request.method === "GET" && pathname === "/api/admin/ai/providers") {
-    return listAiProviders(env, context.user.id);
-  }
-
-  if (request.method === "POST" && pathname === "/api/admin/ai/providers") {
-    return saveAiProvider(request, env);
-  }
-
-  if (request.method === "POST" && pathname === "/api/admin/ai/schedule-draft") {
-    return generateAiScheduleDraft(request, env, context);
-  }
-
-  const aiProviderMatch = /^\/api\/admin\/ai\/providers\/([^/]+)$/.exec(pathname);
-  if (aiProviderMatch) {
-    const providerId = decodeURIComponent(aiProviderMatch[1]);
-    if (request.method === "PUT") {
-      return saveAiProvider(request, env, providerId);
-    }
-    if (request.method === "DELETE") {
-      return deleteAiProvider(env, providerId);
-    }
-    return notFound();
-  }
-
-  const aiProviderTestMatch = /^\/api\/admin\/ai\/providers\/([^/]+)\/test$/.exec(pathname);
-  if (aiProviderTestMatch) {
-    if (request.method !== "POST") {
-      return notFound();
-    }
-    return testAiProvider(request, env, context, decodeURIComponent(aiProviderTestMatch[1]));
-  }
-
-  const feedbackMatch = /^\/api\/admin\/feedback\/([^/]+)$/.exec(pathname);
-  if (feedbackMatch) {
-    if (request.method !== "PATCH") {
-      return notFound();
-    }
-    return updateFeedback(request, env, context, feedbackMatch[1]);
-  }
-
-  const deleteMatch = /^\/api\/admin\/users\/([^/]+)\/delete-(request|confirm|cancel)$/.exec(pathname);
-  if (deleteMatch) {
-    const [, userId, action] = deleteMatch;
-    if (request.method !== "POST") {
-      return notFound();
-    }
-    if (action === "request") {
-      return requestDeleteUser(request, env, context, userId);
-    }
-    if (action === "confirm") {
-      return confirmDeleteUser(request, env, context, userId);
-    }
-    if (action === "cancel") {
-      return cancelDeleteUser(env, context, userId);
-    }
-  }
-
-  return null;
-}
-
-async function handleApi(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const { pathname } = url;
-
-  if (request.method === "GET" && pathname === "/api/health") {
-    return json({ ok: true, service: "teacher-salary-tracker" });
-  }
-
-  if (request.method === "GET" && pathname === "/api/public/login-notice") {
-    return getLoginNotice(env);
-  }
-
-  if (request.method === "GET" && pathname === "/api/public/settings") {
-    return getPublicSettings(env);
-  }
-
-  if (request.method === "GET" && pathname === "/api/auth/lookup") {
-    return authLookup(request, env);
-  }
-
-  if (request.method === "POST" && pathname === "/api/auth/register") {
-    return registerUser(request, env);
-  }
-
-  if (request.method === "POST" && pathname === "/api/auth/login") {
-    return loginUser(request, env);
-  }
-
-  if (request.method === "POST" && pathname === "/api/auth/logout") {
-    return logout(request, env);
-  }
-
-  if (request.method === "GET" && pathname === "/api/auth/me") {
-    return me(request, env);
-  }
-
-  if (request.method === "POST" && pathname === "/api/me/delete-cancel") {
-    return selfCancelDeletion(request, env);
-  }
-
-  if (request.method === "POST" && pathname === "/api/feedback") {
-    return submitFeedback(request, env);
-  }
-
-  if (pathname.startsWith("/api/ai/")) {
-    const context = await requireAuth(request, env);
-    if (context instanceof Response) {
-      return context;
-    }
-    if (request.method === "GET" && pathname === "/api/ai/providers") {
-      return listUsableAiProviders(env, false, context.user.id);
-    }
-    if (request.method === "POST" && pathname === "/api/ai/schedule-draft") {
-      return generateAiScheduleDraft(request, env, context);
-    }
-    return notFound();
-  }
-
-  if (request.method === "GET" && pathname === "/api/me/vault") {
-    return getMyVault(request, env);
-  }
-
-  if (request.method === "GET" && pathname === "/api/me/vault/meta") {
-    return getMyVaultMeta(request, env);
-  }
-
-  if (request.method === "PUT" && pathname === "/api/me/vault") {
-    return putMyVault(request, env);
-  }
-
-  if (pathname.startsWith("/api/admin/")) {
-    const adminResponse = await handleAdminRequest(request, env);
-    return adminResponse ?? notFound();
-  }
-
-  if (pathname.startsWith("/api/encrypted-documents/")) {
-    if (request.method === "GET") {
-      return getEncryptedDocument(pathname, request, env);
-    }
-    if (request.method === "PUT") {
-      return putEncryptedDocument(pathname, request, env);
-    }
-  }
-
-  return notFound();
-}
+const apiRouteHandlers = {
+  json,
+  notFound,
+  isAuthorizedLegacyAdminRequest,
+  requireAuth,
+  requireAdmin,
+  updateLoginNotice,
+  updateRegistrationSetting,
+  runDueDeletions,
+  adminSummary,
+  listUsers,
+  listLoginNotices,
+  createLoginNotice,
+  updateLoginNoticeRecord,
+  listFeedback,
+  listAiProviders,
+  saveAiProvider,
+  generateAiScheduleDraft,
+  listUsableAiProviders,
+  deleteAiProvider,
+  testAiProvider,
+  updateFeedback,
+  requestDeleteUser,
+  confirmDeleteUser,
+  cancelDeleteUser,
+  getLoginNotice,
+  getPublicSettings,
+  authLookup,
+  registerUser,
+  loginUser,
+  logout,
+  me,
+  selfCancelDeletion,
+  submitFeedback,
+  getMyVault,
+  getMyVaultMeta,
+  putMyVault,
+  getEncryptedDocument,
+  putEncryptedDocument
+} satisfies ApiRouteHandlers<Env, AuthContext>;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -2356,7 +2172,7 @@ export default {
         if (request.method !== "GET" && url.pathname !== "/api/admin/deletions/run-due") {
           await runDueDeletions(env).catch(() => undefined);
         }
-        return await handleApi(request, env);
+        return await handleApiRoutes(request, env, apiRouteHandlers);
       } catch (error) {
         if (isMigrationError(error)) {
           return json(
@@ -2385,3 +2201,4 @@ export default {
     await runDueDeletions(env);
   }
 };
+

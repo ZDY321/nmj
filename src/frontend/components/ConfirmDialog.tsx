@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,19 +23,10 @@ export function useConfirmDialog() {
   const close = useCallback(() => setOptions(null), []);
 
   const dialog = (
-    <AnimatePresence>
+    <>
       {options && (
-        <motion.div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-[#061226]/36 p-4 backdrop-blur-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 18, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.98 }}
-            transition={{ duration: 0.18 }}
+        <div className="app-fade-in fixed inset-0 z-[70] flex items-center justify-center bg-[#061226]/36 p-4 backdrop-blur-sm">
+          <div
             className="w-full max-w-[430px] overflow-hidden rounded-[20px] border border-[#dbe4ef] bg-white shadow-[0_28px_80px_rgba(6,18,38,0.24)]"
           >
             <div className="flex items-start gap-4 p-5">
@@ -87,10 +77,10 @@ export function useConfirmDialog() {
                 {options.confirmLabel ?? "确认"}
               </Button>
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   );
 
   return { confirm, dialog };

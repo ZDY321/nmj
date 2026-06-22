@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, GraduationCap, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -72,13 +71,12 @@ export function Sidebar({
             const Icon = item.icon;
             const isActive = view === item.key;
             return (
-              <motion.button
+              <button
                 key={item.key}
-                whileTap={{ scale: 0.98 }}
                 type="button"
                 onClick={() => onViewChange(item.key)}
                 className={cn(
-                  "group relative flex h-[54px] w-full items-center rounded-[12px] text-left text-[14px] font-semibold transition-all duration-200",
+                  "group relative flex h-[54px] w-full items-center rounded-[12px] text-left text-[14px] font-semibold transition-all duration-200 active:scale-[0.98]",
                   collapsed ? "justify-center px-0" : "gap-3 px-4",
                   isActive
                     ? "bg-[#0d4b86]/65 text-white shadow-[0_12px_26px_rgba(0,0,0,0.16)]"
@@ -97,7 +95,7 @@ export function Sidebar({
                   <Icon size={21} strokeWidth={2.2} />
                 </span>
                 {!collapsed && <span className="truncate">{item.label}</span>}
-              </motion.button>
+              </button>
             );
           })}
         </nav>

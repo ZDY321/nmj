@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { motion } from "framer-motion";
 import { AlertTriangle, BookOpen, CalendarDays, Eye, EyeOff, GraduationCap, Lock, ShieldCheck, WalletCards } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -153,7 +152,7 @@ export function LoginScreen({
               </div>
             </div>
 
-            <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="app-fade-up">
               <Badge className="mb-4 bg-white/12 px-4 py-1.5 text-white" variant="outline">
                 Private Workspace
               </Badge>
@@ -168,7 +167,7 @@ export function LoginScreen({
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">

@@ -1,6 +1,7 @@
 import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, WeekStart } from "@/shared/types";
+import { aiEndpointUrlForProvider } from "@/shared/aiEndpoint";
 import { formatAppDateTime, getCourse, lessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
-import { timeToMinutes as parseTimeToMinutes } from "@/frontend/lib/time";
+import { timeToMinutes } from "@/frontend/lib/time";
 import { isPlainRecord } from "@/frontend/lib/typeGuards";
 import {
   addDays,
@@ -26,6 +27,7 @@ import {
 import type { CourseTypeFilter, LessonScope } from "@/frontend/lib/scheduleViewTypes";
 
 export { arrayValue, isPlainRecord, textValue } from "@/frontend/lib/typeGuards";
+export { timesOverlap } from "@/frontend/lib/time";
 
 export function offsetDate(offset: number): string {
   return addDays(todayIso(), offset);
@@ -78,15 +80,6 @@ function parseDateOnlyUtc(dateIso: string): Date {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
-export function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
-  const aStartMinutes = timeToMinutes(aStart);
-  const aEndMinutes = timeToMinutes(aEnd);
-  const bStartMinutes = timeToMinutes(bStart);
-  const bEndMinutes = timeToMinutes(bEnd);
-  if (![aStartMinutes, aEndMinutes, bStartMinutes, bEndMinutes].every(Number.isFinite)) return false;
-  return aStartMinutes < bEndMinutes && bStartMinutes < aEndMinutes;
-}
-
 export function isOrderedTimeRange(startTime: string, endTime: string): boolean {
   if (!startTime || !endTime) return false;
   const startMinutes = timeToMinutes(startTime);
@@ -121,23 +114,7 @@ export function lessonStatusForAttendanceStatus(status: AttendanceStatus): Lesso
 }
 
 export function aiChatEndpoint(baseUrl: string, provider?: AiProviderConfig): string {
-  const normalized = baseUrl
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/\/+$/, "")
-    .replace(/\/v1\/chat\/completions$/i, "")
-    .replace(/\/chat\/completions$/i, "")
-    .replace(/\/v1\/responses$/i, "")
-    .replace(/\/responses$/i, "")
-    .replace(/\/v1\/messages$/i, "")
-    .replace(/\/messages$/i, "");
-  if (!normalized) return "";
-  const path = provider?.provider === "openai_response"
-    ? "responses"
-    : provider?.provider === "anthropic"
-      ? "messages"
-      : "chat/completions";
-  return /\/v1$/i.test(normalized) ? `${normalized}/${path}` : `${normalized}/v1/${path}`;
+  return aiEndpointUrlForProvider(baseUrl, provider);
 }
 
 export function formatAiValue(value: unknown): string {
@@ -263,10 +240,6 @@ export function isStudentStatsTimeRangeValid(startTime: string, endTime: string)
   if (startTime && !Number.isFinite(timeToMinutes(startTime))) return false;
   if (endTime && !Number.isFinite(timeToMinutes(endTime))) return false;
   return !startTime || !endTime || timeToMinutes(startTime) <= timeToMinutes(endTime);
-}
-
-export function timeToMinutes(value: string): number {
-  return parseTimeToMinutes(value);
 }
 
 export function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {

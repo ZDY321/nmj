@@ -9,7 +9,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "deploy": "npm run build && wrangler deploy",
     "cf-typegen": "wrangler types",
-    "check": "tsc -b"
+    "check": "tsc -b",
+    "test": "vitest run"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",
@@ -32,6 +33,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.3.0",
+    "vitest": "^4.1.9",
     "wrangler": "^4.50.0"
   }
 }

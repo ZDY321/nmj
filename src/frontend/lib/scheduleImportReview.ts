@@ -52,7 +52,6 @@ export {
 } from "@/frontend/lib/scheduleImportReviewRecords";
 export {
   courseTypeLabelSafe,
-  lessonCampusId,
   lessonDurationHours,
   linkedLessonsForResolution,
   linkedLessonsForSavedRow,

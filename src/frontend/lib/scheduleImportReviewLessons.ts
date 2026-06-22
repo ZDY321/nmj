@@ -2,7 +2,7 @@ import type { CourseType, Lesson, ScheduleImportSavedRow, ScheduleImportResoluti
 import {
   courseName as localCourseName,
   courseTypeLabel,
-  lessonCampusId as sharedLessonCampusId,
+  lessonCampusId,
   studentNames
 } from "@/frontend/lib/helpers";
 import { billableHoursForCourseLesson, lessonBillableHoursForVault } from "@/frontend/lib/calculations";
@@ -192,10 +192,6 @@ function daysBetween(a: string, b: string): number {
   const second = new Date(`${b}T00:00:00`).getTime();
   if (Number.isNaN(first) || Number.isNaN(second)) return 999;
   return Math.round((first - second) / 86400000);
-}
-
-export function lessonCampusId(vault: TeacherVault, lesson: Lesson): string | undefined {
-  return sharedLessonCampusId(vault, lesson);
 }
 
 export function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {

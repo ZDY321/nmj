@@ -8,12 +8,11 @@ import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIss
 import { ScheduleImportLinkedLessonsPanel } from "@/frontend/components/ScheduleImportLinkedLessonsPanel";
 import { ScheduleImportRowDetails } from "@/frontend/components/ScheduleImportRowDetails";
 import type { CourseGroup, Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
-import { courseName as localCourseName, courseTimeRangeBillingLabel, lessonAttendanceNoteText, lessonStatusLabels, lessonTimeRangeBillingLabel } from "@/frontend/lib/helpers";
+import { courseName as localCourseName, courseTimeRangeBillingLabel, lessonAttendanceNoteText, lessonCampusId, lessonStatusLabels, lessonTimeRangeBillingLabel } from "@/frontend/lib/helpers";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import {
   effectiveRowStatus,
   isReviewedResolution,
-  lessonCampusId,
   linkedLessonsForResolution,
   quickResolutionActionsForRow,
   resolutionStatusLabel,

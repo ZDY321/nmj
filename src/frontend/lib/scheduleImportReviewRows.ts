@@ -2,6 +2,7 @@ import type { Lesson, TeacherVault } from "@/shared/types";
 import {
   campusName,
   compareByName,
+  lessonCampusId,
   sortLessons,
   studentNames
 } from "@/frontend/lib/helpers";
@@ -11,7 +12,6 @@ import {
   type ScheduleImportMapping
 } from "@/frontend/lib/scheduleImport";
 import type { ScheduleImportFileSummary } from "@/frontend/lib/scheduleImportReviewStorage";
-import { lessonCampusId } from "@/frontend/lib/scheduleImportReviewLessons";
 
 export function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPreviewLesson[], rawLessons: ImportedScheduleLesson[]): ImportPreviewLesson[] {
   if (rawLessons.length === 0) return [];
