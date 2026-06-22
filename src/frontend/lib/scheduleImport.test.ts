@@ -11,6 +11,7 @@ import {
 import {
   buildNextScheduleImportState,
   savedReviewEffectiveCounts,
+  savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit
 } from "@/frontend/lib/scheduleImportReviewRecords";
 import { buildLocalOnlyRows } from "@/frontend/lib/scheduleImportReviewRows";
@@ -254,6 +255,12 @@ describe("schedule import parsing and matching", () => {
 });
 
 describe("schedule import review records", () => {
+  it("reports how many saved reviews will be removed by the next save", () => {
+    expect(savedScheduleImportReviewOverflowCount(savedScheduleImportReviewLimit - 1)).toBe(0);
+    expect(savedScheduleImportReviewOverflowCount(savedScheduleImportReviewLimit)).toBe(1);
+    expect(savedScheduleImportReviewOverflowCount(savedScheduleImportReviewLimit + 2)).toBe(3);
+  });
+
   it("limits saved reviews, trims raw text, and treats split-merge rows as resolved", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-22T04:00:00.000Z"));

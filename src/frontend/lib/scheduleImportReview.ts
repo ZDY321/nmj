@@ -48,6 +48,7 @@ export {
   savedReviewEffectiveCounts,
   savedReviewNeedsAttention,
   savedReviewTitle,
+  savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit
 } from "@/frontend/lib/scheduleImportReviewRecords";
 export {

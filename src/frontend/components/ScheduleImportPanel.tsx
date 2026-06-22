@@ -57,6 +57,7 @@ import {
   resolutionMarksRowResolved,
   resolutionStatusLabel,
   savedReviewEffectiveCounts,
+  savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
   savedReviewTitle,
   statusPillClass,
@@ -383,12 +384,19 @@ export function ScheduleImportPanel({
   }
 
   function requestSaveMapping(afterSave?: () => void) {
-    if (savedReviews.length >= savedScheduleImportReviewLimit) {
-      const oldestReview = savedReviews[savedScheduleImportReviewLimit - 1] ?? savedReviews[savedReviews.length - 1];
-      const oldestReviewText = oldestReview ? `：「${savedReviewTitle(oldestReview)}」` : "";
+    const overflowCount = savedScheduleImportReviewOverflowCount(savedReviews.length);
+    if (overflowCount > 0) {
+      const deletedReviews = savedReviews.slice(savedScheduleImportReviewLimit - 1);
+      const oldestReview = deletedReviews[deletedReviews.length - 1] ?? savedReviews[savedReviews.length - 1];
+      const deleteCountText = overflowCount === 1 ? "最早的一条保存记录" : `最早的 ${overflowCount} 条保存记录`;
+      const oldestReviewText = oldestReview
+        ? overflowCount === 1
+          ? `：「${savedReviewTitle(oldestReview)}」`
+          : `，其中最早一条是「${savedReviewTitle(oldestReview)}」`
+        : "";
       confirm({
         title: "保存新的对账记录？",
-        description: `当前最多保留最近 ${savedScheduleImportReviewLimit} 次保存对账。继续保存会删除最早的一条保存记录${oldestReviewText}。`,
+        description: `当前最多保留最近 ${savedScheduleImportReviewLimit} 次保存对账。继续保存会删除${deleteCountText}${oldestReviewText}。`,
         confirmLabel: "继续保存",
         cancelLabel: "取消",
         onConfirm: () => performSaveMapping(afterSave)

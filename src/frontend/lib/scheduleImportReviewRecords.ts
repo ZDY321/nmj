@@ -24,6 +24,10 @@ import {
 export const savedScheduleImportReviewLimit = 6;
 const savedScheduleImportRawTextLimit = 240;
 
+export function savedScheduleImportReviewOverflowCount(currentReviewCount: number): number {
+  return Math.max(currentReviewCount + 1 - savedScheduleImportReviewLimit, 0);
+}
+
 export function buildNextScheduleImportState(
   vault: TeacherVault,
   context: {
