@@ -236,16 +236,42 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
             <div className="mt-1 text-xs font-semibold text-[#64748b]">
               需要单独规则时可以新增，比如“高中高级”“合作老师”等；新增后会出现在默认等级和课程指定等级下拉框里。
             </div>
+            <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+              下面填写的「一对一基础费 / 班课底费 / 人头加价」是同一等级在所有年级阶段的初始值；新增后可以在上方表格里再按小学 / 初中 / 高中分别微调。
+              <span className="block">一对一基础费用于「非班课」班型（含 1 人，第 2 人起按人头加价累计）；班课底费用于「班课」班型（含 5 人，第 6 人起按人头加价累计）。</span>
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1.2fr_repeat(4,minmax(112px,1fr))_112px]">
-            <Input value={customLabel} onChange={(event) => setCustomLabel(event.target.value)} placeholder="等级名称" className="bg-white" />
-            <AmountInput amountsVisible={amountsVisible} value={customBaseSalary} onChange={setCustomBaseSalary} />
-            <AmountInput amountsVisible={amountsVisible} value={customOneOnOneFee} onChange={setCustomOneOnOneFee} />
-            <AmountInput amountsVisible={amountsVisible} value={customClassBaseFee} onChange={setCustomClassBaseFee} />
-            <AmountInput amountsVisible={amountsVisible} value={customHeadcountIncrementFee} onChange={setCustomHeadcountIncrementFee} />
-            <Button type="button" onClick={addCustomSalaryGradeRule} disabled={!customLabel.trim()}>
-              <Plus size={14} /> 添加
-            </Button>
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1.4fr_repeat(4,minmax(120px,1fr))_112px]">
+            <div>
+              <div className="mb-1 text-[11px] font-bold text-[#64748b]">等级名称</div>
+              <Input
+                value={customLabel}
+                onChange={(event) => setCustomLabel(event.target.value)}
+                placeholder="如：高中高级"
+                className="bg-white"
+              />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-bold text-[#64748b]">底薪（元 / 月）</div>
+              <AmountInput amountsVisible={amountsVisible} value={customBaseSalary} onChange={setCustomBaseSalary} />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-bold text-[#64748b]">一对一基础费（非班课，含 1 人）</div>
+              <AmountInput amountsVisible={amountsVisible} value={customOneOnOneFee} onChange={setCustomOneOnOneFee} />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-bold text-[#64748b]">班课底费（班课，含 5 人）</div>
+              <AmountInput amountsVisible={amountsVisible} value={customClassBaseFee} onChange={setCustomClassBaseFee} />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-bold text-[#64748b]">人头加价（每多 1 人）</div>
+              <AmountInput amountsVisible={amountsVisible} value={customHeadcountIncrementFee} onChange={setCustomHeadcountIncrementFee} />
+            </div>
+            <div className="flex items-end">
+              <Button type="button" onClick={addCustomSalaryGradeRule} disabled={!customLabel.trim()} className="w-full">
+                <Plus size={14} /> 添加
+              </Button>
+            </div>
           </div>
         </div>
       </CardContent>
