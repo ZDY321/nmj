@@ -104,6 +104,9 @@ export function ScheduleImportHeaderPanel({
           </div>
           <CardTitle>教务 Excel 与云端课表核对</CardTitle>
           <CardDescription>教务 Excel 只作为外部对账来源；Excel 节数与对账行数分开统计。</CardDescription>
+          <div className="mt-2 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
+            教务 Excel 来自校宝；校宝查看与导出助手脚本已内置在右侧“导出指引”页，可一键复制到 Tampermonkey。
+          </div>
           {onOpenGuide && (
             <Button type="button" size="sm" variant="outline" className="mt-3 h-8 border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2] hover:bg-[#dbeafe]" onClick={onOpenGuide}>
               <BookOpen size={14} /> 查看导出与脚本安装指引
