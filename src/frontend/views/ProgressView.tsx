@@ -60,6 +60,7 @@ type HomeworkFilter = "all" | StudentHomeworkStatus;
 type ProgressFilter = "all" | StudentProgressStatus;
 type ProgressSortOption = "smart" | "today" | "student_name" | "campus" | "grade";
 type ProgressSectionView = "ledger" | "checklist";
+type StudentStatusScope = "active" | "archived" | "all";
 
 type ProgressDraft = {
   progressText: string;
@@ -170,6 +171,7 @@ export function ProgressView({
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [homeworkFilter, setHomeworkFilter] = useState<HomeworkFilter>("all");
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
+  const [studentStatusScope, setStudentStatusScope] = useState<StudentStatusScope>("active");
   const [sortOption, setSortOption] = useState<ProgressSortOption>("smart");
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
@@ -194,7 +196,12 @@ export function ProgressView({
     [vault]
   );
 
-  const visibleRows = rows
+  const scopedRows = rows.filter((row) => {
+    if (studentStatusScope === "all") return true;
+    return studentStatusScope === "archived" ? row.student.status === "paused" : row.student.status !== "paused";
+  });
+
+  const visibleRows = scopedRows
     .filter((row) => {
       const searchable = [
         row.student.name,
@@ -248,10 +255,10 @@ export function ProgressView({
         .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id))
     : [];
 
-  const rowsNeedingFollowUp = rows.filter(needsFollowUp).length;
-  const rowsNeedingRecord = rows.filter((row) => row.needsLatestRecord).length;
-  const assignedHomeworkRows = rows.filter((row) => row.homeworkStatus === "assigned").length;
-  const checkedHomeworkRows = rows.filter((row) => row.homeworkStatus === "checked").length;
+  const rowsNeedingFollowUp = scopedRows.filter(needsFollowUp).length;
+  const rowsNeedingRecord = scopedRows.filter((row) => row.needsLatestRecord).length;
+  const assignedHomeworkRows = scopedRows.filter((row) => row.homeworkStatus === "assigned").length;
+  const checkedHomeworkRows = scopedRows.filter((row) => row.homeworkStatus === "checked").length;
   const sectionSwitcher = (
     <Card className="overflow-hidden">
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -392,7 +399,7 @@ export function ProgressView({
       {sectionSwitcher}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "学生课程", value: `${rows.length} 组`, icon: UserCheck, tone: "bg-[#eaf2ff] text-[#1557c2]" },
+          { label: "学生课程", value: `${scopedRows.length} 组`, icon: UserCheck, tone: "bg-[#eaf2ff] text-[#1557c2]" },
           { label: "需要跟进", value: `${rowsNeedingFollowUp} 组`, icon: AlertTriangle, tone: "bg-[#fff3e4] text-[#c2410c]" },
           { label: "最新课未整理", value: `${rowsNeedingRecord} 组`, icon: Clock3, tone: "bg-[#eef0ff] text-[#5161d6]" },
           { label: "作业已检查", value: `${checkedHomeworkRows}/${Math.max(assignedHomeworkRows + checkedHomeworkRows, checkedHomeworkRows)}`, icon: CheckCircle2, tone: "bg-[#e8f8ef] text-[#15803d]" }
@@ -425,7 +432,7 @@ export function ProgressView({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(0,1.6fr)_repeat(6,minmax(0,1fr))]">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(0,1.6fr)_repeat(7,minmax(0,1fr))]">
             <label className="relative block">
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
               <Input
@@ -459,6 +466,11 @@ export function ProgressView({
               {subjectOptions.map((subject) => (
                 <option key={subject} value={subject}>{subject}</option>
               ))}
+            </Select>
+            <Select value={studentStatusScope} onChange={(event) => setStudentStatusScope(event.target.value as StudentStatusScope)}>
+              <option value="active">在读学生</option>
+              <option value="all">全部学生</option>
+              <option value="archived">已归档学生</option>
             </Select>
             <Select value={homeworkFilter} onChange={(event) => setHomeworkFilter(event.target.value as HomeworkFilter)}>
               <option value="all">全部作业状态</option>

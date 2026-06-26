@@ -475,6 +475,17 @@ export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | un
   return previous;
 }
 
+export function activeStudentIdsForCourse(vault: TeacherVault, course: CourseGroup): string[] {
+  return course.studentIds.filter((studentId) => {
+    const student = vault.students.find((item) => item.id === studentId);
+    return Boolean(student && student.status !== "paused");
+  });
+}
+
+export function courseHasActiveStudent(vault: TeacherVault, course: CourseGroup): boolean {
+  return activeStudentIdsForCourse(vault, course).length > 0;
+}
+
 export function createLessonFromCourse(
   vault: TeacherVault,
   course: CourseGroup,
@@ -488,6 +499,7 @@ export function createLessonFromCourse(
     syncTargetStartDate?: string;
   }
 ): Lesson {
+  const studentIds = activeStudentIdsForCourse(vault, course);
   const lesson: Lesson = {
     id: makeId("lesson"),
     date: values.date,
@@ -497,8 +509,8 @@ export function createLessonFromCourse(
     campusId: values.campusId ?? course.defaultCampusId,
     type: course.type,
     status: values.status ?? "scheduled",
-    expectedStudentIds: [...course.studentIds],
-    attendance: course.studentIds.map((studentId) => ({
+    expectedStudentIds: [...studentIds],
+    attendance: studentIds.map((studentId) => ({
       studentId,
       status: "attended",
       trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
@@ -537,7 +549,7 @@ export function buildScheduleSyncLessonsForDate(
 
   sourceLessons.forEach((sourceLesson) => {
     const course = getCourse(vault, sourceLesson.courseGroupId);
-    if (!course || course.status !== "active") {
+    if (!course || course.status !== "active" || !courseHasActiveStudent(vault, course)) {
       skippedCount += 1;
       return;
     }

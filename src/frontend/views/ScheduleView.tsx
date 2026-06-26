@@ -23,6 +23,7 @@ import {
   buildScheduleSyncLessonsForDate,
   campusName,
   compareByName,
+  courseHasActiveStudent,
   courseName,
   createLessonFromCourse,
   findStudent,
@@ -150,7 +151,7 @@ export function ScheduleView({
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
   const studentOptions = sortStudentsByName(vault.students);
-  const courseSelectionOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active"));
+  const courseSelectionOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
   const courseSelectionOptionIds = courseSelectionOptions.map((course) => course.id).join("|");
   const courseGroupOptionIds = courseGroupOptions.map((course) => course.id).join("|");
   const firstCourseId = courseSelectionOptions[0]?.id ?? "";
@@ -253,7 +254,10 @@ export function ScheduleView({
     .filter((lesson) => lesson.date === syncSourceDate)
     .sort(sortLessons);
   const syncSourceLessonIds = syncSourceLessons.map((lesson) => lesson.id).join("|");
-  const selectableSyncLessons = syncSourceLessons.filter((lesson) => getCourse(vault, lesson.courseGroupId)?.status === "active");
+  const selectableSyncLessons = syncSourceLessons.filter((lesson) => {
+    const course = getCourse(vault, lesson.courseGroupId);
+    return Boolean(course && course.status === "active" && courseHasActiveStudent(vault, course));
+  });
   const selectableSyncLessonIds = selectableSyncLessons.map((lesson) => lesson.id).join("|");
 
   useEffect(() => {
@@ -404,7 +408,10 @@ export function ScheduleView({
   const syncRangeSourceDates = datesBetweenLocal(syncRangeSourceStart, syncRangeSourceEnd);
   const syncRangeTargetDates = datesBetweenLocal(syncRangeTargetStart, syncRangeTargetEnd);
   const syncRangeSourceLessons = vault.lessons.filter((lesson) => syncRangeSourceDates.includes(lesson.date));
-  const syncRangeActiveLessons = syncRangeSourceLessons.filter((lesson) => getCourse(vault, lesson.courseGroupId)?.status === "active");
+  const syncRangeActiveLessons = syncRangeSourceLessons.filter((lesson) => {
+    const course = getCourse(vault, lesson.courseGroupId);
+    return Boolean(course && course.status === "active" && courseHasActiveStudent(vault, course));
+  });
   const calendarLessonFilters = {
     campusFilter: calendarViewCampusFilter,
     gradeFilter: calendarViewGradeFilter,
@@ -513,7 +520,7 @@ export function ScheduleView({
   const normalizedAttendanceStudentFilter = attendanceStudentFilter.trim().toLowerCase();
   const temporaryStudentOptions = selected
     ? studentOptions.filter((student) => {
-        const isAvailable = !selected.expectedStudentIds.includes(student.id);
+        const isAvailable = student.status !== "paused" && !selected.expectedStudentIds.includes(student.id);
         const searchable = [
           student.name,
           student.grade ?? "",
@@ -649,7 +656,7 @@ export function ScheduleView({
   const isCalendarTimeValid = isOrderedTimeRange(calendarStartTime, calendarEndTime);
   const isMakeupTimeValid = isOrderedTimeRange(makeupStartTime, makeupEndTime);
   const aiActiveStudentCount = vault.students.filter((student) => student.status === "active").length;
-  const aiActiveCourseCount = vault.courseGroups.filter((course) => course.status === "active").length;
+  const aiActiveCourseCount = vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)).length;
   const aiPendingLessonCount = vault.lessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "makeup_pending").length;
   const aiTodayLessonCount = vault.lessons.filter((lesson) => lesson.date === todayIso()).length;
   const aiContextSummary = {
@@ -864,6 +871,10 @@ export function ScheduleView({
     if (!course) return;
     if (course.status !== "active") {
       showScheduleError("这个课程已暂停，请先在档案信息中启用或选择当前课程。");
+      return;
+    }
+    if (!courseHasActiveStudent(vault, course)) {
+      showScheduleError("这个课程没有在读学生，请先在档案信息中关联在读学生。");
       return;
     }
     setScheduleError("");

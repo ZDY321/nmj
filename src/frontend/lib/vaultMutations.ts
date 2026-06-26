@@ -1,6 +1,6 @@
 import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
-import { lessonStudentIds, makeupNeededStudentIds } from "@/frontend/lib/helpers";
+import { activeStudentIdsForCourse, lessonStudentIds, makeupNeededStudentIds } from "@/frontend/lib/helpers";
 import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
 import { stringValue } from "@/frontend/lib/typeGuards";
 import type {
@@ -78,12 +78,13 @@ export function syncLessonsWithCourseDefaults(vault: TeacherVault, course: Cours
   let changedCount = 0;
   vault.lessons = vault.lessons.map((lesson) => {
     if (lesson.courseGroupId !== course.id || !shouldSyncLessonWithCourseDefaults(lesson, scope)) return lesson;
+    const activeStudentIds = activeStudentIdsForCourse(vault, course);
     changedCount += 1;
     return recalculateLessonFeeSnapshot(vault, {
       ...lesson,
       type: course.type,
       campusId: course.defaultCampusId,
-      expectedStudentIds: [...course.studentIds],
+      expectedStudentIds: [...activeStudentIds],
       attendance: lessonAttendanceFromCourse(vault, lesson, course),
       trialStudentCount: course.type === "class" ? lesson.trialStudentCount ?? 0 : 0,
       trialFee: course.type === "class" ? lesson.trialFee ?? 0 : 0
@@ -215,7 +216,7 @@ function shouldSyncLessonWithCourseDefaults(lesson: Lesson, scope: CourseLessonS
 function lessonAttendanceFromCourse(vault: TeacherVault, lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
   const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
   const fallbackStatus = attendanceStatusForLessonStatus(lesson.status);
-  return course.studentIds.map((studentId) => {
+  return activeStudentIdsForCourse(vault, course).map((studentId) => {
     const existing = existingByStudent.get(studentId);
     if (existing) {
       return {

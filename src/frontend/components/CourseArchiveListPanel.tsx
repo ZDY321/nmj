@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { Campus, CourseGroup, CourseType, TeacherVault } from "@/shared/types";
-import { campusName, courseTypeLabel, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseHasActiveStudent, courseTypeLabel, studentNames } from "@/frontend/lib/helpers";
 
 type ConfirmRequest = {
   title: string;
@@ -33,6 +33,7 @@ type CourseArchiveListPanelProps = {
   courseGradeFilter: string;
   courseInUse: (courseId: string) => boolean;
   courseSearch: string;
+  courseStatusFilter: "active" | "paused" | "all";
   courseSubjectFilter: string;
   courseTypeFilter: "all" | CourseType;
   courseTypeOptions: CourseTypeOption[];
@@ -44,6 +45,7 @@ type CourseArchiveListPanelProps = {
   setCourseCampusFilter: Dispatch<SetStateAction<string>>;
   setCourseGradeFilter: Dispatch<SetStateAction<string>>;
   setCourseSearch: Dispatch<SetStateAction<string>>;
+  setCourseStatusFilter: Dispatch<SetStateAction<"active" | "paused" | "all">>;
   setCourseSubjectFilter: Dispatch<SetStateAction<string>>;
   setCourseTypeFilter: Dispatch<SetStateAction<"all" | CourseType>>;
   subjectFilterOptions: string[];
@@ -61,6 +63,7 @@ export function CourseArchiveListPanel({
   courseGradeFilter,
   courseInUse,
   courseSearch,
+  courseStatusFilter,
   courseSubjectFilter,
   courseTypeFilter,
   courseTypeOptions,
@@ -72,6 +75,7 @@ export function CourseArchiveListPanel({
   setCourseCampusFilter,
   setCourseGradeFilter,
   setCourseSearch,
+  setCourseStatusFilter,
   setCourseSubjectFilter,
   setCourseTypeFilter,
   subjectFilterOptions,
@@ -90,7 +94,10 @@ export function CourseArchiveListPanel({
             <CardDescription>筛选和数量只作用于下方已添加课程。</CardDescription>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="w-fit">{visibleCourses.length} / {vault.courseGroups.length} 个</Badge>
+            <Badge variant="secondary" className="w-fit">
+              {visibleCourses.length} / {vault.courseGroups.length} 个
+              {courseStatusFilter !== "all" ? ` · ${courseStatusFilter === "active" ? "启用" : "暂停"}` : ""}
+            </Badge>
             <Button type="button" size="sm" variant="outline" className="h-8 bg-[#f8fbff]" onClick={onRequestSyncVisibleCourses} disabled={visibleCourses.length === 0}>
               <RefreshCw size={14} /> 同步当前筛选课程
             </Button>
@@ -112,7 +119,12 @@ export function CourseArchiveListPanel({
             placeholder="搜索课程档案名称、学科、校区、学生或班型"
           />
         </label>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <Select value={courseStatusFilter} onChange={(event) => setCourseStatusFilter(event.target.value as "active" | "paused" | "all")} className="h-10">
+            <option value="active">启用课程</option>
+            <option value="paused">暂停课程</option>
+            <option value="all">全部课程</option>
+          </Select>
           <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
             <option value="all">全部课程类型</option>
             {courseTypeOptions.map((type) => (
@@ -142,6 +154,7 @@ export function CourseArchiveListPanel({
         <div className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
           {visibleCourses.map((course) => {
             const used = courseInUse(course.id);
+            const effectivelyPaused = course.status === "paused" || !courseHasActiveStudent(vault, course);
             return (
               <motion.div
                 key={course.id}
@@ -174,8 +187,8 @@ export function CourseArchiveListPanel({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Badge variant={course.status === "active" ? "sage" : "secondary"}>
-                      {course.status === "active" ? "启用" : "暂停"}
+                    <Badge variant={effectivelyPaused ? "secondary" : "sage"}>
+                      {effectivelyPaused ? "暂停" : "启用"}
                     </Badge>
                     <span className="mr-1 max-w-[96px] truncate text-xs text-(--color-muted-foreground)" title={campusName(vault, course.defaultCampusId)}>
                       {campusName(vault, course.defaultCampusId)}

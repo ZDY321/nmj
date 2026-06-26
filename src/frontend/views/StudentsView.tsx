@@ -18,7 +18,7 @@ import { TeacherSalaryRulesPanel } from "@/frontend/components/TeacherSalaryRule
 import { NewCourseFormPanel } from "@/frontend/components/NewCourseFormPanel";
 import { makeId } from "@/frontend/lib/crypto";
 import { backupFeeRuleForCourseType, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, classHeadcountFeeRuleForCourseType, classHeadcountStageRateForRule, courseUsesClassBilling, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeRuleById, salaryGradeRulesForVault, salaryGradeAmountForCount, salaryGradeStageForCourse, salaryGradeStageForStudentIds, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
-import { builtInCourseTypeOptions, campusName, compareByName, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
+import { builtInCourseTypeOptions, campusName, compareByName, courseHasActiveStudent, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
@@ -138,6 +138,7 @@ export function StudentsView({
   const [studentCourseTypeFilter, setStudentCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [studentSubjectFilter, setStudentSubjectFilter] = useState("all");
   const [courseSearch, setCourseSearch] = useState("");
+  const [courseStatusFilter, setCourseStatusFilter] = useState<"active" | "paused" | "all">("active");
   const [courseTypeFilter, setCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [courseGradeFilter, setCourseGradeFilter] = useState("all");
   const [courseSubjectFilter, setCourseSubjectFilter] = useState("all");
@@ -201,6 +202,10 @@ export function StudentsView({
         .map((studentId) => vault.students.find((student) => student.id === studentId))
         .filter(Boolean) as Student[];
       const matchesType = courseTypeFilter === "all" || course.type === courseTypeFilter;
+      const hasActiveStudent = courseHasActiveStudent(vault, course);
+      const matchesStatus =
+        courseStatusFilter === "all" ||
+        (courseStatusFilter === "active" ? course.status === "active" && hasActiveStudent : course.status === "paused" || !hasActiveStudent);
       const matchesGrade =
         courseGradeFilter === "all" ||
         (courseGradeFilter === "__unset"
@@ -218,12 +223,12 @@ export function StudentsView({
         ...courseStudents.flatMap((student) => [student.name, student.grade ?? "", student.school ?? "", student.note ?? ""])
       ].join(" ").toLowerCase();
       const matchesSearch = matchesKeywordSearch(searchable, normalizedCourseSearch);
-      return matchesType && matchesGrade && matchesSubject && matchesCampus && matchesSearch;
+      return matchesStatus && matchesType && matchesGrade && matchesSubject && matchesCampus && matchesSearch;
     })
     .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id));
   const activeStudentCount = activeStudentOptions.length;
   const archivedStudentCount = archivedStudentOptions.length;
-  const activeCourses = vault.courseGroups.filter((course) => course.status === "active").length;
+  const activeCourses = vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)).length;
   const obligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId ?? "";
   const obligationMode = vault.profile.obligationDeductionMode ?? "auto_gap";
   const isManualObligationMode = obligationMode === "manual";
@@ -1568,6 +1573,7 @@ export function StudentsView({
           courseGradeFilter={courseGradeFilter}
           courseInUse={courseInUse}
           courseSearch={courseSearch}
+          courseStatusFilter={courseStatusFilter}
           courseSubjectFilter={courseSubjectFilter}
           courseTypeFilter={courseTypeFilter}
           courseTypeOptions={courseTypeOptions}
@@ -1579,6 +1585,7 @@ export function StudentsView({
           setCourseCampusFilter={setCourseCampusFilter}
           setCourseGradeFilter={setCourseGradeFilter}
           setCourseSearch={setCourseSearch}
+          setCourseStatusFilter={setCourseStatusFilter}
           setCourseSubjectFilter={setCourseSubjectFilter}
           setCourseTypeFilter={setCourseTypeFilter}
           subjectFilterOptions={subjectFilterOptions}

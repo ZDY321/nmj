@@ -5,9 +5,11 @@ import { timeToMinutes } from "@/frontend/lib/time";
 import { isPlainRecord } from "@/frontend/lib/typeGuards";
 import {
   addDays,
+  activeStudentIdsForCourse,
   attendedStudentNamesForLesson,
   campusName,
   compareByName,
+  courseHasActiveStudent,
   courseName,
   courseSubject,
   courseTypeLabel,
@@ -696,14 +698,14 @@ export function buildScheduleAiContext(
       temporaryTrial: student.temporaryTrial ?? false
     }));
   const activeCourses = vault.courseGroups
-    .filter((course) => course.status === "active")
+    .filter((course) => course.status === "active" && courseHasActiveStudent(vault, course))
     .map((course) => ({
       id: course.id,
       name: course.name,
       subject: course.subject,
       type: courseTypeLabel(vault, course.type),
       campus: campusName(vault, course.defaultCampusId),
-      students: studentNames(vault, course.studentIds)
+      students: studentNames(vault, activeStudentIdsForCourse(vault, course))
     }));
   const nearbyLessons = vault.lessons
     .filter((lesson) => lesson.date >= addDays(today, -14) && lesson.date <= addDays(today, 45))

@@ -551,10 +551,24 @@ export function App() {
   function updateStudent(student: Student) {
     updateVault((draft) => {
       const previousStudent = draft.students.find((item) => item.id === student.id);
+      const isArchivingStudent = previousStudent?.status !== "paused" && student.status === "paused";
       if (previousStudent && Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
         materializeStudentTrialStatusOnLessons(draft, student.id, Boolean(previousStudent.temporaryTrial));
       }
       draft.students = draft.students.map((item) => (item.id === student.id ? student : item));
+      if (isArchivingStudent) {
+        const activeStudentIds = new Set(draft.students.filter((item) => item.status !== "paused").map((item) => item.id));
+        draft.courseGroups = draft.courseGroups.map((course) => {
+          if (!course.studentIds.includes(student.id)) return course;
+          const studentIds = course.studentIds.filter((studentId) => studentId !== student.id);
+          const hasActiveStudent = studentIds.some((studentId) => activeStudentIds.has(studentId));
+          return {
+            ...course,
+            studentIds,
+            status: course.status === "active" && !hasActiveStudent ? "paused" : course.status
+          };
+        });
+      }
       if (previousStudent && Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
         syncFutureLessonsWithStudentTrialStatus(draft, student.id, Boolean(student.temporaryTrial));
       }
