@@ -24,6 +24,9 @@ export function PayrollScheduleExportGuide() {
               <CardDescription className="mt-2">
                 先安装 Tampermonkey，再导入你已有的校宝辅助脚本，最后从校宝教务中心导出课表 Excel 后回到对账页导入。
               </CardDescription>
+              <div className="mt-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
+                教务 Excel 来自校宝；脚本内容来自 <code className="rounded bg-white px-1.5 py-0.5 text-[#1557c2]">K:\Aria2\校宝查看与导出助手-0.1.0.txt</code>。
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="sky">适用 pro.schoolpal.cn</Badge>
