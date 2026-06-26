@@ -5,6 +5,7 @@ import { PayrollMetricSummaryCards } from "@/frontend/components/PayrollMetricSu
 import { PayrollObligationDeductionCard } from "@/frontend/components/PayrollObligationDeductionCard";
 import { PayrollOverviewGrid } from "@/frontend/components/PayrollOverviewGrid";
 import { PayrollReviewFiltersCard } from "@/frontend/components/PayrollReviewFiltersCard";
+import { PayrollScheduleExportGuide } from "@/frontend/components/PayrollScheduleExportGuide";
 import { ScheduleImportPanel } from "@/frontend/components/ScheduleImportPanel";
 import type { CourseType, Lesson, ScheduleImportVaultState, TeacherVault } from "@/shared/types";
 import { todayIso } from "@/frontend/lib/calculations";
@@ -14,7 +15,7 @@ import { loadEncryptedDocumentWithVersion, saveEncryptedDocument } from "@/front
 
 type TypeFilter = "all" | CourseType;
 type LessonStatusFilter = "all" | Lesson["status"];
-type PayrollPanel = "review" | "reconcile";
+type PayrollPanel = "review" | "reconcile" | "guide";
 const scheduleImportArchiveDocType = "schedule_import_reviews";
 const scheduleImportArchiveDocKey = "primary";
 
@@ -160,7 +161,8 @@ export function PayrollReviewView({
         <div className="flex w-full min-w-max items-center gap-1 p-1 md:min-w-0">
           {[
             { key: "review" as PayrollPanel, label: "工资核对" },
-            { key: "reconcile" as PayrollPanel, label: "教务课表对账" }
+            { key: "reconcile" as PayrollPanel, label: "教务课表对账" },
+            { key: "guide" as PayrollPanel, label: "导出指引" }
           ].map((item) => (
             <button
               key={item.key}
@@ -176,7 +178,9 @@ export function PayrollReviewView({
         </div>
       </div>
 
-      {payrollPanel === "reconcile" ? (
+      {payrollPanel === "guide" ? (
+        <PayrollScheduleExportGuide />
+      ) : payrollPanel === "reconcile" ? (
         <>
         {scheduleImportArchiveError && (
           <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] px-4 py-3 text-sm font-bold text-[#9a3412]">
@@ -191,6 +195,7 @@ export function PayrollReviewView({
           onSaveScheduleImport={saveScheduleImportState}
           onOpenLesson={onOpenReconcileLessonInCalendar}
           onSuggestSchedule={onSuggestSchedule}
+          onOpenGuide={() => setPayrollPanel("guide")}
         />
         </>
       ) : (

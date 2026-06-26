@@ -73,6 +73,7 @@ export function ScheduleImportPanel({
   onOpenLesson,
   onSuggestSchedule,
   onSaveScheduleImport,
+  onOpenGuide,
   scheduleImportState,
   storageScope
 }: {
@@ -81,6 +82,7 @@ export function ScheduleImportPanel({
   onOpenLesson?: (lesson: Lesson) => void;
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
   onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
+  onOpenGuide?: () => void;
   scheduleImportState?: ScheduleImportVaultState | null;
   storageScope?: string;
 }) {
@@ -507,6 +509,7 @@ export function ScheduleImportPanel({
           onExport={downloadMergedSchedule}
           onClear={clearImport}
           onFileCampusChange={updateFileCampus}
+          onOpenGuide={onOpenGuide}
         />
 
         <ScheduleImportSavedReviewsPanel

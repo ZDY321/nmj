@@ -104,7 +104,7 @@ type CalendarOverviewFocusState = {
   weekStudentFilter: string;
 };
 
-type PayrollPanelFocus = "review" | "reconcile";
+type PayrollPanelFocus = "review" | "reconcile" | "guide";
 
 type ScheduleCalendarFocus = {
   date: string;

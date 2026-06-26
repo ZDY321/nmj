@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { ChevronDown, Download, FileSpreadsheet, MapPin, RefreshCw, Save, Upload, X } from "lucide-react";
+import { BookOpen, ChevronDown, Download, FileSpreadsheet, MapPin, RefreshCw, Save, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +31,8 @@ export function ScheduleImportHeaderPanel({
   onSave,
   onExport,
   onClear,
-  onFileCampusChange
+  onFileCampusChange,
+  onOpenGuide
 }: {
   rawLessonCount: number;
   rowCount: number;
@@ -50,6 +51,7 @@ export function ScheduleImportHeaderPanel({
   onExport: () => void;
   onClear: () => void;
   onFileCampusChange: (fileName: string, campusId: string) => void;
+  onOpenGuide?: () => void;
 }) {
   const fileSummaryKey = useMemo(
     () => fileSummaries.map((file) => `${file.fileName}:${fileCampusOverrides[file.fileName] ?? ""}`).join("|"),
@@ -102,6 +104,11 @@ export function ScheduleImportHeaderPanel({
           </div>
           <CardTitle>教务 Excel 与云端课表核对</CardTitle>
           <CardDescription>教务 Excel 只作为外部对账来源；Excel 节数与对账行数分开统计。</CardDescription>
+          {onOpenGuide && (
+            <Button type="button" size="sm" variant="outline" className="mt-3 h-8 border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2] hover:bg-[#dbeafe]" onClick={onOpenGuide}>
+              <BookOpen size={14} /> 查看导出与脚本安装指引
+            </Button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="sky">Excel {rawLessonCount} 节</Badge>
