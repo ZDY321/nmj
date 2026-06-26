@@ -152,9 +152,12 @@
       "#" + ROOT_ID + " .spc-foot{display:flex;justify-content:flex-end;gap:8px;padding:8px 12px 12px;border-top:1px solid #edf1f6}",
       "#" + ROOT_ID + " .spc-link{height:30px;border:1px solid #d8e1ec;border-radius:6px;background:#fff;color:#2f4054;padding:0 10px;cursor:pointer}",
       "#" + ROOT_ID + " .spc-link:hover{border-color:#9eb5ce}",
-      ".spc-export-campus-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-right:8px;border:1px solid #129b63;border-radius:4px;background:#12b76a;color:#fff;padding:0;cursor:pointer;font-size:16px;font-weight:700;line-height:1;vertical-align:middle;white-space:nowrap;overflow:hidden;box-shadow:0 4px 10px rgba(18,183,106,.24)}",
-      ".spc-export-campus-btn:hover{background:#0f9f5c;border-color:#0f8f54}",
-      ".spc-export-campus-btn[disabled]{cursor:default;opacity:.65}",
+      ".spc-export-campus-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:112px;height:34px;margin-right:10px;border:1px solid #7c3aed;border-radius:999px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;padding:0 12px 0 9px;cursor:pointer;font-size:12px;font-weight:800;line-height:1;vertical-align:middle;white-space:nowrap;overflow:hidden;box-shadow:0 10px 22px rgba(79,70,229,.28)}",
+      ".spc-export-campus-btn:hover{background:linear-gradient(135deg,#6d28d9,#4338ca);border-color:#6d28d9;box-shadow:0 12px 26px rgba(79,70,229,.34)}",
+      ".spc-export-campus-btn[disabled]{cursor:default;opacity:.72}",
+      ".spc-export-campus-btn .spc-export-mark{display:inline-flex;align-items:center;justify-content:center;height:20px;border-radius:999px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.34);padding:0 6px;font-size:11px;font-weight:900;letter-spacing:.02em}",
+      ".spc-export-campus-btn .spc-export-text{display:inline-flex;align-items:center;font-size:12px;font-weight:900}",
+      ".spc-export-campus-btn-loading{background:linear-gradient(135deg,#64748b,#475569);border-color:#64748b;box-shadow:0 8px 18px rgba(71,85,105,.22)}",
       "@media (max-width:640px){#" + ROOT_ID + "{top:64px;right:10px;left:10px}#" + ROOT_ID + " .spc-trigger{float:right}#" + ROOT_ID + " .spc-panel{width:100%;clear:both}}"
     ].join("\n");
     document.documentElement.appendChild(style);
@@ -484,9 +487,10 @@
     var timeView = getTimeView();
     if (!timeView || !timeView.$axiosServices) return;
 
-    var oldText = button.textContent;
+    var oldHtml = button.innerHTML;
     button.disabled = true;
-    button.textContent = "\u5bfc\u51fa\u4e2d...";
+    button.classList.add("spc-export-campus-btn-loading");
+    button.innerHTML = '<span class="spc-export-mark">\u811a\u672c</span><span class="spc-export-text">\u5bfc\u51fa\u4e2d</span>';
     try {
       var response = await timeView.$axiosServices.post("/api2/Schedule/ClassScheduleListExport", buildExportParams(timeView));
       var data = response && response.data;
@@ -508,7 +512,8 @@
       }
     } finally {
       button.disabled = false;
-      button.textContent = oldText;
+      button.classList.remove("spc-export-campus-btn-loading");
+      button.innerHTML = oldHtml;
     }
   }
 
@@ -519,9 +524,9 @@
     var button = document.createElement("button");
     button.type = "button";
     button.className = "spc-export-campus-btn";
-    button.title = "\u5bfc\u51fa\u8bfe\u8868\uff0c\u6587\u4ef6\u540d\u8ffd\u52a0\u6821\u533a\u540d";
-    button.setAttribute("aria-label", "\u5bfc\u51fa\u8bfe\u8868\uff0c\u6587\u4ef6\u540d\u8ffd\u52a0\u6821\u533a\u540d");
-    button.textContent = "\u21e9";
+    button.title = "\u811a\u672c\u52a9\u624b\uff1a\u5bfc\u51fa\u8bfe\u8868\u5e76\u5728\u6587\u4ef6\u540d\u8ffd\u52a0\u6821\u533a\u540d";
+    button.setAttribute("aria-label", "\u811a\u672c\u52a9\u624b\uff1a\u5bfc\u51fa\u8bfe\u8868\u5e76\u5728\u6587\u4ef6\u540d\u8ffd\u52a0\u6821\u533a\u540d");
+    button.innerHTML = '<span class="spc-export-mark">\u811a\u672c</span><span class="spc-export-text">\u5bfc\u51fa\u8bfe\u8868</span>';
     button.addEventListener("click", function () {
       exportScheduleWithCampusName(button);
     });
