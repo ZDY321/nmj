@@ -144,6 +144,7 @@ export type ScheduleImportSystemLessonStats = {
   count: number;
   hours: number;
   completedCount: number;
+  completedHours: number;
   completedAmount: number;
 };
 
@@ -162,6 +163,7 @@ export function summarizeScheduleImportSystemLessons(
     count: lessons.length,
     hours: lessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
     completedCount: completedLessons.length,
+    completedHours: completedLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
     completedAmount: completedLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0)
   };
 }

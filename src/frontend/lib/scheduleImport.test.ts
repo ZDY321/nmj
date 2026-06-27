@@ -401,6 +401,7 @@ describe("schedule import review records", () => {
         count: 1,
         hours: 1,
         completedCount: 1,
+        completedHours: 1,
         completedAmount: 80
       });
 

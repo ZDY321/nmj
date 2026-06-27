@@ -547,6 +547,8 @@ export function ScheduleImportPanel({
           importedLessonHours={importedLessonStats.hours}
           systemLessonCount={systemLessonStats.count}
           systemLessonHours={systemLessonStats.hours}
+          systemCompletedLessonCount={systemLessonStats.completedCount}
+          systemCompletedLessonHours={systemLessonStats.completedHours}
           needsAttentionHours={needsAttentionHours}
           fileSummaries={fileSummaries}
           monthCount={monthOptions.length}
