@@ -199,10 +199,7 @@ export function usePayrollReviewData({
     return campusOptions.map((campus) => {
       const lessons = campusSummaryBaseLessons.filter((lesson) => lessonCampusId(vault, lesson) === campus.id);
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
-      const hours = lessons.reduce((sum, lesson) => {
-        if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return sum;
-        return sum + lessonBillableHoursForVault(vault, lesson);
-      }, 0);
+      const hours = lessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
       const obligation = campus.id === effectiveObligationCampusId ? obligationSummary(vault, selectedMonth, campus.id).amount : 0;
       const obligationHours = obligationHoursByCampus.get(campus.id) ?? 0;
       return {
