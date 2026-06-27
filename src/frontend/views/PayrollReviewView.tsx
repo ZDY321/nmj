@@ -162,6 +162,8 @@ export function PayrollReviewView({
     }
   }
 
+  const obligationCourseDeductedHours = currentCampusObligation.courseBreakdown.reduce((sum, item) => sum + item.deductedHours, 0);
+
   return (
     <div className="space-y-6">
       <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">
@@ -231,7 +233,7 @@ export function PayrollReviewView({
 
       <PayrollMetricSummaryCards
         cards={[
-          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `筛选已完成 ${campusHours.toFixed(1)} 小时 · 本月汇总 ${monthLessonCount} 节 / ${monthPayrollHours.toFixed(1)} 小时`, icon: CalendarDays },
+          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `计薪完成 ${campusHours.toFixed(1)} 小时 · 本月计薪 ${monthLessonCount} 节 / ${monthPayrollHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatPrivateMoney(campusLessonFee, amountsVisible), hint: "仅统计已完成/补课完成", icon: Banknote },
           { label: "课时费总计", value: formatPrivateMoney(lessonFeeTotal, amountsVisible), hint: "本月全部已完成课时费", icon: Banknote },
           {
@@ -241,7 +243,7 @@ export function PayrollReviewView({
               ? `归入 ${campusName(vault, effectiveObligationCampusId)}`
               : currentCampusObligation.mode === "manual"
               ? "手动填写扣除"
-              : `缺口 ${currentCampusObligation.missingHours.toFixed(1)} / ${currentCampusObligation.requiredHours || 0} 小时`,
+              : `课程已抵 ${obligationCourseDeductedHours.toFixed(1)} 小时 · 补扣缺口 ${currentCampusObligation.fallbackHours.toFixed(1)} 小时`,
             icon: SlidersHorizontal,
             danger: true
           },
