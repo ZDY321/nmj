@@ -5,7 +5,7 @@ import type {
   ScheduleImportVaultState,
   TeacherVault
 } from "@/shared/types";
-import { completedAmount } from "@/frontend/lib/calculations";
+import { completedAmount, lessonBillableHoursForVault } from "@/frontend/lib/calculations";
 import { compareByName, formatPrivateMoney } from "@/frontend/lib/helpers";
 import {
   type ImportedScheduleLesson,
@@ -15,7 +15,6 @@ import {
 } from "@/frontend/lib/scheduleImport";
 import {
   effectiveSavedRowStatus,
-  linkedSystemLessonIdsFromResolutions,
   linkedSystemLessonIdsFromRows,
   linkedSystemLessonIdsFromSavedRows,
   resolutionKey
@@ -72,7 +71,7 @@ function buildReviewRecord(
   savedAt: string
 ): ScheduleImportReviewRecord {
   const fileNames = Array.from(new Set(context.rawLessons.map((lesson) => lesson.fileName))).sort(compareByName);
-  const systemLessonSummary = summarizeSystemLessonsForReview(vault, context.rows, context.resolutions);
+  const systemLessonSummary = summarizeScheduleImportSystemLessons(vault, context.rows, context.resolutions);
   return {
     id: `schedule-import-${savedAt}`,
     savedAt,
@@ -92,8 +91,8 @@ function buildReviewRecord(
       systemMissing: context.summary.systemMissing,
       importMissing: context.summary.importMissing,
       needsMapping: context.summary.needsMapping,
-      systemLessonCount: systemLessonSummary.lessonCount,
-      systemCompletedLessonCount: systemLessonSummary.completedLessonCount,
+      systemLessonCount: systemLessonSummary.count,
+      systemCompletedLessonCount: systemLessonSummary.completedCount,
       systemCompletedAmount: systemLessonSummary.completedAmount
     },
     rows: context.rows.map((row) => {
@@ -139,6 +138,63 @@ function buildReviewRecord(
   };
 }
 
+export type ScheduleImportSystemLessonStats = {
+  count: number;
+  hours: number;
+  completedCount: number;
+  completedAmount: number;
+};
+
+export function summarizeScheduleImportSystemLessons(
+  vault: TeacherVault,
+  rows: ImportPreviewLesson[],
+  resolutions: ScheduleImportResolutionMap
+): ScheduleImportSystemLessonStats {
+  const lessonIds = scheduleImportSystemLessonIds(vault, rows, resolutions);
+  const lessons = lessonIds
+    .map((lessonId) => vault.lessons.find((lesson) => lesson.id === lessonId))
+    .filter((lesson): lesson is Lesson => Boolean(lesson));
+  const completedLessons = lessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
+  return {
+    count: lessons.length,
+    hours: lessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
+    completedCount: completedLessons.length,
+    completedAmount: completedLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0)
+  };
+}
+
+export function splitMergePayrollExcludedLessonIds(
+  vault: TeacherVault,
+  rows: ImportPreviewLesson[],
+  resolutions: ScheduleImportResolutionMap
+): string[] {
+  const existingSystemLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
+  const lessonIds = new Set<string>();
+  rows.forEach((row) => {
+    const resolution = resolutions[resolutionKey(row)];
+    if (resolution?.status !== "split_merge_ok" || !row.systemLessonId) return;
+    const mergeTargetLessonIds = (resolution.linkedSystemLessonIds ?? []).filter((lessonId) =>
+      lessonId &&
+      lessonId !== row.systemLessonId &&
+      existingSystemLessonIds.has(lessonId)
+    );
+    if (mergeTargetLessonIds.length > 0) lessonIds.add(row.systemLessonId);
+  });
+  return Array.from(lessonIds);
+}
+
+function scheduleImportSystemLessonIds(
+  vault: TeacherVault,
+  rows: ImportPreviewLesson[],
+  resolutions: ScheduleImportResolutionMap
+): string[] {
+  const ids = new Set(rows.map((row) => row.systemLessonId).filter((lessonId): lessonId is string => Boolean(lessonId)));
+  const excludedLessonIds = new Set(splitMergePayrollExcludedLessonIds(vault, rows, resolutions));
+  linkedSystemLessonIdsFromRows(rows, resolutions).forEach((lessonId) => ids.add(lessonId));
+  excludedLessonIds.forEach((lessonId) => ids.delete(lessonId));
+  return Array.from(ids);
+}
+
 export function buildScheduleImportStateWithoutReview(
   vault: TeacherVault,
   mapping: ScheduleImportMapping,
@@ -152,36 +208,6 @@ export function buildScheduleImportStateWithoutReview(
     splitMergeExcludedLessonIds: splitMergeExcludedLessonIds ?? vault.scheduleImport?.splitMergeExcludedLessonIds ?? [],
     updatedAt: new Date().toISOString()
   };
-}
-
-function summarizeSystemLessonsForReview(vault: TeacherVault, rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): { lessonCount: number; completedLessonCount: number; completedAmount: number } {
-  const lessonIds = dedupSplitMergeLessonIds(rows, resolutions);
-  const lessons = lessonIds
-    .map((lessonId) => vault.lessons.find((lesson) => lesson.id === lessonId))
-    .filter((lesson): lesson is Lesson => Boolean(lesson));
-  const completedLessons = lessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
-  return {
-    lessonCount: lessons.length,
-    completedLessonCount: completedLessons.length,
-    completedAmount: completedLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0)
-  };
-}
-
-function dedupSplitMergeLessonIds(rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): string[] {
-  const linkedLessonIds = linkedSystemLessonIdsFromRows(rows, resolutions);
-  const allResolutionLinkedLessonIds = linkedSystemLessonIdsFromResolutions(resolutions);
-  const ids = new Set<string>();
-  rows.forEach((row) => {
-    const rowKey = resolutionKey(row);
-    const linkedIds = (resolutions[rowKey]?.linkedSystemLessonIds ?? []).filter(Boolean);
-    if (row.systemLessonId && linkedIds.length > 0) {
-      ids.add(row.systemLessonId);
-      return;
-    }
-    if (row.systemLessonId && (linkedLessonIds.has(row.systemLessonId) || allResolutionLinkedLessonIds.has(row.systemLessonId))) return;
-    if (row.systemLessonId) ids.add(row.systemLessonId);
-  });
-  return Array.from(ids);
 }
 
 export function savedReviewNeedsAttention(review: ScheduleImportReviewRecord): number {

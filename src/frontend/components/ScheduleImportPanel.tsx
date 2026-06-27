@@ -62,7 +62,9 @@ import {
   savedScheduleImportReviewLimit,
   savedReviewTitle,
   statusPillClass,
+  splitMergePayrollExcludedLessonIds,
   summarizeFiles,
+  summarizeScheduleImportSystemLessons,
   writeSavedMapping,
   writeSavedWorkspace,
   type StatusFilter
@@ -188,15 +190,8 @@ export function ScheduleImportPanel({
     [importedRows, vault]
   );
   const systemLessonStats = useMemo(() => {
-    const lessonsById = new Map(vault.lessons.map((lesson) => [lesson.id, lesson]));
-    const systemLessons = Array.from(new Set(rows.map((row) => row.systemLessonId).filter((lessonId): lessonId is string => Boolean(lessonId))))
-      .map((lessonId) => lessonsById.get(lessonId))
-      .filter((lesson): lesson is Lesson => Boolean(lesson));
-    return {
-      count: systemLessons.length,
-      hours: systemLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0)
-    };
-  }, [rows, vault]);
+    return summarizeScheduleImportSystemLessons(vault, rows, resolutions);
+  }, [resolutions, rows, vault]);
   const needsAttentionHours = useMemo(
     () => attentionRows.reduce((sum, row) => sum + scheduleImportRowHours(vault, row), 0),
     [attentionRows, vault]
@@ -726,18 +721,6 @@ function timeGapMinutes(row: Pick<ImportPreviewLesson, "startTime" | "endTime">,
   const lessonEnd = minutesForTime(lesson.endTime);
   if (rowStart <= lessonEnd && lessonStart <= rowEnd) return 0;
   return Math.min(Math.abs(rowStart - lessonEnd), Math.abs(lessonStart - rowEnd));
-}
-
-function splitMergePayrollExcludedLessonIds(vault: TeacherVault, rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): string[] {
-  const existingSystemLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
-  const lessonIds = new Set<string>();
-  rows.forEach((row) => {
-    const resolution = resolutions[resolutionKey(row)];
-    if (resolution?.status !== "split_merge_ok" || !row.systemLessonId) return;
-    const mergeTargetLessonIds = (resolution.linkedSystemLessonIds ?? []).filter((lessonId) => lessonId && lessonId !== row.systemLessonId && existingSystemLessonIds.has(lessonId));
-    if (mergeTargetLessonIds.length > 0) lessonIds.add(row.systemLessonId);
-  });
-  return Array.from(lessonIds);
 }
 
 function rawLessonsFromSavedReview(review: ScheduleImportReviewRecord): ImportedScheduleLesson[] {

@@ -12,7 +12,8 @@ import {
   buildNextScheduleImportState,
   savedReviewEffectiveCounts,
   savedScheduleImportReviewOverflowCount,
-  savedScheduleImportReviewLimit
+  savedScheduleImportReviewLimit,
+  summarizeScheduleImportSystemLessons
 } from "@/frontend/lib/scheduleImportReviewRecords";
 import { buildDefaultCampusOverrides, buildLocalOnlyRows } from "@/frontend/lib/scheduleImportReviewRows";
 import { resolutionKey } from "@/frontend/lib/scheduleImportReviewMatching";
@@ -355,11 +356,18 @@ describe("schedule import review records", () => {
         summary: summarizeImportPreview([splitMergeRow, importMissingRow]),
         splitMergeExcludedLessonIds: [mainLesson.id]
       });
+      const systemStats = summarizeScheduleImportSystemLessons(vault, [splitMergeRow, importMissingRow], resolutions);
 
       expect(nextState.reviews).toHaveLength(savedScheduleImportReviewLimit);
       expect(nextState.reviews[0]?.id).toBe("schedule-import-2026-06-22T04:00:00.000Z");
       expect(nextState.reviews.map((review) => review.id)).not.toContain("previous_5");
       expect(nextState.splitMergeExcludedLessonIds).toEqual([mainLesson.id]);
+      expect(systemStats).toEqual({
+        count: 1,
+        hours: 1,
+        completedCount: 1,
+        completedAmount: 80
+      });
 
       const savedReview = nextState.reviews[0];
       if (!savedReview) throw new Error("Expected saved review");
@@ -370,7 +378,7 @@ describe("schedule import review records", () => {
         importMissing: 1,
         systemLessonCount: 1,
         systemCompletedLessonCount: 1,
-        systemCompletedAmount: 120
+        systemCompletedAmount: 80
       });
       expect(savedReview.rows[0]?.rawText).toHaveLength(240);
       expect(savedReview.rows[0]).toMatchObject({

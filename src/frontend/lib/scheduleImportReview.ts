@@ -49,7 +49,10 @@ export {
   savedReviewNeedsAttention,
   savedReviewTitle,
   savedScheduleImportReviewOverflowCount,
-  savedScheduleImportReviewLimit
+  savedScheduleImportReviewLimit,
+  splitMergePayrollExcludedLessonIds,
+  summarizeScheduleImportSystemLessons,
+  type ScheduleImportSystemLessonStats
 } from "@/frontend/lib/scheduleImportReviewRecords";
 export {
   courseTypeLabelSafe,
