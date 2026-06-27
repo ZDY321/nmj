@@ -488,7 +488,27 @@ describe("schedule import review records", () => {
       rawCount: 2,
       count: 1,
       hours: 2,
-      excludedCount: 1
+      excludedCount: 1,
+      cancelledExcludedCount: 0
     });
+
+    const cancelledRow = makePreviewRow({
+      id: "row_cancelled",
+      presentCount: 0,
+      expectedCount: 1,
+      note: "取消原因：学生请假",
+      rawText: "小明_数学一对一 教师：王老师 实到/应到：0/1 取消原因：学生请假",
+      warnings: ["未全员到课", "未开课/取消"],
+      status: "attendance_mismatch"
+    });
+    const cancelledStats = summarizeScheduleImportImportedLessons(vault, [confirmedRow, cancelledRow], {});
+
+    expect(cancelledStats).toMatchObject({
+      rawCount: 2,
+      count: 1,
+      excludedCount: 0,
+      cancelledExcludedCount: 1
+    });
+    expect(cancelledStats.hours).toBeCloseTo(1.83, 2);
   });
 });

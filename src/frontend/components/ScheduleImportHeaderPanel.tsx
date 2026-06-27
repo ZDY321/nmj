@@ -18,6 +18,7 @@ export function ScheduleImportHeaderPanel({
   rawLessonCount,
   importedLessonCount,
   excludedImportedLessonCount,
+  cancelledImportedLessonCount,
   rowCount,
   loading,
   summary,
@@ -44,6 +45,7 @@ export function ScheduleImportHeaderPanel({
   rawLessonCount: number;
   importedLessonCount: number;
   excludedImportedLessonCount: number;
+  cancelledImportedLessonCount: number;
   rowCount: number;
   loading: boolean;
   summary: ScheduleImportSummary;
@@ -130,6 +132,7 @@ export function ScheduleImportHeaderPanel({
         <div className="flex flex-wrap gap-2">
           <Badge variant="sky">教务导入 {importedLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
           {excludedImportedLessonCount > 0 && <Badge variant="secondary">未到日期不计 {excludedImportedLessonCount} 节</Badge>}
+          {cancelledImportedLessonCount > 0 && <Badge variant="secondary">取消/未开课不计 {cancelledImportedLessonCount} 节</Badge>}
           <Badge variant="secondary">云端排课总课时(含未完成，未抵扣前) {systemLessonCount} 节 / {systemLessonHours.toFixed(1)}h</Badge>
           <Badge variant="sage">云端已完成课时(已完成，未抵扣前) {systemCompletedLessonCount} 节 / {systemCompletedLessonHours.toFixed(1)}h</Badge>
           <Badge variant={needsAttention > 0 ? "amber" : "sage"}>待核对 {needsAttention} 节 / {needsAttentionHours.toFixed(1)}h</Badge>

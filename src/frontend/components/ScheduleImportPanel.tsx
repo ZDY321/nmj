@@ -540,6 +540,7 @@ export function ScheduleImportPanel({
           rawLessonCount={rawLessons.length}
           importedLessonCount={importedLessonStats.count}
           excludedImportedLessonCount={importedLessonStats.excludedCount}
+          cancelledImportedLessonCount={importedLessonStats.cancelledExcludedCount}
           rowCount={rows.length}
           loading={loading}
           summary={summary}

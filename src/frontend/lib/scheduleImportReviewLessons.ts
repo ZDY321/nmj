@@ -174,6 +174,7 @@ export type ScheduleImportImportedLessonStats = {
   count: number;
   hours: number;
   excludedCount: number;
+  cancelledExcludedCount: number;
 };
 
 export function summarizeScheduleImportImportedLessons(
@@ -185,11 +186,16 @@ export function summarizeScheduleImportImportedLessons(
   let count = 0;
   let hours = 0;
   let excludedCount = 0;
+  let cancelledExcludedCount = 0;
 
   rows.forEach((row) => {
     const resolution = resolutions[resolutionKey(row)];
     if (resolutionExcludesImportStats(resolution?.status)) {
       excludedCount += 1;
+      return;
+    }
+    if (importPreviewLessonExcludedAsCancelled(row)) {
+      cancelledExcludedCount += 1;
       return;
     }
 
@@ -213,7 +219,8 @@ export function summarizeScheduleImportImportedLessons(
     rawCount: rows.length,
     count: count + splitMergeLessons.length,
     hours: hours + splitMergeLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
-    excludedCount
+    excludedCount,
+    cancelledExcludedCount
   };
 }
 
@@ -235,6 +242,12 @@ function importPreviewLessonStatsHours(vault: TeacherVault, row: ImportPreviewLe
 function validLinkedLessonIds(vault: TeacherVault, resolution: ScheduleImportResolution): string[] {
   const existingLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
   return Array.from(new Set((resolution.linkedSystemLessonIds ?? []).filter((lessonId) => existingLessonIds.has(lessonId))));
+}
+
+function importPreviewLessonExcludedAsCancelled(row: Pick<ImportPreviewLesson, "presentCount" | "warnings" | "note" | "rawText">): boolean {
+  if (row.presentCount !== 0) return false;
+  if (row.warnings.includes("未开课/取消")) return true;
+  return /取消|停课|请假|未上|不上课|未开课|课消|缺勤|无学生/.test(`${row.note ?? ""} ${row.rawText ?? ""}`);
 }
 
 export function lessonDurationHours(lesson: Pick<Lesson, "startTime" | "endTime">): number {
