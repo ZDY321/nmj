@@ -162,6 +162,7 @@ export function ScheduleImportPanel({
     if (invalidSplitMergeRowKeys.has(rowKey)) return "拆分合并标记已失效";
     if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId) && !isCurrentlyLinked && !isDirectMatched && !hasValidCurrentLinkedLesson) return "拆分合并标记已失效";
     if (resolution?.linkedSystemLessonIds?.length && row.systemLessonId && isDirectMatched) return "合并需复核";
+    if (splitMergeLinkedLessonWarnings(vault, row, resolution).length > 0) return "关联需复核";
     if (resolution?.status === "split_merge_ok" && resolution.linkedSystemLessonIds?.length) return `合并到 ${resolution.linkedSystemLessonIds.length} 节云端课`;
     if (row.status === "import_missing" && isCurrentlyLinked && linkedSourceCount > 0) return `由 ${linkedSourceCount} 条教务课合并`;
     return undefined;
@@ -171,8 +172,8 @@ export function ScheduleImportPanel({
     [linkedSystemLessonIds, resolutions, rows]
   );
   const splitMergeExcludedLessonIds = useMemo(
-    () => splitMergePayrollExcludedLessonIds(rows, resolutions),
-    [resolutions, rows]
+    () => splitMergePayrollExcludedLessonIds(vault, rows, resolutions),
+    [resolutions, rows, vault]
   );
   const summary = useMemo(() => summarizeImportPreview(effectiveRows), [effectiveRows]);
   const attentionRows = useMemo(
@@ -373,7 +374,7 @@ export function ScheduleImportPanel({
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) {
     const key = resolutionKey(row);
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
-    const nextSplitMergeExcludedLessonIds = splitMergePayrollExcludedLessonIds(rows, nextResolutions);
+    const nextSplitMergeExcludedLessonIds = splitMergePayrollExcludedLessonIds(vault, rows, nextResolutions);
     setResolutions(nextResolutions);
     if (patch.status) {
       onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds));
@@ -674,12 +675,66 @@ function scheduleImportRowHours(vault: TeacherVault, row: ImportPreviewLesson): 
   return importPreviewLessonBillableHours(vault, row);
 }
 
-function splitMergePayrollExcludedLessonIds(rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): string[] {
+function splitMergeLinkedLessonWarnings(vault: TeacherVault, row: ImportPreviewLesson, resolution?: ScheduleImportResolution): string[] {
+  const linkedLessons = (resolution?.linkedSystemLessonIds ?? [])
+    .map((lessonId) => vault.lessons.find((lesson) => lesson.id === lessonId))
+    .filter((lesson): lesson is Lesson => Boolean(lesson));
+  return linkedLessons.flatMap((lesson) => splitMergeLinkedLessonWarningsForLesson(vault, row, lesson));
+}
+
+function splitMergeLinkedLessonWarningsForLesson(vault: TeacherVault, row: ImportPreviewLesson, lesson: Lesson): string[] {
+  const warnings: string[] = [];
+  const rowCourseId = row.matchedCourseId ?? row.mappedCourseId;
+  const linkedCourse = vault.courseGroups.find((course) => course.id === lesson.courseGroupId);
+  const linkedCampusId = lesson.campusId ?? linkedCourse?.defaultCampusId;
+  if (row.campusId && linkedCampusId && row.campusId !== linkedCampusId) warnings.push("校区不同");
+  if (rowCourseId && lesson.courseGroupId !== rowCourseId) {
+    const linkedCourseName = normalizeReviewText(linkedCourse?.name ?? "");
+    const rowTitle = normalizeReviewText(row.title);
+    const subjectMatches = Boolean(row.subjectHint && linkedCourse?.subject && normalizeReviewText(row.subjectHint) === normalizeReviewText(linkedCourse.subject));
+    const titleMatches = Boolean(linkedCourseName && rowTitle && (rowTitle.includes(linkedCourseName) || linkedCourseName.includes(rowTitle)));
+    if (!subjectMatches && !titleMatches) warnings.push("课程/科目不同");
+  }
+  const dateDistance = Math.abs(daysBetween(row.date, lesson.date));
+  if (dateDistance > 3) warnings.push(`日期相差 ${dateDistance} 天`);
+  const gap = timeGapMinutes(row, lesson);
+  if (gap > 60) warnings.push(`时间相差 ${Math.round(gap)} 分钟`);
+  return warnings;
+}
+
+function normalizeReviewText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function daysBetween(a: string, b: string): number {
+  const first = new Date(`${a}T00:00:00`).getTime();
+  const second = new Date(`${b}T00:00:00`).getTime();
+  if (Number.isNaN(first) || Number.isNaN(second)) return 999;
+  return Math.round((first - second) / 86400000);
+}
+
+function minutesForTime(value: string): number {
+  const [hour, minute] = value.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return 0;
+  return hour * 60 + minute;
+}
+
+function timeGapMinutes(row: Pick<ImportPreviewLesson, "startTime" | "endTime">, lesson: Pick<Lesson, "startTime" | "endTime">): number {
+  const rowStart = minutesForTime(row.startTime);
+  const rowEnd = minutesForTime(row.endTime);
+  const lessonStart = minutesForTime(lesson.startTime);
+  const lessonEnd = minutesForTime(lesson.endTime);
+  if (rowStart <= lessonEnd && lessonStart <= rowEnd) return 0;
+  return Math.min(Math.abs(rowStart - lessonEnd), Math.abs(lessonStart - rowEnd));
+}
+
+function splitMergePayrollExcludedLessonIds(vault: TeacherVault, rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): string[] {
+  const existingSystemLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
   const lessonIds = new Set<string>();
   rows.forEach((row) => {
     const resolution = resolutions[resolutionKey(row)];
     if (resolution?.status !== "split_merge_ok" || !row.systemLessonId) return;
-    const mergeTargetLessonIds = (resolution.linkedSystemLessonIds ?? []).filter((lessonId) => lessonId && lessonId !== row.systemLessonId);
+    const mergeTargetLessonIds = (resolution.linkedSystemLessonIds ?? []).filter((lessonId) => lessonId && lessonId !== row.systemLessonId && existingSystemLessonIds.has(lessonId));
     if (mergeTargetLessonIds.length > 0) lessonIds.add(row.systemLessonId);
   });
   return Array.from(lessonIds);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildFeeSnapshot,
   completedAmount,
+  payrollExcludedSplitMergeLessonIds,
   salaryBreakdown
 } from "@/frontend/lib/calculations";
 import type {
@@ -217,6 +218,34 @@ describe("salary calculations", () => {
 
     expect(snapshot.hours).toBe(3);
     expect(snapshot.amount).toBe(90);
+  });
+
+  it("ignores split-merge payroll exclusions when the merge target lesson was deleted", () => {
+    const baseVault = makeVault();
+    const sourceLesson = lessonWithSnapshot(baseVault, oneOnOneCourse, {
+      id: "lesson_source",
+      expectedStudentIds: ["student_1"],
+      attendance: [attended("student_1")]
+    });
+    const vault = makeVault({
+      lessons: [sourceLesson],
+      scheduleImport: {
+        mappings: {},
+        resolutions: {
+          [`${sourceLesson.id}|教务课表.xlsx|2026-06-05|10:00|12:00|${oneOnOneCourse.id}|One on one`]: {
+            status: "split_merge_ok",
+            linkedSystemLessonIds: ["lesson_deleted_target"],
+            updatedAt: "2026-06-06T00:00:00.000Z"
+          }
+        },
+        reviews: [],
+        splitMergeExcludedLessonIds: [sourceLesson.id],
+        updatedAt: "2026-06-06T00:00:00.000Z"
+      }
+    });
+
+    expect(Array.from(payrollExcludedSplitMergeLessonIds(vault, "2026-06"))).toEqual([]);
+    expect(salaryBreakdown(vault, "2026-06").oneOnOne).toBe(120);
   });
 
   it("subtracts automatic obligation deductions from eligible completed lesson income", () => {

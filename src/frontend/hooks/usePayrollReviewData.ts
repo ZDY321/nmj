@@ -134,10 +134,6 @@ export function usePayrollReviewData({
     }, 0),
     [filteredLessons, vault]
   );
-  const monthPayrollHours = useMemo(
-    () => monthPayrollLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
-    [monthPayrollLessons, vault]
-  );
   const obligationDeductionApplies = campusFilter === "all" || campusFilter === effectiveObligationCampusId;
   const campusDeduction = obligationDeductionApplies ? currentCampusObligation.amount : 0;
   const campusNet = campusLessonFee - campusDeduction;
@@ -206,6 +202,15 @@ export function usePayrollReviewData({
     });
   }, [campusOptions, effectiveObligationCampusId, gradeFilter, monthLessons, selectedMonth, splitMergeExcludedLessonIds, statusFilter, typeFilter, vault]);
 
+  const monthSummaryLessonCount = useMemo(
+    () => campusSummaries.reduce((sum, item) => sum + item.lessons.length, 0),
+    [campusSummaries]
+  );
+  const monthSummaryHours = useMemo(
+    () => campusSummaries.reduce((sum, item) => sum + item.hours, 0),
+    [campusSummaries]
+  );
+
   const typeCountCards = useMemo(() => {
     const typeCounts = filteredLessons.reduce<Record<string, number>>(
       (summary, lesson) => {
@@ -228,8 +233,8 @@ export function usePayrollReviewData({
     effectiveObligationCampusId,
     filteredLessons,
     detailLessons,
-    monthLessonCount: monthPayrollLessons.length,
-    monthPayrollHours,
+    monthLessonCount: monthSummaryLessonCount,
+    monthPayrollHours: monthSummaryHours,
     breakdown,
     lessonFeeTotal,
     estimatedIncome,

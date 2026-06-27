@@ -877,6 +877,10 @@ function completedHours(lesson: Lesson, vault?: TeacherVault): number {
 
 export function payrollExcludedSplitMergeLessonIds(vault: TeacherVault, month?: string): Set<string> {
   if (vault.scheduleImport?.splitMergeExcludedLessonIds) {
+    const validatedLessonIds = validSplitMergeExcludedLessonIdsFromCurrentResolutions(vault, month);
+    if (validatedLessonIds) {
+      return new Set(vault.scheduleImport.splitMergeExcludedLessonIds.filter((lessonId) => validatedLessonIds.has(lessonId)));
+    }
     return new Set(vault.scheduleImport.splitMergeExcludedLessonIds.filter((lessonId) => {
       if (!month) return true;
       return vault.lessons.find((lesson) => lesson.id === lessonId)?.date.startsWith(month);
@@ -898,6 +902,26 @@ export function payrollExcludedSplitMergeLessonIds(vault: TeacherVault, month?: 
       });
     });
   return lessonIds;
+}
+
+function validSplitMergeExcludedLessonIdsFromCurrentResolutions(vault: TeacherVault, month?: string): Set<string> | undefined {
+  const resolutions = vault.scheduleImport?.resolutions;
+  if (!resolutions || Object.keys(resolutions).length === 0) return undefined;
+  const existingLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
+  const validSourceLessonIds = new Set<string>();
+  Object.entries(resolutions).forEach(([key, resolution]) => {
+    if (resolution.status !== "split_merge_ok") return;
+    const sourceLessonId = key.split("|", 1)[0];
+    const sourceLesson = vault.lessons.find((lesson) => lesson.id === sourceLessonId);
+    if (!sourceLesson || (month && !sourceLesson.date.startsWith(month))) return;
+    const hasExistingMergeTarget = (resolution.linkedSystemLessonIds ?? []).some((lessonId) =>
+      lessonId &&
+      lessonId !== sourceLessonId &&
+      existingLessonIds.has(lessonId)
+    );
+    if (hasExistingMergeTarget) validSourceLessonIds.add(sourceLessonId);
+  });
+  return validSourceLessonIds;
 }
 
 export function isPayrollExcludedSplitMergeLesson(lesson: Lesson, excludedLessonIds: Set<string>): boolean {

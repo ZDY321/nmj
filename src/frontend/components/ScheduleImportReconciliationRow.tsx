@@ -58,13 +58,9 @@ export function ScheduleImportReconciliationRow({
   const systemTimeLabel = systemLesson ? lessonTimeRangeBillingLabel(vault, systemLesson) : "";
   const systemAttendanceNoteText = systemLesson ? lessonAttendanceNoteText(vault, systemLesson) : "";
   const resolutionStatus = resolution?.status ?? "unreviewed";
-  const reviewed = isReviewedResolution(resolution);
-  const displayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
-  const isMatched = displayStatus === "matched";
-  const canCollapseDetails = isMatched || reviewed;
-  const resolvedAsMatched = isMatched && row.status !== "matched";
+  const baseReviewed = isReviewedResolution(resolution);
+  const baseDisplayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
   const resolvedByLinkedImport = row.status === "import_missing" && Boolean(row.systemLessonId && linkedSystemLessonIds.has(row.systemLessonId));
-  const [detailsExpanded, setDetailsExpanded] = useState(() => !canCollapseDetails);
   const quickResolutionActions = quickResolutionActionsForRow(row);
   const splitMergeCandidates = useMemo(() => splitMergeCandidateLessons(vault, row), [row, vault]);
   const linkedLessons = useMemo(
@@ -80,6 +76,14 @@ export function ScheduleImportReconciliationRow({
   const hasInvalidLinkedLessons = invalidLinkedSystemLessonIds.length > 0;
   const hasValidCurrentLinkedLessons = linkedLessons.length > 0;
   const hasSplitMergeLinkProblem = (hasInvalidLinkedLessons || staleLinkedByPreviousResolution) && !hasCurrentDirectMatch && !isCurrentlyLinkedBySources && !hasValidCurrentLinkedLessons;
+  const linkedLessonWarnings = linkedLessons.flatMap((lesson) => splitMergeLinkedLessonWarnings(vault, row, lesson));
+  const hasLinkedLessonWarning = linkedLessonWarnings.length > 0;
+  const displayStatus = hasSplitMergeLinkProblem ? row.status : baseDisplayStatus;
+  const reviewed = baseReviewed && !hasSplitMergeLinkProblem;
+  const isMatched = displayStatus === "matched";
+  const canCollapseDetails = isMatched || reviewed;
+  const resolvedAsMatched = isMatched && row.status !== "matched";
+  const [detailsExpanded, setDetailsExpanded] = useState(() => !canCollapseDetails);
   const canLinkSplitMerge =
     row.status === "time_mismatch" ||
     row.status === "system_missing" ||
@@ -125,6 +129,7 @@ export function ScheduleImportReconciliationRow({
             {resolution?.linkedSystemLessonIds?.length && !resolvedByLinkedImport ? <Badge variant="plum">→ 合并到 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}
             {splitMergeNeedsReview && <Badge variant="amber">拆分合并需复核</Badge>}
             {hasSplitMergeLinkProblem && <Badge variant="amber">拆分合并标记已失效</Badge>}
+            {hasLinkedLessonWarning && <Badge variant="amber">关联需复核</Badge>}
           </div>
           {canCollapseDetails && !detailsExpanded && (
             <>
@@ -243,6 +248,12 @@ export function ScheduleImportReconciliationRow({
             </div>
           )}
 
+          {hasLinkedLessonWarning && (
+            <div className="mt-3 rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
+              关联课节疑似不匹配：{Array.from(new Set(linkedLessonWarnings)).join("；")}。请确认是否选错云端课节。
+            </div>
+          )}
+
         </>
       )}
 
@@ -331,4 +342,53 @@ export function ScheduleImportReconciliationRow({
       )}
     </div>
   );
+}
+
+function splitMergeLinkedLessonWarnings(vault: TeacherVault, row: ImportPreviewLesson, lesson: Lesson): string[] {
+  const warnings: string[] = [];
+  const rowCourseId = row.matchedCourseId ?? row.mappedCourseId;
+  const linkedCourse = vault.courseGroups.find((course) => course.id === lesson.courseGroupId);
+  const rowCampusId = row.campusId;
+  const linkedCampusId = lessonCampusId(vault, lesson);
+  if (rowCampusId && linkedCampusId && rowCampusId !== linkedCampusId) {
+    warnings.push("校区不同");
+  }
+  if (rowCourseId && lesson.courseGroupId !== rowCourseId) {
+    const linkedCourseName = normalizeReviewText(linkedCourse?.name ?? "");
+    const rowTitle = normalizeReviewText(row.title);
+    const subjectMatches = Boolean(row.subjectHint && linkedCourse?.subject && normalizeReviewText(row.subjectHint) === normalizeReviewText(linkedCourse.subject));
+    const titleMatches = Boolean(linkedCourseName && rowTitle && (rowTitle.includes(linkedCourseName) || linkedCourseName.includes(rowTitle)));
+    if (!subjectMatches && !titleMatches) warnings.push("课程/科目不同");
+  }
+  const dateDistance = Math.abs(daysBetween(row.date, lesson.date));
+  if (dateDistance > 3) warnings.push(`日期相差 ${dateDistance} 天`);
+  const gap = timeGapMinutes(row, lesson);
+  if (gap > 60) warnings.push(`时间相差 ${Math.round(gap)} 分钟`);
+  return warnings;
+}
+
+function normalizeReviewText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function daysBetween(a: string, b: string): number {
+  const first = new Date(`${a}T00:00:00`).getTime();
+  const second = new Date(`${b}T00:00:00`).getTime();
+  if (Number.isNaN(first) || Number.isNaN(second)) return 999;
+  return Math.round((first - second) / 86400000);
+}
+
+function minutesForTime(value: string): number {
+  const [hour, minute] = value.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return 0;
+  return hour * 60 + minute;
+}
+
+function timeGapMinutes(row: Pick<ImportPreviewLesson, "startTime" | "endTime">, lesson: Pick<Lesson, "startTime" | "endTime">): number {
+  const rowStart = minutesForTime(row.startTime);
+  const rowEnd = minutesForTime(row.endTime);
+  const lessonStart = minutesForTime(lesson.startTime);
+  const lessonEnd = minutesForTime(lesson.endTime);
+  if (rowStart <= lessonEnd && lessonStart <= rowEnd) return 0;
+  return Math.min(Math.abs(rowStart - lessonEnd), Math.abs(lessonStart - rowEnd));
 }

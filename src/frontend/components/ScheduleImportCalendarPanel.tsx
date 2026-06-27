@@ -85,12 +85,12 @@ export function ScheduleImportCalendarPanel({
                           : "border-[#e8eef6] bg-white"
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-extrabold text-[#061226]">{Number(date.slice(8))}</span>
-                  <div className="flex items-center gap-1">
-                    {reviewedDayCount > 0 && <Badge variant="sky" className="text-[10px]">已标 {reviewedDayCount}</Badge>}
-                    {missingFeeDayCount > 0 && <Badge variant="amber" className="text-[10px]">欠费 {missingFeeDayCount}</Badge>}
-                    {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="text-[10px]">{dayRows.length}</Badge>}
+                <div className="flex items-start justify-between gap-1.5">
+                  <span className="shrink-0 text-sm font-extrabold text-[#061226]">{Number(date.slice(8))}</span>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1">
+                    {reviewedDayCount > 0 && <Badge variant="sky" className="px-1.5 text-[10px] leading-4">已标 {reviewedDayCount}</Badge>}
+                    {missingFeeDayCount > 0 && <Badge variant="destructive" className="px-1.5 text-[10px] leading-4">欠费 {missingFeeDayCount}</Badge>}
+                    {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="px-1.5 text-[10px] leading-4">{dayRows.length}</Badge>}
                   </div>
                 </div>
                 <div className="mt-2 flex flex-col gap-1">
@@ -128,7 +128,7 @@ export function ScheduleImportCalendarPanel({
             <Badge variant={selectedDateHasProblems ? "amber" : "sage"}>
               {selectedDateHasProblems ? `有差异 ${selectedDateProblemCount} 节` : "已对应"}
             </Badge>
-            {selectedDateMissingFeeCount > 0 && <Badge variant="amber">欠费 {selectedDateMissingFeeCount} 节</Badge>}
+            {selectedDateMissingFeeCount > 0 && <Badge variant="destructive">欠费 {selectedDateMissingFeeCount} 节</Badge>}
           </div>
         </div>
 
@@ -146,7 +146,7 @@ export function ScheduleImportCalendarPanel({
 }
 
 function attentionLabelMarksProblem(label: string | undefined): boolean {
-  return label === "拆分合并标记已失效" || label === "合并需复核";
+  return label === "拆分合并标记已失效" || label === "合并需复核" || label === "关联需复核";
 }
 
 function attentionLabelClass(problem: boolean): string {
