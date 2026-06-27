@@ -531,13 +531,20 @@ function matchCourse(vault: TeacherVault, lesson: ImportedScheduleLesson, campus
   const normalizedTitle = normalizeText(lesson.title);
   const studentName = normalizeText(lesson.studentNameHint ?? "");
   const subject = normalizeText(lesson.subjectHint);
-  const candidates = vault.courseGroups.filter((course) => {
-    if (course.status !== "active") return false;
-    if (campusId && course.defaultCampusId && course.defaultCampusId !== campusId) return false;
-    if (lesson.courseTypeHint !== "unknown" && course.type !== lesson.courseTypeHint) return false;
-    if (subject && normalizeText(course.subject) !== subject) return false;
-    return true;
-  });
+  const candidates = vault.courseGroups.flatMap((course) => {
+    const systemLessonScore = systemLessonScopeScoreForCourse(vault, course.id, lesson, campusId);
+    if (course.status !== "active" && systemLessonScore === 0) return [];
+    if (campusId && course.defaultCampusId && course.defaultCampusId !== campusId) return [];
+    if (lesson.courseTypeHint !== "unknown" && course.type !== lesson.courseTypeHint) return [];
+    if (subject && normalizeText(course.subject) !== subject) return [];
+    return [{ course, systemLessonScore }];
+  })
+    .sort((a, b) =>
+      b.systemLessonScore - a.systemLessonScore ||
+      Number(b.course.status === "active") - Number(a.course.status === "active") ||
+      normalizeText(a.course.name).localeCompare(normalizeText(b.course.name))
+    )
+    .map((candidate) => candidate.course);
   if (lesson.courseTypeHint === "one_on_one" && studentName) {
     const byStudent = candidates.find((course) =>
       course.studentIds.some((studentId) => normalizeText(vault.students.find((student) => student.id === studentId)?.name ?? "") === studentName)
@@ -545,6 +552,18 @@ function matchCourse(vault: TeacherVault, lesson: ImportedScheduleLesson, campus
     if (byStudent) return byStudent;
   }
   return candidates.find((course) => normalizedTitle.includes(normalizeText(course.name)) || normalizeText(course.name).includes(normalizedTitle));
+}
+
+function systemLessonScopeScoreForCourse(vault: TeacherVault, courseId: string, lesson: ImportedScheduleLesson, campusId?: string): number {
+  return vault.lessons.reduce((score, systemLesson) => {
+    if (systemLesson.courseGroupId !== courseId) return score;
+    if (campusId && systemLessonCampusId(vault, systemLesson) !== campusId) return score;
+    if (systemLesson.date.slice(0, 7) !== lesson.date.slice(0, 7)) return score;
+    if (systemLesson.date === lesson.date && systemLesson.startTime === lesson.startTime && systemLesson.endTime === lesson.endTime) return Math.max(score, 100);
+    if (systemLesson.date === lesson.date && timesOverlap(systemLesson.startTime, systemLesson.endTime, lesson.startTime, lesson.endTime)) return Math.max(score, 90);
+    if (systemLesson.date === lesson.date) return Math.max(score, 80);
+    return Math.max(score, 60);
+  }, 0);
 }
 
 function findSameTimeCourseThatLooksLikeImportedLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, campusId?: string, fallbackCourseId?: string): CourseGroup | undefined {

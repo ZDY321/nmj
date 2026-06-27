@@ -7,6 +7,7 @@ import type { CourseGroup, CourseType, Lesson, TeacherVault } from "@/shared/typ
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import {
   campusName,
+  courseHasActiveStudent,
   courseName as localCourseName,
   courseSubject,
   courseTimeRangeBillingLabel,
@@ -206,7 +207,8 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
         studentNames(vault, course.studentIds),
         courseTypeLabel(vault, course.type),
         campusName(vault, course.defaultCampusId),
-        course.note ?? ""
+        course.note ?? "",
+        mappingCourseStatusLabel(vault, course)
       ].join(" ").toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
@@ -218,7 +220,14 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
 
 function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): string {
   const students = studentNames(vault, course.studentIds) || "未关联学生";
-  return `${localCourseName(vault, course.id)} · ${course.subject} · ${students}`;
+  const statusLabel = mappingCourseStatusLabel(vault, course);
+  return `${localCourseName(vault, course.id)} · ${course.subject} · ${students}${statusLabel ? ` · ${statusLabel}` : ""}`;
+}
+
+function mappingCourseStatusLabel(vault: TeacherVault, course: CourseGroup): string {
+  if (course.status === "paused") return "课程已暂停";
+  if (!courseHasActiveStudent(vault, course)) return "学生已归档";
+  return "";
 }
 
 function LinkedSystemLessons({

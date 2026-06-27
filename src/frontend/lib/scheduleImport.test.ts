@@ -284,6 +284,40 @@ describe("schedule import parsing and matching", () => {
       status: "matched"
     });
   });
+
+  it("matches paused course archives when an existing system lesson belongs to the import month", () => {
+    const archivedCourse: CourseGroup = {
+      ...oneOnOneCourse,
+      id: "course_archived",
+      name: "小明数学归档课",
+      status: "paused"
+    };
+    const archivedLesson = makeLesson({
+      id: "lesson_archived",
+      courseGroupId: archivedCourse.id,
+      type: "one_on_one",
+      startTime: "10:00",
+      endTime: "12:00"
+    });
+    const vault = makeVault({
+      courseGroups: [archivedCourse],
+      lessons: [archivedLesson]
+    });
+    const imported = makeImportedLesson({
+      id: "import_archived",
+      title: "小明数学归档课",
+      startTime: "10:30",
+      endTime: "12:30"
+    });
+
+    const rows = buildImportPreview(vault, [imported], {});
+
+    expect(rows[0]).toMatchObject({
+      status: "time_mismatch",
+      matchedCourseId: archivedCourse.id,
+      systemLessonId: archivedLesson.id
+    });
+  });
 });
 
 describe("schedule import review records", () => {

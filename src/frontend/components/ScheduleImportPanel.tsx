@@ -121,7 +121,7 @@ export function ScheduleImportPanel({
     [vault.campuses, vault.profile.homeCampusId]
   );
   const courseOptions = useMemo(
-    () => sortCoursesByName(vault.courseGroups).filter((course) => course.status === "active"),
+    () => sortCoursesByName(vault.courseGroups),
     [vault.courseGroups]
   );
   const importedRows = useMemo(
