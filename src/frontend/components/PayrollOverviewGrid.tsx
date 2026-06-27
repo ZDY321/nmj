@@ -16,6 +16,8 @@ export type PayrollCampusSummary = {
   lessons: Lesson[];
   amount: number;
   hours: number;
+  obligationHours: number;
+  remainingHours: number;
   obligation: number;
   net: number;
 };
@@ -36,6 +38,9 @@ export function PayrollOverviewGrid({
   selectedMonth,
   amountsVisible,
   campusFilter,
+  monthLessonCount,
+  monthPayrollHours,
+  monthRemainingPayrollHours,
   campusSummaries,
   breakdown,
   lessonFeeTotal,
@@ -46,6 +51,9 @@ export function PayrollOverviewGrid({
   selectedMonth: string;
   amountsVisible: boolean;
   campusFilter: string;
+  monthLessonCount: number;
+  monthPayrollHours: number;
+  monthRemainingPayrollHours: number;
   campusSummaries: PayrollCampusSummary[];
   breakdown: SalaryBreakdown;
   lessonFeeTotal: number;
@@ -61,9 +69,21 @@ export function PayrollOverviewGrid({
             <MapPin size={14} /> 校区合并统计
           </div>
           <CardTitle>{selectedMonth} 校区汇总</CardTitle>
-          <CardDescription>义务课时先按老师本校区单节总课时费从低到高抵扣；本校区不足时，再把其他校区课次合并后从低到高抵扣，试听不参与。</CardDescription>
+          <CardDescription>节数和总时长为当前筛选下的计薪口径；抵扣后时长会扣除已用于义务课时的小时数。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {[
+              { label: "本月计薪", value: `${monthLessonCount} 节` },
+              { label: "总时长", value: `${monthPayrollHours.toFixed(1)} 小时` },
+              { label: "抵扣后时长", value: `${monthRemainingPayrollHours.toFixed(1)} 小时` }
+            ].map((item) => (
+              <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
+                <div className="text-xs font-bold text-[#64748b]">{item.label}</div>
+                <div className="mt-1 text-base font-extrabold text-[#061226]">{item.value}</div>
+              </div>
+            ))}
+          </div>
           {campusSummaries.map((item) => (
             <button
               key={item.campus.id}
@@ -77,8 +97,12 @@ export function PayrollOverviewGrid({
                 <div className="min-w-0">
                   <div className="truncate text-base font-extrabold text-[#061226]">{item.campus.name}</div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
-                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{item.lessons.length} 节</span>
-                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">{item.hours.toFixed(1)} 小时</span>
+                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">计薪 {item.lessons.length} 节</span>
+                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">总时长 {item.hours.toFixed(1)} 小时</span>
+                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">抵扣后 {item.remainingHours.toFixed(1)} 小时</span>
+                    {item.obligationHours > 0 && (
+                      <span className="rounded-full bg-[#fff7ed] px-2.5 py-1 text-[#9a3412] ring-1 ring-[#fed7aa]">已抵扣 {item.obligationHours.toFixed(1)} 小时</span>
+                    )}
                     {item.obligation > 0 && (
                       <span className="rounded-full bg-[#fee2e2] px-2.5 py-1 text-[#b91c1c]">义务扣 {formatPrivateMoney(item.obligation, amountsVisible)}</span>
                     )}
