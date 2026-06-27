@@ -78,6 +78,7 @@ export function ScheduleImportReconciliationRow({
   const hasSplitMergeLinkProblem = (hasInvalidLinkedLessons || staleLinkedByPreviousResolution) && !hasCurrentDirectMatch && !isCurrentlyLinkedBySources && !hasValidCurrentLinkedLessons;
   const linkedLessonWarnings = linkedLessons.flatMap((lesson) => splitMergeLinkedLessonWarnings(vault, row, lesson));
   const hasLinkedLessonWarning = linkedLessonWarnings.length > 0;
+  const hasArrears = scheduleImportRowHasArrears(row, resolution);
   const displayStatus = hasSplitMergeLinkProblem ? row.status : baseDisplayStatus;
   const reviewed = baseReviewed && !hasSplitMergeLinkProblem;
   const isMatched = displayStatus === "matched";
@@ -115,6 +116,7 @@ export function ScheduleImportReconciliationRow({
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant={statusVariant(displayStatus)}>{statusLabel(displayStatus)}</Badge>
+            {hasArrears && <Badge variant="destructive">已欠费</Badge>}
             <Badge variant="secondary">{row.date}</Badge>
             <Badge variant="secondary">教务 {importTimeLabel}</Badge>
             {systemLesson && (
@@ -365,6 +367,17 @@ function splitMergeLinkedLessonWarnings(vault: TeacherVault, row: ImportPreviewL
   const gap = timeGapMinutes(row, lesson);
   if (gap > 60) warnings.push(`时间相差 ${Math.round(gap)} 分钟`);
   return warnings;
+}
+
+function scheduleImportRowHasArrears(row: ImportPreviewLesson, resolution?: ScheduleImportResolution): boolean {
+  if (resolution?.status === "missing_lesson_fee") return true;
+  const text = [
+    row.note,
+    row.rawText,
+    ...row.warnings,
+    ...row.issues
+  ].join(" ");
+  return /欠费|已欠|未缴|未交|未付|待缴|待交|费用不足|余额不足|课时不足/.test(text);
 }
 
 function normalizeReviewText(value: string): string {
