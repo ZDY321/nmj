@@ -79,7 +79,7 @@ export function ScheduleImportStatusControls({
       </div>
 
       <div className="overflow-x-auto rounded-[14px] border border-[#bbf7d0] bg-[#f0fdf4] p-2">
-        <div className="grid min-w-[680px] grid-cols-5 gap-2">
+        <div className="grid min-w-[820px] grid-cols-6 gap-2">
           {resolvedStatusCards.map((item) => (
             <button
               key={item.status}

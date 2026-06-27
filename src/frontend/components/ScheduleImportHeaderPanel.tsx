@@ -16,6 +16,8 @@ export type ScheduleImportFileSummary = {
 
 export function ScheduleImportHeaderPanel({
   rawLessonCount,
+  importedLessonCount,
+  excludedImportedLessonCount,
   rowCount,
   loading,
   summary,
@@ -38,6 +40,8 @@ export function ScheduleImportHeaderPanel({
   onOpenGuide
 }: {
   rawLessonCount: number;
+  importedLessonCount: number;
+  excludedImportedLessonCount: number;
   rowCount: number;
   loading: boolean;
   summary: ScheduleImportSummary;
@@ -120,7 +124,8 @@ export function ScheduleImportHeaderPanel({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="sky">教务导入 {rawLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
+          <Badge variant="sky">教务导入 {importedLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
+          {excludedImportedLessonCount > 0 && <Badge variant="secondary">未到日期不计 {excludedImportedLessonCount} 节</Badge>}
           <Badge variant="secondary">云端课表(未抵扣前的总课时) {systemLessonCount} 节 / {systemLessonHours.toFixed(1)}h</Badge>
           <Badge variant={needsAttention > 0 ? "amber" : "sage"}>待核对 {needsAttention} 节 / {needsAttentionHours.toFixed(1)}h</Badge>
         </div>

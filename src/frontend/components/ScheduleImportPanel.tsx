@@ -54,6 +54,7 @@ import {
   matchesImportRowFilters,
   readSavedMapping,
   readSavedWorkspace,
+  resolutionExcludesImportStats,
   resolutionKey,
   resolutionMarksRowResolved,
   resolutionStatusLabel,
@@ -64,6 +65,7 @@ import {
   statusPillClass,
   splitMergePayrollExcludedLessonIds,
   summarizeFiles,
+  summarizeScheduleImportImportedLessons,
   summarizeScheduleImportSystemLessons,
   writeSavedMapping,
   writeSavedWorkspace,
@@ -173,10 +175,14 @@ export function ScheduleImportPanel({
     () => rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds)),
     [linkedSystemLessonIds, resolutions, rows]
   );
+  const statisticRows = useMemo(
+    () => effectiveRows.filter((row) => !resolutionExcludesImportStats(resolutions[resolutionKey(row)]?.status)),
+    [effectiveRows, resolutions]
+  );
   const splitMergeExcludedLessonIds = useMemo(() => {
     return combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, resolutions);
   }, [resolutions, rows, scheduleImportVault, vault]);
-  const summary = useMemo(() => summarizeImportPreview(effectiveRows), [effectiveRows]);
+  const summary = useMemo(() => summarizeImportPreview(statisticRows), [statisticRows]);
   const attentionRows = useMemo(
     () => rows.filter((row) =>
       effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" ||
@@ -184,9 +190,9 @@ export function ScheduleImportPanel({
     ),
     [linkedSystemLessonIds, resolutions, rows]
   );
-  const importedLessonHours = useMemo(
-    () => importedRows.reduce((sum, row) => sum + importPreviewLessonBillableHours(vault, row), 0),
-    [importedRows, vault]
+  const importedLessonStats = useMemo(
+    () => summarizeScheduleImportImportedLessons(vault, importedRows, resolutions),
+    [importedRows, resolutions, vault]
   );
   const systemLessonStats = useMemo(() => {
     return summarizeScheduleImportSystemLessons(vault, rows, resolutions, splitMergeExcludedLessonIds);
@@ -196,7 +202,10 @@ export function ScheduleImportPanel({
     [attentionRows, vault]
   );
   const resolvedAsMatchedCount = useMemo(
-    () => rows.filter((row) => row.status !== "matched" && resolutionMarksRowResolved(resolutions[resolutionKey(row)]?.status)).length,
+    () => rows.filter((row) => {
+      const status = resolutions[resolutionKey(row)]?.status;
+      return row.status !== "matched" && !resolutionExcludesImportStats(status) && resolutionMarksRowResolved(status);
+    }).length,
     [resolutions, rows]
   );
   const resolutionCounts = useMemo(() => countResolutionsForRows(rows, resolutions), [resolutions, rows]);
@@ -374,7 +383,9 @@ export function ScheduleImportPanel({
       onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds));
       const label = resolutionStatusLabel(patch.status);
       setMessage(
-        resolutionMarksRowResolved(patch.status)
+        resolutionExcludesImportStats(patch.status)
+          ? `已标为「${label}」，这条教务课不会计入顶部教务导入节数和小时。`
+          : resolutionMarksRowResolved(patch.status)
           ? `已标为「${label}」，这条差异已计入已对应，顶部统计和状态筛选已更新。`
           : `已标为「${label}」，这条差异仍保留在待核对统计中。`
       );
@@ -527,11 +538,13 @@ export function ScheduleImportPanel({
       <CardContent className="space-y-4">
         <ScheduleImportHeaderPanel
           rawLessonCount={rawLessons.length}
+          importedLessonCount={importedLessonStats.count}
+          excludedImportedLessonCount={importedLessonStats.excludedCount}
           rowCount={rows.length}
           loading={loading}
           summary={summary}
           needsAttention={needsAttention}
-          importedLessonHours={importedLessonHours}
+          importedLessonHours={importedLessonStats.hours}
           systemLessonCount={systemLessonStats.count}
           systemLessonHours={systemLessonStats.hours}
           needsAttentionHours={needsAttentionHours}
@@ -777,7 +790,8 @@ function liveSavedReviewEffectiveCounts(vault: TeacherVault, review: ScheduleImp
     : resolutionsFromSavedReviewRows(review.rows);
   const linkedSystemLessonIds = linkedSystemLessonIdsFromRows(rows, resolutions);
   const effectiveRows = rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds));
-  const summary = summarizeImportPreview(effectiveRows);
+  const statisticRows = effectiveRows.filter((row) => !resolutionExcludesImportStats(resolutions[resolutionKey(row)]?.status));
+  const summary = summarizeImportPreview(statisticRows);
   return {
     matched: summary.matched,
     attendanceMismatch: summary.attendanceMismatch,

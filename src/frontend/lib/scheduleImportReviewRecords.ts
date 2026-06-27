@@ -19,6 +19,7 @@ import {
   linkedSystemLessonIdsFromSavedRows,
   resolutionKey
 } from "@/frontend/lib/scheduleImportReviewMatching";
+import { resolutionExcludesImportStats } from "@/frontend/lib/scheduleImportReviewStatus";
 
 export const savedScheduleImportReviewLimit = 6;
 const savedScheduleImportRawTextLimit = 240;
@@ -233,6 +234,7 @@ export function savedReviewEffectiveCounts(review: ScheduleImportReviewRecord): 
   const linkedSystemLessonIds = linkedSystemLessonIdsFromSavedRows(review.rows);
   return review.rows.reduce(
     (counts, row) => {
+      if (resolutionExcludesImportStats(row.resolutionStatus)) return counts;
       const status = effectiveSavedRowStatus(row, linkedSystemLessonIds);
       if (status === "matched") counts.matched += 1;
       if (status === "attendance_mismatch") counts.attendanceMismatch += 1;

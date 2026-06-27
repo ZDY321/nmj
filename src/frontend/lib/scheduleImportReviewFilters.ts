@@ -5,6 +5,7 @@ import {
 import { courseName as localCourseName } from "@/frontend/lib/helpers";
 import {
   isResolutionFilter,
+  resolutionExcludesImportStats,
   resolutionStatusFromFilter,
   resolutionStatusLabel,
   type StatusFilter
@@ -25,6 +26,8 @@ export function matchesImportRowFilters(
   const resolution = filters.resolutions[resolutionKey(row)];
   if (isResolutionFilter(filters.statusFilter)) {
     if (resolution?.status !== resolutionStatusFromFilter(filters.statusFilter)) return false;
+  } else if (filters.statusFilter !== "all" && resolutionExcludesImportStats(resolution?.status)) {
+    return false;
   } else if (filters.statusFilter !== "all" && effectiveRowStatus(row, resolution, filters.linkedSystemLessonIds) !== filters.statusFilter) {
     return false;
   }
@@ -59,6 +62,8 @@ export function matchesSavedReviewRowFilters(
 ): boolean {
   if (isResolutionFilter(filters.statusFilter)) {
     if (row.resolutionStatus !== resolutionStatusFromFilter(filters.statusFilter)) return false;
+  } else if (filters.statusFilter !== "all" && resolutionExcludesImportStats(row.resolutionStatus)) {
+    return false;
   } else if (filters.statusFilter !== "all" && effectiveSavedRowStatus(row, filters.linkedSystemLessonIds) !== filters.statusFilter) {
     return false;
   }

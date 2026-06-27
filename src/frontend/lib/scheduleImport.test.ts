@@ -15,6 +15,7 @@ import {
   savedScheduleImportReviewLimit,
   summarizeScheduleImportSystemLessons
 } from "@/frontend/lib/scheduleImportReviewRecords";
+import { summarizeScheduleImportImportedLessons } from "@/frontend/lib/scheduleImportReviewLessons";
 import { buildDefaultCampusOverrides, buildLocalOnlyRows } from "@/frontend/lib/scheduleImportReviewRows";
 import { resolutionKey } from "@/frontend/lib/scheduleImportReviewMatching";
 import type {
@@ -398,5 +399,61 @@ describe("schedule import review records", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("excludes not-due imported rows and uses system billing hours after confirmation", () => {
+    const systemLesson = makeLesson({
+      id: "lesson_class_confirmed",
+      courseGroupId: classCourse.id,
+      type: "class",
+      startTime: "10:00",
+      endTime: "12:00",
+      expectedStudentIds: ["student_ming", "student_hong", "student_li"],
+      attendance: [
+        { studentId: "student_ming", status: "attended" },
+        { studentId: "student_hong", status: "attended" },
+        { studentId: "student_li", status: "attended" }
+      ],
+      feeSnapshot: { amount: 80, hours: 2 }
+    });
+    const vault = makeVault({ lessons: [systemLesson] });
+    const confirmedRow = makePreviewRow({
+      id: "row_confirmed",
+      title: classCourse.name,
+      courseTypeHint: "class" as CourseType,
+      startTime: "10:00",
+      endTime: "11:50",
+      matchedCourseId: undefined,
+      mappedCourseId: undefined,
+      status: "time_mismatch",
+      systemLessonId: systemLesson.id,
+      issues: ["云端同课程时间不一致"]
+    });
+    const notDueRow = makePreviewRow({
+      id: "row_not_due",
+      status: "system_missing",
+      systemLessonId: undefined,
+      issues: ["云端课表缺少这节教务 Excel 课节"]
+    });
+    const resolutions = {
+      [resolutionKey(confirmedRow)]: {
+        status: "accepted" as const,
+        note: "确认按云端课时统计",
+        updatedAt: "2026-06-22T05:00:00.000Z"
+      },
+      [resolutionKey(notDueRow)]: {
+        status: "not_due" as const,
+        note: "课程未到日期",
+        updatedAt: "2026-06-22T05:00:00.000Z"
+      }
+    };
+
+    expect(summarizeScheduleImportImportedLessons(vault, [confirmedRow], {}).hours).toBeCloseTo(1.83, 2);
+    expect(summarizeScheduleImportImportedLessons(vault, [confirmedRow, notDueRow], resolutions)).toEqual({
+      rawCount: 2,
+      count: 1,
+      hours: 2,
+      excludedCount: 1
+    });
   });
 });

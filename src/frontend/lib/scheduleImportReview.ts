@@ -1,10 +1,12 @@
 export {
   isReviewedResolution,
   isResolutionFilter,
+  resolutionExcludesImportStats,
   resolutionMarksRowResolved,
   resolutionStatusFromFilter,
   resolutionStatusLabel,
   resolutionStatuses,
+  resolutionUsesSystemHoursForImportStats,
   importMatchStatusFilterOptions,
   resolutionStatusFilterOptions,
   statusFilters,
@@ -64,6 +66,7 @@ export {
   savedRowSystemLesson,
   savedRowSystemLessonLabel,
   splitMergeCandidateLessons,
+  summarizeScheduleImportImportedLessons,
   summarizeLinkedLessons
 } from "@/frontend/lib/scheduleImportReviewLessons";
 export {

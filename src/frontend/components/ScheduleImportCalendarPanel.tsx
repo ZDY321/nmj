@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import type { ScheduleImportResolution, ScheduleImportResolutionMap, TeacherVault } from "@/shared/types";
 import type { ImportMatchStatus, ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import { courseName as localCourseName } from "@/frontend/lib/helpers";
+import { resolutionExcludesImportStats } from "@/frontend/lib/scheduleImportReview";
 
 export function ScheduleImportCalendarPanel({
   vault,
@@ -48,7 +49,9 @@ export function ScheduleImportCalendarPanel({
     attentionLabelMarksProblem(rowAttentionLabel?.(row));
   const selectedDateProblemCount = selectedDateRows.filter(rowHasProblem).length;
   const selectedDateMissingFeeCount = selectedDateRows.filter(rowHasMissingLessonFee).length;
+  const selectedDateNotDueCount = selectedDateRows.filter((row) => resolutionExcludesImportStats(resolutions[resolutionKey(row)]?.status)).length;
   const selectedDateHasProblems = selectedDateProblemCount > 0;
+  const selectedDateOnlyNotDue = selectedDateRows.length > 0 && selectedDateRows.length === selectedDateNotDueCount;
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -65,6 +68,7 @@ export function ScheduleImportCalendarPanel({
             const isCurrentMonth = date.startsWith(displayMonth);
             const hasProblems = dayRows.some(rowHasProblem);
             const missingFeeDayCount = dayRows.filter(rowHasMissingLessonFee).length;
+            const notDueDayCount = dayRows.filter((row) => resolutionExcludesImportStats(resolutions[resolutionKey(row)]?.status)).length;
             const reviewedDayCount = dayRows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
             return (
               <button
@@ -90,16 +94,18 @@ export function ScheduleImportCalendarPanel({
                   <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1">
                     {reviewedDayCount > 0 && <Badge variant="sky" className="px-1.5 text-[10px] leading-4">已标 {reviewedDayCount}</Badge>}
                     {missingFeeDayCount > 0 && <Badge variant="destructive" className="px-1.5 text-[10px] leading-4">欠费 {missingFeeDayCount}</Badge>}
+                    {notDueDayCount > 0 && <Badge variant="secondary" className="px-1.5 text-[10px] leading-4">未到 {notDueDayCount}</Badge>}
                     {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="px-1.5 text-[10px] leading-4">{dayRows.length}</Badge>}
                   </div>
                 </div>
                 <div className="mt-2 flex flex-col gap-1">
                   {dayRows.slice(0, 3).map((row) => {
-                    const rowReviewed = isReviewedResolution(resolutions[resolutionKey(row)]);
-                    const rowStatus = effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds);
+                    const resolution = resolutions[resolutionKey(row)];
+                    const rowReviewed = isReviewedResolution(resolution);
+                    const rowStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
                     const attentionLabel = rowAttentionLabel?.(row);
                     const attentionIsProblem = attentionLabelMarksProblem(attentionLabel);
-                    const rowPrefix = rowReviewed ? rowStatus === "matched" ? "已确认 · " : "已标 · " : "";
+                    const rowPrefix = resolutionExcludesImportStats(resolution?.status) ? "未到日期 · " : rowReviewed ? rowStatus === "matched" ? "已确认 · " : "已标 · " : "";
                     return (
                       <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${attentionLabel ? attentionLabelClass(attentionIsProblem) : statusPillClass(rowStatus, rowReviewed && rowStatus !== "matched")}`}>
                         {attentionLabel ? `${attentionLabel} · ` : rowPrefix}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
@@ -125,10 +131,11 @@ export function ScheduleImportCalendarPanel({
               </div>
               <div className="mt-1 text-xs font-semibold text-[#64748b]">当前筛选 {selectedDateRows.length} 条</div>
             </div>
-            <Badge variant={selectedDateHasProblems ? "amber" : "sage"}>
-              {selectedDateHasProblems ? `有差异 ${selectedDateProblemCount} 节` : "已对应"}
+            <Badge variant={selectedDateHasProblems ? "amber" : selectedDateOnlyNotDue ? "secondary" : "sage"}>
+              {selectedDateHasProblems ? `有差异 ${selectedDateProblemCount} 节` : selectedDateOnlyNotDue ? "未到日期" : "已对应"}
             </Badge>
             {selectedDateMissingFeeCount > 0 && <Badge variant="destructive">欠费 {selectedDateMissingFeeCount} 节</Badge>}
+            {selectedDateNotDueCount > 0 && <Badge variant="secondary">未到日期 {selectedDateNotDueCount} 节</Badge>}
           </div>
         </div>
 

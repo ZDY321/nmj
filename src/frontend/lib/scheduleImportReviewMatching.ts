@@ -5,7 +5,7 @@ import type {
   ScheduleImportResolutionStatus
 } from "@/shared/types";
 import type { ImportMatchStatus, ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
-import { resolutionMarksRowResolved } from "@/frontend/lib/scheduleImportReviewStatus";
+import { resolutionMarksRowResolved, resolutionStatuses } from "@/frontend/lib/scheduleImportReviewStatus";
 
 export type LinkedSystemLessonSource = {
   lessonId: string;
@@ -67,16 +67,7 @@ export function countResolutionsForRows(rows: ImportPreviewLesson[], resolutions
       if (status && status !== "unreviewed") counts[status] += 1;
       return counts;
     },
-    {
-      unreviewed: 0,
-      excel_error: 0,
-      cloud_error: 0,
-      missing_lesson_fee: 0,
-      fixed: 0,
-      accepted: 0,
-      time_variance_ok: 0,
-      split_merge_ok: 0
-    }
+    Object.fromEntries(resolutionStatuses.map((status) => [status, 0])) as Record<ScheduleImportResolutionStatus, number>
   );
 }
 

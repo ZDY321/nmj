@@ -1,4 +1,4 @@
-import type { CourseType, Lesson, ScheduleImportSavedRow, ScheduleImportResolution, TeacherVault } from "@/shared/types";
+import type { CourseType, Lesson, ScheduleImportSavedRow, ScheduleImportResolution, ScheduleImportResolutionMap, TeacherVault } from "@/shared/types";
 import {
   courseName as localCourseName,
   courseTypeLabel,
@@ -7,6 +7,8 @@ import {
 } from "@/frontend/lib/helpers";
 import { billableHoursForCourseLesson, lessonBillableHoursForVault } from "@/frontend/lib/calculations";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
+import { resolutionKey } from "@/frontend/lib/scheduleImportReviewMatching";
+import { resolutionExcludesImportStats, resolutionUsesSystemHoursForImportStats } from "@/frontend/lib/scheduleImportReviewStatus";
 import { durationHours, timeToMinutes } from "@/frontend/lib/time";
 
 export function splitMergeCandidateLessons(vault: TeacherVault, row: ImportPreviewLesson): Array<Lesson & { score: number; scoreLabel: string }> {
@@ -167,11 +169,72 @@ export function summarizeLinkedLessons(vault: TeacherVault, linkedLessons: Lesso
   };
 }
 
+export type ScheduleImportImportedLessonStats = {
+  rawCount: number;
+  count: number;
+  hours: number;
+  excludedCount: number;
+};
+
+export function summarizeScheduleImportImportedLessons(
+  vault: TeacherVault,
+  rows: ImportPreviewLesson[],
+  resolutions: ScheduleImportResolutionMap
+): ScheduleImportImportedLessonStats {
+  const splitMergeLessonIds = new Set<string>();
+  let count = 0;
+  let hours = 0;
+  let excludedCount = 0;
+
+  rows.forEach((row) => {
+    const resolution = resolutions[resolutionKey(row)];
+    if (resolutionExcludesImportStats(resolution?.status)) {
+      excludedCount += 1;
+      return;
+    }
+
+    if (resolution?.status === "split_merge_ok") {
+      const linkedLessonIds = validLinkedLessonIds(vault, resolution);
+      if (linkedLessonIds.length > 0) {
+        linkedLessonIds.forEach((lessonId) => splitMergeLessonIds.add(lessonId));
+        return;
+      }
+    }
+
+    count += 1;
+    hours += importPreviewLessonStatsHours(vault, row, resolution);
+  });
+
+  const splitMergeLessons = Array.from(splitMergeLessonIds)
+    .map((lessonId) => vault.lessons.find((lesson) => lesson.id === lessonId))
+    .filter((lesson): lesson is Lesson => Boolean(lesson));
+
+  return {
+    rawCount: rows.length,
+    count: count + splitMergeLessons.length,
+    hours: hours + splitMergeLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
+    excludedCount
+  };
+}
+
 export function importPreviewLessonBillableHours(vault: TeacherVault, row: Pick<ImportPreviewLesson, "startTime" | "endTime" | "matchedCourseId" | "mappedCourseId">): number {
   const courseId = row.matchedCourseId ?? row.mappedCourseId;
   const course = courseId ? vault.courseGroups.find((item) => item.id === courseId) : undefined;
   if (course) return billableHoursForCourseLesson(course, row, vault);
   return durationHours(row.startTime, row.endTime);
+}
+
+function importPreviewLessonStatsHours(vault: TeacherVault, row: ImportPreviewLesson, resolution?: ScheduleImportResolution): number {
+  if ((row.status === "matched" || resolutionUsesSystemHoursForImportStats(resolution?.status)) && row.systemLessonId) {
+    const systemLesson = vault.lessons.find((lesson) => lesson.id === row.systemLessonId);
+    if (systemLesson) return lessonBillableHoursForVault(vault, systemLesson);
+  }
+  return importPreviewLessonBillableHours(vault, row);
+}
+
+function validLinkedLessonIds(vault: TeacherVault, resolution: ScheduleImportResolution): string[] {
+  const existingLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
+  return Array.from(new Set((resolution.linkedSystemLessonIds ?? []).filter((lessonId) => existingLessonIds.has(lessonId))));
 }
 
 export function lessonDurationHours(lesson: Pick<Lesson, "startTime" | "endTime">): number {

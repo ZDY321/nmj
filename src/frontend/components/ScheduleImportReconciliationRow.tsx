@@ -15,6 +15,7 @@ import {
   isReviewedResolution,
   linkedLessonsForResolution,
   quickResolutionActionsForRow,
+  resolutionExcludesImportStats,
   resolutionStatusLabel,
   resolutionStatuses,
   splitMergeCandidateLessons,
@@ -59,6 +60,7 @@ export function ScheduleImportReconciliationRow({
   const systemAttendanceNoteText = systemLesson ? lessonAttendanceNoteText(vault, systemLesson) : "";
   const resolutionStatus = resolution?.status ?? "unreviewed";
   const baseReviewed = isReviewedResolution(resolution);
+  const excludedFromImportStats = resolutionExcludesImportStats(resolutionStatus);
   const baseDisplayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
   const resolvedByLinkedImport = row.status === "import_missing" && Boolean(row.systemLessonId && linkedSystemLessonIds.has(row.systemLessonId));
   const quickResolutionActions = quickResolutionActionsForRow(row);
@@ -83,7 +85,7 @@ export function ScheduleImportReconciliationRow({
   const reviewed = baseReviewed && !hasSplitMergeLinkProblem;
   const isMatched = displayStatus === "matched";
   const canCollapseDetails = isMatched || reviewed;
-  const resolvedAsMatched = isMatched && row.status !== "matched";
+  const resolvedAsMatched = isMatched && row.status !== "matched" && !excludedFromImportStats;
   const [detailsExpanded, setDetailsExpanded] = useState(() => !canCollapseDetails);
   const canLinkSplitMerge =
     row.status === "time_mismatch" ||
@@ -126,6 +128,7 @@ export function ScheduleImportReconciliationRow({
             )}
             {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
             {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
+            {excludedFromImportStats && <Badge variant="secondary">不计入导入统计</Badge>}
             {resolvedByLinkedImport && <Badge variant="plum">由 {linkedBySources.length} 条教务课合并成此云端课</Badge>}
             {resolvedAsMatched && !resolvedByLinkedImport && <Badge variant="sage">已计入已对应</Badge>}
             {resolution?.linkedSystemLessonIds?.length && !resolvedByLinkedImport ? <Badge variant="plum">→ 合并到 {resolution.linkedSystemLessonIds.length} 节云端课</Badge> : null}

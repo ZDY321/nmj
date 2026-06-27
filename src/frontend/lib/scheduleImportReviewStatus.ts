@@ -8,7 +8,7 @@ export type StatusFilterOption = { label: string; value: StatusFilter; variant?:
 export type MatchStatusFilterOption = { label: string; status: ImportMatchStatus; variant: ScheduleImportBadgeVariant };
 export type ResolutionStatusFilterOption = { label: string; status: ResolutionFilter; resolutionStatus: ScheduleImportResolutionStatus; variant: ScheduleImportBadgeVariant };
 
-export const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "excel_error", "cloud_error", "missing_lesson_fee", "fixed", "accepted", "time_variance_ok", "split_merge_ok"];
+export const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "accepted", "not_due", "fixed", "time_variance_ok", "split_merge_ok", "excel_error", "missing_lesson_fee", "cloud_error"];
 
 export const importMatchStatusFilterOptions: MatchStatusFilterOption[] = [
   { label: "已对应", status: "matched", variant: "sage" },
@@ -22,6 +22,7 @@ export const importMatchStatusFilterOptions: MatchStatusFilterOption[] = [
 
 export const resolutionStatusFilterOptions: ResolutionStatusFilterOption[] = [
   { label: "确认无误", status: "resolution:accepted", resolutionStatus: "accepted", variant: "sky" },
+  { label: "未到日期", status: "resolution:not_due", resolutionStatus: "not_due", variant: "secondary" },
   { label: "已修正", status: "resolution:fixed", resolutionStatus: "fixed", variant: "sage" },
   { label: "时间偏差正常", status: "resolution:time_variance_ok", resolutionStatus: "time_variance_ok", variant: "yellow" },
   { label: "拆分合并正常", status: "resolution:split_merge_ok", resolutionStatus: "split_merge_ok", variant: "plum" },
@@ -39,7 +40,15 @@ export const statusFilterOptions: StatusFilterOption[] = [
 export const statusFilters: StatusFilter[] = statusFilterOptions.map((option) => option.value);
 
 export function resolutionMarksRowResolved(status?: ScheduleImportResolutionStatus): boolean {
-  return status === "accepted" || status === "fixed" || status === "excel_error" || status === "time_variance_ok" || status === "split_merge_ok";
+  return status === "accepted" || status === "not_due" || status === "fixed" || status === "excel_error" || status === "time_variance_ok" || status === "split_merge_ok";
+}
+
+export function resolutionExcludesImportStats(status?: ScheduleImportResolutionStatus): boolean {
+  return status === "not_due";
+}
+
+export function resolutionUsesSystemHoursForImportStats(status?: ScheduleImportResolutionStatus): boolean {
+  return status === "accepted" || status === "fixed" || status === "time_variance_ok" || status === "split_merge_ok";
 }
 
 export function isResolutionFilter(statusFilter: StatusFilter): statusFilter is ResolutionFilter {
@@ -57,6 +66,7 @@ export function isReviewedResolution(resolution: ScheduleImportResolution | unde
 export function resolutionStatusLabel(status: ScheduleImportResolutionStatus): string {
   const labels: Record<ScheduleImportResolutionStatus, string> = {
     unreviewed: "未处理",
+    not_due: "未到日期",
     excel_error: "教务表错误",
     cloud_error: "云端需修正",
     missing_lesson_fee: "缺课时费",

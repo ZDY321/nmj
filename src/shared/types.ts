@@ -455,6 +455,7 @@ export type ScheduleImportMapping = Record<string, string>;
 
 export type ScheduleImportResolutionStatus =
   | "unreviewed"
+  | "not_due"
   | "excel_error"
   | "cloud_error"
   | "missing_lesson_fee"

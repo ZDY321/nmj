@@ -13,6 +13,7 @@ import {
   linkedLessonsForSavedRow,
   linkedSystemLessonIdsFromSavedRows,
   matchesSavedReviewRowFilters,
+  resolutionExcludesImportStats,
   resolutionStatusLabel,
   savedRowSystemAttendance,
   savedRowSystemLesson,
@@ -105,7 +106,8 @@ function SavedReviewRowCard({
 }) {
   const rowStatus = effectiveSavedRowStatus(row, linkedSystemLessonIds);
   const reviewed = Boolean(row.resolutionStatus && row.resolutionStatus !== "unreviewed");
-  const resolvedAsMatched = row.status !== "matched" && rowStatus === "matched";
+  const excludedFromImportStats = resolutionExcludesImportStats(row.resolutionStatus);
+  const resolvedAsMatched = row.status !== "matched" && rowStatus === "matched" && !excludedFromImportStats;
   const linkedLessons = linkedLessonsForSavedRow(vault, row);
   const systemLesson = savedRowSystemLesson(vault, row);
   const systemLessonLabel = savedRowSystemLessonLabel(vault, row);
@@ -130,6 +132,7 @@ function SavedReviewRowCard({
             )}
             {systemAttendance.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemAttendance.status]}</Badge>}
             {row.resolutionStatus && row.resolutionStatus !== "unreviewed" && <Badge variant="sky">{resolutionStatusLabel(row.resolutionStatus)}</Badge>}
+            {excludedFromImportStats && <Badge variant="secondary">不计入导入统计</Badge>}
             {resolvedAsMatched && <Badge variant="sage">已计入已对应</Badge>}
             {usesCurrentSystemLesson && <Badge variant="sky">当前云端时间</Badge>}
           </div>
