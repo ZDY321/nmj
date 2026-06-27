@@ -20,8 +20,10 @@ export function ScheduleImportHeaderPanel({
   loading,
   summary,
   needsAttention,
-  resolvedAsMatchedCount,
-  reviewedCount,
+  importedLessonHours,
+  systemLessonCount,
+  systemLessonHours,
+  needsAttentionHours,
   fileSummaries,
   monthCount,
   campusOptions,
@@ -40,8 +42,10 @@ export function ScheduleImportHeaderPanel({
   loading: boolean;
   summary: ScheduleImportSummary;
   needsAttention: number;
-  resolvedAsMatchedCount: number;
-  reviewedCount: number;
+  importedLessonHours: number;
+  systemLessonCount: number;
+  systemLessonHours: number;
+  needsAttentionHours: number;
   fileSummaries: ScheduleImportFileSummary[];
   monthCount: number;
   campusOptions: Campus[];
@@ -116,12 +120,9 @@ export function ScheduleImportHeaderPanel({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="sky">Excel {rawLessonCount} 节</Badge>
-          <Badge variant="secondary">对账行 {summary.total} 条</Badge>
-          <Badge variant="sage">已对应 {summary.matched} 条</Badge>
-          <Badge variant={needsAttention > 0 ? "amber" : "secondary"}>待核对 {needsAttention} 条</Badge>
-          {resolvedAsMatchedCount > 0 && <Badge variant="sage">人工确认 {resolvedAsMatchedCount} 条</Badge>}
-          {reviewedCount > 0 && <Badge variant="sky">已标注 {reviewedCount} 条</Badge>}
+          <Badge variant="sky">教务导入 {rawLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
+          <Badge variant="secondary">云端课表 {systemLessonCount} 节 / {systemLessonHours.toFixed(1)}h</Badge>
+          <Badge variant={needsAttention > 0 ? "amber" : "sage"}>待核对 {needsAttention} 节 / {needsAttentionHours.toFixed(1)}h</Badge>
         </div>
       </CardHeader>
 

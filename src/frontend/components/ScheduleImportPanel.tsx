@@ -16,7 +16,7 @@ import type {
   ScheduleImportVaultState,
   TeacherVault
 } from "@/shared/types";
-import { todayIso } from "@/frontend/lib/calculations";
+import { lessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import {
   calendarDates,
   orderedWeekdayLabels,
@@ -46,6 +46,7 @@ import {
   effectiveRowStatus,
   formatSavedReviewAmount,
   formatSavedReviewNumber,
+  importPreviewLessonBillableHours,
   isReviewedResolution,
   linkedSystemLessonIdsFromRows,
   linkedSystemLessonIdsFromResolutions,
@@ -174,6 +175,31 @@ export function ScheduleImportPanel({
     [resolutions, rows]
   );
   const summary = useMemo(() => summarizeImportPreview(effectiveRows), [effectiveRows]);
+  const attentionRows = useMemo(
+    () => rows.filter((row) =>
+      effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" ||
+      resolutions[resolutionKey(row)]?.status === "missing_lesson_fee"
+    ),
+    [linkedSystemLessonIds, resolutions, rows]
+  );
+  const importedLessonHours = useMemo(
+    () => importedRows.reduce((sum, row) => sum + importPreviewLessonBillableHours(vault, row), 0),
+    [importedRows, vault]
+  );
+  const systemLessonStats = useMemo(() => {
+    const lessonsById = new Map(vault.lessons.map((lesson) => [lesson.id, lesson]));
+    const systemLessons = Array.from(new Set(rows.map((row) => row.systemLessonId).filter((lessonId): lessonId is string => Boolean(lessonId))))
+      .map((lessonId) => lessonsById.get(lessonId))
+      .filter((lesson): lesson is Lesson => Boolean(lesson));
+    return {
+      count: systemLessons.length,
+      hours: systemLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0)
+    };
+  }, [rows, vault]);
+  const needsAttentionHours = useMemo(
+    () => attentionRows.reduce((sum, row) => sum + scheduleImportRowHours(vault, row), 0),
+    [attentionRows, vault]
+  );
   const resolvedAsMatchedCount = useMemo(
     () => rows.filter((row) => row.status !== "matched" && resolutionMarksRowResolved(resolutions[resolutionKey(row)]?.status)).length,
     [resolutions, rows]
@@ -198,8 +224,7 @@ export function ScheduleImportPanel({
   const weekStartPreference = weekStartsOn(vault);
   const days = calendarDates(displayMonth, weekStartPreference);
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference);
-  const needsAttention = summary.attendanceMismatch + summary.timeMismatch + summary.courseMismatch + summary.systemMissing + summary.importMissing + summary.needsMapping;
-  const reviewedCount = rows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
+  const needsAttention = attentionRows.length;
   const savedReviews = persistedScheduleImport?.reviews ?? [];
   const selectedReview = savedReviews.find((review) => review.id === selectedReviewId) ?? savedReviews[0];
   const savedReviewLiveCounts = useMemo(
@@ -511,8 +536,10 @@ export function ScheduleImportPanel({
           loading={loading}
           summary={summary}
           needsAttention={needsAttention}
-          resolvedAsMatchedCount={resolvedAsMatchedCount}
-          reviewedCount={reviewedCount}
+          importedLessonHours={importedLessonHours}
+          systemLessonCount={systemLessonStats.count}
+          systemLessonHours={systemLessonStats.hours}
+          needsAttentionHours={needsAttentionHours}
           fileSummaries={fileSummaries}
           monthCount={monthOptions.length}
           campusOptions={campusOptions}
@@ -637,6 +664,14 @@ export function ScheduleImportPanel({
       {dialog}
     </Card>
   );
+}
+
+function scheduleImportRowHours(vault: TeacherVault, row: ImportPreviewLesson): number {
+  if (row.status === "import_missing" && row.systemLessonId) {
+    const lesson = vault.lessons.find((item) => item.id === row.systemLessonId);
+    if (lesson) return lessonBillableHoursForVault(vault, lesson);
+  }
+  return importPreviewLessonBillableHours(vault, row);
 }
 
 function splitMergePayrollExcludedLessonIds(rows: ImportPreviewLesson[], resolutions: ScheduleImportResolutionMap): string[] {

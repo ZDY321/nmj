@@ -64,6 +64,8 @@ export function PayrollReviewView({
     effectiveObligationCampusId,
     filteredLessons,
     detailLessons,
+    monthLessonCount,
+    monthPayrollHours,
     breakdown,
     lessonFeeTotal,
     estimatedIncome,
@@ -218,7 +220,7 @@ export function PayrollReviewView({
 
       <PayrollMetricSummaryCards
         cards={[
-          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `已完成 ${campusHours.toFixed(1)} 小时`, icon: CalendarDays },
+          { label: "筛选课次", value: `${filteredLessons.length} 节`, hint: `筛选已完成 ${campusHours.toFixed(1)} 小时 · 本月 ${monthLessonCount} 节 / ${monthPayrollHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatPrivateMoney(campusLessonFee, amountsVisible), hint: "仅统计已完成/补课完成", icon: Banknote },
           { label: "课时费总计", value: formatPrivateMoney(lessonFeeTotal, amountsVisible), hint: "本月全部已完成课时费", icon: Banknote },
           {

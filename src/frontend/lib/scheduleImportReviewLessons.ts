@@ -162,12 +162,12 @@ export function savedRowSystemAttendance(
 
 export function summarizeLinkedLessons(vault: TeacherVault, linkedLessons: Lesson[], row: ImportPreviewLesson): { importHours: number; systemHours: number } {
   return {
-    importHours: importedRowDurationHours(vault, row),
+    importHours: importPreviewLessonBillableHours(vault, row),
     systemHours: linkedLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0)
   };
 }
 
-function importedRowDurationHours(vault: TeacherVault, row: Pick<ImportPreviewLesson, "startTime" | "endTime" | "matchedCourseId" | "mappedCourseId">): number {
+export function importPreviewLessonBillableHours(vault: TeacherVault, row: Pick<ImportPreviewLesson, "startTime" | "endTime" | "matchedCourseId" | "mappedCourseId">): number {
   const courseId = row.matchedCourseId ?? row.mappedCourseId;
   const course = courseId ? vault.courseGroups.find((item) => item.id === courseId) : undefined;
   if (course) return billableHoursForCourseLesson(course, row, vault);

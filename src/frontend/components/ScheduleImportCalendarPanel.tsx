@@ -40,10 +40,14 @@ export function ScheduleImportCalendarPanel({
   rowAttentionLabel?: (row: ImportPreviewLesson) => string | undefined;
   renderRow: (row: ImportPreviewLesson) => ReactNode;
 }) {
+  const rowHasMissingLessonFee = (row: ImportPreviewLesson): boolean =>
+    resolutions[resolutionKey(row)]?.status === "missing_lesson_fee";
   const rowHasProblem = (row: ImportPreviewLesson): boolean =>
     effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" ||
+    rowHasMissingLessonFee(row) ||
     attentionLabelMarksProblem(rowAttentionLabel?.(row));
   const selectedDateProblemCount = selectedDateRows.filter(rowHasProblem).length;
+  const selectedDateMissingFeeCount = selectedDateRows.filter(rowHasMissingLessonFee).length;
   const selectedDateHasProblems = selectedDateProblemCount > 0;
 
   return (
@@ -60,6 +64,7 @@ export function ScheduleImportCalendarPanel({
             const isSelected = selectedDate === date;
             const isCurrentMonth = date.startsWith(displayMonth);
             const hasProblems = dayRows.some(rowHasProblem);
+            const missingFeeDayCount = dayRows.filter(rowHasMissingLessonFee).length;
             const reviewedDayCount = dayRows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
             return (
               <button
@@ -84,6 +89,7 @@ export function ScheduleImportCalendarPanel({
                   <span className="text-sm font-extrabold text-[#061226]">{Number(date.slice(8))}</span>
                   <div className="flex items-center gap-1">
                     {reviewedDayCount > 0 && <Badge variant="sky" className="text-[10px]">已标 {reviewedDayCount}</Badge>}
+                    {missingFeeDayCount > 0 && <Badge variant="amber" className="text-[10px]">欠费 {missingFeeDayCount}</Badge>}
                     {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="text-[10px]">{dayRows.length}</Badge>}
                   </div>
                 </div>
@@ -122,6 +128,7 @@ export function ScheduleImportCalendarPanel({
             <Badge variant={selectedDateHasProblems ? "amber" : "sage"}>
               {selectedDateHasProblems ? `有差异 ${selectedDateProblemCount} 节` : "已对应"}
             </Badge>
+            {selectedDateMissingFeeCount > 0 && <Badge variant="amber">欠费 {selectedDateMissingFeeCount} 节</Badge>}
           </div>
         </div>
 

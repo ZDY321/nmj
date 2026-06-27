@@ -84,12 +84,15 @@ export function usePayrollReviewData({
     () => payrollExcludedSplitMergeLessonIds(vault, selectedMonth),
     [selectedMonth, vault]
   );
+  const monthPayrollLessons = useMemo(
+    () => monthLessons.filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)),
+    [monthLessons, splitMergeExcludedLessonIds]
+  );
   const filteredLessons = useMemo(
-    () => monthLessons
-      .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
+    () => monthPayrollLessons
       .filter((lesson) => matchesReviewFilters(lesson, true))
       .sort(sortLessons),
-    [campusFilter, gradeFilter, monthLessons, splitMergeExcludedLessonIds, statusFilter, typeFilter, vault]
+    [campusFilter, gradeFilter, monthPayrollLessons, statusFilter, typeFilter, vault]
   );
   const detailLessons = useMemo(
     () => filteredLessons
@@ -130,6 +133,10 @@ export function usePayrollReviewData({
       return sum + lessonBillableHoursForVault(vault, lesson);
     }, 0),
     [filteredLessons, vault]
+  );
+  const monthPayrollHours = useMemo(
+    () => monthPayrollLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
+    [monthPayrollLessons, vault]
   );
   const obligationDeductionApplies = campusFilter === "all" || campusFilter === effectiveObligationCampusId;
   const campusDeduction = obligationDeductionApplies ? currentCampusObligation.amount : 0;
@@ -221,6 +228,8 @@ export function usePayrollReviewData({
     effectiveObligationCampusId,
     filteredLessons,
     detailLessons,
+    monthLessonCount: monthPayrollLessons.length,
+    monthPayrollHours,
     breakdown,
     lessonFeeTotal,
     estimatedIncome,

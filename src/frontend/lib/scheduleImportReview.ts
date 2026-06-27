@@ -53,6 +53,7 @@ export {
 } from "@/frontend/lib/scheduleImportReviewRecords";
 export {
   courseTypeLabelSafe,
+  importPreviewLessonBillableHours,
   lessonDurationHours,
   linkedLessonsForResolution,
   linkedLessonsForSavedRow,
