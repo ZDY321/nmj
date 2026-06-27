@@ -16,6 +16,7 @@ export type PayrollCampusSummary = {
   lessons: Lesson[];
   amount: number;
   hours: number;
+  unfinishedHours: number;
   obligationHours: number;
   remainingHours: number;
   obligation: number;
@@ -41,6 +42,7 @@ export function PayrollOverviewGrid({
   monthLessonCount,
   monthPayrollHours,
   monthRemainingPayrollHours,
+  monthUnfinishedPayrollHours,
   campusSummaries,
   breakdown,
   lessonFeeTotal,
@@ -54,6 +56,7 @@ export function PayrollOverviewGrid({
   monthLessonCount: number;
   monthPayrollHours: number;
   monthRemainingPayrollHours: number;
+  monthUnfinishedPayrollHours: number;
   campusSummaries: PayrollCampusSummary[];
   breakdown: SalaryBreakdown;
   lessonFeeTotal: number;
@@ -72,10 +75,11 @@ export function PayrollOverviewGrid({
           <CardDescription>节数和总时长为当前筛选下未抵扣前的云端课表口径；抵扣后时长会扣除已用于义务课时的小时数。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {[
               { label: "本月课节", value: `${monthLessonCount} 节` },
               { label: "未抵扣前总时长", value: `${monthPayrollHours.toFixed(1)} 小时` },
+              { label: "未完成课节时长", value: `${monthUnfinishedPayrollHours.toFixed(1)} 小时` },
               { label: "抵扣后剩余时长", value: `${monthRemainingPayrollHours.toFixed(1)} 小时` }
             ].map((item) => (
               <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-white px-3 py-2">
@@ -99,6 +103,9 @@ export function PayrollOverviewGrid({
                   <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
                     <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">课节 {item.lessons.length} 节</span>
                     <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">未抵扣前 {item.hours.toFixed(1)} 小时</span>
+                    {item.unfinishedHours > 0 && (
+                      <span className="rounded-full bg-[#eef4fb] px-2.5 py-1 text-[#475569] ring-1 ring-[#cbd6e3]">未完成 {item.unfinishedHours.toFixed(1)} 小时</span>
+                    )}
                     <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">抵扣后 {item.remainingHours.toFixed(1)} 小时</span>
                     {item.obligationHours > 0 && (
                       <span className="rounded-full bg-[#fff7ed] px-2.5 py-1 text-[#9a3412] ring-1 ring-[#fed7aa]">已抵扣 {item.obligationHours.toFixed(1)} 小时</span>

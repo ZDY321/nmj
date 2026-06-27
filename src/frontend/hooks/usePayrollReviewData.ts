@@ -138,6 +138,13 @@ export function usePayrollReviewData({
     }, 0),
     [filteredLessons, vault]
   );
+  const campusUnfinishedHours = useMemo(
+    () => filteredLessons.reduce((sum, lesson) => {
+      if (lesson.status === "completed" || lesson.status === "makeup_completed") return sum;
+      return sum + lessonBillableHoursForVault(vault, lesson);
+    }, 0),
+    [filteredLessons, vault]
+  );
   const obligationDeductionApplies = campusFilter === "all" || campusFilter === effectiveObligationCampusId;
   const campusDeduction = obligationDeductionApplies ? currentCampusObligation.amount : 0;
   const campusNet = campusLessonFee - campusDeduction;
@@ -200,6 +207,10 @@ export function usePayrollReviewData({
       const lessons = campusSummaryBaseLessons.filter((lesson) => lessonCampusId(vault, lesson) === campus.id);
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
       const hours = lessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
+      const unfinishedHours = lessons.reduce((sum, lesson) => {
+        if (lesson.status === "completed" || lesson.status === "makeup_completed") return sum;
+        return sum + lessonBillableHoursForVault(vault, lesson);
+      }, 0);
       const obligation = campus.id === effectiveObligationCampusId ? obligationSummary(vault, selectedMonth, campus.id).amount : 0;
       const obligationHours = obligationHoursByCampus.get(campus.id) ?? 0;
       return {
@@ -207,6 +218,7 @@ export function usePayrollReviewData({
         lessons,
         amount,
         hours,
+        unfinishedHours,
         obligationHours,
         remainingHours: Math.max(hours - obligationHours, 0),
         obligation,
@@ -225,6 +237,10 @@ export function usePayrollReviewData({
   );
   const monthRemainingPayrollHours = useMemo(
     () => campusSummaries.reduce((sum, item) => sum + item.remainingHours, 0),
+    [campusSummaries]
+  );
+  const monthUnfinishedPayrollHours = useMemo(
+    () => campusSummaries.reduce((sum, item) => sum + item.unfinishedHours, 0),
     [campusSummaries]
   );
 
@@ -253,12 +269,14 @@ export function usePayrollReviewData({
     monthLessonCount: monthSummaryLessonCount,
     monthPayrollHours: monthSummaryHours,
     monthRemainingPayrollHours,
+    monthUnfinishedPayrollHours,
     breakdown,
     lessonFeeTotal,
     estimatedIncome,
     currentCampusObligation,
     campusLessonFee,
     campusHours,
+    campusUnfinishedHours,
     obligationDeductionApplies,
     campusDeduction,
     campusNet,
