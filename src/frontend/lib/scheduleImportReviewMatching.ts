@@ -124,6 +124,13 @@ export function quickResolutionActionsForRow(row: ImportPreviewLesson): Array<{ 
       note: "人工核对确认无误。"
     }
   ];
+  if (importRowLooksNoShow(row)) {
+    actions.push({
+      status: "missing_lesson_fee",
+      label: "缺课时费",
+      note: "教务实到为 0，疑似学生未到或课时费不足，按缺课时费处理。"
+    });
+  }
   if (row.status === "time_mismatch") {
     actions.push({
       status: "time_variance_ok",
@@ -139,6 +146,14 @@ export function quickResolutionActionsForRow(row: ImportPreviewLesson): Array<{ 
     });
   }
   return actions;
+}
+
+function importRowLooksNoShow(row: Pick<ImportPreviewLesson, "presentCount" | "expectedCount" | "warnings" | "note" | "rawText">): boolean {
+  if (row.presentCount !== 0 || (row.expectedCount ?? 0) <= 0) return false;
+  if (row.warnings.includes("缺勤未到")) return true;
+  if (row.warnings.includes("未开课/取消")) return false;
+  if (/取消|停课|请假|未上|不上课|未开课|课消|无学生/.test(`${row.note ?? ""} ${row.rawText ?? ""}`)) return false;
+  return true;
 }
 
 export function resolutionKey(row: ImportPreviewLesson): string {

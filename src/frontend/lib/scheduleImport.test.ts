@@ -199,6 +199,16 @@ describe("schedule import parsing and matching", () => {
       expectedCount: 3,
       warnings: ["未全员到课", "未开课/取消"]
     });
+
+    const absentLessons = parseScheduleCell(
+      "6月5日\n16:00 - 18:00 孙可瑶_九年级物理1V1（1对1） 教师：朱老师 教室：B05 实到/应到：0/1",
+      { fileName, campusName: "东城校区", year: 2026 }
+    );
+    expect(absentLessons[0]).toMatchObject({
+      presentCount: 0,
+      expectedCount: 1,
+      warnings: ["未全员到课", "缺勤未到"]
+    });
   });
 
   it("matches imported rows to system lessons and summarizes mismatches plus local-only lessons", () => {
@@ -489,7 +499,8 @@ describe("schedule import review records", () => {
       count: 1,
       hours: 2,
       excludedCount: 1,
-      cancelledExcludedCount: 0
+      cancelledExcludedCount: 0,
+      absentExcludedCount: 0
     });
 
     const cancelledRow = makePreviewRow({
@@ -507,8 +518,54 @@ describe("schedule import review records", () => {
       rawCount: 2,
       count: 1,
       excludedCount: 0,
-      cancelledExcludedCount: 1
+      cancelledExcludedCount: 1,
+      absentExcludedCount: 0
     });
     expect(cancelledStats.hours).toBeCloseTo(1.83, 2);
+
+    const absentRow = makePreviewRow({
+      id: "row_absent",
+      presentCount: 0,
+      expectedCount: 1,
+      rawText: "孙可瑶_九年级物理1V1（1对1） 教师：朱大勇 实到/应到：0/1",
+      warnings: ["未全员到课", "缺勤未到"],
+      status: "attendance_mismatch"
+    });
+    const absentStats = summarizeScheduleImportImportedLessons(vault, [confirmedRow, absentRow], {});
+
+    expect(absentStats).toMatchObject({
+      rawCount: 2,
+      count: 1,
+      excludedCount: 0,
+      cancelledExcludedCount: 0,
+      absentExcludedCount: 1
+    });
+    expect(absentStats.hours).toBeCloseTo(1.83, 2);
+
+    const legacyAbsentRow = makePreviewRow({
+      id: "row_legacy_absent",
+      presentCount: 0,
+      expectedCount: 1,
+      rawText: "孙可瑶_九年级物理1V1（1对1） 教师：朱大勇 实到/应到：0/1",
+      warnings: ["未全员到课"],
+      status: "attendance_mismatch"
+    });
+    expect(summarizeScheduleImportImportedLessons(vault, [legacyAbsentRow], {})).toMatchObject({
+      rawCount: 1,
+      count: 0,
+      absentExcludedCount: 1
+    });
+
+    const manuallyAcceptedAbsentStats = summarizeScheduleImportImportedLessons(vault, [absentRow], {
+      [resolutionKey(absentRow)]: {
+        status: "accepted" as const,
+        note: "人工确认仍计入课时。",
+        updatedAt: "2026-06-22T05:05:00.000Z"
+      }
+    });
+    expect(manuallyAcceptedAbsentStats).toMatchObject({
+      count: 1,
+      absentExcludedCount: 0
+    });
   });
 });

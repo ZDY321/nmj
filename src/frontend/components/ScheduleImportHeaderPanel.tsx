@@ -19,6 +19,7 @@ export function ScheduleImportHeaderPanel({
   importedLessonCount,
   excludedImportedLessonCount,
   cancelledImportedLessonCount,
+  absentImportedLessonCount,
   rowCount,
   loading,
   summary,
@@ -46,6 +47,7 @@ export function ScheduleImportHeaderPanel({
   importedLessonCount: number;
   excludedImportedLessonCount: number;
   cancelledImportedLessonCount: number;
+  absentImportedLessonCount: number;
   rowCount: number;
   loading: boolean;
   summary: ScheduleImportSummary;
@@ -133,6 +135,7 @@ export function ScheduleImportHeaderPanel({
           <Badge variant="sky">教务导入 {importedLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
           {excludedImportedLessonCount > 0 && <Badge variant="secondary">未到日期不计 {excludedImportedLessonCount} 节</Badge>}
           {cancelledImportedLessonCount > 0 && <Badge variant="secondary">取消/未开课不计 {cancelledImportedLessonCount} 节</Badge>}
+          {absentImportedLessonCount > 0 && <Badge variant="secondary">缺勤未到不计 {absentImportedLessonCount} 节</Badge>}
           <Badge variant="secondary">云端排课总课时(含未完成，未抵扣前) {systemLessonCount} 节 / {systemLessonHours.toFixed(1)}h</Badge>
           <Badge variant="sage">云端已完成课时(已完成，未抵扣前) {systemCompletedLessonCount} 节 / {systemCompletedLessonHours.toFixed(1)}h</Badge>
           <Badge variant={needsAttention > 0 ? "amber" : "sage"}>待核对 {needsAttention} 节 / {needsAttentionHours.toFixed(1)}h</Badge>

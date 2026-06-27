@@ -175,6 +175,7 @@ export type ScheduleImportImportedLessonStats = {
   hours: number;
   excludedCount: number;
   cancelledExcludedCount: number;
+  absentExcludedCount: number;
 };
 
 export function summarizeScheduleImportImportedLessons(
@@ -187,6 +188,7 @@ export function summarizeScheduleImportImportedLessons(
   let hours = 0;
   let excludedCount = 0;
   let cancelledExcludedCount = 0;
+  let absentExcludedCount = 0;
 
   rows.forEach((row) => {
     const resolution = resolutions[resolutionKey(row)];
@@ -194,8 +196,13 @@ export function summarizeScheduleImportImportedLessons(
       excludedCount += 1;
       return;
     }
-    if (importPreviewLessonExcludedAsCancelled(row)) {
+    const forceIncludeByResolution = resolutionUsesSystemHoursForImportStats(resolution?.status);
+    if (!forceIncludeByResolution && importPreviewLessonExcludedAsCancelled(row)) {
       cancelledExcludedCount += 1;
+      return;
+    }
+    if (!forceIncludeByResolution && importPreviewLessonExcludedAsAbsent(row)) {
+      absentExcludedCount += 1;
       return;
     }
 
@@ -220,7 +227,8 @@ export function summarizeScheduleImportImportedLessons(
     count: count + splitMergeLessons.length,
     hours: hours + splitMergeLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
     excludedCount,
-    cancelledExcludedCount
+    cancelledExcludedCount,
+    absentExcludedCount
   };
 }
 
@@ -247,7 +255,15 @@ function validLinkedLessonIds(vault: TeacherVault, resolution: ScheduleImportRes
 function importPreviewLessonExcludedAsCancelled(row: Pick<ImportPreviewLesson, "presentCount" | "warnings" | "note" | "rawText">): boolean {
   if (row.presentCount !== 0) return false;
   if (row.warnings.includes("未开课/取消")) return true;
-  return /取消|停课|请假|未上|不上课|未开课|课消|缺勤|无学生/.test(`${row.note ?? ""} ${row.rawText ?? ""}`);
+  return /取消|停课|请假|未上|不上课|未开课|课消|无学生/.test(`${row.note ?? ""} ${row.rawText ?? ""}`);
+}
+
+function importPreviewLessonExcludedAsAbsent(row: Pick<ImportPreviewLesson, "presentCount" | "expectedCount" | "warnings" | "note" | "rawText">): boolean {
+  if (row.presentCount !== 0 || (row.expectedCount ?? 0) <= 0) return false;
+  if (row.warnings.includes("缺勤未到")) return true;
+  if (row.warnings.includes("未开课/取消")) return false;
+  if (/取消|停课|请假|未上|不上课|未开课|课消|无学生/.test(`${row.note ?? ""} ${row.rawText ?? ""}`)) return false;
+  return true;
 }
 
 export function lessonDurationHours(lesson: Pick<Lesson, "startTime" | "endTime">): number {

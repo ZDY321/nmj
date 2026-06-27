@@ -149,9 +149,11 @@ export function parseScheduleCell(
     const subjectHint = inferSubjectHint(title);
     const courseTypeHint = inferCourseTypeHint(title, expectedCount);
     const warnings: string[] = [];
+    const likelyCancelled = isLikelyCancelledImportedLesson({ presentCount, note, rawText: body });
     if (!countMatch) warnings.push("缺少实到/应到");
     if (presentCount !== undefined && expectedCount !== undefined && presentCount < expectedCount) warnings.push("未全员到课");
-    if (isLikelyCancelledImportedLesson({ presentCount, note, rawText: body })) warnings.push("未开课/取消");
+    if (presentCount === 0 && (expectedCount ?? 0) > 0 && !likelyCancelled) warnings.push("缺勤未到");
+    if (likelyCancelled) warnings.push("未开课/取消");
     if (!title) warnings.push("缺少课程标题");
 
     lessons.push({

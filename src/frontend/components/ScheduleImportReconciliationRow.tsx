@@ -81,6 +81,7 @@ export function ScheduleImportReconciliationRow({
   const linkedLessonWarnings = linkedLessons.flatMap((lesson) => splitMergeLinkedLessonWarnings(vault, row, lesson));
   const hasLinkedLessonWarning = linkedLessonWarnings.length > 0;
   const hasArrears = scheduleImportRowHasArrears(row, resolution);
+  const hasNoShow = scheduleImportRowIsNoShow(row);
   const displayStatus = hasSplitMergeLinkProblem ? row.status : baseDisplayStatus;
   const reviewed = baseReviewed && !hasSplitMergeLinkProblem;
   const isMatched = displayStatus === "matched";
@@ -119,6 +120,7 @@ export function ScheduleImportReconciliationRow({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant={statusVariant(displayStatus)}>{statusLabel(displayStatus)}</Badge>
             {hasArrears && <Badge variant="destructive">已欠费</Badge>}
+            {hasNoShow && <Badge variant="amber">缺勤未到</Badge>}
             <Badge variant="secondary">{row.date}</Badge>
             <Badge variant="secondary">教务 {importTimeLabel}</Badge>
             {systemLesson && (
@@ -370,6 +372,14 @@ function splitMergeLinkedLessonWarnings(vault: TeacherVault, row: ImportPreviewL
   const gap = timeGapMinutes(row, lesson);
   if (gap > 60) warnings.push(`时间相差 ${Math.round(gap)} 分钟`);
   return warnings;
+}
+
+function scheduleImportRowIsNoShow(row: Pick<ImportPreviewLesson, "presentCount" | "expectedCount" | "warnings" | "note" | "rawText">): boolean {
+  if (row.presentCount !== 0 || (row.expectedCount ?? 0) <= 0) return false;
+  if (row.warnings.includes("缺勤未到")) return true;
+  if (row.warnings.includes("未开课/取消")) return false;
+  if (/取消|停课|请假|未上|不上课|未开课|课消|无学生/.test(`${row.note ?? ""} ${row.rawText ?? ""}`)) return false;
+  return true;
 }
 
 function scheduleImportRowHasArrears(row: ImportPreviewLesson, resolution?: ScheduleImportResolution): boolean {
