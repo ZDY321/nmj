@@ -64,7 +64,7 @@ export function PayrollScheduleExportGuide() {
               </div>
               <CardTitle>教务 Excel 导出与脚本安装指引</CardTitle>
               <CardDescription className="mt-2">
-                先安装 Tampermonkey，再导入你已有的校宝辅助脚本，最后从校宝教务中心导出课表 Excel 后回到对账页导入。
+                先安装 Tampermonkey，再导入你已有的校宝辅助脚本，最后从 <strong>校宝教务中心--&gt;排课</strong> 导出课表 Excel 后回到对账页导入。
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
