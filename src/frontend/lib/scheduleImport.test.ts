@@ -14,7 +14,7 @@ import {
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit
 } from "@/frontend/lib/scheduleImportReviewRecords";
-import { buildLocalOnlyRows } from "@/frontend/lib/scheduleImportReviewRows";
+import { buildDefaultCampusOverrides, buildLocalOnlyRows } from "@/frontend/lib/scheduleImportReviewRows";
 import { resolutionKey } from "@/frontend/lib/scheduleImportReviewMatching";
 import type {
   CourseGroup,
@@ -251,6 +251,36 @@ describe("schedule import parsing and matching", () => {
       importMissing: 1
     });
     expect(summary.byCampus).toContainEqual({ key: campus.name, count: 3, selected: 1 });
+  });
+
+  it("maps legacy Haizhou file names to Haining campus", () => {
+    const hainingCampus = { id: "campus_haining", name: "海宁校区" };
+    const hainingCourse: CourseGroup = {
+      ...oneOnOneCourse,
+      id: "course_haining",
+      defaultCampusId: hainingCampus.id
+    };
+    const vault = makeVault({
+      campuses: [campus, hainingCampus],
+      courseGroups: [hainingCourse],
+      lessons: [makeLesson({ id: "lesson_haining", courseGroupId: hainingCourse.id, type: "one_on_one", campusId: hainingCampus.id })]
+    });
+    const fileName = "校宝课表导出2026-06-20（海州区）.xlsx";
+    const imported = makeImportedLesson({
+      id: "import_haining",
+      fileName,
+      campusName: parseCampusFromFileName(fileName) ?? ""
+    });
+    const overrides = buildDefaultCampusOverrides(vault, [imported], {});
+    const rows = buildImportPreview(vault, [imported], {}, overrides);
+
+    expect(imported.campusName).toBe("海州区");
+    expect(overrides[fileName]).toBe(hainingCampus.id);
+    expect(rows[0]).toMatchObject({
+      campusId: hainingCampus.id,
+      campusName: hainingCampus.name,
+      status: "matched"
+    });
   });
 });
 

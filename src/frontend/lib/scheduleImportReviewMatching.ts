@@ -71,6 +71,7 @@ export function countResolutionsForRows(rows: ImportPreviewLesson[], resolutions
       unreviewed: 0,
       excel_error: 0,
       cloud_error: 0,
+      missing_lesson_fee: 0,
       fixed: 0,
       accepted: 0,
       time_variance_ok: 0,

@@ -8,7 +8,7 @@ export type StatusFilterOption = { label: string; value: StatusFilter; variant?:
 export type MatchStatusFilterOption = { label: string; status: ImportMatchStatus; variant: ScheduleImportBadgeVariant };
 export type ResolutionStatusFilterOption = { label: string; status: ResolutionFilter; resolutionStatus: ScheduleImportResolutionStatus; variant: ScheduleImportBadgeVariant };
 
-export const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "excel_error", "cloud_error", "fixed", "accepted", "time_variance_ok", "split_merge_ok"];
+export const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "excel_error", "cloud_error", "missing_lesson_fee", "fixed", "accepted", "time_variance_ok", "split_merge_ok"];
 
 export const importMatchStatusFilterOptions: MatchStatusFilterOption[] = [
   { label: "已对应", status: "matched", variant: "sage" },
@@ -26,6 +26,7 @@ export const resolutionStatusFilterOptions: ResolutionStatusFilterOption[] = [
   { label: "时间偏差正常", status: "resolution:time_variance_ok", resolutionStatus: "time_variance_ok", variant: "yellow" },
   { label: "拆分合并正常", status: "resolution:split_merge_ok", resolutionStatus: "split_merge_ok", variant: "plum" },
   { label: "教务表错误", status: "resolution:excel_error", resolutionStatus: "excel_error", variant: "amber" },
+  { label: "缺课时费", status: "resolution:missing_lesson_fee", resolutionStatus: "missing_lesson_fee", variant: "amber" },
   { label: "云端需修正", status: "resolution:cloud_error", resolutionStatus: "cloud_error", variant: "destructive" }
 ];
 
@@ -58,6 +59,7 @@ export function resolutionStatusLabel(status: ScheduleImportResolutionStatus): s
     unreviewed: "未处理",
     excel_error: "教务表错误",
     cloud_error: "云端需修正",
+    missing_lesson_fee: "缺课时费",
     fixed: "已修正",
     accepted: "确认无误",
     time_variance_ok: "时间偏差正常",

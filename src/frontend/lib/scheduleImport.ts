@@ -512,8 +512,19 @@ function mergedExportDateRange(lessons: ImportedScheduleLesson[]): string {
 
 function matchCampus(vault: TeacherVault, campusName: string) {
   const normalized = normalizeText(campusName);
-  if (!normalized) return undefined;
-  return vault.campuses.find((campus) => normalizeText(campus.id) === normalized || normalizeText(campus.name) === normalized);
+  const candidates = [normalized, ...legacyCampusAliasesForValue(normalized)].filter(Boolean);
+  if (candidates.length === 0) return undefined;
+  return vault.campuses.find((campus) => {
+    const campusId = normalizeText(campus.id);
+    const campusNameValue = normalizeText(campus.name);
+    return candidates.some((candidate) => campusId === candidate || campusNameValue === candidate || campusNameValue.includes(candidate));
+  });
+}
+
+function legacyCampusAliasesForValue(value: string): string[] {
+  if (!value) return [];
+  if (value.includes("海州区")) return [normalizeText("海宁")];
+  return [];
 }
 
 function matchCourse(vault: TeacherVault, lesson: ImportedScheduleLesson, campusId?: string): CourseGroup | undefined {

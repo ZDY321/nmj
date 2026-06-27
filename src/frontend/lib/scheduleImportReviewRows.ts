@@ -107,9 +107,10 @@ export function applyCampusOverridesToLessons(
 }
 
 function findCampusByName(vault: TeacherVault, values: string | string[]) {
-  const normalizedValues = (Array.isArray(values) ? values : [values])
+  const normalizedValues = Array.from(new Set((Array.isArray(values) ? values : [values])
     .map(normalizeText)
-    .filter(Boolean);
+    .flatMap((value) => [value, ...legacyCampusAliasesForValue(value)])
+    .filter(Boolean)));
   if (normalizedValues.length === 0) return undefined;
   const campuses = [...vault.campuses].sort((a, b) => normalizeText(b.name).length - normalizeText(a.name).length);
   const matches = campuses.flatMap((campus) => {
@@ -128,6 +129,12 @@ function findCampusByName(vault: TeacherVault, values: string | string[]) {
     normalizeText(b.campus.name).length - normalizeText(a.campus.name).length ||
     compareByName(a.campus.name, b.campus.name)
   )[0]?.campus;
+}
+
+function legacyCampusAliasesForValue(value: string): string[] {
+  if (!value) return [];
+  if (value.includes("海州区")) return [normalizeText("海宁")];
+  return [];
 }
 
 function normalizeText(value: string): string {

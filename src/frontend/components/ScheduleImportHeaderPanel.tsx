@@ -31,6 +31,7 @@ export function ScheduleImportHeaderPanel({
   onSave,
   onExport,
   onClear,
+  onRemoveFile,
   onFileCampusChange,
   onOpenGuide
 }: {
@@ -50,6 +51,7 @@ export function ScheduleImportHeaderPanel({
   onSave: () => void;
   onExport: () => void;
   onClear: () => void;
+  onRemoveFile: (fileName: string) => void;
   onFileCampusChange: (fileName: string, campusId: string) => void;
   onOpenGuide?: () => void;
 }) {
@@ -222,13 +224,18 @@ export function ScheduleImportHeaderPanel({
               </div>
               <div className="space-y-2">
                 {fileSummaries.map((file) => (
-                  <div key={file.fileName} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[minmax(0,1fr)_240px]">
+                  <div key={file.fileName} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3 md:grid-cols-[minmax(0,1fr)_240px_76px]">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-extrabold text-[#061226]">{file.fileName}</div>
                       <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
                         <Badge variant="secondary" className="text-[10px]">{file.count} 节</Badge>
                         <Badge variant="secondary" className="text-[10px]">{file.months.join("、") || "未知月份"}</Badge>
                         <Badge variant={file.sourceCampus ? "sky" : "amber"} className="text-[10px]">{file.sourceCampus || "文件名未识别校区"}</Badge>
+                        <Badge variant={fileCampusOverrides[file.fileName] ? "sage" : "amber"} className="text-[10px]">
+                          {fileCampusOverrides[file.fileName]
+                            ? `已对应 ${campusOptions.find((campus) => campus.id === fileCampusOverrides[file.fileName])?.name ?? "校区"}`
+                            : "未对应校区"}
+                        </Badge>
                       </div>
                     </div>
                     <Select value={fileCampusOverrides[file.fileName] ?? ""} onChange={(event) => onFileCampusChange(file.fileName, event.target.value)}>
@@ -237,6 +244,9 @@ export function ScheduleImportHeaderPanel({
                         <option key={campus.id} value={campus.id}>{campus.name}</option>
                       ))}
                     </Select>
+                    <Button type="button" variant="outline" className="h-10 md:h-full" onClick={() => onRemoveFile(file.fileName)}>
+                      <X size={14} /> 移除
+                    </Button>
                   </div>
                 ))}
                 {fileSummaries.length === 0 && (

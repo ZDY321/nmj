@@ -153,12 +153,13 @@ export function ScheduleImportPanel({
     const resolution = resolutions[rowKey];
     const isCurrentlyLinked = row.systemLessonId && linkedSystemLessonIds.has(row.systemLessonId);
     const isDirectMatched = row.status === "matched" || row.status === "attendance_mismatch";
+    const hasValidCurrentLinkedLesson = Boolean(resolution?.linkedSystemLessonIds?.some((lessonId) => existingSystemLessonIds.has(lessonId)));
     const linkedSourceCount = row.systemLessonId
       ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId).length
       : 0;
 
     if (invalidSplitMergeRowKeys.has(rowKey)) return "拆分合并标记已失效";
-    if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId) && !isCurrentlyLinked && !isDirectMatched) return "拆分合并标记已失效";
+    if (row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId) && !isCurrentlyLinked && !isDirectMatched && !hasValidCurrentLinkedLesson) return "拆分合并标记已失效";
     if (resolution?.linkedSystemLessonIds?.length && row.systemLessonId && isDirectMatched) return "合并需复核";
     if (resolution?.status === "split_merge_ok" && resolution.linkedSystemLessonIds?.length) return `合并到 ${resolution.linkedSystemLessonIds.length} 节云端课`;
     if (row.status === "import_missing" && isCurrentlyLinked && linkedSourceCount > 0) return `由 ${linkedSourceCount} 条教务课合并`;
@@ -332,6 +333,18 @@ export function ScheduleImportPanel({
     setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
   }
 
+  function removeImportedFile(fileName: string) {
+    const removedResolutionKeys = new Set(rows.filter((row) => row.fileName === fileName).map((row) => resolutionKey(row)));
+    setRawLessons((current) => current.filter((lesson) => lesson.fileName !== fileName));
+    setFileCampusOverrides((current) => {
+      const next = { ...current };
+      delete next[fileName];
+      return next;
+    });
+    setResolutions((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !removedResolutionKeys.has(key))));
+    setMessage(`已移除「${fileName}」。`);
+  }
+
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) {
     const key = resolutionKey(row);
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
@@ -472,6 +485,7 @@ export function ScheduleImportPanel({
   function clearImport() {
     setRawLessons([]);
     setFileCampusOverrides({});
+    setResolutions({});
     setMessage("");
     setSearch("");
     setStatusFilter("all");
@@ -508,6 +522,7 @@ export function ScheduleImportPanel({
           onSave={saveMapping}
           onExport={downloadMergedSchedule}
           onClear={clearImport}
+          onRemoveFile={removeImportedFile}
           onFileCampusChange={updateFileCampus}
           onOpenGuide={onOpenGuide}
         />

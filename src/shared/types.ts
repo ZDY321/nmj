@@ -457,6 +457,7 @@ export type ScheduleImportResolutionStatus =
   | "unreviewed"
   | "excel_error"
   | "cloud_error"
+  | "missing_lesson_fee"
   | "fixed"
   | "accepted"
   | "time_variance_ok"

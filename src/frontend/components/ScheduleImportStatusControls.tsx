@@ -54,8 +54,8 @@ export function ScheduleImportStatusControls({
   }));
   const matchedStatusCard = statusCards.find((item) => item.status === "matched");
   const attentionStatusCards = statusCards.filter((item) => item.status !== "matched");
-  const errorResolutionCards = resolutionCards.filter((item) => item.resolutionStatus === "excel_error" || item.resolutionStatus === "cloud_error");
-  const normalResolutionCards = resolutionCards.filter((item) => item.resolutionStatus !== "excel_error" && item.resolutionStatus !== "cloud_error");
+  const errorResolutionCards = resolutionCards.filter((item) => item.resolutionStatus === "excel_error" || item.resolutionStatus === "cloud_error" || item.resolutionStatus === "missing_lesson_fee");
+  const normalResolutionCards = resolutionCards.filter((item) => item.resolutionStatus !== "excel_error" && item.resolutionStatus !== "cloud_error" && item.resolutionStatus !== "missing_lesson_fee");
   const resolvedStatusCards = matchedStatusCard ? [matchedStatusCard, ...normalResolutionCards] : normalResolutionCards;
 
   return (
