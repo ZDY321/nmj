@@ -121,7 +121,7 @@ export function ScheduleImportHeaderPanel({
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="sky">教务导入 {rawLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
-          <Badge variant="secondary">云端课表 {systemLessonCount} 节 / {systemLessonHours.toFixed(1)}h</Badge>
+          <Badge variant="secondary">云端课表(对账后) {systemLessonCount} 节 / {systemLessonHours.toFixed(1)}h</Badge>
           <Badge variant={needsAttention > 0 ? "amber" : "sage"}>待核对 {needsAttention} 节 / {needsAttentionHours.toFixed(1)}h</Badge>
         </div>
       </CardHeader>

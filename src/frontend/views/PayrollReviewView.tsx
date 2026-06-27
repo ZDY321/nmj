@@ -54,6 +54,7 @@ export function PayrollReviewView({
   const [detailStatusFilter, setDetailStatusFilter] = useState<LessonStatusFilter>("all");
   const [payrollPanel, setPayrollPanel] = useState<PayrollPanel>(() => panelFocus?.panel ?? "review");
   const [scheduleImportArchive, setScheduleImportArchive] = useState<ScheduleImportVaultState | null>(vault.scheduleImport ?? null);
+  const [scheduleImportArchiveLoading, setScheduleImportArchiveLoading] = useState(false);
   const [scheduleImportArchiveError, setScheduleImportArchiveError] = useState("");
 
   const {
@@ -101,10 +102,12 @@ export function PayrollReviewView({
   useEffect(() => {
     if (!token || !password) {
       setScheduleImportArchive(vault.scheduleImport ?? null);
+      setScheduleImportArchiveLoading(false);
       setScheduleImportArchiveError("");
       return;
     }
     let cancelled = false;
+    setScheduleImportArchiveLoading(true);
     setScheduleImportArchiveError("");
     loadEncryptedDocumentWithVersion<ScheduleImportVaultState>(
       token,
@@ -117,6 +120,7 @@ export function PayrollReviewView({
         const fallback = vault.scheduleImport ?? null;
         const nextArchive = value ?? fallback;
         setScheduleImportArchive(nextArchive);
+        setScheduleImportArchiveLoading(false);
         if (!value && fallback?.reviews.length) {
           void saveEncryptedDocument(
             token,
@@ -133,6 +137,7 @@ export function PayrollReviewView({
       .catch(() => {
         if (!cancelled) {
           setScheduleImportArchive(vault.scheduleImport ?? null);
+          setScheduleImportArchiveLoading(false);
           setScheduleImportArchiveError("核对历史云端文档读取失败，当前显示主档案里的本地兼容数据。");
         }
       });
@@ -189,16 +194,22 @@ export function PayrollReviewView({
             {scheduleImportArchiveError}
           </div>
         )}
-        <ScheduleImportPanel
-          vault={vault}
-          amountsVisible={amountsVisible}
-          storageScope={storageScope}
-          scheduleImportState={scheduleImportArchive}
-          onSaveScheduleImport={saveScheduleImportState}
-          onOpenLesson={onOpenReconcileLessonInCalendar}
-          onSuggestSchedule={onSuggestSchedule}
-          onOpenGuide={() => setPayrollPanel("guide")}
-        />
+        {scheduleImportArchiveLoading ? (
+          <div className="rounded-[14px] border border-[#dbe4ef] bg-white px-4 py-3 text-sm font-bold text-[#475569]">
+            正在读取已保存的教务对账历史和拆分合并标记...
+          </div>
+        ) : (
+          <ScheduleImportPanel
+            vault={vault}
+            amountsVisible={amountsVisible}
+            storageScope={storageScope}
+            scheduleImportState={scheduleImportArchive}
+            onSaveScheduleImport={saveScheduleImportState}
+            onOpenLesson={onOpenReconcileLessonInCalendar}
+            onSuggestSchedule={onSuggestSchedule}
+            onOpenGuide={() => setPayrollPanel("guide")}
+          />
+        )}
         </>
       ) : (
       <>

@@ -16,7 +16,7 @@ import type {
   ScheduleImportVaultState,
   TeacherVault
 } from "@/shared/types";
-import { lessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
+import { lessonBillableHoursForVault, payrollExcludedSplitMergeLessonIds, todayIso } from "@/frontend/lib/calculations";
 import {
   calendarDates,
   orderedWeekdayLabels,
@@ -173,10 +173,9 @@ export function ScheduleImportPanel({
     () => rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds)),
     [linkedSystemLessonIds, resolutions, rows]
   );
-  const splitMergeExcludedLessonIds = useMemo(
-    () => splitMergePayrollExcludedLessonIds(vault, rows, resolutions),
-    [resolutions, rows, vault]
-  );
+  const splitMergeExcludedLessonIds = useMemo(() => {
+    return combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, resolutions);
+  }, [resolutions, rows, scheduleImportVault, vault]);
   const summary = useMemo(() => summarizeImportPreview(effectiveRows), [effectiveRows]);
   const attentionRows = useMemo(
     () => rows.filter((row) =>
@@ -190,8 +189,8 @@ export function ScheduleImportPanel({
     [importedRows, vault]
   );
   const systemLessonStats = useMemo(() => {
-    return summarizeScheduleImportSystemLessons(vault, rows, resolutions);
-  }, [resolutions, rows, vault]);
+    return summarizeScheduleImportSystemLessons(vault, rows, resolutions, splitMergeExcludedLessonIds);
+  }, [resolutions, rows, splitMergeExcludedLessonIds, vault]);
   const needsAttentionHours = useMemo(
     () => attentionRows.reduce((sum, row) => sum + scheduleImportRowHours(vault, row), 0),
     [attentionRows, vault]
@@ -369,7 +368,7 @@ export function ScheduleImportPanel({
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) {
     const key = resolutionKey(row);
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
-    const nextSplitMergeExcludedLessonIds = splitMergePayrollExcludedLessonIds(vault, rows, nextResolutions);
+    const nextSplitMergeExcludedLessonIds = combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, nextResolutions);
     setResolutions(nextResolutions);
     if (patch.status) {
       onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds));
@@ -721,6 +720,20 @@ function timeGapMinutes(row: Pick<ImportPreviewLesson, "startTime" | "endTime">,
   const lessonEnd = minutesForTime(lesson.endTime);
   if (rowStart <= lessonEnd && lessonStart <= rowEnd) return 0;
   return Math.min(Math.abs(rowStart - lessonEnd), Math.abs(lessonStart - rowEnd));
+}
+
+function combinedSplitMergeExcludedLessonIds(
+  vault: TeacherVault,
+  scheduleImportVault: TeacherVault,
+  rows: ImportPreviewLesson[],
+  resolutions: ScheduleImportResolutionMap
+): string[] {
+  const lessonIds = new Set(splitMergePayrollExcludedLessonIds(vault, rows, resolutions));
+  const months = Array.from(new Set(rows.map((row) => row.date.slice(0, 7))));
+  months.forEach((month) => {
+    payrollExcludedSplitMergeLessonIds(scheduleImportVault, month).forEach((lessonId) => lessonIds.add(lessonId));
+  });
+  return Array.from(lessonIds);
 }
 
 function rawLessonsFromSavedReview(review: ScheduleImportReviewRecord): ImportedScheduleLesson[] {

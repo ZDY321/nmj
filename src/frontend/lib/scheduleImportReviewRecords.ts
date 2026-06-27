@@ -67,11 +67,12 @@ function buildReviewRecord(
     selectedDate: string;
     rows: ImportPreviewLesson[];
     summary: ReturnType<typeof summarizeImportPreview>;
+    splitMergeExcludedLessonIds?: string[];
   },
   savedAt: string
 ): ScheduleImportReviewRecord {
   const fileNames = Array.from(new Set(context.rawLessons.map((lesson) => lesson.fileName))).sort(compareByName);
-  const systemLessonSummary = summarizeScheduleImportSystemLessons(vault, context.rows, context.resolutions);
+  const systemLessonSummary = summarizeScheduleImportSystemLessons(vault, context.rows, context.resolutions, context.splitMergeExcludedLessonIds);
   return {
     id: `schedule-import-${savedAt}`,
     savedAt,
@@ -148,9 +149,10 @@ export type ScheduleImportSystemLessonStats = {
 export function summarizeScheduleImportSystemLessons(
   vault: TeacherVault,
   rows: ImportPreviewLesson[],
-  resolutions: ScheduleImportResolutionMap
+  resolutions: ScheduleImportResolutionMap,
+  splitMergeExcludedLessonIds?: Iterable<string>
 ): ScheduleImportSystemLessonStats {
-  const lessonIds = scheduleImportSystemLessonIds(vault, rows, resolutions);
+  const lessonIds = scheduleImportSystemLessonIds(vault, rows, resolutions, splitMergeExcludedLessonIds);
   const lessons = lessonIds
     .map((lessonId) => vault.lessons.find((lesson) => lesson.id === lessonId))
     .filter((lesson): lesson is Lesson => Boolean(lesson));
@@ -186,10 +188,11 @@ export function splitMergePayrollExcludedLessonIds(
 function scheduleImportSystemLessonIds(
   vault: TeacherVault,
   rows: ImportPreviewLesson[],
-  resolutions: ScheduleImportResolutionMap
+  resolutions: ScheduleImportResolutionMap,
+  splitMergeExcludedLessonIds?: Iterable<string>
 ): string[] {
   const ids = new Set(rows.map((row) => row.systemLessonId).filter((lessonId): lessonId is string => Boolean(lessonId)));
-  const excludedLessonIds = new Set(splitMergePayrollExcludedLessonIds(vault, rows, resolutions));
+  const excludedLessonIds = new Set(splitMergeExcludedLessonIds ?? splitMergePayrollExcludedLessonIds(vault, rows, resolutions));
   linkedSystemLessonIdsFromRows(rows, resolutions).forEach((lessonId) => ids.add(lessonId));
   excludedLessonIds.forEach((lessonId) => ids.delete(lessonId));
   return Array.from(ids);
