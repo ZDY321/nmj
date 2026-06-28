@@ -2,13 +2,20 @@ import type { ScheduleImportResolution, ScheduleImportResolutionStatus } from "@
 import type { ImportMatchStatus } from "@/frontend/lib/scheduleImport";
 
 export type ResolutionFilter = `resolution:${ScheduleImportResolutionStatus}`;
-export type StatusFilter = "all" | ImportMatchStatus | ResolutionFilter;
+export type SpecialStatusFilter = "needs_attention" | "system_unfinished";
+export type StatusFilter = "all" | SpecialStatusFilter | ImportMatchStatus | ResolutionFilter;
 export type ScheduleImportBadgeVariant = "sage" | "amber" | "secondary" | "destructive" | "sky" | "yellow" | "plum";
 export type StatusFilterOption = { label: string; value: StatusFilter; variant?: ScheduleImportBadgeVariant };
+export type SpecialStatusFilterOption = { label: string; value: SpecialStatusFilter; variant: ScheduleImportBadgeVariant };
 export type MatchStatusFilterOption = { label: string; status: ImportMatchStatus; variant: ScheduleImportBadgeVariant };
 export type ResolutionStatusFilterOption = { label: string; status: ResolutionFilter; resolutionStatus: ScheduleImportResolutionStatus; variant: ScheduleImportBadgeVariant };
 
 export const resolutionStatuses: ScheduleImportResolutionStatus[] = ["unreviewed", "accepted", "not_due", "fixed", "time_variance_ok", "split_merge_ok", "excel_error", "missing_lesson_fee", "cloud_error"];
+
+export const specialStatusFilterOptions: SpecialStatusFilterOption[] = [
+  { label: "待核对", value: "needs_attention", variant: "amber" },
+  { label: "云端未完成", value: "system_unfinished", variant: "secondary" }
+];
 
 export const importMatchStatusFilterOptions: MatchStatusFilterOption[] = [
   { label: "已对应", status: "matched", variant: "sage" },
@@ -33,6 +40,7 @@ export const resolutionStatusFilterOptions: ResolutionStatusFilterOption[] = [
 
 export const statusFilterOptions: StatusFilterOption[] = [
   { label: "全部状态", value: "all" },
+  ...specialStatusFilterOptions,
   ...importMatchStatusFilterOptions.map((option) => ({ label: option.label, value: option.status, variant: option.variant })),
   ...resolutionStatusFilterOptions.map((option) => ({ label: option.label, value: option.status, variant: option.variant }))
 ];

@@ -610,6 +610,7 @@ export function ScheduleImportPanel({
           summary={summary}
           resolvedAsMatchedCount={resolvedAsMatchedCount}
           resolutionCounts={resolutionCounts}
+          rawImportedLessonCount={importedLessonStats.rawCount}
           importedLessonCount={importedLessonStats.count}
           importedLessonHours={importedLessonStats.hours}
           excludedImportedLessonCount={importedLessonStats.excludedCount}
