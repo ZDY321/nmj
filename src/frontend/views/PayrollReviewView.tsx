@@ -67,7 +67,10 @@ export function PayrollReviewView({
     detailLessons,
     monthLessonCount,
     monthPayrollHours,
+    monthCompletedLessonCount,
+    monthCompletedPayrollHours,
     monthRemainingPayrollHours,
+    monthUnfinishedLessonCount,
     monthUnfinishedPayrollHours,
     breakdown,
     lessonFeeTotal,
@@ -270,7 +273,10 @@ export function PayrollReviewView({
         campusFilter={campusFilter}
         monthLessonCount={monthLessonCount}
         monthPayrollHours={monthPayrollHours}
+        monthCompletedLessonCount={monthCompletedLessonCount}
+        monthCompletedPayrollHours={monthCompletedPayrollHours}
         monthRemainingPayrollHours={monthRemainingPayrollHours}
+        monthUnfinishedLessonCount={monthUnfinishedLessonCount}
         monthUnfinishedPayrollHours={monthUnfinishedPayrollHours}
         campusSummaries={campusSummaries}
         breakdown={breakdown}

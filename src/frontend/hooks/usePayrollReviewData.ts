@@ -205,12 +205,12 @@ export function usePayrollReviewData({
     });
     return campusOptions.map((campus) => {
       const lessons = campusSummaryBaseLessons.filter((lesson) => lessonCampusId(vault, lesson) === campus.id);
+      const completedLessons = lessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
+      const unfinishedLessons = lessons.filter((lesson) => lesson.status !== "completed" && lesson.status !== "makeup_completed");
       const amount = lessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0);
       const hours = lessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
-      const unfinishedHours = lessons.reduce((sum, lesson) => {
-        if (lesson.status === "completed" || lesson.status === "makeup_completed") return sum;
-        return sum + lessonBillableHoursForVault(vault, lesson);
-      }, 0);
+      const completedHours = completedLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
+      const unfinishedHours = unfinishedLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
       const obligation = campus.id === effectiveObligationCampusId ? obligationSummary(vault, selectedMonth, campus.id).amount : 0;
       const obligationHours = obligationHoursByCampus.get(campus.id) ?? 0;
       return {
@@ -218,9 +218,12 @@ export function usePayrollReviewData({
         lessons,
         amount,
         hours,
+        completedCount: completedLessons.length,
+        completedHours,
+        unfinishedCount: unfinishedLessons.length,
         unfinishedHours,
         obligationHours,
-        remainingHours: Math.max(hours - obligationHours, 0),
+        remainingHours: Math.max(completedHours - obligationHours, 0),
         obligation,
         net: amount - obligation
       };
@@ -235,8 +238,20 @@ export function usePayrollReviewData({
     () => campusSummaries.reduce((sum, item) => sum + item.hours, 0),
     [campusSummaries]
   );
+  const monthCompletedLessonCount = useMemo(
+    () => campusSummaries.reduce((sum, item) => sum + item.completedCount, 0),
+    [campusSummaries]
+  );
+  const monthCompletedPayrollHours = useMemo(
+    () => campusSummaries.reduce((sum, item) => sum + item.completedHours, 0),
+    [campusSummaries]
+  );
   const monthRemainingPayrollHours = useMemo(
     () => campusSummaries.reduce((sum, item) => sum + item.remainingHours, 0),
+    [campusSummaries]
+  );
+  const monthUnfinishedLessonCount = useMemo(
+    () => campusSummaries.reduce((sum, item) => sum + item.unfinishedCount, 0),
     [campusSummaries]
   );
   const monthUnfinishedPayrollHours = useMemo(
@@ -268,7 +283,10 @@ export function usePayrollReviewData({
     detailLessons,
     monthLessonCount: monthSummaryLessonCount,
     monthPayrollHours: monthSummaryHours,
+    monthCompletedLessonCount,
+    monthCompletedPayrollHours,
     monthRemainingPayrollHours,
+    monthUnfinishedLessonCount,
     monthUnfinishedPayrollHours,
     breakdown,
     lessonFeeTotal,
