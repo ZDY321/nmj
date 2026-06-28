@@ -98,30 +98,31 @@ export function ScheduleImportStatusControls({
     <>
       <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
         <div className="grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.15fr)_minmax(190px,0.55fr)]">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-[10px] border border-[#e2e8f0] bg-white px-2.5 py-2">
-            <span className="mr-1 text-[11px] font-extrabold text-[#334155]">教务统计</span>
-            <Badge variant="secondary" className="text-[10px]">教务原始导入 {rawImportedLessonCount} 节 / {rawImportedLessonHours.toFixed(1)}h</Badge>
-            <Badge variant="secondary" className="text-[10px]">教务有效统计(已排除不计后) {importedLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
-            {excludedImportedLessonCount > 0 && <button type="button" onClick={() => onStatusToggle("resolution:not_due")} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusFilter === "resolution:not_due" ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e2e8f0] bg-[#f8fafc] text-[#64748b]"}`}>教务未到日期不计 {excludedImportedLessonCount} 节 / {excludedImportedLessonHours.toFixed(1)}h</button>}
-            {cancelledImportedLessonCount > 0 && <Badge variant="secondary" className="text-[10px]">教务取消/未开课不计 {cancelledImportedLessonCount} 节 / {cancelledImportedLessonHours.toFixed(1)}h</Badge>}
-            {absentImportedLessonCount > 0 && <Badge variant="secondary" className="text-[10px]">教务缺勤未到不计 {absentImportedLessonCount} 节 / {absentImportedLessonHours.toFixed(1)}h</Badge>}
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-[10px] border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-2">
+            <span className="mr-1 text-[11px] font-extrabold text-[#1557c2]">教务统计</span>
+            <Badge variant="sky" className="text-[10px]">教务原始导入 {rawImportedLessonCount} 节 / {rawImportedLessonHours.toFixed(1)}h</Badge>
+            <Badge variant="sky" className="text-[10px]">教务有效统计(已排除不计后) {importedLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
+            {excludedImportedLessonCount > 0 && <button type="button" title="筛选未到日期" onClick={() => onStatusToggle("resolution:not_due")} className={`rounded-full border px-2 py-0.5 text-[10px] font-extrabold shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#93c5fd] ${statusFilter === "resolution:not_due" ? "border-[#1557c2] bg-white text-[#1557c2] ring-2 ring-[#bfdbfe]" : "border-[#60a5fa] bg-white text-[#1557c2]"}`}>教务未到日期不计 {excludedImportedLessonCount} 节 / {excludedImportedLessonHours.toFixed(1)}h</button>}
+            {cancelledImportedLessonCount > 0 && <Badge variant="sky" className="text-[10px]">教务取消/未开课不计 {cancelledImportedLessonCount} 节 / {cancelledImportedLessonHours.toFixed(1)}h</Badge>}
+            {absentImportedLessonCount > 0 && <Badge variant="sky" className="text-[10px]">教务缺勤未到不计 {absentImportedLessonCount} 节 / {absentImportedLessonHours.toFixed(1)}h</Badge>}
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-[10px] border border-[#e2e8f0] bg-white px-2.5 py-2">
-            <span className="mr-1 text-[11px] font-extrabold text-[#334155]">云端统计</span>
-            <Badge variant="secondary" className="text-[10px]">云端排课总课时(含未完成，未抵扣前) {systemLessonCount} 节 / {systemLessonHours.toFixed(1)}h</Badge>
-            <Badge variant="secondary" className="text-[10px]">云端已完成课时(已完成，未抵扣前) {systemCompletedLessonCount} 节 / {systemCompletedLessonHours.toFixed(1)}h</Badge>
-            {systemUnfinishedCount > 0 && <button type="button" onClick={() => onStatusToggle("system_unfinished")} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusFilter === "system_unfinished" ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e2e8f0] bg-[#f8fafc] text-[#64748b]"}`}>云端未完成 {systemUnfinishedCount} 节 / {systemUnfinishedHours.toFixed(1)}h</button>}
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-2.5 py-2">
+            <span className="mr-1 text-[11px] font-extrabold text-[#15803d]">云端统计</span>
+            <Badge variant="sage" className="text-[10px]">云端排课总课时(含未完成，未抵扣前) {systemLessonCount} 节 / {systemLessonHours.toFixed(1)}h</Badge>
+            <Badge variant="sage" className="text-[10px]">云端已完成课时(已完成，未抵扣前) {systemCompletedLessonCount} 节 / {systemCompletedLessonHours.toFixed(1)}h</Badge>
+            {systemUnfinishedCount > 0 && <button type="button" title="筛选云端未完成课程" onClick={() => onStatusToggle("system_unfinished")} className={`rounded-full border px-2 py-0.5 text-[10px] font-extrabold shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#86efac] ${statusFilter === "system_unfinished" ? "border-[#15803d] bg-white text-[#15803d] ring-2 ring-[#bbf7d0]" : "border-[#4ade80] bg-white text-[#15803d]"}`}>云端未完成 {systemUnfinishedCount} 节 / {systemUnfinishedHours.toFixed(1)}h</button>}
           </div>
           <button
             type="button"
+            title="筛选待核对记录"
             aria-pressed={statusFilter === "needs_attention"}
             onClick={() => onStatusToggle("needs_attention")}
-            className={`flex min-w-0 items-center gap-1.5 rounded-[10px] border px-2.5 py-2 text-left transition-all hover:border-[#93c5fd] hover:bg-white ${
-              statusFilter === "needs_attention" ? "border-[#1557c2] bg-[#eaf2ff] ring-2 ring-[#bfdbfe]" : "border-[#e2e8f0] bg-white"
+            className={`flex min-w-0 items-center gap-1.5 rounded-[10px] border px-2.5 py-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fbbf24] ${
+              statusFilter === "needs_attention" ? "border-[#b45309] bg-white ring-2 ring-[#fde68a]" : "border-[#fde68a] bg-[#fffbeb]"
             }`}
           >
-            <span className="text-[11px] font-extrabold text-[#334155]">待核对</span>
-            <Badge variant="secondary" className="text-[10px]">{needsAttention} 节 / {needsAttentionHours.toFixed(1)}h</Badge>
+            <span className="text-[11px] font-extrabold text-[#b45309]">待核对</span>
+            <Badge variant="amber" className="text-[10px]">{needsAttention} 节 / {needsAttentionHours.toFixed(1)}h</Badge>
           </button>
         </div>
       </div>
