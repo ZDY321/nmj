@@ -611,11 +611,15 @@ export function ScheduleImportPanel({
           resolvedAsMatchedCount={resolvedAsMatchedCount}
           resolutionCounts={resolutionCounts}
           rawImportedLessonCount={importedLessonStats.rawCount}
+          rawImportedLessonHours={importedLessonStats.rawHours}
           importedLessonCount={importedLessonStats.count}
           importedLessonHours={importedLessonStats.hours}
           excludedImportedLessonCount={importedLessonStats.excludedCount}
+          excludedImportedLessonHours={importedLessonStats.excludedHours}
           cancelledImportedLessonCount={importedLessonStats.cancelledExcludedCount}
+          cancelledImportedLessonHours={importedLessonStats.cancelledExcludedHours}
           absentImportedLessonCount={importedLessonStats.absentExcludedCount}
+          absentImportedLessonHours={importedLessonStats.absentExcludedHours}
           systemLessonCount={systemLessonStats.count}
           systemLessonHours={systemLessonStats.hours}
           systemCompletedLessonCount={systemLessonStats.completedCount}

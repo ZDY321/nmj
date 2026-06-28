@@ -171,11 +171,15 @@ export function summarizeLinkedLessons(vault: TeacherVault, linkedLessons: Lesso
 
 export type ScheduleImportImportedLessonStats = {
   rawCount: number;
+  rawHours: number;
   count: number;
   hours: number;
   excludedCount: number;
+  excludedHours: number;
   cancelledExcludedCount: number;
+  cancelledExcludedHours: number;
   absentExcludedCount: number;
+  absentExcludedHours: number;
 };
 
 export function summarizeScheduleImportImportedLessons(
@@ -184,25 +188,34 @@ export function summarizeScheduleImportImportedLessons(
   resolutions: ScheduleImportResolutionMap
 ): ScheduleImportImportedLessonStats {
   const splitMergeLessonIds = new Set<string>();
+  let rawHours = 0;
   let count = 0;
   let hours = 0;
   let excludedCount = 0;
+  let excludedHours = 0;
   let cancelledExcludedCount = 0;
+  let cancelledExcludedHours = 0;
   let absentExcludedCount = 0;
+  let absentExcludedHours = 0;
 
   rows.forEach((row) => {
     const resolution = resolutions[resolutionKey(row)];
+    const importedHours = importPreviewLessonBillableHours(vault, row);
+    rawHours += importedHours;
     if (resolutionExcludesImportStats(resolution?.status)) {
       excludedCount += 1;
+      excludedHours += importedHours;
       return;
     }
     const forceIncludeByResolution = resolutionUsesSystemHoursForImportStats(resolution?.status);
     if (!forceIncludeByResolution && importPreviewLessonExcludedAsCancelled(row)) {
       cancelledExcludedCount += 1;
+      cancelledExcludedHours += importedHours;
       return;
     }
     if (!forceIncludeByResolution && importPreviewLessonExcludedAsAbsent(row)) {
       absentExcludedCount += 1;
+      absentExcludedHours += importedHours;
       return;
     }
 
@@ -224,11 +237,15 @@ export function summarizeScheduleImportImportedLessons(
 
   return {
     rawCount: rows.length,
+    rawHours,
     count: count + splitMergeLessons.length,
     hours: hours + splitMergeLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0),
     excludedCount,
+    excludedHours,
     cancelledExcludedCount,
-    absentExcludedCount
+    cancelledExcludedHours,
+    absentExcludedCount,
+    absentExcludedHours
   };
 }
 

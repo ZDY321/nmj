@@ -18,11 +18,15 @@ export function ScheduleImportStatusControls({
   resolvedAsMatchedCount,
   resolutionCounts,
   rawImportedLessonCount,
+  rawImportedLessonHours,
   importedLessonCount,
   importedLessonHours,
   excludedImportedLessonCount,
+  excludedImportedLessonHours,
   cancelledImportedLessonCount,
+  cancelledImportedLessonHours,
   absentImportedLessonCount,
+  absentImportedLessonHours,
   systemLessonCount,
   systemLessonHours,
   systemCompletedLessonCount,
@@ -44,11 +48,15 @@ export function ScheduleImportStatusControls({
   resolvedAsMatchedCount: number;
   resolutionCounts: Record<ScheduleImportResolutionStatus, number>;
   rawImportedLessonCount: number;
+  rawImportedLessonHours: number;
   importedLessonCount: number;
   importedLessonHours: number;
   excludedImportedLessonCount: number;
+  excludedImportedLessonHours: number;
   cancelledImportedLessonCount: number;
+  cancelledImportedLessonHours: number;
   absentImportedLessonCount: number;
+  absentImportedLessonHours: number;
   systemLessonCount: number;
   systemLessonHours: number;
   systemCompletedLessonCount: number;
@@ -92,11 +100,11 @@ export function ScheduleImportStatusControls({
         <div className="grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.15fr)_minmax(190px,0.55fr)]">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-[10px] border border-[#e2e8f0] bg-white px-2.5 py-2">
             <span className="mr-1 text-[11px] font-extrabold text-[#334155]">教务统计</span>
-            <Badge variant="secondary" className="text-[10px]">教务原始导入 {rawImportedLessonCount} 节</Badge>
+            <Badge variant="secondary" className="text-[10px]">教务原始导入 {rawImportedLessonCount} 节 / {rawImportedLessonHours.toFixed(1)}h</Badge>
             <Badge variant="secondary" className="text-[10px]">教务有效统计(已排除不计后) {importedLessonCount} 节 / {importedLessonHours.toFixed(1)}h</Badge>
-            {excludedImportedLessonCount > 0 && <button type="button" onClick={() => onStatusToggle("resolution:not_due")} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusFilter === "resolution:not_due" ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e2e8f0] bg-[#f8fafc] text-[#64748b]"}`}>教务未到日期不计 {excludedImportedLessonCount} 节</button>}
-            {cancelledImportedLessonCount > 0 && <Badge variant="secondary" className="text-[10px]">教务取消/未开课不计 {cancelledImportedLessonCount} 节</Badge>}
-            {absentImportedLessonCount > 0 && <Badge variant="secondary" className="text-[10px]">教务缺勤未到不计 {absentImportedLessonCount} 节</Badge>}
+            {excludedImportedLessonCount > 0 && <button type="button" onClick={() => onStatusToggle("resolution:not_due")} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusFilter === "resolution:not_due" ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e2e8f0] bg-[#f8fafc] text-[#64748b]"}`}>教务未到日期不计 {excludedImportedLessonCount} 节 / {excludedImportedLessonHours.toFixed(1)}h</button>}
+            {cancelledImportedLessonCount > 0 && <Badge variant="secondary" className="text-[10px]">教务取消/未开课不计 {cancelledImportedLessonCount} 节 / {cancelledImportedLessonHours.toFixed(1)}h</Badge>}
+            {absentImportedLessonCount > 0 && <Badge variant="secondary" className="text-[10px]">教务缺勤未到不计 {absentImportedLessonCount} 节 / {absentImportedLessonHours.toFixed(1)}h</Badge>}
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-[10px] border border-[#e2e8f0] bg-white px-2.5 py-2">
             <span className="mr-1 text-[11px] font-extrabold text-[#334155]">云端统计</span>
@@ -131,7 +139,7 @@ export function ScheduleImportStatusControls({
                   statusFilter === item.status ? "border-[#1557c2] bg-[#eaf2ff] ring-2 ring-[#bfdbfe]" : "border-[#e8eef6] bg-white"
                 }`}
               >
-                <Badge variant="secondary" className="min-w-0 max-w-[78px] truncate text-[10px]">{item.label}</Badge>
+                <Badge variant={item.variant} className="min-w-0 max-w-[78px] truncate text-[10px]">{item.label}</Badge>
                 <span className="shrink-0 text-sm font-extrabold leading-5 text-[#061226]">{item.value}</span>
               </button>
             ))}
@@ -151,7 +159,7 @@ export function ScheduleImportStatusControls({
                 statusFilter === item.status ? "border-[#15803d] bg-white ring-2 ring-[#bbf7d0]" : "border-[#d9f99d] bg-white/85"
               }`}
             >
-              <Badge variant="secondary" className="max-w-full truncate text-[10px]">{item.label}</Badge>
+              <Badge variant={item.variant} className="max-w-full truncate text-[10px]">{item.label}</Badge>
               <div className="mt-1 text-base font-extrabold leading-5 text-[#061226]">{item.value}</div>
               {"hint" in item && item.hint && <div className="mt-0.5 truncate text-[10px] font-bold text-[#64748b]">{item.hint}</div>}
             </button>

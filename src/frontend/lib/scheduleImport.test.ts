@@ -494,14 +494,17 @@ describe("schedule import review records", () => {
     };
 
     expect(summarizeScheduleImportImportedLessons(vault, [confirmedRow], {}).hours).toBeCloseTo(1.83, 2);
-    expect(summarizeScheduleImportImportedLessons(vault, [confirmedRow, notDueRow], resolutions)).toEqual({
+    const notDueStats = summarizeScheduleImportImportedLessons(vault, [confirmedRow, notDueRow], resolutions);
+    expect(notDueStats).toMatchObject({
       rawCount: 2,
       count: 1,
-      hours: 2,
       excludedCount: 1,
       cancelledExcludedCount: 0,
       absentExcludedCount: 0
     });
+    expect(notDueStats.rawHours).toBeCloseTo(3.83, 2);
+    expect(notDueStats.hours).toBe(2);
+    expect(notDueStats.excludedHours).toBeCloseTo(2, 2);
 
     const cancelledRow = makePreviewRow({
       id: "row_cancelled",
