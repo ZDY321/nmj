@@ -244,7 +244,7 @@ export function StudentArchivePanel({
           </label>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("active")}>设为在读</Button>
-            <Button type="button" size="sm" variant="outline" className="h-8 border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("transition")}>设为过渡期</Button>
+            <Button type="button" size="sm" variant="outline" className="h-8 border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6] hover:bg-[#e0e7ff] hover:text-[#4338ca]" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("transition")}>设为过渡期</Button>
             <Button type="button" size="sm" variant="destructive" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("paused")}>归档</Button>
           </div>
         </div>
@@ -399,8 +399,9 @@ function studentStatusLabel(status: Student["status"]): string {
   return "在读";
 }
 
-function studentStatusBadgeVariant(status: Student["status"]): "secondary" | "sage" | "amber" {
+function studentStatusBadgeVariant(status: Student["status"]): "secondary" | "sage" | "plum" {
   if (status === "paused") return "secondary";
-  if (status === "transition") return "amber";
+  if (status === "transition") return "plum";
   return "sage";
 }
+
