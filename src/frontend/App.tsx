@@ -558,19 +558,30 @@ export function App() {
   }
 
   function updateStudent(student: Student) {
+    updateStudents([student]);
+  }
+
+  function updateStudents(students: Student[]) {
+    if (students.length === 0) return;
     updateVault((draft) => {
-      const previousStudent = draft.students.find((item) => item.id === student.id);
-      const isRestoringStudent = previousStudent?.status === "paused" && student.status !== "paused";
-      if (previousStudent && Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
-        materializeStudentTrialStatusOnLessons(draft, student.id, Boolean(previousStudent.temporaryTrial));
-      }
-      draft.students = draft.students.map((item) => (item.id === student.id ? student : item));
-      if (isRestoringStudent) {
-        repairCourseStudentLinksFromLessons(draft, student.id);
-      }
-      if (previousStudent && Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
-        syncFutureLessonsWithStudentTrialStatus(draft, student.id, Boolean(student.temporaryTrial));
-      }
+      const changedStudentIds = new Set<string>();
+      students.forEach((student) => {
+        const previousStudent = draft.students.find((item) => item.id === student.id);
+        if (!previousStudent) return;
+        const isRestoringStudent = previousStudent.status === "paused" && student.status !== "paused";
+        if (Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
+          materializeStudentTrialStatusOnLessons(draft, student.id, Boolean(previousStudent.temporaryTrial));
+        }
+        draft.students = draft.students.map((item) => (item.id === student.id ? student : item));
+        changedStudentIds.add(student.id);
+        if (isRestoringStudent) {
+          repairCourseStudentLinksFromLessons(draft, student.id);
+        }
+        if (Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
+          syncFutureLessonsWithStudentTrialStatus(draft, student.id, Boolean(student.temporaryTrial));
+        }
+      });
+      pauseCoursesWithoutActiveStudents(draft, changedStudentIds);
     });
   }
 
@@ -1853,6 +1864,7 @@ export function App() {
                       })
                     }
                     onUpdateStudent={updateStudent}
+                    onUpdateStudents={updateStudents}
                     onDeleteStudent={deleteStudent}
                     onUpdateProfile={updateProfile}
                     onAddCourse={addCourse}
@@ -1969,6 +1981,17 @@ function readOnboardingVisitedSteps(username: string): OnboardingStepKey[] {
   }
 }
 
+function pauseCoursesWithoutActiveStudents(vault: TeacherVault, studentIds: Set<string>) {
+  if (studentIds.size === 0) return;
+  vault.courseGroups = vault.courseGroups.map((course) => {
+    if (course.status === "paused" || !course.studentIds.some((studentId) => studentIds.has(studentId))) return course;
+    return courseHasActiveStudentLocal(vault, course) ? course : { ...course, status: "paused" };
+  });
+}
+
+function courseHasActiveStudentLocal(vault: TeacherVault, course: CourseGroup): boolean {
+  return course.studentIds.some((studentId) => vault.students.find((student) => student.id === studentId)?.status === "active");
+}
 function shouldPauseSupersededClassCourse(vault: TeacherVault, existingCourse: CourseGroup, newCourse: CourseGroup): boolean {
   if (existingCourse.status !== "active") return false;
   if (existingCourse.type !== "class" || newCourse.type !== "class") return false;

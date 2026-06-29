@@ -33,6 +33,7 @@ export function StudentsView({
   onDeleteCampus,
   onAddStudent,
   onUpdateStudent,
+  onUpdateStudents,
   onDeleteStudent,
   onUpdateProfile,
   onAddCourse,
@@ -60,6 +61,7 @@ export function StudentsView({
   onDeleteCampus: (campusId: string) => void;
   onAddStudent: (student: Student) => void;
   onUpdateStudent: (student: Student) => void;
+  onUpdateStudents: (students: Student[]) => void;
   onDeleteStudent: (studentId: string) => void;
   onUpdateProfile: (profile: TeacherProfile) => void;
   onAddCourse: (course: CourseGroup) => void;
@@ -1169,7 +1171,7 @@ export function StudentsView({
       if (status === "paused") {
         setCourseStudentIds((current) => current.filter((studentId) => !selectedIdSet.has(studentId)));
       }
-      selectedStudents.forEach((student) => onUpdateStudent({ ...student, status }));
+      onUpdateStudents(selectedStudents.map((student) => ({ ...student, status })));
       setSelectedStudentIds((current) => current.filter((id) => !selectedIdSet.has(id)));
     };
     if (status === "paused") {
