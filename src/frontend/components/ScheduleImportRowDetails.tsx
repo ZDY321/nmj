@@ -226,8 +226,12 @@ function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): str
 
 function mappingCourseStatusLabel(vault: TeacherVault, course: CourseGroup): string {
   if (course.status === "paused") return "课程已暂停";
-  if (!courseHasActiveStudent(vault, course)) return "学生已归档";
-  return "";
+  if (courseHasActiveStudent(vault, course)) return "";
+  if (course.studentIds.length === 0) return "未关联学生";
+  const linkedStudents = course.studentIds
+    .map((studentId) => vault.students.find((student) => student.id === studentId))
+    .filter(Boolean);
+  return linkedStudents.some((student) => student?.status === "transition") ? "学生过渡期" : "学生已归档";
 }
 
 function LinkedSystemLessons({
@@ -267,3 +271,4 @@ function LinkedSystemLessons({
 function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {
   return type === "unknown" ? "未知班型" : courseTypeLabel(vault, type);
 }
+

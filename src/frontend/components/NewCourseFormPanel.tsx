@@ -343,7 +343,7 @@ export function NewCourseFormPanel({
                               : "border-[#dbe4ef] bg-white text-[#25324a]"
                       }`}
                     >
-                      {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                      {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}{student.status === "transition" ? " · 过渡期" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
                     </button>
                   );
                 })}
@@ -366,3 +366,4 @@ export function NewCourseFormPanel({
     </Card>
   );
 }
+

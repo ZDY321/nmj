@@ -478,7 +478,7 @@ export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | un
 export function activeStudentIdsForCourse(vault: TeacherVault, course: CourseGroup): string[] {
   return course.studentIds.filter((studentId) => {
     const student = vault.students.find((item) => item.id === studentId);
-    return Boolean(student && student.status !== "paused");
+    return Boolean(student && student.status === "active");
   });
 }
 
@@ -659,3 +659,4 @@ export function monthShift(month: string, offset: number): string {
   date.setUTCMonth(date.getUTCMonth() + offset);
   return formatMonthIso(date);
 }
+

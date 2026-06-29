@@ -586,6 +586,15 @@ export function App() {
     });
   }
 
+  function addCourse(course: CourseGroup) {
+    updateVault((draft) => {
+      draft.courseGroups = draft.courseGroups.map((item) =>
+        shouldPauseSupersededClassCourse(draft, item, course) ? { ...item, status: "paused" } : item
+      );
+      draft.courseGroups.push(course);
+    });
+  }
+
   function updateCourse(course: CourseGroup) {
     updateVault((draft) => {
       const previousCourse = draft.courseGroups.find((item) => item.id === course.id);
@@ -1846,11 +1855,8 @@ export function App() {
                     onUpdateStudent={updateStudent}
                     onDeleteStudent={deleteStudent}
                     onUpdateProfile={updateProfile}
-                    onAddCourse={(course) =>
-                      updateVault((draft) => {
-                        draft.courseGroups.push(course);
-                      })
-                    }
+                    onAddCourse={addCourse}
+
                     onUpdateCourse={updateCourse}
                     onSyncCoursesToLessons={syncCoursesToLessons}
                     onDeleteCourse={deleteCourse}
@@ -1963,6 +1969,26 @@ function readOnboardingVisitedSteps(username: string): OnboardingStepKey[] {
   }
 }
 
+function shouldPauseSupersededClassCourse(vault: TeacherVault, existingCourse: CourseGroup, newCourse: CourseGroup): boolean {
+  if (existingCourse.status !== "active") return false;
+  if (existingCourse.type !== "class" || newCourse.type !== "class") return false;
+  if (existingCourse.subject.trim() !== newCourse.subject.trim()) return false;
+  if ((existingCourse.defaultCampusId ?? "") !== (newCourse.defaultCampusId ?? "")) return false;
+
+  const existingStudents = existingCourse.studentIds
+    .map((studentId) => vault.students.find((student) => student.id === studentId))
+    .filter(Boolean);
+  const hasStoppedStudent = existingStudents.some((student) => student?.status === "transition" || student?.status === "paused");
+  if (!hasStoppedStudent) return false;
+
+  const existingActiveStudentIds = existingStudents
+    .filter((student) => student?.status === "active")
+    .map((student) => student!.id);
+  if (existingActiveStudentIds.length === 0) return true;
+
+  const newStudentIds = new Set(newCourse.studentIds);
+  return existingActiveStudentIds.every((studentId) => newStudentIds.has(studentId));
+}
 function shouldShowOnboarding(vault: TeacherVault): boolean {
   return (
     vault.campuses.length === 0 &&
