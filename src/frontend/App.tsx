@@ -53,6 +53,7 @@ import {
   moveLessonsToTrash,
   normalizeCourseLessonSyncScope,
   recalculateLessonFeeSnapshot,
+  repairCourseStudentLinksFromLessons,
   syncFutureLessonsWithStudentTrialStatus,
   syncLessonsWithCourseDefaults,
   syncOriginalLessonFromMakeupCompletion
@@ -169,6 +170,11 @@ export function App() {
   const skipCloudCheckUntilRef = useRef(0);
   const { confirm, dialog } = useConfirmDialog();
 
+  function repairedVaultForCourseLinks(source: TeacherVault): TeacherVault {
+    const next = cloneVault(source);
+    return repairCourseStudentLinksFromLessons(next) > 0 ? next : source;
+  }
+
   function rememberUnlockedSession(next?: Partial<UnlockedSession>) {
     const session: UnlockedSession = {
       username,
@@ -193,7 +199,8 @@ export function App() {
     setToken(result.token);
     setRole(result.account.role);
     setDeletion(result.deletion);
-    setVault(result.vault);
+    const nextVault = repairedVaultForCourseLinks(result.vault);
+    setVault(nextVault);
     setAmountsVisible(false);
     setPersistLoginAfterClose(nextPersistLoginAfterClose);
     writePersistentLoginPreference(result.account.username, nextPersistLoginAfterClose);
@@ -208,7 +215,7 @@ export function App() {
       token: result.token,
       role: result.account.role,
       deletion: result.deletion,
-      vault: result.vault,
+      vault: nextVault,
       cloudVersion: result.cloudVersion,
       persistAfterClose: nextPersistLoginAfterClose
     });
@@ -224,7 +231,8 @@ export function App() {
     setToken(result.token);
     setRole(result.account.role);
     setDeletion(result.deletion);
-    setVault(result.vault);
+    const nextVault = repairedVaultForCourseLinks(result.vault);
+    setVault(nextVault);
     setAmountsVisible(false);
     setPersistLoginAfterClose(nextPersistLoginAfterClose);
     writePersistentLoginPreference(result.account.username, nextPersistLoginAfterClose);
@@ -239,7 +247,7 @@ export function App() {
       token: result.token,
       role: result.account.role,
       deletion: result.deletion,
-      vault: result.vault,
+      vault: nextVault,
       cloudVersion: result.cloudVersion,
       persistAfterClose: nextPersistLoginAfterClose
     });
@@ -382,7 +390,8 @@ export function App() {
     try {
       const cloud = await loadCloudVaultWithVersion(token, password, username, { allowLocalFallback: false });
       const nextCloudVersion = cloud.updatedAt || cloudVersion;
-      setVault(cloud.vault);
+      const nextVault = repairedVaultForCourseLinks(cloud.vault);
+      setVault(nextVault);
       cloudVersionRef.current = nextCloudVersion;
       setCloudVersion(nextCloudVersion);
       setRemoteCloudVersion("");
@@ -390,7 +399,7 @@ export function App() {
       setSyncMessage("");
       setSaveState("idle");
       setSyncCountdownSeconds(syncCheckIntervalSeconds);
-      rememberUnlockedSession({ vault: cloud.vault, cloudVersion: nextCloudVersion });
+      rememberUnlockedSession({ vault: nextVault, cloudVersion: nextCloudVersion });
     } catch (error) {
       setSyncState("error");
       setSyncMessage(error instanceof Error ? error.message : "云端同步失败，请稍后重试。");
@@ -551,23 +560,13 @@ export function App() {
   function updateStudent(student: Student) {
     updateVault((draft) => {
       const previousStudent = draft.students.find((item) => item.id === student.id);
-      const isArchivingStudent = previousStudent?.status !== "paused" && student.status === "paused";
+      const isRestoringStudent = previousStudent?.status === "paused" && student.status !== "paused";
       if (previousStudent && Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
         materializeStudentTrialStatusOnLessons(draft, student.id, Boolean(previousStudent.temporaryTrial));
       }
       draft.students = draft.students.map((item) => (item.id === student.id ? student : item));
-      if (isArchivingStudent) {
-        const activeStudentIds = new Set(draft.students.filter((item) => item.status !== "paused").map((item) => item.id));
-        draft.courseGroups = draft.courseGroups.map((course) => {
-          if (!course.studentIds.includes(student.id)) return course;
-          const studentIds = course.studentIds.filter((studentId) => studentId !== student.id);
-          const hasActiveStudent = studentIds.some((studentId) => activeStudentIds.has(studentId));
-          return {
-            ...course,
-            studentIds,
-            status: course.status === "active" && !hasActiveStudent ? "paused" : course.status
-          };
-        });
+      if (isRestoringStudent) {
+        repairCourseStudentLinksFromLessons(draft, student.id);
       }
       if (previousStudent && Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
         syncFutureLessonsWithStudentTrialStatus(draft, student.id, Boolean(student.temporaryTrial));
@@ -1042,7 +1041,8 @@ export function App() {
           setToken(session.token);
           setRole(session.role);
           setDeletion(session.deletion);
-          setVault(session.vault);
+          const restoredVault = repairedVaultForCourseLinks(session.vault);
+          setVault(restoredVault);
           setCloudVersion(cachedCloudVersion);
           setSelectedDate(today);
           setPersistLoginAfterClose(restoredPersistLoginAfterClose);
@@ -1056,7 +1056,8 @@ export function App() {
           void loadCloudVaultWithVersion(session.token, session.password, session.username, { allowLocalFallback: false })
             .then((cloud) => {
               const nextCloudVersion = cloud.updatedAt || cachedCloudVersion;
-              setVault(cloud.vault);
+              const nextVault = repairedVaultForCourseLinks(cloud.vault);
+              setVault(nextVault);
               setCloudVersion(nextCloudVersion);
               setRemoteCloudVersion("");
               setSyncState("idle");
@@ -1064,7 +1065,7 @@ export function App() {
               if (cancelled) return;
               void writeUnlockedSession({
                 ...session,
-                vault: cloud.vault,
+                vault: nextVault,
                 selectedDate: today,
                 cloudVersion: nextCloudVersion,
                 persistAfterClose: restoredPersistLoginAfterClose
@@ -1984,9 +1985,4 @@ function greetingFor(date: Date): string {
   if (hour >= 14 && hour < 18) return "下午好";
   return "晚上好";
 }
-
-
-
-
-
 

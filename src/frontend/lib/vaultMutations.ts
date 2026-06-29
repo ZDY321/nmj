@@ -1,6 +1,6 @@
 import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
-import { activeStudentIdsForCourse, lessonStudentIds, makeupNeededStudentIds } from "@/frontend/lib/helpers";
+import { activeStudentIdsForCourse, lessonStudentIds, makeupNeededStudentIds, studentLimitForCourseType } from "@/frontend/lib/helpers";
 import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
 import { stringValue } from "@/frontend/lib/typeGuards";
 import type {
@@ -119,6 +119,42 @@ export function syncFutureLessonsWithStudentTrialStatus(vault: TeacherVault, stu
     changedCount += 1;
     return recalculateLessonFeeSnapshot(vault, { ...lesson, attendance });
   });
+  return changedCount;
+}
+
+export function repairCourseStudentLinksFromLessons(vault: TeacherVault, studentId?: string): number {
+  const activeStudentIds = new Set(vault.students.filter((student) => student.status !== "paused").map((student) => student.id));
+  let changedCount = 0;
+
+  vault.courseGroups = vault.courseGroups.map((course) => {
+    const limit = studentLimitForCourseType(course.type);
+    if (!limit || activeStudentIdsForCourse(vault, course).length > 0) return course;
+
+    const openSlots = limit - course.studentIds.length;
+    if (openSlots <= 0) return course;
+
+    const inferredStudentIds: string[] = [];
+    vault.lessons.forEach((lesson) => {
+      if (lesson.courseGroupId !== course.id) return;
+      lessonStudentIds(lesson).forEach((lessonStudentId) => {
+        if (!activeStudentIds.has(lessonStudentId) || course.studentIds.includes(lessonStudentId)) return;
+        if (studentId && lessonStudentId !== studentId) return;
+        if (!inferredStudentIds.includes(lessonStudentId)) {
+          inferredStudentIds.push(lessonStudentId);
+        }
+      });
+    });
+
+    const nextStudentIds = inferredStudentIds.slice(0, openSlots);
+    if (nextStudentIds.length === 0) return course;
+    changedCount += 1;
+    return {
+      ...course,
+      studentIds: [...course.studentIds, ...nextStudentIds],
+      status: "active"
+    };
+  });
+
   return changedCount;
 }
 
@@ -254,3 +290,4 @@ function removeResolvedMakeupNames(note: string | undefined, vault: TeacherVault
     return studentName ? current.replaceAll(studentName, "").replace(/、{2,}/g, "、").replace(/^、|、(?= 补 )/g, "").trim() : current;
   }, note);
 }
+
