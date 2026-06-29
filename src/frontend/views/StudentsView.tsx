@@ -23,6 +23,7 @@ import { builtInCourseTypeOptions, campusName, compareByName, courseHasActiveStu
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
 type ArchivePanel = "profile" | "salaryRules" | "campuses" | "students" | "courses";
+type StudentStatusFilter = "active" | "transition" | "archived" | "all";
 type CustomCourseTypeTemplate = "class" | "non_class";
 
 export function StudentsView({
@@ -85,6 +86,8 @@ export function StudentsView({
   const selectedProfileSalaryGrade = salaryGradeRuleById(vault.profile.defaultSalaryGradeId, vault);
   const studentOptions = sortStudentsByName(vault.students);
   const activeStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status !== "paused"));
+  const currentStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "active"));
+  const transitionStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "transition"));
   const archivedStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "paused"));
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
   const customCourseTypes = vault.preferences?.customCourseTypes ?? [];
@@ -133,7 +136,7 @@ export function StudentsView({
   const [archivePanel, setArchivePanel] = useState<ArchivePanel>("profile");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
-  const [studentStatusFilter, setStudentStatusFilter] = useState<"active" | "archived" | "all">("active");
+  const [studentStatusFilter, setStudentStatusFilter] = useState<StudentStatusFilter>("active");
   const [studentTrialFilter, setStudentTrialFilter] = useState<"all" | "trial" | "regular">("all");
   const [studentCourseTypeFilter, setStudentCourseTypeFilter] = useState<"all" | CourseType>("all");
   const [studentSubjectFilter, setStudentSubjectFilter] = useState("all");
@@ -160,6 +163,8 @@ export function StudentsView({
   const [transferEndExisting, setTransferEndExisting] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
   const [courseArchiveMessage, setCourseArchiveMessage] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const { confirm, dialog } = useConfirmDialog();
   const normalizedArchiveSearch = archiveSearch.trim().toLowerCase();
   const normalizedCourseStudentSearch = courseStudentSearch.trim().toLowerCase();
@@ -177,9 +182,7 @@ export function StudentsView({
   });
   const visibleStudents = vault.students
     .filter((student) => {
-      const matchesStatus =
-        studentStatusFilter === "all" ||
-        (studentStatusFilter === "archived" ? student.status === "paused" : student.status !== "paused");
+      const matchesStatus = matchesStudentStatusFilter(student, studentStatusFilter);
       const matchesTrial =
         studentTrialFilter === "all" ||
         (studentTrialFilter === "trial" ? Boolean(student.temporaryTrial) : !student.temporaryTrial);
@@ -226,7 +229,8 @@ export function StudentsView({
       return matchesStatus && matchesType && matchesGrade && matchesSubject && matchesCampus && matchesSearch;
     })
     .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id));
-  const activeStudentCount = activeStudentOptions.length;
+  const activeStudentCount = currentStudentOptions.length;
+  const transitionStudentCount = transitionStudentOptions.length;
   const archivedStudentCount = archivedStudentOptions.length;
   const activeCourses = vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)).length;
   const obligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId ?? "";
@@ -345,7 +349,7 @@ export function StudentsView({
     const resolvedCampusId = studentCampusInput || preferredCampusId;
     const duplicateStudent = findDuplicateStudent(studentNameInput.trim(), resolvedGrade, resolvedCampusId);
     if (duplicateStudent && !forceDuplicate) {
-      const duplicateStatus = duplicateStudent.status === "paused" ? "，当前已归档" : "";
+      const duplicateStatus = duplicateStudent.status === "paused" ? "，当前已归档" : duplicateStudent.status === "transition" ? "，当前为过渡期" : "";
       confirm({
         title: "可能重复添加学生",
         description: `已有「${duplicateStudent.name}」使用相同姓名、年级和校区${duplicateStatus}。建议先确认是否需要恢复或编辑原档案。`,
@@ -1142,6 +1146,82 @@ export function StudentsView({
     flashArchiveRow("students", student.id);
   }
 
+  function toggleStudentSelection(studentId: string) {
+    setSelectedStudentIds((current) =>
+      current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]
+    );
+  }
+
+  function toggleVisibleStudentSelection(checked: boolean) {
+    const visibleIds = visibleStudents.map((student) => student.id);
+    setSelectedStudentIds((current) => {
+      if (checked) return Array.from(new Set([...current, ...visibleIds]));
+      const visibleIdSet = new Set(visibleIds);
+      return current.filter((id) => !visibleIdSet.has(id));
+    });
+  }
+
+  function updateSelectedStudentsStatus(status: Student["status"]) {
+    const selectedStudents = visibleStudents.filter((student) => selectedStudentIds.includes(student.id));
+    if (selectedStudents.length === 0) return;
+    const apply = () => {
+      const selectedIdSet = new Set(selectedStudents.map((student) => student.id));
+      if (status === "paused") {
+        setCourseStudentIds((current) => current.filter((studentId) => !selectedIdSet.has(studentId)));
+      }
+      selectedStudents.forEach((student) => onUpdateStudent({ ...student, status }));
+      setSelectedStudentIds((current) => current.filter((id) => !selectedIdSet.has(id)));
+    };
+    if (status === "paused") {
+      confirm({
+        title: `归档选中的 ${selectedStudents.length} 个学生？`,
+        description: "归档后不会出现在添加课程档案、添加关联学生和班型调整的学生搜索结果中，历史课程和课时记录会保留。",
+        confirmLabel: "归档",
+        tone: "danger",
+        onConfirm: apply
+      });
+      return;
+    }
+    apply();
+  }
+
+  function toggleCourseSelection(courseId: string) {
+    setSelectedCourseIds((current) =>
+      current.includes(courseId) ? current.filter((id) => id !== courseId) : [...current, courseId]
+    );
+  }
+
+  function toggleVisibleCourseSelection(checked: boolean) {
+    const visibleIds = visibleCourses.map((course) => course.id);
+    setSelectedCourseIds((current) => {
+      if (checked) return Array.from(new Set([...current, ...visibleIds]));
+      const visibleIdSet = new Set(visibleIds);
+      return current.filter((id) => !visibleIdSet.has(id));
+    });
+  }
+
+  function updateSelectedCoursesStatus(status: CourseGroup["status"]) {
+    const selectedCourses = visibleCourses.filter((course) => selectedCourseIds.includes(course.id));
+    if (selectedCourses.length === 0) return;
+    const apply = () => {
+      const selectedIdSet = new Set(selectedCourses.map((course) => course.id));
+      selectedCourses.forEach((course) => onUpdateCourse({ ...course, status }));
+      setSelectedCourseIds((current) => current.filter((id) => !selectedIdSet.has(id)));
+      setCourseArchiveMessage(`${status === "active" ? "启用" : "暂停"}完成：已处理 ${selectedCourses.length} 个课程档案。`);
+    };
+    if (status === "paused") {
+      confirm({
+        title: `暂停选中的 ${selectedCourses.length} 个课程？`,
+        description: "暂停课程后仍会保留历史课时；需要继续排课时可重新启用。",
+        confirmLabel: "暂停",
+        tone: "danger",
+        onConfirm: apply
+      });
+      return;
+    }
+    apply();
+  }
+
   function updateProfile(patch: Partial<TeacherProfile>) {
     onUpdateProfile({
       ...vault.profile,
@@ -1298,7 +1378,7 @@ export function StudentsView({
       {dialog}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
-          { label: "档案信息", value: `${vault.students.length} 人`, hint: `在读 ${activeStudentCount} 人 / 已归档 ${archivedStudentCount} 人`, icon: Users },
+          { label: "档案信息", value: `${vault.students.length} 人`, hint: `在读 ${activeStudentCount} 人 / 过渡 ${transitionStudentCount} 人 / 已归档 ${archivedStudentCount} 人`, icon: Users },
           { label: "校区", value: `${vault.campuses.length} 个`, hint: "教学地点", icon: Building2 },
           { label: "添加课程档案", value: `${vault.courseGroups.length} 个`, hint: `启用 ${activeCourses} 个`, icon: GraduationCap }
         ].map((item) => {
@@ -1512,6 +1592,7 @@ export function StudentsView({
             studentNameInput={studentNameInput}
             studentNoteInput={studentNoteInput}
             studentSchoolInput={studentSchoolInput}
+            selectedStudentIds={selectedStudentIds}
             studentStatusFilter={studentStatusFilter}
             studentSubjectFilter={studentSubjectFilter}
             studentTemporaryTrialInput={studentTemporaryTrialInput}
@@ -1519,6 +1600,9 @@ export function StudentsView({
             subjectFilterOptions={subjectFilterOptions}
             vault={vault}
             visibleStudents={visibleStudents}
+            onToggleStudentSelection={toggleStudentSelection}
+            onToggleVisibleStudentSelection={toggleVisibleStudentSelection}
+            onUpdateSelectedStudentsStatus={updateSelectedStudentsStatus}
           />
         )}
 
@@ -1582,6 +1666,10 @@ export function StudentsView({
           onDeleteCourse={onDeleteCourse}
           onOpenCourseEditor={openCourseEditor}
           onRequestSyncVisibleCourses={requestSyncVisibleCoursesToLessons}
+          selectedCourseIds={selectedCourseIds}
+          onToggleCourseSelection={toggleCourseSelection}
+          onToggleVisibleCourseSelection={toggleVisibleCourseSelection}
+          onUpdateSelectedCoursesStatus={updateSelectedCoursesStatus}
           setCourseCampusFilter={setCourseCampusFilter}
           setCourseGradeFilter={setCourseGradeFilter}
           setCourseSearch={setCourseSearch}
@@ -1662,7 +1750,7 @@ function studentCourseSearchText(vault: TeacherVault, student: Student): string 
     student.school ?? "",
     student.note ?? "",
     campusName(vault, student.defaultCampusId),
-    student.status === "paused" ? "已归档 归档 暂停" : "在读 正常",
+    studentStatusSearchText(student.status),
     student.temporaryTrial ? "试听 临时试听" : "",
     ...studentCourses.flatMap((course) => [
       course.name,
@@ -1673,6 +1761,17 @@ function studentCourseSearchText(vault: TeacherVault, student: Student): string 
   ].join(" ").toLowerCase();
 }
 
+function matchesStudentStatusFilter(student: Student, filter: StudentStatusFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "archived") return student.status === "paused";
+  return student.status === filter;
+}
+
+function studentStatusSearchText(status: Student["status"]): string {
+  if (status === "paused") return "已归档 归档 暂停";
+  if (status === "transition") return "过渡期 升学 中考 待定 缓冲";
+  return "在读 正常";
+}
 function normalizeCourseTypeLabel(value: string): string {
   return value.trim().replace(/\s+/g, "").toLowerCase();
 }
@@ -1746,3 +1845,4 @@ function matchesGradeFilter(grade: string | undefined, filter: string): boolean 
 function studentOptionLabel(student: Student): string {
   return `${student.name} · ${student.grade || "未设置年级"}`;
 }
+

@@ -375,7 +375,7 @@ export function CourseEditDialog({
                                     : "border-[#dbe4ef] bg-white text-[#25324a]"
                             }`}
                           >
-                            {student.name} · {student.grade || "未设置年级"}{student.status === "paused" ? " · 已归档" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                            {student.name} · {student.grade || "未设置年级"}{student.status === "paused" ? " · 已归档" : student.status === "transition" ? " · 过渡期" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
                           </button>
                         );
                       })}
@@ -410,3 +410,4 @@ function courseBillingHint(vault: TeacherVault, course: CourseGroup): string {
     ? "按标准课时统计；例：10:10-12:00 实际 110 分钟，默认计费 2 小时，可在课节详情手动改为 1 小时等拆课课时。"
     : "按实际上课时长折算。";
 }
+

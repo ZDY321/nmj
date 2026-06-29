@@ -23,6 +23,8 @@ type CourseTypeOption = {
   label: string;
 };
 
+type StudentStatusFilter = "active" | "transition" | "archived" | "all";
+
 type StudentArchivePanelProps = {
   archiveRowClass: (panel: "students", id: string) => string;
   archiveSearch: string;
@@ -39,6 +41,10 @@ type StudentArchivePanelProps = {
   onOpenStudentEditor: (student: Student) => void;
   onRequestArchiveStudent: (student: Student) => void;
   onRestoreStudent: (student: Student) => void;
+  onToggleStudentSelection: (studentId: string) => void;
+  onToggleVisibleStudentSelection: (checked: boolean) => void;
+  onUpdateSelectedStudentsStatus: (status: Student["status"]) => void;
+  selectedStudentIds: string[];
   setArchiveSearch: Dispatch<SetStateAction<string>>;
   setCustomGradeInput: Dispatch<SetStateAction<string>>;
   setGradeFilter: Dispatch<SetStateAction<string>>;
@@ -49,7 +55,7 @@ type StudentArchivePanelProps = {
   setStudentNameInput: Dispatch<SetStateAction<string>>;
   setStudentNoteInput: Dispatch<SetStateAction<string>>;
   setStudentSchoolInput: Dispatch<SetStateAction<string>>;
-  setStudentStatusFilter: Dispatch<SetStateAction<"active" | "archived" | "all">>;
+  setStudentStatusFilter: Dispatch<SetStateAction<StudentStatusFilter>>;
   setStudentSubjectFilter: Dispatch<SetStateAction<string>>;
   setStudentTemporaryTrialInput: Dispatch<SetStateAction<boolean>>;
   setStudentTrialFilter: Dispatch<SetStateAction<"all" | "trial" | "regular">>;
@@ -61,7 +67,7 @@ type StudentArchivePanelProps = {
   studentNameInput: string;
   studentNoteInput: string;
   studentSchoolInput: string;
-  studentStatusFilter: "active" | "archived" | "all";
+  studentStatusFilter: StudentStatusFilter;
   studentSubjectFilter: string;
   studentTemporaryTrialInput: boolean;
   studentTrialFilter: "all" | "trial" | "regular";
@@ -86,6 +92,10 @@ export function StudentArchivePanel({
   onOpenStudentEditor,
   onRequestArchiveStudent,
   onRestoreStudent,
+  onToggleStudentSelection,
+  onToggleVisibleStudentSelection,
+  onUpdateSelectedStudentsStatus,
+  selectedStudentIds,
   setArchiveSearch,
   setCustomGradeInput,
   setGradeFilter,
@@ -116,6 +126,9 @@ export function StudentArchivePanel({
   vault,
   visibleStudents
 }: StudentArchivePanelProps) {
+  const selectedVisibleCount = visibleStudents.filter((student) => selectedStudentIds.includes(student.id)).length;
+  const allVisibleSelected = visibleStudents.length > 0 && selectedVisibleCount === visibleStudents.length;
+
   return (
     <Card className="h-fit overflow-hidden">
       <CardHeader className="gap-3">
@@ -126,7 +139,7 @@ export function StudentArchivePanel({
           </div>
           <Badge variant="secondary">
             {visibleStudents.length} / {vault.students.length} 人
-            {studentStatusFilter !== "all" ? ` · ${studentStatusFilter === "archived" ? "已归档" : "在读"}` : ""}
+            {studentStatusFilter !== "all" ? ` · ${studentStatusFilterLabel(studentStatusFilter)}` : ""}
           </Badge>
         </div>
         <form onSubmit={onAddStudent} className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -181,8 +194,9 @@ export function StudentArchivePanel({
           <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名、学校或备注" />
         </label>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
-          <Select value={studentStatusFilter} onChange={(event) => setStudentStatusFilter(event.target.value as "active" | "archived" | "all")} className="h-10">
+          <Select value={studentStatusFilter} onChange={(event) => setStudentStatusFilter(event.target.value as StudentStatusFilter)} className="h-10">
             <option value="active">在读学生</option>
+            <option value="transition">过渡期学生</option>
             <option value="archived">已归档学生</option>
             <option value="all">全部学生</option>
           </Select>
@@ -217,17 +231,35 @@ export function StudentArchivePanel({
             ))}
           </Select>
         </div>
+        <div className="flex flex-col gap-2 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-2 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex items-center gap-2 text-xs font-bold text-[#25324a]">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              disabled={visibleStudents.length === 0}
+              onChange={(event) => onToggleVisibleStudentSelection(event.target.checked)}
+              className="h-4 w-4 accent-[#1557c2]"
+            />
+            选择当前筛选 {selectedVisibleCount > 0 ? ` · 已选 ${selectedVisibleCount}` : ""}
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("active")}>设为在读</Button>
+            <Button type="button" size="sm" variant="outline" className="h-8 border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("transition")}>设为过渡期</Button>
+            <Button type="button" size="sm" variant="destructive" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("paused")}>归档</Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
         {visibleStudents.map((student) => {
           const used = studentInUse(student.id);
           const archived = student.status === "paused";
+          const selected = selectedStudentIds.includes(student.id);
           return (
             <motion.div
               key={student.id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className={`${archiveRowClass("students", student.id)} cursor-pointer transition-colors hover:bg-[#f8fbff]`}
+              className={`${archiveRowClass("students", student.id)} ${selected ? "bg-[#f8fbff]" : ""} cursor-pointer transition-colors hover:bg-[#f8fbff]`}
               role="button"
               tabIndex={0}
               onClick={() => onOpenStudentEditor(student)}
@@ -241,6 +273,14 @@ export function StudentArchivePanel({
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => onToggleStudentSelection(student.id)}
+                      onClick={(event) => event.stopPropagation()}
+                      className="h-4 w-4 shrink-0 accent-[#1557c2]"
+                      aria-label={`选择学生 ${student.name}`}
+                    />
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#fff1e2]">
                       <span className="text-xs font-bold text-[#ff8617]">{student.name.slice(0, 1)}</span>
                     </div>
@@ -255,8 +295,8 @@ export function StudentArchivePanel({
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                    <Badge variant={archived ? "secondary" : "sage"}>
-                      {archived ? "已归档" : "在读"}
+                    <Badge variant={studentStatusBadgeVariant(student.status)}>
+                      {studentStatusLabel(student.status)}
                     </Badge>
                     {archived ? (
                       <Button
@@ -338,10 +378,29 @@ export function StudentArchivePanel({
         })}
         {visibleStudents.length === 0 && (
           <p className="py-8 text-center text-sm text-(--color-muted-foreground)">
-            {studentStatusFilter === "archived" ? "还没有已归档学生" : "还没有符合条件的学生"}
+            {studentStatusFilter === "archived" ? "还没有已归档学生" : studentStatusFilter === "transition" ? "还没有过渡期学生" : "还没有符合条件的学生"}
           </p>
         )}
       </CardContent>
     </Card>
   );
+}
+
+function studentStatusFilterLabel(filter: StudentStatusFilter): string {
+  if (filter === "archived") return "已归档";
+  if (filter === "transition") return "过渡期";
+  if (filter === "active") return "在读";
+  return "全部";
+}
+
+function studentStatusLabel(status: Student["status"]): string {
+  if (status === "paused") return "已归档";
+  if (status === "transition") return "过渡期";
+  return "在读";
+}
+
+function studentStatusBadgeVariant(status: Student["status"]): "secondary" | "sage" | "amber" {
+  if (status === "paused") return "secondary";
+  if (status === "transition") return "amber";
+  return "sage";
 }

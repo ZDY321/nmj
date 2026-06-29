@@ -190,7 +190,7 @@ export type Student = {
   temporaryTrial?: boolean;
   defaultCampusId?: string;
   note?: string;
-  status: "active" | "paused";
+  status: "active" | "transition" | "paused";
 };
 
 export type FeeRule = {
@@ -656,3 +656,4 @@ export type SalaryBreakdown = {
   obligationDeduction: number;
   total: number;
 };
+

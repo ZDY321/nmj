@@ -438,10 +438,10 @@ export function applyAiScheduleDraftToVault(options: ApplyAiScheduleDraftOptions
         updates.push(student.note ? "备注已更新" : "备注已清空");
       }
       if (data.status !== undefined) {
-        const status = stringValue(data.status).toLowerCase();
-        if (status === "active" || status === "paused") {
+        const status = normalizeAiStudentStatus(data.status);
+        if (status) {
           student.status = status;
-          updates.push(status === "active" ? "状态改为在读" : "状态改为归档");
+          updates.push(status === "active" ? "状态改为在读" : status === "transition" ? "状态改为过渡期" : "状态改为归档");
         }
       }
       if (data.temporaryTrial !== undefined) {
@@ -1070,6 +1070,13 @@ function normalizedSingleClassFeeTier(rule: FeeRule): ClassFeeTier {
   };
 }
 
+function normalizeAiStudentStatus(value: unknown): "active" | "transition" | "paused" | undefined {
+  const normalized = stringValue(value).toLowerCase();
+  if (normalized === "active" || normalized === "在读" || normalized === "正常") return "active";
+  if (normalized === "transition" || normalized === "pending" || normalized === "过渡" || normalized === "过渡期" || normalized === "待定" || normalized === "升学") return "transition";
+  if (normalized === "paused" || normalized === "archived" || normalized === "归档" || normalized === "已归档" || normalized === "暂停") return "paused";
+  return undefined;
+}
 function normalizeAiCourseType(value: unknown, vault: TeacherVault | null = null): CourseType {
   const normalized = stringValue(value).toLowerCase();
   if (normalized === "one_on_one" || normalized === "一对一") return "one_on_one";
@@ -1088,5 +1095,4 @@ function normalizeAiCourseType(value: unknown, vault: TeacherVault | null = null
   if (matchedKnownType) return matchedKnownType;
   return "class";
 }
-
 

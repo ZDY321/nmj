@@ -42,6 +42,10 @@ type CourseArchiveListPanelProps = {
   onDeleteCourse: (courseId: string) => void;
   onOpenCourseEditor: (course: CourseGroup) => void;
   onRequestSyncVisibleCourses: () => void;
+  onToggleCourseSelection: (courseId: string) => void;
+  onToggleVisibleCourseSelection: (checked: boolean) => void;
+  onUpdateSelectedCoursesStatus: (status: CourseGroup["status"]) => void;
+  selectedCourseIds: string[];
   setCourseCampusFilter: Dispatch<SetStateAction<string>>;
   setCourseGradeFilter: Dispatch<SetStateAction<string>>;
   setCourseSearch: Dispatch<SetStateAction<string>>;
@@ -72,6 +76,10 @@ export function CourseArchiveListPanel({
   onDeleteCourse,
   onOpenCourseEditor,
   onRequestSyncVisibleCourses,
+  onToggleCourseSelection,
+  onToggleVisibleCourseSelection,
+  onUpdateSelectedCoursesStatus,
+  selectedCourseIds,
   setCourseCampusFilter,
   setCourseGradeFilter,
   setCourseSearch,
@@ -82,6 +90,9 @@ export function CourseArchiveListPanel({
   vault,
   visibleCourses
 }: CourseArchiveListPanelProps) {
+  const selectedVisibleCount = visibleCourses.filter((course) => selectedCourseIds.includes(course.id)).length;
+  const allVisibleSelected = visibleCourses.length > 0 && selectedVisibleCount === visibleCourses.length;
+
   return (
     <Card className="h-fit overflow-hidden">
       <CardHeader>
@@ -151,16 +162,33 @@ export function CourseArchiveListPanel({
             ))}
           </Select>
         </div>
+        <div className="flex flex-col gap-2 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-2 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex items-center gap-2 text-xs font-bold text-[#25324a]">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              disabled={visibleCourses.length === 0}
+              onChange={(event) => onToggleVisibleCourseSelection(event.target.checked)}
+              className="h-4 w-4 accent-[#1557c2]"
+            />
+            选择当前筛选 {selectedVisibleCount > 0 ? ` · 已选 ${selectedVisibleCount}` : ""}
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" className="h-8 border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedCoursesStatus("active")}>启用</Button>
+            <Button type="button" size="sm" variant="destructive" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedCoursesStatus("paused")}>暂停</Button>
+          </div>
+        </div>
         <div className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
           {visibleCourses.map((course) => {
             const used = courseInUse(course.id);
             const effectivelyPaused = course.status === "paused" || !courseHasActiveStudent(vault, course);
+            const selected = selectedCourseIds.includes(course.id);
             return (
               <motion.div
                 key={course.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className={`${archiveRowClass("courses", course.id)} cursor-pointer transition-colors hover:bg-[#f8fbff]`}
+                className={`${archiveRowClass("courses", course.id)} ${selected ? "bg-[#f8fbff]" : ""} cursor-pointer transition-colors hover:bg-[#f8fbff]`}
                 role="button"
                 tabIndex={0}
                 onClick={() => onOpenCourseEditor(course)}
@@ -173,6 +201,14 @@ export function CourseArchiveListPanel({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => onToggleCourseSelection(course.id)}
+                      onClick={(event) => event.stopPropagation()}
+                      className="h-4 w-4 shrink-0 accent-[#1557c2]"
+                      aria-label={`选择课程 ${course.name}`}
+                    />
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
                       <GraduationCap size={16} className="text-[#1557c2]" />
                     </div>

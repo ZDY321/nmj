@@ -94,6 +94,7 @@ export function StudentEditDialog({
                 onChange={(event) => setEditingStudent({ ...editingStudent, status: event.target.value as Student["status"] })}
               >
                 <option value="active">在读</option>
+                <option value="transition">过渡期</option>
                 <option value="paused">已归档</option>
               </Select>
               <label className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-bold text-[#25324a]">
@@ -126,3 +127,4 @@ export function StudentEditDialog({
     </AnimatePresence>
   );
 }
+
