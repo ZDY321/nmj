@@ -6,6 +6,7 @@ import { PayrollObligationDeductionCard } from "@/frontend/components/PayrollObl
 import { PayrollOverviewGrid } from "@/frontend/components/PayrollOverviewGrid";
 import { PayrollReviewFiltersCard } from "@/frontend/components/PayrollReviewFiltersCard";
 import { PayrollScheduleExportGuide } from "@/frontend/components/PayrollScheduleExportGuide";
+import { ScheduleImportCourseMappingPanel } from "@/frontend/components/ScheduleImportCourseMappingPanel";
 import { ScheduleImportPanel } from "@/frontend/components/ScheduleImportPanel";
 import type { CourseType, Lesson, ScheduleImportVaultState, TeacherVault } from "@/shared/types";
 import { todayIso } from "@/frontend/lib/calculations";
@@ -15,7 +16,7 @@ import { loadEncryptedDocumentWithVersion, saveEncryptedDocument } from "@/front
 
 type TypeFilter = "all" | CourseType;
 type LessonStatusFilter = "all" | Lesson["status"];
-type PayrollPanel = "review" | "reconcile" | "guide";
+type PayrollPanel = "review" | "reconcile" | "mapping" | "guide";
 const scheduleImportArchiveDocType = "schedule_import_reviews";
 const scheduleImportArchiveDocKey = "primary";
 
@@ -177,6 +178,7 @@ export function PayrollReviewView({
           {[
             { key: "review" as PayrollPanel, label: "工资核对" },
             { key: "reconcile" as PayrollPanel, label: "教务课表对账" },
+            { key: "mapping" as PayrollPanel, label: "课程名称映射" },
             { key: "guide" as PayrollPanel, label: "导出指引" }
           ].map((item) => (
             <button
@@ -195,6 +197,26 @@ export function PayrollReviewView({
 
       {payrollPanel === "guide" ? (
         <PayrollScheduleExportGuide />
+      ) : payrollPanel === "mapping" ? (
+        <>
+        {scheduleImportArchiveError && (
+          <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] px-4 py-3 text-sm font-bold text-[#9a3412]">
+            {scheduleImportArchiveError}
+          </div>
+        )}
+        {scheduleImportArchiveLoading ? (
+          <div className="rounded-[14px] border border-[#dbe4ef] bg-white px-4 py-3 text-sm font-bold text-[#475569]">
+            正在读取已保存的教务对账历史和课程映射...
+          </div>
+        ) : (
+          <ScheduleImportCourseMappingPanel
+            vault={vault}
+            storageScope={storageScope}
+            scheduleImportState={scheduleImportArchive}
+            onSaveScheduleImport={saveScheduleImportState}
+          />
+        )}
+        </>
       ) : payrollPanel === "reconcile" ? (
         <>
         {scheduleImportArchiveError && (

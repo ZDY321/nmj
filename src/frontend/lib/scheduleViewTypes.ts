@@ -20,7 +20,7 @@ export type ExternalLessonReturnTarget = {
   view: ViewKey;
   label: string;
   calendarFocus?: CalendarOverviewReturnFocus;
-  payrollPanel?: "review" | "reconcile" | "guide";
+  payrollPanel?: "review" | "reconcile" | "mapping" | "guide";
 };
 
 export type InternalLessonReturnTarget = {
