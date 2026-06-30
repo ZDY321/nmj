@@ -616,6 +616,21 @@ export function App() {
     });
   }
 
+  function updateCourses(courses: CourseGroup[]) {
+    if (courses.length === 0) return;
+    updateVault((draft) => {
+      const nextCoursesById = new Map(courses.map((course) => [course.id, course]));
+      const previousCoursesById = new Map(draft.courseGroups.map((course) => [course.id, course]));
+      draft.courseGroups = draft.courseGroups.map((course) => nextCoursesById.get(course.id) ?? course);
+      courses.forEach((course) => {
+        const previousCourse = previousCoursesById.get(course.id);
+        if (previousCourse && courseUpdateAffectsLessonDefaults(previousCourse, course)) {
+          syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
+        }
+      });
+    });
+  }
+
   function syncCoursesToLessons(courseIds: string[]) {
     const courseIdSet = new Set(courseIds);
     if (courseIdSet.size === 0) return;
@@ -1870,6 +1885,7 @@ export function App() {
                     onAddCourse={addCourse}
 
                     onUpdateCourse={updateCourse}
+                    onUpdateCourses={updateCourses}
                     onSyncCoursesToLessons={syncCoursesToLessons}
                     onDeleteCourse={deleteCourse}
                     onAddCustomCourseType={addCustomCourseType}

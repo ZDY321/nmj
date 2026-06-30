@@ -38,6 +38,7 @@ export function StudentsView({
   onUpdateProfile,
   onAddCourse,
   onUpdateCourse,
+  onUpdateCourses,
   onSyncCoursesToLessons,
   onDeleteCourse,
   onAddCustomCourseType,
@@ -66,6 +67,7 @@ export function StudentsView({
   onUpdateProfile: (profile: TeacherProfile) => void;
   onAddCourse: (course: CourseGroup) => void;
   onUpdateCourse: (course: CourseGroup) => void;
+  onUpdateCourses: (courses: CourseGroup[]) => void;
   onSyncCoursesToLessons: (courseIds: string[]) => void;
   onDeleteCourse: (courseId: string) => void;
   onAddCustomCourseType: (courseType: CustomCourseTypeOption, feeRule?: FeeRule) => void;
@@ -1207,7 +1209,7 @@ export function StudentsView({
     if (selectedCourses.length === 0) return;
     const apply = () => {
       const selectedIdSet = new Set(selectedCourses.map((course) => course.id));
-      selectedCourses.forEach((course) => onUpdateCourse({ ...course, status }));
+      onUpdateCourses(selectedCourses.map((course) => ({ ...course, status })));
       setSelectedCourseIds((current) => current.filter((id) => !selectedIdSet.has(id)));
       setCourseArchiveMessage(`${status === "active" ? "启用" : "暂停"}完成：已处理 ${selectedCourses.length} 个课程档案。`);
     };
