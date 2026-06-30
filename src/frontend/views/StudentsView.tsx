@@ -1434,7 +1434,7 @@ export function StudentsView({
           </div>
         </div>
         <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
-          删除限制：已有学生、课程或历史课时引用的数据不能直接删除，建议将对应的引用数据全部删除或改为归档状态。
+          计费原则：课节金额以创建或刷新时保存的快照为准；档案和课时费规则调整默认用于新建课节，已排未上课节只有在课程档案同步或手动刷新时才会更新，已完成历史课节保留原金额。
         </div>
         {archivePanel === "profile" && (
           <TeacherProfilePanel
