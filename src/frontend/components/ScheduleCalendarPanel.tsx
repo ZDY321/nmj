@@ -11,6 +11,7 @@ import { ScheduleCalendarSyncPanel, type ScheduleCalendarSyncPanelProps } from "
 type CalendarMode = "schedule" | "view";
 
 type ScheduleCalendarPanelProps = {
+  calendarBillingHours: string;
   calendarCourseGroupId: string;
   calendarCourseOptions: CourseGroup[];
   calendarCourseSearch: string;
@@ -20,6 +21,7 @@ type ScheduleCalendarPanelProps = {
   calendarMode: CalendarMode;
   calendarMonth: string;
   calendarStartTime: string;
+  calendarSuggestedBillingHours: number;
   calendarViewCampusFilter: string;
   calendarViewCampusOptions: Campus[];
   calendarViewGradeFilter: string;
@@ -37,6 +39,7 @@ type ScheduleCalendarPanelProps = {
   refreshSelectedDateLessonCount: number;
   selectedCalendarLessonCount: number;
   selectedCalendarWeekLessonCount: number;
+  setCalendarBillingHours: (value: string) => void;
   setCalendarCourseGroupId: (value: string) => void;
   setCalendarCourseSearch: (value: string) => void;
   setCalendarEndTime: (value: string) => void;
@@ -50,6 +53,7 @@ type ScheduleCalendarPanelProps = {
 };
 
 export function ScheduleCalendarPanel({
+  calendarBillingHours,
   calendarCourseGroupId,
   calendarCourseOptions,
   calendarCourseSearch,
@@ -59,6 +63,7 @@ export function ScheduleCalendarPanel({
   calendarMode,
   calendarMonth,
   calendarStartTime,
+  calendarSuggestedBillingHours,
   calendarViewCampusFilter,
   calendarViewCampusOptions,
   calendarViewGradeFilter,
@@ -76,6 +81,7 @@ export function ScheduleCalendarPanel({
   refreshSelectedDateLessonCount,
   selectedCalendarLessonCount,
   selectedCalendarWeekLessonCount,
+  setCalendarBillingHours,
   setCalendarCourseGroupId,
   setCalendarCourseSearch,
   setCalendarEndTime,
@@ -147,7 +153,7 @@ export function ScheduleCalendarPanel({
         </div>
         {calendarMode === "schedule" ? (
           <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">排课课程</label>
                 <label className="relative block">
@@ -175,6 +181,17 @@ export function ScheduleCalendarPanel({
                 {!isCalendarTimeValid && (
                   <div className="text-xs font-bold text-[#b91c1c]">日历排课的结束时间必须晚于开始时间。</div>
                 )}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">计费课时</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={calendarBillingHours}
+                  onChange={(event) => setCalendarBillingHours(event.target.value)}
+                  placeholder={calendarSuggestedBillingHours ? `自动 ${calendarSuggestedBillingHours.toFixed(1)} 小时` : "自动按课程规则"}
+                />
               </div>
             </div>
             <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">

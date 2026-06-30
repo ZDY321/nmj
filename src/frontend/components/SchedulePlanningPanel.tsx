@@ -13,6 +13,9 @@ type DateShortcut = {
 };
 
 type SchedulePlanningPanelProps = {
+  batchCandidateCount: number;
+  batchConflictCount: number;
+  batchLessonTargetCount: string;
   customPresetEnd: string;
   customPresetStart: string;
   customTimePresets: TimePreset[];
@@ -29,35 +32,45 @@ type SchedulePlanningPanelProps = {
   onToggleWeekday: (day: Weekday) => void;
   rangeEnd: string;
   rangeStart: string;
+  ruleBillingHours: string;
   ruleCourseGroupId: string;
   ruleCourseOptions: CourseGroup[];
   ruleCourseSearch: string;
   ruleEndTime: string;
   ruleStartTime: string;
+  ruleSuggestedBillingHours: number;
   selectedWeekdays: Weekday[];
+  setBatchLessonTargetCount: (value: string) => void;
   setCustomPresetEnd: (value: string) => void;
   setCustomPresetStart: (value: string) => void;
   setRangeEnd: (value: string) => void;
   setRangeStart: (value: string) => void;
   setRuleCourseGroupId: (value: string) => void;
+  setRuleBillingHours: (value: string) => void;
   setRuleCourseSearch: (value: string) => void;
   setRuleEndTime: (value: string) => void;
   setRuleStartTime: (value: string) => void;
+  setSingleBillingHours: (value: string) => void;
   setSingleCourseGroupId: (value: string) => void;
   setSingleCourseSearch: (value: string) => void;
   setSingleDate: (value: string) => void;
   setSingleEndTime: (value: string) => void;
   setSingleStartTime: (value: string) => void;
+  singleBillingHours: string;
   singleCourseGroupId: string;
   singleCourseOptions: CourseGroup[];
   singleCourseSearch: string;
   singleDate: string;
   singleEndTime: string;
   singleStartTime: string;
+  singleSuggestedBillingHours: number;
   visibleWeekdays: Weekday[];
 };
 
 export function SchedulePlanningPanel({
+  batchCandidateCount,
+  batchConflictCount,
+  batchLessonTargetCount,
   customPresetEnd,
   customPresetStart,
   customTimePresets,
@@ -74,31 +87,38 @@ export function SchedulePlanningPanel({
   onToggleWeekday,
   rangeEnd,
   rangeStart,
+  ruleBillingHours,
   ruleCourseGroupId,
   ruleCourseOptions,
   ruleCourseSearch,
   ruleEndTime,
   ruleStartTime,
+  ruleSuggestedBillingHours,
   selectedWeekdays,
+  setBatchLessonTargetCount,
   setCustomPresetEnd,
   setCustomPresetStart,
   setRangeEnd,
   setRangeStart,
+  setRuleBillingHours,
   setRuleCourseGroupId,
   setRuleCourseSearch,
   setRuleEndTime,
   setRuleStartTime,
+  setSingleBillingHours,
   setSingleCourseGroupId,
   setSingleCourseSearch,
   setSingleDate,
   setSingleEndTime,
   setSingleStartTime,
+  singleBillingHours,
   singleCourseGroupId,
   singleCourseOptions,
   singleCourseSearch,
   singleDate,
   singleEndTime,
   singleStartTime,
+  singleSuggestedBillingHours,
   visibleWeekdays
 }: SchedulePlanningPanelProps) {
   return (
@@ -143,6 +163,20 @@ export function SchedulePlanningPanel({
               {!isSingleTimeValid && (
                 <div className="text-xs font-bold text-[#b91c1c]">结束时间必须晚于开始时间。</div>
               )}
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium">计费课时</label>
+              <Input
+                type="number"
+                min={0}
+                step={0.5}
+                value={singleBillingHours}
+                onChange={(event) => setSingleBillingHours(event.target.value)}
+                placeholder={singleSuggestedBillingHours ? `自动 ${singleSuggestedBillingHours.toFixed(1)} 小时` : "自动按课程规则"}
+              />
+              <div className="rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
+                留空按课程规则自动建议；填写后本次课按手动计费课时保存。
+              </div>
             </div>
           </div>
 
@@ -256,7 +290,7 @@ export function SchedulePlanningPanel({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
-            需要逐日选择时，可以切换到日历查看后点击日期排课。
+            批量排课按“日期开始到日期结束”与下方勾选星期叠加生成；只会生成范围内匹配星期的日期。需要逐日选择时，可以切换到日历查看后点击日期排课。
           </div>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -276,7 +310,7 @@ export function SchedulePlanningPanel({
                 ))}
               </Select>
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <label className="text-sm font-medium">开始</label>
                 <TimeTextInput value={ruleStartTime} onValueChange={setRuleStartTime} className={!isBatchTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
@@ -288,8 +322,19 @@ export function SchedulePlanningPanel({
                   <div className="text-xs font-bold text-[#b91c1c]">结束时间必须晚于开始时间。</div>
                 )}
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">计费课时</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={ruleBillingHours}
+                  onChange={(event) => setRuleBillingHours(event.target.value)}
+                  placeholder={ruleSuggestedBillingHours ? `自动 ${ruleSuggestedBillingHours.toFixed(1)} 小时` : "自动按课程规则"}
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <label className="text-sm font-medium">日期开始</label>
                 <Input type="date" value={rangeStart} max={rangeEnd} onChange={(event) => setRangeStart(event.target.value)} className={!isBatchDateRangeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
@@ -300,6 +345,18 @@ export function SchedulePlanningPanel({
                 {!isBatchDateRangeValid && (
                   <div className="text-xs font-bold text-[#b91c1c]">结束日期不能早于开始日期。</div>
                 )}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">目标节数</label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={batchLessonTargetCount}
+                  onChange={(event) => setBatchLessonTargetCount(event.target.value)}
+                  placeholder="例如 20"
+                />
+                <div className="text-xs font-semibold text-[#64748b]">填写后按开始日期和星期自动计算结束日期。</div>
               </div>
             </div>
           </div>
@@ -320,6 +377,10 @@ export function SchedulePlanningPanel({
                 </Button>
               ))}
             </div>
+          </div>
+
+          <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-extrabold text-[#25324a]">
+            当前条件共 {batchCandidateCount} 节{batchConflictCount > 0 ? `，其中 ${batchConflictCount} 节会因时间冲突跳过` : ""}。
           </div>
 
           <Button

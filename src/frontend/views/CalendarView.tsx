@@ -487,7 +487,7 @@ export function CalendarView({
                 {days.map((date) => {
                   const dayLessons = filteredVisibleLessons.filter((l) => l.date === date).sort(sortLessons);
                   const amount = dayLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
-                  const hasPending = dayLessons.some((l) => l.status === "scheduled" || l.status === "makeup_pending");
+                  const hasPending = dayLessons.some((l) => l.status === "scheduled");
                   const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
                   const hasCancelled = dayLessons.some((l) => l.status === "cancelled");
                   const hasMakeup = dayLessons.some((l) => makeupMarkerForLesson(l));
@@ -503,25 +503,30 @@ export function CalendarView({
                       onClick={() => selectCalendarDate(date)}
                       className={`relative flex min-h-[66px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[100px] sm:rounded-[14px] sm:p-2.5 ${
                         isSelected
-                          ? isAllCompleted
-                            ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
-                            : "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
+                          ? hasMakeup
+                            ? "border-[#facc15] bg-[#fef9c3] shadow-[0_10px_24px_rgba(202,138,4,0.14)]"
+                            : isAllCompleted
+                              ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
+                              : "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
                         : isCurrentMonth
-                            ? hasCancelled
-                              ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
-                              : isAllCompleted
-                                ? "border-[#bbf7d0] bg-[#f0fdf4] hover:border-[#86efac] hover:shadow-[0_10px_24px_rgba(22,163,74,0.1)]"
-                                : "border-[#dbe4ef] bg-white hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
+                            ? hasMakeup
+                              ? "border-[#facc15] bg-[#fefce8] hover:shadow-[0_10px_24px_rgba(202,138,4,0.1)]"
+                              : hasCancelled
+                                ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
+                                : isAllCompleted
+                                  ? "border-[#bbf7d0] bg-[#f0fdf4] hover:border-[#86efac] hover:shadow-[0_10px_24px_rgba(22,163,74,0.1)]"
+                                  : "border-[#dbe4ef] bg-white hover:shadow-[0_10px_24px_rgba(15,35,66,0.08)]"
                             : "border-transparent bg-white opacity-40"
                       }`}
                     >
-                      <span className={`text-sm font-bold ${isSelected ? (isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
+                      <span className={`text-sm font-bold ${isSelected ? (hasMakeup ? "text-[#854d0e]" : isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
                         {Number(date.slice(8))}
                       </span>
                       <div className="mt-2 flex gap-1 sm:hidden">
                         {hasDone && <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a]" />}
                         {hasCancelled && <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626]" />}
                         {hasPending && <span className="h-1.5 w-1.5 rounded-full bg-[#ff8617]" />}
+                        {hasMakeup && <span className="h-1.5 w-1.5 rounded-full bg-[#eab308]" />}
                       </div>
                       <div className="mt-1.5 hidden flex-wrap gap-1 sm:flex">
                         {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
@@ -567,6 +572,7 @@ export function CalendarView({
                       {weekDates.map((date, index) => {
                         const dayLessons = weekLessons.filter((lesson) => lesson.date === date);
                         const dayTotal = dayLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
+                        const dayHasMakeup = dayLessons.some((lesson) => makeupMarkerForLesson(lesson));
                         const isSelected = date === selectedDate;
                         return (
                           <button
@@ -574,11 +580,11 @@ export function CalendarView({
                             type="button"
                             onClick={() => selectCalendarDate(date)}
                             className={`border-r border-[#e8eef6] px-3 py-2 text-left transition-colors last:border-r-0 ${
-                              isSelected ? "bg-[#fff7ed]" : "hover:bg-[#f3f7fb]"
+                              dayHasMakeup ? "bg-[#fef9c3] hover:bg-[#fef3c7]" : isSelected ? "bg-[#fff7ed]" : "hover:bg-[#f3f7fb]"
                             }`}
                           >
                             <span className="flex min-w-0 items-center justify-between gap-2">
-                              <span className={`truncate text-sm font-extrabold ${isSelected ? "text-[#ff8617]" : "text-[#061226]"}`}>
+                              <span className={`truncate text-sm font-extrabold ${dayHasMakeup ? "text-[#854d0e]" : isSelected ? "text-[#ff8617]" : "text-[#061226]"}`}>
                                 {date.slice(5)}
                               </span>
                               <span className="shrink-0 text-[11px] font-extrabold text-[#1557c2]">

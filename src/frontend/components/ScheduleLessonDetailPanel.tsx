@@ -334,15 +334,15 @@ export function ScheduleLessonDetailPanel({
             </div>
           </div>
 
-          {selected.status === "cancelled" && (
-            <div className="rounded-[14px] border border-[#fecaca] bg-[#fff1f2] p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-extrabold text-[#7f1d1d]">
-                <AlertTriangle size={16} /> 取消备注
+          {(selected.status === "cancelled" || selected.status === "makeup_pending") && (
+            <div className={`rounded-[14px] border p-4 ${selected.status === "cancelled" ? "border-[#fecaca] bg-[#fff1f2]" : "border-[#facc15] bg-[#fefce8]"}`}>
+              <div className={`mb-2 flex items-center gap-2 text-sm font-extrabold ${selected.status === "cancelled" ? "text-[#7f1d1d]" : "text-[#854d0e]"}`}>
+                <AlertTriangle size={16} /> {selected.status === "cancelled" ? "取消备注" : "待补课原因"}
               </div>
               <Textarea
                 value={selected.note ?? ""}
                 onChange={(event) => onUpdateSelected({ note: event.target.value })}
-                placeholder="填写取消原因，例如学生请假、校区停课、老师调课..."
+                placeholder={selected.status === "cancelled" ? "填写取消原因，例如学生请假、校区停课、老师调课..." : "填写待补课原因，例如学生请假、缺课、整节课顺延..."}
                 className="min-h-[76px] bg-white"
               />
             </div>

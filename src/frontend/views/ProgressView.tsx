@@ -58,7 +58,7 @@ import type {
 
 type HomeworkFilter = "all" | StudentHomeworkStatus;
 type ProgressFilter = "all" | StudentProgressStatus;
-type ProgressSortOption = "smart" | "today" | "student_name" | "campus" | "grade";
+type ProgressSortOption = "smart" | "today" | "course_name" | "campus" | "grade";
 type ProgressSectionView = "ledger" | "checklist";
 type StudentStatusScope = "active" | "archived" | "all";
 
@@ -73,7 +73,7 @@ type ProgressDraft = {
 
 type ProgressRow = {
   key: string;
-  student: Student;
+  students: Student[];
   course: CourseGroup;
   lessons: Lesson[];
   latestLesson?: Lesson;
@@ -85,6 +85,7 @@ type ProgressRow = {
   needsLatestRecord: boolean;
   campusId?: string;
   campusLabel: string;
+  gradeLabel: string;
 };
 
 type TimelineColumn = {
@@ -127,7 +128,7 @@ const homeworkStatusLabels: Record<StudentHomeworkStatus, string> = {
 const progressSortLabels: Record<ProgressSortOption, string> = {
   smart: "智能排序",
   today: "今天有课优先",
-  student_name: "按姓名",
+  course_name: "按课程",
   campus: "按校区",
   grade: "按年级"
 };
@@ -178,6 +179,7 @@ export function ProgressView({
   const [onlyFollowUp, setOnlyFollowUp] = useState(false);
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedLessonId, setSelectedLessonId] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [draft, setDraft] = useState<ProgressDraft>(emptyDraft);
   const [sectionView, setSectionView] = useState<ProgressSectionView>("ledger");
@@ -198,21 +200,24 @@ export function ProgressView({
 
   const scopedRows = rows.filter((row) => {
     if (studentStatusScope === "all") return true;
-    return studentStatusScope === "archived" ? row.student.status === "paused" : row.student.status !== "paused";
+    return studentStatusScope === "archived"
+      ? row.students.some((student) => student.status === "paused")
+      : row.students.some((student) => student.status !== "paused");
   });
 
   const visibleRows = scopedRows
     .filter((row) => {
       const searchable = [
-        row.student.name,
-        row.student.grade ?? "",
-        row.student.school ?? "",
-        row.campusLabel,
         row.course.name,
         row.course.subject,
         courseTypeLabel(vault, row.course.type),
+        row.campusLabel,
+        row.gradeLabel,
+        studentNames(vault, row.students.map((student) => student.id)),
+        ...row.students.flatMap((student) => [student.name, student.grade ?? "", student.school ?? ""]),
         row.latestLesson?.content.taught ?? "",
         row.latestLesson?.content.homework ?? "",
+        row.latestLesson?.content.nextLessonReminder ?? "",
         row.displayRecord?.progressText ?? "",
         row.displayRecord?.homeworkText ?? "",
         row.displayRecord?.nextPlan ?? "",
@@ -222,7 +227,7 @@ export function ProgressView({
         !normalizedQuery ||
         normalizedQuery.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
       const matchesCourse = courseFilter === "all" || row.course.id === courseFilter;
-      const matchesGrade = gradeFilter === "all" || (gradeFilter === "__unset" ? !row.student.grade : row.student.grade === gradeFilter);
+      const matchesGrade = gradeFilter === "all" || (gradeFilter === "__unset" ? row.students.some((student) => !student.grade) : row.students.some((student) => student.grade === gradeFilter));
       const matchesCampus = campusFilter === "all" || row.campusId === campusFilter;
       const matchesSubject = subjectFilter === "all" || row.course.subject === subjectFilter;
       const matchesHomework = homeworkFilter === "all" || row.homeworkStatus === homeworkFilter;
@@ -240,20 +245,24 @@ export function ProgressView({
     ? selectedLessonId
     : selectedRow?.latestLesson?.id ?? selectedLessons.at(-1)?.id ?? "";
   const selectedLesson = selectedLessons.find((lesson) => lesson.id === effectiveLessonId);
-  const selectedRecord = selectedRow && selectedLesson
-    ? progressRecords.find(
-        (record) =>
-          record.studentId === selectedRow.student.id &&
-          record.courseGroupId === selectedRow.course.id &&
-          record.lessonId === selectedLesson.id
-      )
-    : undefined;
   const selectedLessonStudents = selectedLesson
     ? lessonStudentIds(selectedLesson)
         .map((studentId) => findStudent(vault, studentId))
         .filter((student): student is Student => Boolean(student))
         .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id))
     : [];
+  const effectiveStudentId = selectedLessonStudents.some((student) => student.id === selectedStudentId)
+    ? selectedStudentId
+    : selectedLessonStudents[0]?.id ?? selectedRow?.students[0]?.id ?? "";
+  const selectedStudent = effectiveStudentId ? findStudent(vault, effectiveStudentId) : undefined;
+  const selectedRecord = selectedRow && selectedLesson && effectiveStudentId
+    ? progressRecords.find(
+        (record) =>
+          record.studentId === effectiveStudentId &&
+          record.courseGroupId === selectedRow.course.id &&
+          record.lessonId === selectedLesson.id
+      )
+    : undefined;
 
   const rowsNeedingFollowUp = scopedRows.filter(needsFollowUp).length;
   const rowsNeedingRecord = scopedRows.filter((row) => row.needsLatestRecord).length;
@@ -290,13 +299,23 @@ export function ProgressView({
     if (!selectedRow) {
       setSelectedKey("");
       setSelectedLessonId("");
+      setSelectedStudentId("");
       return;
     }
     if (!selectedKey || !visibleRows.some((row) => row.key === selectedKey)) {
       setSelectedKey(selectedRow.key);
       setSelectedLessonId(selectedRow.latestLesson?.id ?? selectedRow.lessons.at(-1)?.id ?? "");
+      setSelectedStudentId(selectedRow.students[0]?.id ?? "");
     }
   }, [selectedRow?.key, selectedKey, visibleRows]);
+
+  useEffect(() => {
+    if (!selectedLesson) return;
+    const studentIds = lessonStudentIds(selectedLesson);
+    if (studentIds.length > 0 && !studentIds.includes(selectedStudentId)) {
+      setSelectedStudentId(studentIds[0]);
+    }
+  }, [selectedLesson?.id, selectedStudentId]);
 
   useEffect(() => {
     if (!selectedRow || !selectedLesson) {
@@ -307,10 +326,10 @@ export function ProgressView({
   }, [selectedRow?.key, selectedLesson?.id, selectedRecord?.id, selectedRecord?.updatedAt]);
 
   function saveRecord() {
-    if (!selectedRow || !selectedLesson) return;
+    if (!selectedRow || !selectedLesson || !effectiveStudentId) return;
     onSaveProgressRecord({
       id: selectedRecord?.id ?? makeId("progress"),
-      studentId: selectedRow.student.id,
+      studentId: effectiveStudentId,
       courseGroupId: selectedRow.course.id,
       lessonId: selectedLesson.id,
       date: selectedLesson.date,
@@ -355,7 +374,7 @@ export function ProgressView({
     if (!selectedRecord || !selectedRow) return;
     confirm({
       title: "删除这条学生进度记录？",
-      description: `${selectedRow.student.name} · ${selectedRow.course.name} · ${selectedRecord.date}`,
+      description: `${selectedStudent?.name ?? "未选择学生"} · ${selectedRow.course.name} · ${selectedRecord.date}`,
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => {
@@ -399,7 +418,7 @@ export function ProgressView({
       {sectionSwitcher}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "学生课程", value: `${scopedRows.length} 组`, icon: UserCheck, tone: "bg-[#eaf2ff] text-[#1557c2]" },
+          { label: "课程台账", value: `${scopedRows.length} 门`, icon: UserCheck, tone: "bg-[#eaf2ff] text-[#1557c2]" },
           { label: "需要跟进", value: `${rowsNeedingFollowUp} 组`, icon: AlertTriangle, tone: "bg-[#fff3e4] text-[#c2410c]" },
           { label: "最新课未整理", value: `${rowsNeedingRecord} 组`, icon: Clock3, tone: "bg-[#eef0ff] text-[#5161d6]" },
           { label: "作业已检查", value: `${checkedHomeworkRows}/${Math.max(assignedHomeworkRows + checkedHomeworkRows, checkedHomeworkRows)}`, icon: CheckCircle2, tone: "bg-[#e8f8ef] text-[#15803d]" }
@@ -426,9 +445,9 @@ export function ProgressView({
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <Target size={14} /> 进度与作业
           </div>
-          <CardTitle>学生进度与作业总览</CardTitle>
+          <CardTitle>课程进度与作业总览</CardTitle>
           <CardDescription>
-            以学生为主视角，读取每节课的共同内容和课后作业，并允许为同一节课里的不同学生单独记录差异。
+            以课程为主视角，读取每节课的共同内容和课后作业；点击课节后再查看本节学生和个人差异。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -439,7 +458,7 @@ export function ProgressView({
                 className="pl-9"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索学生、课程、内容或作业"
+                placeholder="搜索课程、学生、内容或作业"
               />
             </label>
             <Select value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
@@ -520,7 +539,7 @@ export function ProgressView({
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle>进度与作业台账</CardTitle>
-              <CardDescription className="mt-1">行是学生课程，列是上课日期；横向看同一天，纵向看单个学生的连续进度。</CardDescription>
+              <CardDescription className="mt-1">行是课程，列是上课日期；点击课节后查看本节学生、共同内容、作业和下次提醒。</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary" className="w-fit">{visibleRows.length} 组</Badge>
@@ -538,7 +557,7 @@ export function ProgressView({
                   <thead>
                     <tr className="bg-[#f8fbff]">
                       <th className="sticky top-0 z-30 w-[170px] min-w-[170px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a] md:left-0 md:w-[230px] md:min-w-[230px]">
-                        学生 / 课程
+                        课程
                       </th>
                       {timelineColumns.map((column) => (
                         <th
@@ -569,9 +588,12 @@ export function ProgressView({
                             }}
                             className="w-full text-left"
                           >
-                            <div className="font-extrabold text-[#061226]">{row.student.name}</div>
+                            <div className="font-extrabold text-[#061226]">{row.course.name}</div>
                             <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                              {row.course.name} · {row.course.subject}
+                              {row.course.subject} · {courseTypeLabel(vault, row.course.type)}
+                            </div>
+                            <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                              {row.students.length > 0 ? `${row.students.length} 人 · ${row.gradeLabel}` : row.gradeLabel}
                             </div>
                             <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[#64748b]">
                               <MapPin size={11} /> {row.campusLabel}
@@ -689,7 +711,7 @@ export function ProgressView({
                   <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                     <NotebookPen size={14} /> 学生记录
                   </div>
-                  <CardTitle>{selectedRow ? `${selectedRow.student.name} · ${selectedRow.course.name}` : "选择学生"}</CardTitle>
+                  <CardTitle>{selectedRow ? selectedRow.course.name : "选择课程"}</CardTitle>
                   <CardDescription className="mt-1">
                     单独保存只改当前学生；应用到本节全部学生适合班课整体进度一致的情况。
                   </CardDescription>
@@ -716,7 +738,7 @@ export function ProgressView({
               <CardContent className="max-h-[calc(92vh-118px)] space-y-5 overflow-y-auto p-5 sm:p-6">
             {!selectedRow || !selectedLesson ? (
               <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
-                请选择有课时的学生课程
+                请选择有课时的课程
               </div>
             ) : (
               <>
@@ -777,14 +799,14 @@ export function ProgressView({
                         const studentRecord = progressRecords.find(
                           (record) => record.studentId === student.id && record.courseGroupId === selectedLesson.courseGroupId && record.lessonId === selectedLesson.id
                         );
-                        const active = selectedRow?.student.id === student.id;
+                        const active = effectiveStudentId === student.id;
                         return (
                           <Button
                             key={student.id}
                             type="button"
                             size="sm"
                             variant={active ? "default" : "outline"}
-                            onClick={() => setSelectedKey(pairKey(student.id, selectedLesson.courseGroupId))}
+                            onClick={() => setSelectedStudentId(student.id)}
                             className="h-9"
                           >
                             {student.name}
@@ -911,45 +933,42 @@ function ReadonlyBlock({
 }
 
 function buildProgressRows(vault: TeacherVault): ProgressRow[] {
-  const pairMap = new Map<string, { studentId: string; courseGroupId: string }>();
-  vault.courseGroups.forEach((course) => {
-    course.studentIds.forEach((studentId) => {
-      pairMap.set(pairKey(studentId, course.id), { studentId, courseGroupId: course.id });
-    });
-  });
-  vault.lessons.forEach((lesson) => {
-    lessonStudentIds(lesson).forEach((studentId) => {
-      pairMap.set(pairKey(studentId, lesson.courseGroupId), { studentId, courseGroupId: lesson.courseGroupId });
-    });
-  });
-  (vault.studentProgressRecords ?? []).forEach((record) => {
-    pairMap.set(pairKey(record.studentId, record.courseGroupId), {
-      studentId: record.studentId,
-      courseGroupId: record.courseGroupId
-    });
-  });
+  const courseIds = new Set<string>();
+  vault.courseGroups.forEach((course) => courseIds.add(course.id));
+  vault.lessons.forEach((lesson) => courseIds.add(lesson.courseGroupId));
+  (vault.studentProgressRecords ?? []).forEach((record) => courseIds.add(record.courseGroupId));
 
-  return Array.from(pairMap.values())
-    .map(({ studentId, courseGroupId }) => {
-      const student = findStudent(vault, studentId);
+  return Array.from(courseIds)
+    .map((courseGroupId) => {
       const course = getCourse(vault, courseGroupId);
-      if (!student || !course) return null;
+      if (!course) return null;
       const lessons = vault.lessons
-        .filter((lesson) => lesson.courseGroupId === courseGroupId && lessonStudentIds(lesson).includes(studentId))
+        .filter((lesson) => lesson.courseGroupId === courseGroupId)
         .sort(sortLessons);
+      const relatedStudentIds = new Set<string>(course.studentIds);
+      lessons.forEach((lesson) => lessonStudentIds(lesson).forEach((studentId) => relatedStudentIds.add(studentId)));
+      (vault.studentProgressRecords ?? [])
+        .filter((record) => record.courseGroupId === courseGroupId)
+        .forEach((record) => relatedStudentIds.add(record.studentId));
+      const students = Array.from(relatedStudentIds)
+        .map((studentId) => findStudent(vault, studentId))
+        .filter((student): student is Student => Boolean(student))
+        .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id));
       const latestLesson = lessons.filter((lesson) => lesson.status !== "cancelled").at(-1);
       const records = (vault.studentProgressRecords ?? [])
-        .filter((record) => record.studentId === studentId && record.courseGroupId === courseGroupId)
+        .filter((record) => record.courseGroupId === courseGroupId)
         .sort(sortProgressRecords);
       const latestRecord = records.at(-1);
-      const latestLessonRecord = latestLesson ? records.find((record) => record.lessonId === latestLesson.id) : undefined;
+      const latestLessonRecords = latestLesson ? records.filter((record) => record.lessonId === latestLesson.id) : [];
+      const latestLessonRecord = latestLessonRecords.at(-1);
       const displayRecord = latestLessonRecord ?? latestRecord;
-      const progressStatus = displayRecord?.progressStatus ?? inferProgressStatus(latestLesson);
-      const homeworkStatus = displayRecord?.homeworkStatus ?? inferHomeworkStatus(latestLesson);
-      const campusId = latestLesson?.campusId ?? course.defaultCampusId ?? student.defaultCampusId;
+      const progressStatus = aggregateProgressStatus(latestLessonRecords, latestLesson);
+      const homeworkStatus = aggregateHomeworkStatus(latestLessonRecords, latestLesson);
+      const campusId = latestLesson?.campusId ?? course.defaultCampusId ?? students[0]?.defaultCampusId;
+      const gradeLabel = summarizeStudentGrades(students);
       const row: ProgressRow = {
-        key: pairKey(studentId, courseGroupId),
-        student,
+        key: courseGroupId,
+        students,
         course,
         lessons,
         latestLesson,
@@ -958,24 +977,28 @@ function buildProgressRows(vault: TeacherVault): ProgressRow[] {
         displayRecord,
         progressStatus,
         homeworkStatus,
-        needsLatestRecord: Boolean(latestLesson && !latestLessonRecord),
+        needsLatestRecord: Boolean(latestLesson && students.length > 0 && latestLessonRecords.length < lessonStudentIds(latestLesson).length),
         campusId,
-        campusLabel: campusName(vault, campusId)
+        campusLabel: campusName(vault, campusId),
+        gradeLabel
       };
       return row;
     })
     .filter((row): row is ProgressRow => Boolean(row));
 }
-
 function recordToDraft(record: StudentProgressRecord | undefined, lesson: Lesson): ProgressDraft {
   return {
-    progressText: record?.progressText ?? lesson.content.taught,
-    homeworkText: record?.homeworkText ?? lesson.content.homework,
-    nextPlan: record?.nextPlan ?? lesson.content.nextLessonReminder,
+    progressText: textOrFallback(record?.progressText, lesson.content.taught),
+    homeworkText: textOrFallback(record?.homeworkText, lesson.content.homework),
+    nextPlan: textOrFallback(record?.nextPlan, lesson.content.nextLessonReminder),
     progressStatus: record?.progressStatus ?? inferProgressStatus(lesson),
     homeworkStatus: record?.homeworkStatus ?? inferHomeworkStatus(lesson),
     note: record?.note ?? ""
   };
+}
+
+function textOrFallback(value: string | undefined, fallback: string): string {
+  return value?.trim() ? value : fallback;
 }
 
 function buildTimelineColumns(
@@ -991,7 +1014,7 @@ function buildTimelineColumns(
     });
   });
   (vault.studentProgressRecords ?? []).forEach((record) => {
-    if (rows.some((row) => row.student.id === record.studentId && row.course.id === record.courseGroupId) && dateInRange(record.date, dateStart, dateEnd)) {
+    if (rows.some((row) => row.course.id === record.courseGroupId) && dateInRange(record.date, dateStart, dateEnd)) {
       dates.add(record.date);
     }
   });
@@ -1013,28 +1036,58 @@ function buildTimelineColumns(
 function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string): TimelineCell | undefined {
   const lesson = lessonOnDate(row, date);
   const records = (vault.studentProgressRecords ?? [])
-    .filter((record) => record.studentId === row.student.id && record.courseGroupId === row.course.id && record.date === date)
+    .filter((record) => record.courseGroupId === row.course.id && record.date === date)
     .sort(sortProgressRecords);
-  const record = lesson
-    ? records.find((item) => item.lessonId === lesson.id) ?? records.at(-1)
-    : records.at(-1);
+  const lessonRecords = lesson ? records.filter((item) => item.lessonId === lesson.id) : records;
+  const record = lessonRecords.at(-1) ?? records.at(-1);
   if (!lesson && !record) return undefined;
+  const studentCount = lesson ? lessonStudentIds(lesson).length : new Set(records.map((item) => item.studentId)).size || row.students.length;
   return {
     lesson,
     record,
-    studentCount: lesson ? lessonStudentIds(lesson).length : 1,
-    hasDifferences: lesson ? lessonHasStudentDifferences(vault, lesson) : false,
+    studentCount,
+    hasDifferences: lesson ? lessonHasStudentDifferences(vault, lesson) : recordsHaveDifferences(records),
     isCancelled: lesson?.status === "cancelled",
-    progressText: record?.progressText ?? lesson?.content.taught ?? "",
-    homeworkText: record?.homeworkText ?? lesson?.content.homework ?? "",
-    nextPlan: record?.nextPlan ?? lesson?.content.nextLessonReminder ?? "",
+    progressText: lesson ? textOrFallback(lesson.content.taught, record?.progressText ?? "") : record?.progressText ?? "",
+    homeworkText: lesson ? textOrFallback(lesson.content.homework, record?.homeworkText ?? "") : record?.homeworkText ?? "",
+    nextPlan: lesson ? textOrFallback(lesson.content.nextLessonReminder, record?.nextPlan ?? "") : record?.nextPlan ?? "",
     note: lesson?.status === "cancelled" ? (lesson.note?.trim() || record?.note || "") : record?.note ?? "",
-    progressStatus: record?.progressStatus ?? inferProgressStatus(lesson),
-    homeworkStatus: record?.homeworkStatus ?? inferHomeworkStatus(lesson),
-    needsRecord: Boolean(lesson && !records.some((item) => item.lessonId === lesson.id))
+    progressStatus: aggregateProgressStatus(lessonRecords, lesson),
+    homeworkStatus: aggregateHomeworkStatus(lessonRecords, lesson),
+    needsRecord: Boolean(lesson && studentCount > 0 && lessonRecords.length < studentCount)
   };
 }
+function recordsHaveDifferences(records: StudentProgressRecord[]): boolean {
+  if (records.length <= 1) return false;
+  const signatures = records.map((record) => [
+    record.progressText,
+    record.homeworkText,
+    record.nextPlan,
+    record.progressStatus,
+    record.homeworkStatus,
+    record.note ?? ""
+  ].map((value) => String(value).trim()).join("\u001f"));
+  return new Set(signatures).size > 1;
+}
 
+function aggregateProgressStatus(records: StudentProgressRecord[], lesson?: Lesson): StudentProgressStatus {
+  if (records.length === 0) return inferProgressStatus(lesson);
+  const priority: StudentProgressStatus[] = ["behind", "review_needed", "ahead", "on_track"];
+  return priority.find((status) => records.some((record) => record.progressStatus === status)) ?? inferProgressStatus(lesson);
+}
+
+function aggregateHomeworkStatus(records: StudentProgressRecord[], lesson?: Lesson): StudentHomeworkStatus {
+  if (records.length === 0) return inferHomeworkStatus(lesson);
+  const priority: StudentHomeworkStatus[] = ["missing", "partial", "assigned", "checked", "unassigned"];
+  return priority.find((status) => records.some((record) => record.homeworkStatus === status)) ?? inferHomeworkStatus(lesson);
+}
+
+function summarizeStudentGrades(students: Student[]): string {
+  const grades = Array.from(new Set(students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))).sort(compareByName);
+  if (grades.length === 0) return "未设置年级";
+  if (grades.length <= 3) return grades.join("、");
+  return `${grades.slice(0, 3).join("、")} 等`;
+}
 function lessonHasStudentDifferences(vault: TeacherVault, lesson: Lesson): boolean {
   const studentIds = lessonStudentIds(lesson);
   if (studentIds.length <= 1) return false;
@@ -1058,9 +1111,6 @@ function dateInRange(date: string, dateStart: string, dateEnd: string): boolean 
   return (!dateStart || date >= dateStart) && (!dateEnd || date <= dateEnd) && (!dateStart || !dateEnd || dateStart <= dateEnd);
 }
 
-function pairKey(studentId: string, courseGroupId: string): string {
-  return `${studentId}::${courseGroupId}`;
-}
 
 function sortProgressRecords(a: StudentProgressRecord, b: StudentProgressRecord): number {
   return `${a.date} ${a.updatedAt}`.localeCompare(`${b.date} ${b.updatedAt}`);
@@ -1080,8 +1130,8 @@ function sortProgressRows(
     return (
       compareRowsByLessonPresence(a, b) ||
       compareRowsByLatestLesson(a, b) ||
-      compareByName(a.student.name, b.student.name) ||
       compareByName(a.course.name, b.course.name) ||
+      compareByName(a.gradeLabel, b.gradeLabel) ||
       a.key.localeCompare(b.key)
     );
   }
@@ -1093,8 +1143,8 @@ function sortProgressRows(
     return (
       compareRowsByLessonPresence(a, b) ||
       compareRowsByLatestLesson(a, b) ||
-      compareByName(a.student.name, b.student.name) ||
       compareByName(a.course.name, b.course.name) ||
+      compareByName(a.gradeLabel, b.gradeLabel) ||
       a.key.localeCompare(b.key)
     );
   }
@@ -1102,10 +1152,10 @@ function sortProgressRows(
   const baseCompare = compareRowsByLessonPresence(a, b);
   if (baseCompare) return baseCompare;
 
-  if (sortOption === "student_name") {
+  if (sortOption === "course_name") {
     return (
-      compareByName(a.student.name, b.student.name) ||
       compareByName(a.course.name, b.course.name) ||
+      compareByName(a.gradeLabel, b.gradeLabel) ||
       compareRowsByLatestLesson(a, b) ||
       a.key.localeCompare(b.key)
     );
@@ -1114,16 +1164,15 @@ function sortProgressRows(
   if (sortOption === "campus") {
     return (
       compareOptionalLabel(a.campusLabel, b.campusLabel, "未设置校区") ||
-      compareByName(a.student.name, b.student.name) ||
       compareByName(a.course.name, b.course.name) ||
+      compareByName(a.gradeLabel, b.gradeLabel) ||
       compareRowsByLatestLesson(a, b) ||
       a.key.localeCompare(b.key)
     );
   }
 
   return (
-    compareOptionalLabel(a.student.grade, b.student.grade, "未设置年级") ||
-    compareByName(a.student.name, b.student.name) ||
+    compareOptionalLabel(a.gradeLabel, b.gradeLabel, "未设置年级") ||
     compareByName(a.course.name, b.course.name) ||
     compareRowsByLatestLesson(a, b) ||
     a.key.localeCompare(b.key)
@@ -1181,8 +1230,10 @@ function inferHomeworkStatus(lesson?: Lesson): StudentHomeworkStatus {
 }
 
 function needsFollowUp(row: ProgressRow): boolean {
+  if (!row.latestLesson && !row.displayRecord) return false;
   return (
     row.needsLatestRecord ||
+    row.progressStatus === "on_track" ||
     row.progressStatus === "review_needed" ||
     row.progressStatus === "behind" ||
     row.homeworkStatus === "assigned" ||

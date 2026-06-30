@@ -442,10 +442,14 @@ export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "
   return "暂无实到学生";
 }
 
+function isLessonContentSource(lesson: Pick<Lesson, "status">): boolean {
+  return lesson.status !== "cancelled" && lesson.status !== "makeup_pending";
+}
+
 export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | undefined {
   if (lesson.syncSourceLessonId) {
     const sourceLesson = vault.lessons.find((item) => item.id === lesson.syncSourceLessonId);
-    if (sourceLesson) return sourceLesson;
+    if (sourceLesson && isLessonContentSource(sourceLesson)) return sourceLesson;
   }
 
   if (lesson.syncSourceDate) {
@@ -454,7 +458,8 @@ export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | un
         item.courseGroupId === lesson.courseGroupId &&
         item.date === lesson.syncSourceDate &&
         item.startTime === lesson.startTime &&
-        item.endTime === lesson.endTime
+        item.endTime === lesson.endTime &&
+        isLessonContentSource(item)
     );
     if (sourceLesson) return sourceLesson;
   }
@@ -463,7 +468,7 @@ export function previousLesson(vault: TeacherVault, lesson: Lesson): Lesson | un
     .filter(
       (item) =>
         item.courseGroupId === lesson.courseGroupId &&
-        item.status !== "cancelled" &&
+        isLessonContentSource(item) &&
         `${item.date} ${item.startTime}` < `${lesson.date} ${lesson.startTime}`
     )
     .sort(sortLessons)
@@ -494,6 +499,7 @@ export function createLessonFromCourse(
     startTime: string;
     endTime: string;
     campusId?: string;
+    manualBillingHours?: number;
     status?: LessonStatus;
     sourceScheduleRuleId?: string;
     syncTargetStartDate?: string;
@@ -515,7 +521,9 @@ export function createLessonFromCourse(
       status: "attended",
       trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
     })),
-    feeSnapshot: { amount: 0 },
+    feeSnapshot: Number.isFinite(values.manualBillingHours)
+      ? { amount: 0, hours: Math.max(values.manualBillingHours ?? 0, 0), manualHours: true }
+      : { amount: 0 },
     linkedOriginalLessonId: null,
     sourceScheduleRuleId: values.sourceScheduleRuleId,
     syncTargetStartDate: values.syncTargetStartDate,
@@ -598,7 +606,7 @@ export function linkSyncedLessonsToPreviousLessons(vault: TeacherVault, lessons:
       .filter(
         (item) =>
           item.courseGroupId === lesson.courseGroupId &&
-          item.status !== "cancelled" &&
+          isLessonContentSource(item) &&
           `${item.date} ${item.startTime}` < lessonDateTime
       )
       .sort(sortLessons)

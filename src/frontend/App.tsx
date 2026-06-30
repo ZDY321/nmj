@@ -1027,7 +1027,8 @@ export function App() {
     weekdays: number[],
     courseGroupId: string,
     startTime: string,
-    endTime: string
+    endTime: string,
+    manualBillingHours?: number
   ) {
     if (!vault) return;
     const course = getCourse(vault, courseGroupId);
@@ -1050,6 +1051,7 @@ export function App() {
               startTime,
               endTime,
               campusId: course.defaultCampusId,
+              manualBillingHours,
               status: "scheduled"
             })
           );

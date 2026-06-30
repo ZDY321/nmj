@@ -3,6 +3,7 @@ import { FileSpreadsheet, Link2, Search, Trash2, Wand2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { CourseGroup, CourseType, ScheduleImportVaultState, TeacherVault } from "@/shared/types";
@@ -44,6 +45,7 @@ export function ScheduleImportCourseMappingPanel({
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const { confirm, dialog } = useConfirmDialog();
 
   useEffect(() => {
     setMapping((current) => ({ ...externalMapping, ...current }));
@@ -115,6 +117,24 @@ export function ScheduleImportCourseMappingPanel({
     persistMapping(nextMapping, courseId ? "课程名称映射已保存，下次教务对账导入会自动复用。" : "课程名称映射已清除。", courseId ? "课程名称映射已保存到本机浏览器。" : "课程名称映射已从本机浏览器清除。");
   }
 
+  function deleteImportedCourseRow(row: ImportedCourseMappingRow) {
+    confirm({
+      title: `删除教务课程「${row.title || "未命名课程"}」？`,
+      description: `会从当前导入列表中移除这组教务课程记录，共 ${row.count} 节，并同时清除对应课程映射。不会删除云端课程档案或云端课节。`,
+      confirmLabel: "删除整条",
+      tone: "danger",
+      onConfirm: () => {
+        const nextMapping = { ...mapping };
+        setMappingValue(nextMapping, row, "");
+        setRawLessons((current) => current.filter((lesson) => {
+          const key = importMappingKey(lesson);
+          return key !== row.key && key !== row.normalizedKey;
+        }));
+        persistMapping(nextMapping, `已删除教务课程「${row.title || "未命名课程"}」及对应映射。`, `已删除教务课程「${row.title || "未命名课程"}」及本机映射。`);
+      }
+    });
+  }
+
   function applySuggestedMappings() {
     const nextMapping = { ...mapping };
     let changed = 0;
@@ -146,7 +166,9 @@ export function ScheduleImportCourseMappingPanel({
   }
 
   return (
-    <Card className="overflow-hidden border-2 border-[#bfdbfe]">
+    <>
+      {dialog}
+      <Card className="overflow-hidden border-2 border-[#bfdbfe]">
       <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
@@ -247,7 +269,7 @@ export function ScheduleImportCourseMappingPanel({
                     )}
                   </div>
                   <div className="space-y-2">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_112px_112px]">
                       <Select value={selectedCourseId} onChange={(event) => updateMapping(row, event.target.value)}>
                         <option value="">选择云端课程档案</option>
                         {selectCourses.map((course) => (
@@ -263,6 +285,15 @@ export function ScheduleImportCourseMappingPanel({
                         onClick={() => updateMapping(row, "")}
                       >
                         <Trash2 size={14} /> 删除映射
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 border-[#fecaca] bg-[#fff1f2] text-[#991b1b] hover:bg-[#fee2e2]"
+                        onClick={() => deleteImportedCourseRow(row)}
+                        title="删除这一整组教务课程记录和对应映射"
+                      >
+                        <Trash2 size={14} /> 删除整条
                       </Button>
                     </div>
                     <div className="text-xs font-semibold leading-5 text-[#64748b]">
@@ -286,7 +317,8 @@ export function ScheduleImportCourseMappingPanel({
           )}
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </>
   );
 }
 

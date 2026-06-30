@@ -13,7 +13,7 @@ import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsLi
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { buildFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForCourseLesson, buildFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -90,6 +90,38 @@ function optionalDateWithWeekday(date: string | null | undefined): string {
   return date ? dateWithWeekday(date) : "未知";
 }
 
+function timeTwoHoursLater(time: string): string {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!match) return "";
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  const totalMinutes = Math.min(hour * 60 + minute + 120, 23 * 60 + 59);
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+}
+
+function parseOptionalBillingHours(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const hours = Number(trimmed);
+  return Number.isFinite(hours) ? Math.max(hours, 0) : undefined;
+}
+
+
+function endDateForLessonCount(startDate: string, weekdays: Weekday[], lessonCount: number): string {
+  if (!startDate || weekdays.length === 0 || lessonCount <= 0) return "";
+  let matched = 0;
+  let cursor = startDate;
+  for (let index = 0; index < 3660; index += 1) {
+    if (weekdays.includes(weekdayOfDateIso(cursor))) {
+      matched += 1;
+      if (matched >= lessonCount) return cursor;
+    }
+    cursor = addDays(cursor, 1);
+  }
+  return "";
+}
+
 export function ScheduleView({
   vault,
   amountsVisible,
@@ -131,7 +163,8 @@ export function ScheduleView({
     weekdays: Weekday[],
     courseGroupId: string,
     startTime: string,
-    endTime: string
+    endTime: string,
+    manualBillingHours?: number
   ) => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
   role: UserRole;
@@ -160,17 +193,21 @@ export function ScheduleView({
   const [singleDate, setSingleDate] = useState(todayIso());
   const [singleStartTime, setSingleStartTime] = useState("19:00");
   const [singleEndTime, setSingleEndTime] = useState("21:00");
+  const [singleBillingHours, setSingleBillingHours] = useState("");
   const [ruleCourseGroupId, setRuleCourseGroupId] = useState(firstCourseId);
   const [ruleCourseSearch, setRuleCourseSearch] = useState("");
   const [selectedWeekdays, setSelectedWeekdays] = useState<Weekday[]>([3]);
   const [ruleStartTime, setRuleStartTime] = useState("19:00");
   const [ruleEndTime, setRuleEndTime] = useState("21:00");
+  const [ruleBillingHours, setRuleBillingHours] = useState("");
   const [rangeStart, setRangeStart] = useState(todayIso());
   const [rangeEnd, setRangeEnd] = useState(monthShift(todayIso().slice(0, 7), 1) + "-01");
+  const [batchLessonTargetCount, setBatchLessonTargetCount] = useState("");
   const [calendarCourseGroupId, setCalendarCourseGroupId] = useState(firstCourseId);
   const [calendarCourseSearch, setCalendarCourseSearch] = useState("");
   const [calendarStartTime, setCalendarStartTime] = useState("19:00");
   const [calendarEndTime, setCalendarEndTime] = useState("21:00");
+  const [calendarBillingHours, setCalendarBillingHours] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(initialFocusedMonth);
   const [calendarMode, setCalendarMode] = useState<"schedule" | "view">("view");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(initialFocusedDate);
@@ -259,6 +296,17 @@ export function ScheduleView({
     return Boolean(course && course.status === "active" && courseHasActiveStudent(vault, course));
   });
   const selectableSyncLessonIds = selectableSyncLessons.map((lesson) => lesson.id).join("|");
+  const selectedWeekdayKey = selectedWeekdays.join("|");
+  const batchTargetCount = Math.max(Math.floor(Number(batchLessonTargetCount)), 0);
+  const batchCandidateDates = isOrderedDateRange(rangeStart, rangeEnd)
+    ? datesBetweenLocal(rangeStart, rangeEnd).filter((date) => selectedWeekdays.includes(weekdayOfDateIso(date)))
+    : [];
+  const batchConflictCount = isOrderedTimeRange(ruleStartTime, ruleEndTime)
+    ? batchCandidateDates.filter((date) => findTimeConflict(date, ruleStartTime, ruleEndTime)).length
+    : 0;
+  const singleSuggestedBillingHours = suggestedBillingHoursForDraft(singleCourseGroupId, singleStartTime, singleEndTime);
+  const ruleSuggestedBillingHours = suggestedBillingHoursForDraft(ruleCourseGroupId, ruleStartTime, ruleEndTime);
+  const calendarSuggestedBillingHours = suggestedBillingHoursForDraft(calendarCourseGroupId, calendarStartTime, calendarEndTime);
 
   useEffect(() => {
     if (!token) return;
@@ -292,6 +340,14 @@ export function ScheduleView({
     setRuleCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
     setCalendarCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
   }, [courseSelectionOptionIds]);
+
+  useEffect(() => {
+    if (!batchTargetCount || selectedWeekdays.length === 0) return;
+    const nextEndDate = endDateForLessonCount(rangeStart, selectedWeekdays, batchTargetCount);
+    if (nextEndDate && nextEndDate !== rangeEnd) {
+      setRangeEnd(nextEndDate);
+    }
+  }, [batchTargetCount, rangeStart, selectedWeekdayKey]);
 
   useEffect(() => {
     setCalendarViewCampusFilter((current) =>
@@ -753,8 +809,41 @@ export function ScheduleView({
     patchAiSession({ instruction: "", followupAnswer: "", draft: null, message: "" });
   }
 
+  function suggestedBillingHoursForDraft(courseGroupId: string, startTime: string, endTime: string): number {
+    const course = getCourse(vault, courseGroupId);
+    if (!course || !isOrderedTimeRange(startTime, endTime)) return 0;
+    return billableHoursForCourseLesson(course, { startTime, endTime }, vault);
+  }
+
+  function updateTimeWithTwoHourEnd(startTime: string, setStartTime: (value: string) => void, setEndTime: (value: string) => void) {
+    setStartTime(startTime);
+    const nextEndTime = timeTwoHoursLater(startTime);
+    if (nextEndTime) setEndTime(nextEndTime);
+  }
+
+  function updateSingleStartTime(startTime: string) {
+    updateTimeWithTwoHourEnd(startTime, setSingleStartTime, setSingleEndTime);
+  }
+
+  function updateRuleStartTime(startTime: string) {
+    updateTimeWithTwoHourEnd(startTime, setRuleStartTime, setRuleEndTime);
+  }
+
+  function updateCalendarStartTime(startTime: string) {
+    updateTimeWithTwoHourEnd(startTime, setCalendarStartTime, setCalendarEndTime);
+  }
+
+  function updateCustomPresetStartTime(startTime: string) {
+    updateTimeWithTwoHourEnd(startTime, setCustomPresetStart, setCustomPresetEnd);
+  }
+
+  function updateRangeEndManually(date: string) {
+    setBatchLessonTargetCount("");
+    setRangeEnd(date);
+  }
+
   function addSingleLesson(status: "scheduled" | "completed") {
-    addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status);
+    addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status, parseOptionalBillingHours(singleBillingHours));
   }
 
   async function refreshAiProviders() {
@@ -864,6 +953,7 @@ export function ScheduleView({
     lessonStartTime: string,
     lessonEndTime: string,
     status: "scheduled" | "completed",
+    manualBillingHours?: number,
     force = false
   ) {
     if (!validateTimeRange(lessonStartTime, lessonEndTime)) return;
@@ -885,7 +975,7 @@ export function ScheduleView({
         description: `${lessonDate} ${lessonStartTime}-${lessonEndTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要添加。`,
         confirmLabel: "仍然添加",
         tone: "danger",
-        onConfirm: () => addLessonFromCourse(courseGroupId, lessonDate, lessonStartTime, lessonEndTime, status, true)
+        onConfirm: () => addLessonFromCourse(courseGroupId, lessonDate, lessonStartTime, lessonEndTime, status, manualBillingHours, true)
       });
       return;
     }
@@ -895,9 +985,11 @@ export function ScheduleView({
         startTime: lessonStartTime,
         endTime: lessonEndTime,
         campusId: course.defaultCampusId,
+        manualBillingHours,
         status
       })
     );
+    showScheduleNotice(`已添加 ${dateWithWeekday(lessonDate)} ${lessonStartTime}-${lessonEndTime} 的课节。`);
   }
 
   function toggleSyncLesson(lessonId: string) {
@@ -1665,12 +1757,27 @@ export function ScheduleView({
     );
   }
 
+  function generateBatchLessons() {
+    if (!validateDateRange(rangeStart, rangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
+      return;
+    }
+    if (batchCandidateDates.length === 0) {
+      showScheduleError("当前日期范围和星期没有匹配课节。");
+      return;
+    }
+    const manualBillingHours = parseOptionalBillingHours(ruleBillingHours);
+    onGenerateDrafts(rangeStart, rangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime, manualBillingHours);
+    const createdCount = Math.max(batchCandidateDates.length - batchConflictCount, 0);
+    showScheduleNotice(
+      createdCount > 0
+        ? `已生成 ${createdCount} 节待上课${batchConflictCount > 0 ? `，${batchConflictCount} 节因时间冲突已跳过` : ""}。`
+        : `没有新增课节，${batchConflictCount > 0 ? `${batchConflictCount} 节均与已有课程冲突。` : "当前条件没有可生成课节。"}`
+    );
+  }
+
   function hasBatchConflicts(): boolean {
     if (!isBatchDateRangeValid || !isBatchTimeValid) return false;
-    const dates = datesBetweenLocal(rangeStart, rangeEnd).filter((item) =>
-      selectedWeekdays.includes(weekdayOfDateIso(item))
-    );
-    return dates.some((item) => findTimeConflict(item, ruleStartTime, ruleEndTime));
+    return batchConflictCount > 0;
   }
 
   function showScheduleError(message: string) {
@@ -1791,6 +1898,9 @@ export function ScheduleView({
       )}
       {schedulePanel === "schedule" && (
         <SchedulePlanningPanel
+          batchCandidateCount={batchCandidateDates.length}
+          batchConflictCount={batchConflictCount}
+          batchLessonTargetCount={batchLessonTargetCount}
           customPresetEnd={customPresetEnd}
           customPresetStart={customPresetStart}
           customTimePresets={customTimePresets}
@@ -1799,6 +1909,8 @@ export function ScheduleView({
           isBatchTimeValid={isBatchTimeValid}
           isCustomPresetTimeValid={isCustomPresetTimeValid}
           isSingleTimeValid={isSingleTimeValid}
+          ruleBillingHours={ruleBillingHours}
+          ruleSuggestedBillingHours={ruleSuggestedBillingHours}
           onAddCustomPreset={addCustomPreset}
           onAddSingleLesson={addSingleLesson}
           onBatchGenerate={() => {
@@ -1808,13 +1920,13 @@ export function ScheduleView({
             if (hasBatchConflicts()) {
               confirm({
                 title: "批量排课中存在时间冲突",
-                description: "系统会跳过已经有课的时间段，只生成没有冲突的课程。",
+                description: `系统会跳过 ${batchConflictCount} 节已经有课的时间段，只生成没有冲突的课程。`,
                 confirmLabel: "跳过冲突并生成",
-                onConfirm: () => onGenerateDrafts(rangeStart, rangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime)
+                onConfirm: generateBatchLessons
               });
               return;
             }
-            onGenerateDrafts(rangeStart, rangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime);
+            generateBatchLessons();
           }}
           onDeleteCustomPreset={(preset) =>
             confirm({
@@ -1835,25 +1947,30 @@ export function ScheduleView({
           ruleEndTime={ruleEndTime}
           ruleStartTime={ruleStartTime}
           selectedWeekdays={selectedWeekdays}
+          setBatchLessonTargetCount={setBatchLessonTargetCount}
           setCustomPresetEnd={setCustomPresetEnd}
-          setCustomPresetStart={setCustomPresetStart}
-          setRangeEnd={setRangeEnd}
+          setCustomPresetStart={updateCustomPresetStartTime}
+          setRangeEnd={updateRangeEndManually}
           setRangeStart={setRangeStart}
+          setRuleBillingHours={setRuleBillingHours}
           setRuleCourseGroupId={setRuleCourseGroupId}
           setRuleCourseSearch={setRuleCourseSearch}
           setRuleEndTime={setRuleEndTime}
-          setRuleStartTime={setRuleStartTime}
+          setRuleStartTime={updateRuleStartTime}
+          setSingleBillingHours={setSingleBillingHours}
           setSingleCourseGroupId={setSingleCourseGroupId}
           setSingleCourseSearch={setSingleCourseSearch}
           setSingleDate={setSingleDate}
           setSingleEndTime={setSingleEndTime}
-          setSingleStartTime={setSingleStartTime}
+          setSingleStartTime={updateSingleStartTime}
+          singleBillingHours={singleBillingHours}
           singleCourseGroupId={singleCourseGroupId}
           singleCourseOptions={singleCourseOptions}
           singleCourseSearch={singleCourseSearch}
           singleDate={singleDate}
           singleEndTime={singleEndTime}
           singleStartTime={singleStartTime}
+          singleSuggestedBillingHours={singleSuggestedBillingHours}
           visibleWeekdays={visibleWeekdays}
         />
       )}
@@ -1861,6 +1978,7 @@ export function ScheduleView({
       {schedulePanel === "calendar" && (
       <div className="space-y-6">
         <ScheduleCalendarPanel
+          calendarBillingHours={calendarBillingHours}
           calendarCourseGroupId={calendarCourseGroupId}
           calendarCourseOptions={calendarCourseOptions}
           calendarCourseSearch={calendarCourseSearch}
@@ -1877,7 +1995,7 @@ export function ScheduleView({
               setSelectedCalendarDate(calendarDate);
               if (calendarMode === "schedule") {
                 if (!validateTimeRange(calendarStartTime, calendarEndTime, "日历排课的结束时间必须晚于开始时间。")) return;
-                addLessonFromCourse(calendarCourseGroupId, calendarDate, calendarStartTime, calendarEndTime, "scheduled");
+                addLessonFromCourse(calendarCourseGroupId, calendarDate, calendarStartTime, calendarEndTime, "scheduled", parseOptionalBillingHours(calendarBillingHours));
                 return;
               }
               setCalendarDetailDate(calendarDate);
@@ -1890,6 +2008,7 @@ export function ScheduleView({
           calendarMode={calendarMode}
           calendarMonth={calendarMonth}
           calendarStartTime={calendarStartTime}
+          calendarSuggestedBillingHours={calendarSuggestedBillingHours}
           calendarViewCampusFilter={calendarViewCampusFilter}
           calendarViewCampusOptions={calendarViewCampusOptions}
           calendarViewGradeFilter={calendarViewGradeFilter}
@@ -1913,9 +2032,10 @@ export function ScheduleView({
           selectedCalendarLessonCount={selectedCalendarLessons.length}
           selectedCalendarWeekLessonCount={selectedCalendarWeekLessons.length}
           setCalendarCourseGroupId={setCalendarCourseGroupId}
+          setCalendarBillingHours={setCalendarBillingHours}
           setCalendarCourseSearch={setCalendarCourseSearch}
           setCalendarEndTime={setCalendarEndTime}
-          setCalendarStartTime={setCalendarStartTime}
+          setCalendarStartTime={updateCalendarStartTime}
           setCalendarViewCampusFilter={setCalendarViewCampusFilter}
           setCalendarViewGradeFilter={setCalendarViewGradeFilter}
           setCalendarViewStudentFilter={setCalendarViewStudentFilter}
