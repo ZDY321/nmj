@@ -34,7 +34,7 @@ export function StorageManagementCard({
             <Database size={14} /> 存储管理
           </div>
           <CardTitle>当前账号容量概览</CardTitle>
-          <CardDescription>按解密后的档案 JSON 估算，用于判断历史课节、回收站和长内容占用。</CardDescription>
+          <CardDescription>按当前登录账号已解锁后的档案 JSON 在本机估算；云端仍只保存密文。</CardDescription>
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="sky">档案 {formatStorageSize(stats.estimatedJsonBytes)}</Badge>

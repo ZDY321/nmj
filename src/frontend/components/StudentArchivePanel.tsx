@@ -189,6 +189,9 @@ export function StudentArchivePanel({
             <Plus size={15} /> 添加学生
           </Button>
         </form>
+        <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
+          暑假班期间（7~8月）学生的课时费按照原始年级来算，例如8升9按照八年级的课时费来算，9月开学后按照九年级算。所以设置的年级要注意，会影响结算课时费。
+        </div>
         <label className="relative block">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
           <Input className="h-10 pl-9" value={archiveSearch} onChange={(event) => setArchiveSearch(event.target.value)} placeholder="搜索学生姓名、学校或备注" />
