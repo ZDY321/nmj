@@ -1953,6 +1953,7 @@ export function App() {
                         draft.profile = { ...draft.profile, ...patch };
                       })
                     }
+                    onPermanentlyDeleteDeletedLessons={permanentlyDeleteDeletedLessons}
                     onClearData={clearCurrentLocalCache}
                   />
                 )}

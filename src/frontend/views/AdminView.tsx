@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { AdminSummary, AdminUser, AiProviderConfig, AiProviderInput, AiProviderKind, FeedbackStatus, Notice, NoticeRecord, TeacherProfile, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { MetricCard } from "@/frontend/components/MetricCard";
+import { StorageManagementCard } from "@/frontend/components/StorageManagementCard";
 import {
   cancelUserDeletion,
   confirmUserDeletion,
@@ -150,6 +151,7 @@ export function AdminView({
   onPersistLoginAfterCloseChange,
   onNoticeChange,
   onClearData,
+  onPermanentlyDeleteDeletedLessons,
   onUpdateProfile
 }: {
   vault: TeacherVault;
@@ -159,6 +161,7 @@ export function AdminView({
   onPersistLoginAfterCloseChange: (persistAfterClose: boolean) => void;
   onNoticeChange: (notice: Notice) => void;
   onClearData: () => void;
+  onPermanentlyDeleteDeletedLessons: (ids: string[]) => void;
   onUpdateProfile: (patch: Partial<TeacherProfile>) => void;
 }) {
   const [title, setTitle] = useState(vault.notice.title);
@@ -367,6 +370,20 @@ export function AdminView({
       confirmLabel: "删除缓存",
       tone: "danger",
       onConfirm: onClearData
+    });
+  }
+
+  function askPurgeOldTrash(ids: string[]) {
+    if (ids.length === 0) return;
+    confirm({
+      title: `清理 90 天前的 ${ids.length} 条回收站记录？`,
+      description: "这些课节会从回收站永久删除，之后不能再从系统内恢复。",
+      confirmLabel: "确认清理",
+      tone: "danger",
+      onConfirm: () => {
+        onPermanentlyDeleteDeletedLessons(ids);
+        setMessage(`已清理 ${ids.length} 条 90 天前的回收站记录。`);
+      }
     });
   }
 
@@ -651,7 +668,9 @@ export function AdminView({
       </div>
 
       {adminSection === "settings" && (
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="space-y-6">
+        <StorageManagementCard vault={vault} onPurgeOldTrash={askPurgeOldTrash} />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
@@ -840,6 +859,7 @@ export function AdminView({
             </Button>
           </CardContent>
         </Card>
+        </div>
       </div>
       )}
 
