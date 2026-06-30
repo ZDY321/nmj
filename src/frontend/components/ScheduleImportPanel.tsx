@@ -21,13 +21,11 @@ import {
   calendarDates,
   orderedWeekdayLabels,
   sortCampusesForProfile,
-  sortCoursesByName,
   weekStartsOn
 } from "@/frontend/lib/helpers";
 import {
   buildImportPreview,
   downloadMergedScheduleWorkbook,
-  importMappingKey,
   parseScheduleWorkbookFiles,
   summarizeImportPreview,
   type ImportedScheduleLesson,
@@ -119,10 +117,6 @@ export function ScheduleImportPanel({
   const campusOptions = useMemo(
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
     [vault.campuses, vault.profile.homeCampusId]
-  );
-  const courseOptions = useMemo(
-    () => sortCoursesByName(vault.courseGroups),
-    [vault.courseGroups]
   );
   const importedRows = useMemo(
     () => buildImportPreview(vault, rawLessons, mapping, fileCampusOverrides),
@@ -312,36 +306,6 @@ export function ScheduleImportPanel({
     }
   }
 
-  function updateCourseMapping(row: ImportPreviewLesson, courseId: string) {
-    const key = importMappingKey(row);
-    const nextMapping = { ...mapping };
-    if (courseId) {
-      nextMapping[key] = courseId;
-    } else {
-      delete nextMapping[key];
-    }
-    setMapping(nextMapping);
-    const savedMappingOk = writeSavedMapping(storageScope, nextMapping);
-    writeSavedWorkspace(storageScope, {
-      rawLessons,
-      mapping: nextMapping,
-      resolutions,
-      fileCampusOverrides,
-      selectedMonth,
-      selectedDate,
-      campusFilter,
-      statusFilter,
-      search,
-      savedAt: new Date().toISOString()
-    });
-    if (onSaveScheduleImport) {
-      onSaveScheduleImport(buildScheduleImportStateWithoutReview(scheduleImportVault, nextMapping, resolutions, splitMergeExcludedLessonIds));
-      setMessage(courseId ? "课程映射已自动保存到云端加密档案，下次导入会直接复用。" : "课程映射已清除并同步到云端加密档案。");
-    } else if (savedMappingOk) {
-      setMessage(courseId ? "课程映射已自动保存到本机浏览器。" : "课程映射已清除。");
-    }
-  }
-
   function applyStatusFilter(nextStatus: Exclude<StatusFilter, "all">) {
     const effectiveStatus: StatusFilter = statusFilter === nextStatus ? "all" : nextStatus;
     setStatusFilter(effectiveStatus);
@@ -510,7 +474,7 @@ export function ScheduleImportPanel({
       search: "",
       savedAt: new Date().toISOString()
     });
-    setMessage(`已将「${savedReviewTitle(review)}」导入到下方核对列表，可以继续修改课程映射和处理标注。`);
+    setMessage(`已将「${savedReviewTitle(review)}」导入到下方核对列表，可以继续处理差异标注。`);
   }
 
   function clearImport() {
@@ -659,7 +623,6 @@ export function ScheduleImportPanel({
               key={row.id}
               row={row}
               vault={vault}
-              courses={courseOptions}
               resolution={resolutions[resolutionKey(row)]}
               linkedSystemLessonIds={linkedSystemLessonIds}
               linkedBySources={row.systemLessonId ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId) : []}
@@ -670,7 +633,6 @@ export function ScheduleImportPanel({
                 if (hasCurrentDirectMatch) return [];
                 return linkedIds.some((lessonId) => existingSystemLessonIds.has(lessonId)) ? [] : linkedIds.filter((lessonId) => !existingSystemLessonIds.has(lessonId));
               })()}
-              onMap={(courseId) => updateCourseMapping(row, courseId)}
               onResolutionChange={(patch) => updateResolution(row, patch)}
               onOpenLesson={onOpenLesson}
               onSuggestSchedule={onSuggestSchedule}

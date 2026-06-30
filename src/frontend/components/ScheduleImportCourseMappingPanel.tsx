@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { FileSpreadsheet, Link2, Search, Trash2, Wand2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ export function ScheduleImportCourseMappingPanel({
   const [courseSearch, setCourseSearch] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [draggingFiles, setDraggingFiles] = useState(false);
 
   useEffect(() => {
     setMapping((current) => ({ ...externalMapping, ...current }));
@@ -77,6 +78,35 @@ export function ScheduleImportCourseMappingPanel({
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!loading) setDraggingFiles(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = loading ? "none" : "copy";
+    if (!loading) setDraggingFiles(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDraggingFiles(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingFiles(false);
+    if (loading || event.dataTransfer.files.length === 0) return;
+    void handleFiles(event.dataTransfer.files);
   }
 
   function updateMapping(row: ImportedCourseMappingRow, courseId: string) {
@@ -132,8 +162,17 @@ export function ScheduleImportCourseMappingPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_auto]">
-          <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-[12px] border border-dashed border-[#93c5fd] bg-[#eaf2ff] px-4 py-3 text-sm font-extrabold text-[#1557c2] transition-colors hover:bg-[#dbeafe]">
-            <FileSpreadsheet size={16} /> {loading ? "解析中..." : "导入教务 Excel 获取课程名称"}
+          <label
+            className={`flex min-h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed px-4 py-3 text-center text-sm font-extrabold transition-colors ${draggingFiles ? "border-[#1557c2] bg-[#dbeafe] text-[#1557c2] ring-2 ring-[#bfdbfe]" : "border-[#93c5fd] bg-[#eaf2ff] text-[#1557c2] hover:bg-[#dbeafe]"}`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <span className="flex items-center justify-center gap-2">
+              <FileSpreadsheet size={16} /> {loading ? "解析中..." : draggingFiles ? "松开导入 Excel" : "拖拽或选择教务 Excel"}
+            </span>
+            <span className="text-[11px] font-bold text-[#64748b]">支持 .xls / .xlsx 单个或多个文件</span>
             <input
               type="file"
               accept=".xls,.xlsx"
@@ -208,13 +247,24 @@ export function ScheduleImportCourseMappingPanel({
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Select value={selectedCourseId} onChange={(event) => updateMapping(row, event.target.value)}>
-                      <option value="">选择云端课程档案</option>
-                      {selectCourses.map((course) => (
-                        <option key={course.id} value={course.id}>{mappingCourseOptionLabel(vault, course)}</option>
-                      ))}
-                      {selectCourses.length === 0 && <option disabled>没有匹配的课程档案</option>}
-                    </Select>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
+                      <Select value={selectedCourseId} onChange={(event) => updateMapping(row, event.target.value)}>
+                        <option value="">选择云端课程档案</option>
+                        {selectCourses.map((course) => (
+                          <option key={course.id} value={course.id}>{mappingCourseOptionLabel(vault, course)}</option>
+                        ))}
+                        {selectCourses.length === 0 && <option disabled>没有匹配的课程档案</option>}
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 border-[#fecaca] text-[#b91c1c] hover:bg-[#fef2f2]"
+                        disabled={!selectedCourseId}
+                        onClick={() => updateMapping(row, "")}
+                      >
+                        <Trash2 size={14} /> 删除映射
+                      </Button>
+                    </div>
                     <div className="text-xs font-semibold leading-5 text-[#64748b]">
                       {selectedCourse ? `当前映射：${mappingCourseOptionLabel(vault, selectedCourse)}` : "未保存映射；对账时仍会尝试自动匹配，但课程名不一致时建议在这里固定保存。"}
                       {courseSearch.trim() && ` · 下拉显示 ${selectCourses.length} 项`}

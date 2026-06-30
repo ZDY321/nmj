@@ -7,7 +7,7 @@ import { Select } from "@/components/ui/select";
 import { ScheduleImportIssueList } from "@/frontend/components/ScheduleImportIssueList";
 import { ScheduleImportLinkedLessonsPanel } from "@/frontend/components/ScheduleImportLinkedLessonsPanel";
 import { ScheduleImportRowDetails } from "@/frontend/components/ScheduleImportRowDetails";
-import type { CourseGroup, Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
+import type { Lesson, ScheduleImportResolution, ScheduleImportResolutionStatus, TeacherVault } from "@/shared/types";
 import { courseName as localCourseName, courseTimeRangeBillingLabel, lessonAttendanceNoteText, lessonCampusId, lessonStatusLabels, lessonTimeRangeBillingLabel } from "@/frontend/lib/helpers";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import {
@@ -29,26 +29,22 @@ import {
 export function ScheduleImportReconciliationRow({
   row,
   vault,
-  courses,
   resolution,
   linkedSystemLessonIds,
   linkedBySources,
   staleLinkedByPreviousResolution,
   invalidLinkedSystemLessonIds,
-  onMap,
   onResolutionChange,
   onOpenLesson,
   onSuggestSchedule
 }: {
   row: ImportPreviewLesson;
   vault: TeacherVault;
-  courses: CourseGroup[];
   resolution?: ScheduleImportResolution;
   linkedSystemLessonIds: Set<string>;
   linkedBySources: LinkedSystemLessonSource[];
   staleLinkedByPreviousResolution: boolean;
   invalidLinkedSystemLessonIds: string[];
-  onMap: (courseId: string) => void;
   onResolutionChange: (patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) => void;
   onOpenLesson?: (lesson: Lesson) => void;
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
@@ -96,7 +92,7 @@ export function ScheduleImportReconciliationRow({
   const suggestScheduleCourseId = row.matchedCourseId ?? row.mappedCourseId;
   const canSuggestSchedule = Boolean(onSuggestSchedule) && row.status !== "import_missing" && !systemLesson;
   const suggestScheduleDisabledReason = canSuggestSchedule && !suggestScheduleCourseId
-    ? "请先把这条教务课映射到课程档案，再建议排课"
+    ? "请先在课程名称映射页维护这条教务课程名的映射，再建议排课"
     : "";
   const showReviewControls = row.status !== "matched" || reviewed || Boolean(resolution?.linkedSystemLessonIds?.length);
   const showExpandedReviewControls = showReviewControls && (!canCollapseDetails || detailsExpanded);
@@ -212,10 +208,8 @@ export function ScheduleImportReconciliationRow({
           <ScheduleImportRowDetails
             row={row}
             vault={vault}
-            courses={courses}
             systemLesson={systemLesson}
             linkedLessons={linkedLessons}
-            onMap={onMap}
             onOpenLesson={onOpenLesson}
           />
 

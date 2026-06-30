@@ -112,7 +112,13 @@ export function ScheduleImportHeaderPanel({
 
       </CardHeader>
 
-      <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+      <div
+        className={`rounded-[14px] border bg-white p-4 transition-colors ${draggingFiles ? "border-[#1557c2] ring-2 ring-[#bfdbfe]" : "border-[#dbe4ef]"}`}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <button
             type="button"
@@ -148,7 +154,7 @@ export function ScheduleImportHeaderPanel({
 
         {!importSetupExpanded && (
           <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
-            已导入 {fileSummaries.length} 个文件，文件校区已对应。展开后可继续导入、保存、导出、清空或修改文件校区。
+            已导入 {fileSummaries.length} 个文件，文件校区已对应。展开后可继续导入、保存、导出、清空或修改文件校区，也可以直接把 .xls/.xlsx 文件拖到此区域继续导入。
           </div>
         )}
 
@@ -204,7 +210,6 @@ export function ScheduleImportHeaderPanel({
                 <div>文件名中包含“档案信息”里的校区名称关键词即可自动识别，例如“2026-05-课表-延安校区.xlsx”“校宝课表导出2026-06-20（外国语校区鹏成教育）.xlsx”或“2026-05-课表延安.xlsx”。</div>
               </div>
             </div>
-
             <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#061226]">
                 <MapPin size={16} className="text-[#1557c2]" /> 文件对应校区

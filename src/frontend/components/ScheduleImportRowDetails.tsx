@@ -1,13 +1,9 @@
-import { useMemo, useState } from "react";
-import { ArrowDownUp, FileSpreadsheet, Link2, Search } from "lucide-react";
+import { ArrowDownUp, FileSpreadsheet, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import type { CourseGroup, CourseType, Lesson, TeacherVault } from "@/shared/types";
+import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
 import type { ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import {
   campusName,
-  courseHasActiveStudent,
   courseName as localCourseName,
   courseSubject,
   courseTimeRangeBillingLabel,
@@ -21,18 +17,14 @@ import {
 export function ScheduleImportRowDetails({
   row,
   vault,
-  courses,
   systemLesson,
   linkedLessons = [],
-  onMap,
   onOpenLesson
 }: {
   row: ImportPreviewLesson;
   vault: TeacherVault;
-  courses: CourseGroup[];
   systemLesson?: Lesson;
   linkedLessons?: Lesson[];
-  onMap: (courseId: string) => void;
   onOpenLesson?: (lesson: Lesson) => void;
 }) {
   const systemAttendanceNoteText = systemLesson ? lessonAttendanceNoteText(vault, systemLesson) : "";
@@ -140,98 +132,8 @@ export function ScheduleImportRowDetails({
           <div className="text-sm font-bold text-[#b45309]">云端课表没有对应课节</div>
         )}
       </div>
-
-      {row.status !== "import_missing" && (
-        <CourseMappingSelect
-          row={row}
-          vault={vault}
-          courses={courses}
-          onMap={onMap}
-        />
-      )}
     </div>
   );
-}
-
-function CourseMappingSelect({
-  row,
-  vault,
-  courses,
-  onMap
-}: {
-  row: ImportPreviewLesson;
-  vault: TeacherVault;
-  courses: CourseGroup[];
-  onMap: (courseId: string) => void;
-}) {
-  const [courseSearch, setCourseSearch] = useState("");
-  const filteredCourses = useMemo(
-    () => filterMappingCourses(vault, courses, courseSearch, row.matchedCourseId),
-    [courseSearch, courses, row.matchedCourseId, vault]
-  );
-  return (
-    <div className="space-y-2">
-      <label className="relative block">
-        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-        <Input
-          className="h-10 pl-9 text-sm"
-          value={courseSearch}
-          onChange={(event) => setCourseSearch(event.target.value)}
-          placeholder="搜索课程档案名、学生或科目"
-        />
-      </label>
-      <Select value={row.matchedCourseId ?? ""} onChange={(event) => onMap(event.target.value)}>
-        <option value="">手动映射课程档案</option>
-        {filteredCourses.map((course) => (
-          <option key={course.id} value={course.id}>{mappingCourseOptionLabel(vault, course)}</option>
-        ))}
-        {filteredCourses.length === 0 && <option disabled>没有匹配的课程档案</option>}
-      </Select>
-      <div className="text-xs font-semibold text-[#64748b]">
-        {row.mappedCourseId ? "已使用保存映射" : row.matchedCourseId ? `自动匹配：${localCourseName(vault, row.matchedCourseId)}` : "需要手动映射后再核对"}
-        {courseSearch.trim() && ` · 当前显示 ${filteredCourses.length} 项`}
-      </div>
-    </div>
-  );
-}
-
-function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query: string, selectedCourseId?: string): CourseGroup[] {
-  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const selectedCourse = selectedCourseId ? vault.courseGroups.find((course) => course.id === selectedCourseId) : undefined;
-  const matched = terms.length === 0
-    ? courses
-    : courses.filter((course) => {
-      const haystack = [
-        course.name,
-        course.subject,
-        studentNames(vault, course.studentIds),
-        courseTypeLabel(vault, course.type),
-        campusName(vault, course.defaultCampusId),
-        course.note ?? "",
-        mappingCourseStatusLabel(vault, course)
-      ].join(" ").toLowerCase();
-      return terms.every((term) => haystack.includes(term));
-    });
-  const withSelected = selectedCourse && !matched.some((course) => course.id === selectedCourse.id)
-    ? [selectedCourse, ...matched]
-    : matched;
-  return withSelected.slice(0, 80);
-}
-
-function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): string {
-  const students = studentNames(vault, course.studentIds) || "未关联学生";
-  const statusLabel = mappingCourseStatusLabel(vault, course);
-  return `${localCourseName(vault, course.id)} · ${course.subject} · ${students}${statusLabel ? ` · ${statusLabel}` : ""}`;
-}
-
-function mappingCourseStatusLabel(vault: TeacherVault, course: CourseGroup): string {
-  if (course.status === "paused") return "课程已暂停";
-  if (courseHasActiveStudent(vault, course)) return "";
-  if (course.studentIds.length === 0) return "未关联学生";
-  const linkedStudents = course.studentIds
-    .map((studentId) => vault.students.find((student) => student.id === studentId))
-    .filter(Boolean);
-  return linkedStudents.some((student) => student?.status === "transition") ? "学生过渡期" : "学生已归档";
 }
 
 function LinkedSystemLessons({

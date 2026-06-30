@@ -91,6 +91,7 @@ export function StudentsView({
   const studentOptions = sortStudentsByName(vault.students);
   const activeStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status !== "paused"));
   const currentStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "active"));
+  const courseSelectableStudentOptions = currentStudentOptions;
   const transitionStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "transition"));
   const archivedStudentOptions = sortStudentsByName(vault.students.filter((student) => student.status === "paused"));
   const courseGroupOptions = sortCoursesByName(vault.courseGroups);
@@ -180,7 +181,7 @@ export function StudentsView({
   const hasUnsetGradeFilterOption = hasStudentsWithoutGrade || vault.courseGroups.some((course) => course.studentIds.length === 0);
   const subjectFilterOptions = subjectOptions;
   const suggestedCourseName = buildSuggestedCourseName(courseType, courseStudentIds);
-  const addCourseStudentOptions = activeStudentOptions.filter((student) => {
+  const addCourseStudentOptions = courseSelectableStudentOptions.filter((student) => {
     const searchable = studentCourseSearchText(vault, student);
     return matchesKeywordSearch(searchable, normalizedNewCourseStudentSearch);
   });
@@ -267,15 +268,17 @@ export function StudentsView({
   const editingCourseStudentOptions = editingCourse
     ? studentOptions.filter((student) => {
         const isSelected = editingCourse.studentIds.includes(student.id);
-        if (!isSelected && student.status === "paused") return false;
+        if (!isSelected && student.status !== "active") return false;
         const matchesScope =
           courseStudentScope === "all" ||
           (courseStudentScope === "selected" ? isSelected : !isSelected);
         const searchable = studentCourseSearchText(vault, student);
         const matchesSearch = matchesKeywordSearch(searchable, normalizedCourseStudentSearch);
         const matchesGrade = matchesGradeFilter(student.grade, courseStudentGradeFilter);
+        const selectedGrade = editingCourse.type === "class" ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
+        const matchesSelectedGrade = editingCourse.type !== "class" || selectedGrade === undefined || isSelected || (student.grade ?? "") === selectedGrade;
         const matchesCampus = courseStudentCampusFilter === "all" || student.defaultCampusId === courseStudentCampusFilter;
-        return matchesScope && matchesSearch && matchesGrade && matchesCampus;
+        return matchesScope && matchesSearch && matchesGrade && matchesSelectedGrade && matchesCampus;
       })
     : [];
 
@@ -347,10 +350,21 @@ export function StudentsView({
     submitStudent();
   }
 
-  function submitStudent(forceDuplicate = false) {
+  function submitStudent(forceDuplicate = false, forceMissingGrade = false) {
     if (!studentNameInput.trim()) return;
     const resolvedGrade = studentGradeInput === "自定义" ? customGradeInput.trim() : studentGradeInput;
     const resolvedCampusId = studentCampusInput || preferredCampusId;
+    if (!resolvedGrade && !forceMissingGrade) {
+      confirm({
+        title: "未设置学生年级？",
+        description: "学生年级会影响班课同年级筛选和暑假班、课时费结算判断。建议先设置年级后再添加。",
+        confirmLabel: "仍然添加",
+        cancelLabel: "返回设置",
+        tone: "danger",
+        onConfirm: () => submitStudent(forceDuplicate, true)
+      });
+      return;
+    }
     const duplicateStudent = findDuplicateStudent(studentNameInput.trim(), resolvedGrade, resolvedCampusId);
     if (duplicateStudent && !forceDuplicate) {
       const duplicateStatus = duplicateStudent.status === "paused" ? "，当前已归档" : duplicateStudent.status === "transition" ? "，当前为过渡期" : "";
@@ -359,7 +373,7 @@ export function StudentsView({
         description: `已有「${duplicateStudent.name}」使用相同姓名、年级和校区${duplicateStatus}。建议先确认是否需要恢复或编辑原档案。`,
         confirmLabel: "仍然添加",
         tone: "danger",
-        onConfirm: () => submitStudent(true)
+        onConfirm: () => submitStudent(true, forceMissingGrade)
       });
       return;
     }
@@ -1035,14 +1049,14 @@ export function StudentsView({
   function activeCourseStudentIds(studentIds: string[]): string[] {
     return studentIds.filter((studentId) => {
       const student = vault.students.find((item) => item.id === studentId);
-      return student?.status !== "paused";
+      return student?.status === "active";
     });
   }
 
   function toggleNewCourseStudent(studentId: string) {
     const isSelected = courseStudentIds.includes(studentId);
     const student = vault.students.find((item) => item.id === studentId);
-    if (!isSelected && student?.status === "paused") return;
+    if (!isSelected && student?.status !== "active") return;
     const limit = studentLimitForCourseType(courseType);
     if (limit) {
       if (isSelected) {
@@ -1261,7 +1275,7 @@ export function StudentsView({
       if (!current) return current;
       const isSelected = current.studentIds.includes(studentId);
       const student = vault.students.find((item) => item.id === studentId);
-      if (!isSelected && student?.status === "paused") return current;
+      if (!isSelected && student?.status !== "active") return current;
       const limit = studentLimitForCourseType(current.type);
       if (limit) {
         if (!isSelected && current.studentIds.length >= limit) {

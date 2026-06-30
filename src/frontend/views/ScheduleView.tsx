@@ -520,7 +520,7 @@ export function ScheduleView({
   const normalizedAttendanceStudentFilter = attendanceStudentFilter.trim().toLowerCase();
   const temporaryStudentOptions = selected
     ? studentOptions.filter((student) => {
-        const isAvailable = student.status !== "paused" && !selected.expectedStudentIds.includes(student.id);
+        const isAvailable = student.status === "active" && !selected.expectedStudentIds.includes(student.id);
         const searchable = [
           student.name,
           student.grade ?? "",
@@ -535,7 +535,7 @@ export function ScheduleView({
     ? vault.students.find((student) => student.id === temporaryStudentId)
     : undefined;
   const displayedTemporaryStudentOptions =
-    selectedTemporaryStudent && !temporaryStudentOptions.some((student) => student.id === selectedTemporaryStudent.id)
+    selectedTemporaryStudent && selectedTemporaryStudent.status === "active" && !temporaryStudentOptions.some((student) => student.id === selectedTemporaryStudent.id)
       ? [selectedTemporaryStudent, ...temporaryStudentOptions]
       : temporaryStudentOptions;
   const availableTrialStudentOptionCount = temporaryStudentOptions.filter((student) => student.temporaryTrial).length;
@@ -1424,6 +1424,7 @@ export function ScheduleView({
   function addTemporaryStudent() {
     if (!selected || !temporaryStudentId || selected.expectedStudentIds.includes(temporaryStudentId)) return;
     const student = findStudent(vault, temporaryStudentId);
+    if (student?.status !== "active") return;
     const isTrialStudent = Boolean(student?.temporaryTrial);
     const next: Lesson = {
       ...selected,

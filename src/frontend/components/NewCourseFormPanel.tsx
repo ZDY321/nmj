@@ -100,6 +100,11 @@ export function NewCourseFormPanel({
     : usesStandardBilling
       ? "按标准课时统计；例：10:10-12:00 实际 110 分钟，默认计费 2 小时，可在课节详情手动改为 1 小时等拆课课时。"
       : "按实际上课时长折算。";
+  const selectedCourseStudentGrade = courseType === "class" ? firstCourseStudentGrade(courseStudentIds) : undefined;
+  const visibleAddCourseStudentOptions = addCourseStudentOptions.filter((student) => {
+    if (courseType !== "class" || selectedCourseStudentGrade === undefined) return true;
+    return courseStudentIds.includes(student.id) || (student.grade ?? "") === selectedCourseStudentGrade;
+  });
 
   return (
     <Card className="h-fit overflow-hidden">
@@ -321,7 +326,7 @@ export function NewCourseFormPanel({
             )}
             <div className="max-h-[220px] overflow-y-auto pr-1">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {addCourseStudentOptions.map((student) => {
+                {visibleAddCourseStudentOptions.map((student) => {
                   const isSelected = courseStudentIds.includes(student.id);
                   const selectedGrade = courseType === "class" ? firstCourseStudentGrade(courseStudentIds) : undefined;
                   const isDifferentGrade = courseType === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
@@ -348,7 +353,7 @@ export function NewCourseFormPanel({
                   );
                 })}
               </div>
-              {addCourseStudentOptions.length === 0 && (
+              {visibleAddCourseStudentOptions.length === 0 && (
                 <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
                   没有符合条件的学生
                 </div>
