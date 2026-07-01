@@ -54,6 +54,16 @@ export function ScheduleImportCourseMappingPanel({
   const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
   const previewRows = useMemo(() => buildImportPreview(vault, rawLessons, mapping), [mapping, rawLessons, vault]);
   const importedCourses = useMemo(() => buildImportedCourseRows(rawLessons, previewRows, mapping), [mapping, previewRows, rawLessons]);
+  const importedMappingKeys = useMemo(() => importedCourses.reduce((keys, row) => {
+    keys.add(row.key);
+    keys.add(row.normalizedKey);
+    return keys;
+  }, new Set<string>()), [importedCourses]);
+  const savedRules = useMemo(() => buildSavedMappingRules(mapping, importedMappingKeys), [importedMappingKeys, mapping]);
+  const visibleSavedRules = useMemo(
+    () => filterSavedMappingRules(vault, savedRules, search),
+    [savedRules, search, vault]
+  );
   const filteredCourses = useMemo(
     () => filterMappingCourses(vault, courseOptions, courseSearch),
     [courseOptions, courseSearch, vault]
@@ -64,7 +74,7 @@ export function ScheduleImportCourseMappingPanel({
   );
   const mappedCount = importedCourses.filter((row) => courseIdForMappingRow(mapping, row)).length;
   const suggestedCount = importedCourses.filter((row) => !courseIdForMappingRow(mapping, row) && row.suggestedCourseId).length;
-  const savedMappingCount = Object.keys(mapping).length;
+  const savedMappingCount = savedRules.length;
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -115,6 +125,23 @@ export function ScheduleImportCourseMappingPanel({
     const nextMapping = { ...mapping };
     setMappingValue(nextMapping, row, courseId);
     persistMapping(nextMapping, courseId ? "课程名称映射已保存，下次教务对账导入会自动复用。" : "课程名称映射已清除。", courseId ? "课程名称映射已保存到本机浏览器。" : "课程名称映射已从本机浏览器清除。");
+  }
+
+  function updateSavedRule(rule: SavedCourseMappingRule, courseId: string) {
+    const nextMapping = { ...mapping };
+    const importedRow = importedCourses.find((row) => row.key === rule.key || row.normalizedKey === rule.key);
+    if (importedRow) {
+      setMappingValue(nextMapping, importedRow, courseId);
+    } else if (courseId) {
+      nextMapping[rule.key] = courseId;
+    } else {
+      delete nextMapping[rule.key];
+    }
+    persistMapping(nextMapping, courseId ? "已保存这条课程名称映射规则。" : "已删除这条课程名称映射规则。", courseId ? "已保存这条本机课程名称映射规则。" : "已删除这条本机课程名称映射规则。");
+  }
+
+  function deleteSavedRule(rule: SavedCourseMappingRule) {
+    updateSavedRule(rule, "");
   }
 
   function deleteImportedCourseRow(row: ImportedCourseMappingRow) {
@@ -228,7 +255,7 @@ export function ScheduleImportCourseMappingPanel({
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <label className="relative block">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-            <Input className="h-10 pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索教务课程名、校区、科目或已映射课程" />
+            <Input className="h-10 pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索已保存规则、教务课程名、校区、科目或已映射课程" />
           </label>
           <label className="relative block">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
@@ -237,6 +264,84 @@ export function ScheduleImportCourseMappingPanel({
         </div>
 
         <div className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-extrabold text-[#061226]">已保存规则</div>
+              <div className="text-xs font-semibold leading-5 text-[#64748b]">不需要重新导入 Excel，也可以直接查看、修改或删除历史课程名称映射。</div>
+            </div>
+            <Badge variant="secondary">显示 {visibleSavedRules.length}/{savedRules.length}</Badge>
+          </div>
+          {visibleSavedRules.length > 0 && (
+            <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+              {visibleSavedRules.map((rule) => {
+                const selectedCourse = vault.courseGroups.find((course) => course.id === rule.courseId);
+                const selectCourses = selectedCourse && !filteredCourses.some((course) => course.id === selectedCourse.id)
+                  ? [selectedCourse, ...filteredCourses]
+                  : filteredCourses;
+                return (
+                  <div key={rule.key} className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
+                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="break-words text-base font-extrabold text-[#061226]">{rule.title || "未命名课程"}</span>
+                          <Badge variant="secondary" className="text-[10px]">{rule.campusName || "未识别校区"}</Badge>
+                          {rule.usedInCurrentImport && <Badge variant="sky" className="text-[10px]">本次导入</Badge>}
+                          {!selectedCourse && <Badge variant="amber" className="text-[10px]">课程档案已不存在</Badge>}
+                        </div>
+                        <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
+                          {rule.subjectHint || "未知科目"} · {courseTypeLabelSafe(vault, rule.courseTypeHint)}{rule.studentNameHint ? ` · 学生提示：${rule.studentNameHint}` : ""}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
+                          <Select value={rule.courseId} onChange={(event) => updateSavedRule(rule, event.target.value)}>
+                            {!selectedCourse && rule.courseId && <option value={rule.courseId}>课程档案已不存在</option>}
+                            <option value="">选择云端课程档案</option>
+                            {selectCourses.map((course) => (
+                              <option key={course.id} value={course.id}>{mappingCourseOptionLabel(vault, course)}</option>
+                            ))}
+                            {selectCourses.length === 0 && <option disabled>没有匹配的课程档案</option>}
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 border-[#fecaca] text-[#b91c1c] hover:bg-[#fef2f2]"
+                            onClick={() => deleteSavedRule(rule)}
+                          >
+                            <Trash2 size={14} /> 删除规则
+                          </Button>
+                        </div>
+                        <div className="text-xs font-semibold leading-5 text-[#64748b]">
+                          {selectedCourse ? `当前映射：${mappingCourseOptionLabel(vault, selectedCourse)}` : `当前映射的课程档案已不存在（${rule.courseId}）。`}
+                          {courseSearch.trim() && ` · 下拉显示 ${selectCourses.length} 项`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {savedRules.length === 0 && (
+            <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
+              暂无已保存课程名称映射规则。
+            </div>
+          )}
+          {savedRules.length > 0 && visibleSavedRules.length === 0 && (
+            <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
+              当前搜索条件下没有已保存规则。
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-extrabold text-[#061226]">本次导入课程</div>
+              <div className="text-xs font-semibold leading-5 text-[#64748b]">导入 Excel 后，这里显示当前文件里的课程名称，并可继续保存新映射。</div>
+            </div>
+            <Badge variant={mappedCount === importedCourses.length && importedCourses.length > 0 ? "sage" : "amber"}>本次已映射 {mappedCount}/{importedCourses.length}</Badge>
+          </div>
           {visibleRows.map((row) => {
             const selectedCourseId = courseIdForMappingRow(mapping, row) ?? "";
             const selectedCourse = selectedCourseId ? vault.courseGroups.find((course) => course.id === selectedCourseId) : undefined;
@@ -334,6 +439,61 @@ type ImportedCourseMappingRow = {
   months: string[];
   suggestedCourseId?: string;
 };
+
+type SavedCourseMappingRule = {
+  key: string;
+  courseId: string;
+  campusName: string;
+  title: string;
+  studentNameHint: string;
+  subjectHint: string;
+  courseTypeHint: CourseType | "unknown";
+  usedInCurrentImport: boolean;
+};
+
+function buildSavedMappingRules(mapping: ScheduleImportMapping, importedKeys: ReadonlySet<string>): SavedCourseMappingRule[] {
+  return Object.entries(mapping)
+    .flatMap(([key, courseId]) => {
+      if (!courseId) return [];
+      const [campusName = "", title = "", studentNameHint = "", subjectHint = "", rawCourseType = "unknown"] = key.split("|");
+      return [{
+        key,
+        courseId,
+        campusName,
+        title,
+        studentNameHint,
+        subjectHint,
+        courseTypeHint: mappingRuleCourseType(rawCourseType),
+        usedInCurrentImport: importedKeys.has(key)
+      } satisfies SavedCourseMappingRule];
+    })
+    .sort((a, b) => compareByName(a.campusName, b.campusName) || compareByName(a.title, b.title) || compareByName(a.subjectHint, b.subjectHint));
+}
+
+function mappingRuleCourseType(value: string): CourseType | "unknown" {
+  if (value === "one_on_one" || value === "one_on_two" || value === "class" || value === "trial" || value.startsWith("custom_")) {
+    return value as CourseType;
+  }
+  return "unknown";
+}
+
+function filterSavedMappingRules(vault: TeacherVault, rules: SavedCourseMappingRule[], query: string): SavedCourseMappingRule[] {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return rules;
+  return rules.filter((rule) => {
+    const mappedCourse = vault.courseGroups.find((course) => course.id === rule.courseId);
+    const haystack = [
+      rule.key,
+      rule.title,
+      rule.campusName,
+      rule.subjectHint,
+      rule.studentNameHint,
+      courseTypeLabelSafe(vault, rule.courseTypeHint),
+      mappedCourse ? mappingCourseOptionLabel(vault, mappedCourse) : "课程档案已不存在"
+    ].join(" ").toLowerCase();
+    return terms.every((term) => haystack.includes(term));
+  });
+}
 
 function buildImportedCourseRows(
   lessons: ImportedScheduleLesson[],
