@@ -143,7 +143,8 @@ export function ScheduleView({
   aiSession,
   onAiSessionChange,
   onApplyAiDraft,
-  onReturnToView
+  onReturnToView,
+  onOpenProgressChecklist
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
@@ -174,6 +175,7 @@ export function ScheduleView({
   onAiSessionChange: (session: AiScheduleSession | null) => void;
   onApplyAiDraft: (session: AiScheduleSession | null) => { ok: boolean; message: string };
   onReturnToView: (target: ExternalLessonReturnTarget) => void;
+  onOpenProgressChecklist?: (lesson: Lesson) => void;
 }) {
   const initialFocusedDate = calendarFocus?.date ?? todayIso();
   const initialFocusedMonth = initialFocusedDate.slice(0, 7);
@@ -2236,6 +2238,7 @@ export function ScheduleView({
             onGoBackToLessonSource={goBackToLessonSource}
             onGoBackToPreviousLesson={goBackToPreviousLesson}
             onOpenLesson={openLessonInRecords}
+            onOpenProgressChecklist={onOpenProgressChecklist}
             onSelectDetailMakeupStudentIds={setDetailMakeupStudentIds}
             onSelectedCourseChange={updateSelectedCourse}
             onSelectedDateChange={updateSelectedDate}

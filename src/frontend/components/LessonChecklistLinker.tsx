@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookCheck, BookOpen, NotebookPen, Search, X } from "lucide-react";
+import { BookCheck, BookOpen, ExternalLink, NotebookPen, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,12 +14,14 @@ export function LessonChecklistLinker({
   vault,
   content,
   subjectHint,
-  onChange
+  onChange,
+  onOpenChecklist
 }: {
   vault: TeacherVault;
   content: LessonContent;
   subjectHint?: string;
   onChange: (content: LessonContent) => void;
+  onOpenChecklist?: () => void;
 }) {
   const [itemSearch, setItemSearch] = useState("");
   const templates = useMemo(
@@ -104,6 +106,11 @@ export function LessonChecklistLinker({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {onOpenChecklist && (
+            <Button type="button" variant="outline" size="sm" onClick={onOpenChecklist}>
+              <ExternalLink size={14} /> 打开学习清单
+            </Button>
+          )}
           <Badge variant="sky">{taughtItems.length} 项关联到本节内容</Badge>
           <Badge variant="amber">{homeworkItems.length} 项关联到课后作业</Badge>
         </div>

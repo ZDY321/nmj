@@ -36,6 +36,7 @@ import {
 import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { clearStoredSession, clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
+import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
 import { clearSavedScheduleImportLocalState } from "@/frontend/lib/scheduleImportReviewLocalState";
 import {
   clearUnlockedSession,
@@ -159,6 +160,7 @@ export function App() {
   const [syncCountdownSeconds, setSyncCountdownSeconds] = useState(syncCheckIntervalSeconds);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
+  const [progressChecklistFocus, setProgressChecklistFocus] = useState<ProgressChecklistFocus | null>(null);
   const [calendarOverviewFocus, setCalendarOverviewFocus] = useState<(CalendarOverviewFocusState & { nonce: number }) | null>(null);
   const [payrollReviewFocus, setPayrollReviewFocus] = useState<{ panel: PayrollPanelFocus; nonce: number } | null>(null);
   const [aiScheduleSession, setAiScheduleSession] = useState<AiScheduleSession | null>(null);
@@ -1384,6 +1386,21 @@ export function App() {
     openLessonInScheduleRecords(lesson, { kind: "view", view: "progress", label: "返回进度与作业" });
   }
 
+  function openLessonInProgressChecklist(lesson: Lesson) {
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setMobileNavOpen(false);
+    setOnboardingVisible(false);
+    setProgressChecklistFocus({
+      courseGroupId: lesson.courseGroupId,
+      templateId: lesson.content.checklistTemplateId,
+      lessonId: lesson.id,
+      date: lesson.date,
+      nonce: Date.now()
+    });
+    setView("progress");
+  }
+
   function openPayrollReviewLessonInScheduleRecords(lesson: Lesson) {
     openLessonInScheduleRecords(lesson, {
       kind: "view",
@@ -1853,12 +1870,15 @@ export function App() {
                     onAiSessionChange={updateAiScheduleSession}
                     onApplyAiDraft={applyAiScheduleDraft}
                     onReturnToView={returnToViewFromSchedule}
+                    onOpenProgressChecklist={openLessonInProgressChecklist}
                   />
                 )}
                 {view === "progress" && (
                   <ProgressView
                     vault={vault}
                     token={token}
+                    role={role}
+                    checklistFocus={progressChecklistFocus}
                     onSaveProgressRecord={saveStudentProgressRecord}
                     onSaveProgressRecords={saveStudentProgressRecords}
                     onDeleteProgressRecord={deleteStudentProgressRecord}

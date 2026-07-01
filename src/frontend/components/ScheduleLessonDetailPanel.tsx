@@ -57,6 +57,7 @@ type ScheduleLessonDetailPanelProps = {
   onGoBackToLessonSource: () => void;
   onGoBackToPreviousLesson: () => void;
   onOpenLesson: (lesson: Lesson) => void;
+  onOpenProgressChecklist?: (lesson: Lesson) => void;
   onSelectDetailMakeupStudentIds: (studentIds: string[]) => void;
   onSelectedCourseChange: (courseId: string) => void;
   onSelectedDateChange: (date: string) => void;
@@ -134,6 +135,7 @@ export function ScheduleLessonDetailPanel({
   onGoBackToLessonSource,
   onGoBackToPreviousLesson,
   onOpenLesson,
+  onOpenProgressChecklist,
   onSelectDetailMakeupStudentIds,
   onSelectedCourseChange,
   onSelectedDateChange,
@@ -456,6 +458,7 @@ export function ScheduleLessonDetailPanel({
             content={selected.content}
             subjectHint={courseSubject(vault, selected.courseGroupId)}
             onChange={onChecklistContentChange}
+            onOpenChecklist={onOpenProgressChecklist ? () => onOpenProgressChecklist(selected) : undefined}
           />
         </CardContent>
       </Card>

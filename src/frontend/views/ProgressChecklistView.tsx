@@ -3,6 +3,7 @@ import {
   BookCheck,
   CalendarDays,
   CheckCheck,
+  Copy,
   ClipboardList,
   ChevronLeft,
   ChevronRight,
@@ -22,7 +23,7 @@ import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { generateAiScheduleDraft, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
-import { formatChecklistItemLine, formatChecklistItemTitle, stripChecklistTitlePrefix } from "@/frontend/lib/progressChecklist";
+import { formatChecklistItemLine, formatChecklistItemTitle, stripChecklistTitlePrefix, type ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
 import { stringValue } from "@/frontend/lib/typeGuards";
 import {
   campusName,
@@ -43,7 +44,8 @@ import type {
   ProgressChecklistTemplateItem,
   Student,
   StudentProgressRecord,
-  TeacherVault
+  TeacherVault,
+  UserRole
 } from "@/shared/types";
 
 type ChecklistCellSelection = {
@@ -51,9 +53,12 @@ type ChecklistCellSelection = {
   itemId: string;
 };
 
+type ChecklistContextRelation = "selected" | "same_day" | "previous" | "next" | "record_only";
+
 type LatestChecklistContext = {
   lesson?: Lesson;
   record?: StudentProgressRecord;
+  relation?: ChecklistContextRelation;
 };
 
 type ChecklistSyncSource = "taught" | "homework";
@@ -72,6 +77,8 @@ const examChecklistPattern = /真题|试卷|中考|高考|模考|联考|统考|�
 export function ProgressChecklistView({
   vault,
   token,
+  role,
+  focusRequest,
   onSaveChecklistTemplate,
   onDeleteChecklistTemplate,
   onSaveChecklistCompletion,
@@ -80,6 +87,8 @@ export function ProgressChecklistView({
 }: {
   vault: TeacherVault;
   token?: string;
+  role: UserRole;
+  focusRequest?: ProgressChecklistFocus | null;
   onSaveChecklistTemplate: (template: ProgressChecklistTemplate) => void;
   onDeleteChecklistTemplate: (templateId: string) => void;
   onSaveChecklistCompletion: (completion: ProgressChecklistCompletion) => void;
@@ -96,6 +105,9 @@ export function ProgressChecklistView({
   const [itemSearch, setItemSearch] = useState("");
   const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false);
   const [selectedCell, setSelectedCell] = useState<ChecklistCellSelection | null>(null);
+  const [targetDate, setTargetDate] = useState(todayIso());
+  const [selectedLessonId, setSelectedLessonId] = useState("");
+  const [showOnlyLessonStudents, setShowOnlyLessonStudents] = useState(true);
   const [selectedCellDate, setSelectedCellDate] = useState(todayIso());
   const [completionNote, setCompletionNote] = useState("");
   const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
@@ -103,8 +115,10 @@ export function ProgressChecklistView({
   const [aiPrompt, setAiPrompt] = useState("请按教材、真题、专题或题型要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。");
   const [aiMessage, setAiMessage] = useState("");
   const [syncMessage, setSyncMessage] = useState("");
+  const [promptCopyMessage, setPromptCopyMessage] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
+  const aiFeatureEnabled = role === "admin" || Boolean(vault.profile.aiSchedulingEnabled);
 
   const courseOptions = useMemo(
     () => sortCoursesByName(vault.courseGroups).filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)),
@@ -131,7 +145,7 @@ export function ProgressChecklistView({
   }, [templates, selectedTemplateId]);
 
   useEffect(() => {
-    if (!token) {
+    if (!token || !aiFeatureEnabled) {
       setAiProviders([]);
       setAiProviderId("");
       return;
@@ -154,7 +168,7 @@ export function ProgressChecklistView({
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, aiFeatureEnabled]);
 
   const selectedCourse = courseOptions.find((course) => course.id === selectedCourseId);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
@@ -174,7 +188,16 @@ export function ProgressChecklistView({
     setTemplateItemsText("");
   }, [selectedTemplate?.id, selectedTemplate?.updatedAt, selectedCourse?.subject]);
 
-  const selectedStudents = useMemo(
+  const targetDateLessons = useMemo(
+    () =>
+      vault.lessons
+        .filter((lesson) => lesson.courseGroupId === selectedCourseId && lesson.date === targetDate && lesson.status !== "cancelled" && lessonStudentIds(lesson).some((studentId) => findStudent(vault, studentId)?.status === "active"))
+        .sort(sortLessons),
+    [vault, selectedCourseId, targetDate]
+  );
+  const selectedLesson = targetDateLessons.find((lesson) => lesson.id === selectedLessonId);
+
+  const courseStudents = useMemo(
     () =>
       (selectedCourse?.studentIds ?? [])
         .map((studentId) => findStudent(vault, studentId))
@@ -182,11 +205,51 @@ export function ProgressChecklistView({
         .sort((a, b) => compareByName(a.name, b.name) || a.id.localeCompare(b.id)),
     [selectedCourse?.id, selectedCourse?.studentIds, vault]
   );
-  const selectedStudentIds = useMemo(() => new Set(selectedStudents.map((student) => student.id)), [selectedStudents]);
-  const latestContextByStudent = useMemo(
-    () => buildLatestChecklistContextMap(vault, selectedCourseId, selectedStudents),
-    [vault, selectedCourseId, selectedStudents]
+  const lessonStudentIdSet = useMemo(
+    () => new Set(selectedLesson ? lessonStudentIds(selectedLesson) : []),
+    [selectedLesson]
   );
+  const lessonStudents = useMemo(
+    () => courseStudents.filter((student) => lessonStudentIdSet.has(student.id)),
+    [courseStudents, lessonStudentIdSet]
+  );
+  const selectedStudents = useMemo(
+    () => selectedLesson && showOnlyLessonStudents ? lessonStudents : courseStudents,
+    [courseStudents, lessonStudents, selectedLesson, showOnlyLessonStudents]
+  );
+  const selectedStudentIds = useMemo(() => new Set(selectedStudents.map((student) => student.id)), [selectedStudents]);
+  const targetContextByStudent = useMemo(
+    () => buildLatestChecklistContextMap(vault, selectedCourseId, selectedStudents, targetDate, selectedLessonId),
+    [vault, selectedCourseId, selectedStudents, targetDate, selectedLessonId]
+  );
+  const selectedCellContextByStudent = useMemo(
+    () => buildLatestChecklistContextMap(vault, selectedCourseId, selectedStudents, selectedCellDate || targetDate, selectedLessonId),
+    [vault, selectedCourseId, selectedStudents, selectedCellDate, targetDate, selectedLessonId]
+  );
+
+  useEffect(() => {
+    if (selectedLessonId && !targetDateLessons.some((lesson) => lesson.id === selectedLessonId)) {
+      setSelectedLessonId("");
+    }
+  }, [targetDateLessons, selectedLessonId]);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    if (focusRequest.courseGroupId) setSelectedCourseId(focusRequest.courseGroupId);
+    if (focusRequest.templateId) setSelectedTemplateId(focusRequest.templateId);
+    if (focusRequest.date) {
+      setTargetDate(focusRequest.date);
+      setSelectedCellDate(focusRequest.date);
+    }
+    if (focusRequest.lessonId) {
+      setSelectedLessonId(focusRequest.lessonId);
+      setShowOnlyLessonStudents(true);
+    }
+    if (focusRequest.studentId && focusRequest.itemId) {
+      setSelectedCell({ studentId: focusRequest.studentId, itemId: focusRequest.itemId });
+    }
+    setSyncMessage("");
+  }, [focusRequest?.nonce]);
 
   const draftTemplateItems = useMemo(
     () => parseTemplateItemsText(templateItemsText),
@@ -248,27 +311,32 @@ export function ProgressChecklistView({
     if (!selectedCell) return;
     if (!selectedStudents.some((student) => student.id === selectedCell.studentId) || !allItems.some((item) => item.id === selectedCell.itemId)) {
       setSelectedCell(null);
-      setSelectedCellDate(todayIso());
+      setSelectedCellDate(targetDate || todayIso());
       setCompletionNote("");
     }
-  }, [selectedCell, selectedStudents, allItems]);
+  }, [selectedCell, selectedStudents, allItems, targetDate]);
 
   const selectedStudent = selectedStudents.find((student) => student.id === selectedCell?.studentId);
   const selectedItem = allItems.find((item) => item.id === selectedCell?.itemId);
   const selectedCompletion = selectedCell ? completionMap.get(checklistCellKey(selectedCell.studentId, selectedCell.itemId)) : undefined;
-  const selectedLatestContext = selectedStudent ? latestContextByStudent.get(selectedStudent.id) : undefined;
+  const selectedLatestContext = selectedStudent ? selectedCellContextByStudent.get(selectedStudent.id) : undefined;
   const selectedLatestLessonChecklist = selectedLatestContext?.lesson ? resolveLessonChecklistLinks(vault, selectedLatestContext.lesson) : null;
+  const targetLessonChecklist = selectedLesson ? resolveLessonChecklistLinks(vault, selectedLesson) : null;
+  const targetLessonLinkedItemSources = useMemo(
+    () => buildLessonLinkedItemSourceMap(targetLessonChecklist),
+    [targetLessonChecklist]
+  );
   const pendingLessonLinkCompletions = useMemo(
     () => selectedCourse && selectedTemplate
-      ? buildLessonLinkedCompletionCandidates(selectedTemplate, selectedStudents, latestContextByStudent, completionMap)
+      ? buildLessonLinkedCompletionCandidates(selectedTemplate, selectedStudents, targetContextByStudent, completionMap, selectedLesson)
       : { taught: [], homework: [] },
-    [selectedCourse?.id, selectedTemplate?.id, selectedTemplate?.updatedAt, selectedStudents, latestContextByStudent, completionMap]
+    [selectedCourse?.id, selectedTemplate?.id, selectedTemplate?.updatedAt, selectedStudents, targetContextByStudent, completionMap, selectedLesson]
   );
 
   useEffect(() => {
-    setSelectedCellDate(selectedCompletion?.completedDate ?? todayIso());
+    setSelectedCellDate(selectedCompletion?.completedDate ?? targetDate);
     setCompletionNote(selectedCompletion?.note ?? "");
-  }, [selectedCompletion?.id, selectedCompletion?.completedDate, selectedCompletion?.note, selectedCell?.studentId, selectedCell?.itemId]);
+  }, [selectedCompletion?.id, selectedCompletion?.completedDate, selectedCompletion?.note, selectedCell?.studentId, selectedCell?.itemId, targetDate]);
 
   const totalPossible = selectedStudents.length * allItems.length;
   const completedCount = completionList.length;
@@ -276,6 +344,16 @@ export function ProgressChecklistView({
   const fullyCompletedStudents = allItems.length === 0
     ? 0
     : selectedStudents.filter((student) => allItems.every((item) => completionMap.has(checklistCellKey(student.id, item.id)))).length;
+  const selectedItemBatchStudents = useMemo(
+    () => selectedItem
+      ? selectedStudents.filter((student) => !completionMap.has(checklistCellKey(student.id, selectedItem.id)))
+      : [],
+    [selectedItem, selectedStudents, completionMap]
+  );
+  const externalAiPromptExample = useMemo(
+    () => buildExternalChecklistPromptExample(aiPrompt, selectedCourse?.name, currentTemplateSubject),
+    [aiPrompt, selectedCourse?.name, currentTemplateSubject]
+  );
 
   function startNewTemplate() {
     setSelectedTemplateId(NEW_TEMPLATE_ID);
@@ -286,7 +364,7 @@ export function ProgressChecklistView({
     setItemSearch("");
     setShowOnlyIncomplete(false);
     setSelectedCell(null);
-    setSelectedCellDate(todayIso());
+    setSelectedCellDate(targetDate || todayIso());
     setCompletionNote("");
     setAiMessage("");
     setSyncMessage("");
@@ -338,14 +416,14 @@ export function ProgressChecklistView({
     if (!selectedCourse || !selectedTemplate || !selectedStudent || !selectedItem) return;
     const now = new Date().toISOString();
     const existing = completionMap.get(checklistCellKey(selectedStudent.id, selectedItem.id));
-    const latestContext = latestContextByStudent.get(selectedStudent.id);
+    const latestContext = selectedCellContextByStudent.get(selectedStudent.id);
     onSaveChecklistCompletion({
       id: existing?.id ?? makeId("progress_completion"),
       templateId: selectedTemplate.id,
       itemId: selectedItem.id,
       studentId: selectedStudent.id,
       courseGroupId: selectedCourse.id,
-      completedDate: selectedCellDate || todayIso(),
+      completedDate: selectedCellDate || targetDate || todayIso(),
       lessonId: existing?.lessonId ?? latestContext?.lesson?.id,
       progressRecordId: existing?.progressRecordId ?? latestContext?.record?.id,
       note: completionNote.trim() || undefined,
@@ -379,7 +457,42 @@ export function ProgressChecklistView({
     setSyncMessage(`已同步 ${candidates.length} 个${sourceLabel}条目。`);
   }
 
+  function saveSelectedItemForCurrentStudents() {
+    if (!selectedCourse || !selectedTemplate || !selectedItem || selectedItemBatchStudents.length === 0) return;
+    const now = new Date().toISOString();
+    const completedDate = selectedCellDate || targetDate || todayIso();
+    onSaveChecklistCompletions(selectedItemBatchStudents.map((student) => {
+      const context = selectedCellContextByStudent.get(student.id);
+      return {
+        id: makeId("progress_completion"),
+        templateId: selectedTemplate.id,
+        itemId: selectedItem.id,
+        studentId: student.id,
+        courseGroupId: selectedCourse.id,
+        completedDate,
+        lessonId: context?.lesson?.id,
+        progressRecordId: context?.record?.id,
+        note: completionNote.trim() || `批量标记：${completedDate}`,
+        updatedAt: now
+      };
+    }));
+    setSyncMessage(`已把当前条目标记给 ${selectedItemBatchStudents.length} 名学生。`);
+  }
+
+  async function copyExternalAiPrompt() {
+    try {
+      await navigator.clipboard.writeText(externalAiPromptExample);
+      setPromptCopyMessage("已复制 prompt");
+    } catch {
+      setPromptCopyMessage("复制失败，请手动选中复制");
+    }
+  }
+
   async function generateAiTemplateDraft() {
+    if (!aiFeatureEnabled) {
+      setAiMessage("前端 AI 已关闭，可复制下方 prompt 到外部 AI 使用。");
+      return;
+    }
     if (!token) {
       setAiMessage("请先登录后再使用 AI 生成模板。");
       return;
@@ -469,7 +582,7 @@ export function ProgressChecklistView({
     setItemSearch("");
     setShowOnlyIncomplete(false);
     setSelectedCell(null);
-    setSelectedCellDate(todayIso());
+    setSelectedCellDate(targetDate || todayIso());
     setCompletionNote("");
     setTemplatePanelOpen(true);
     return Boolean(stringValue(templateObject.name) || itemTitles.length > 0 || stringValue(templateObject.note));
@@ -560,7 +673,7 @@ export function ProgressChecklistView({
                 </div>
               </div>
 
-              {token && (
+              {aiFeatureEnabled ? (
                 <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
                   <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
                     <BookCheck size={16} className="text-[#1557c2]" /> AI 生成模板草稿
@@ -594,6 +707,19 @@ export function ProgressChecklistView({
                       </Badge>
                     )}
                   </div>
+                </div>
+              ) : (
+                <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
+                      <BookCheck size={16} className="text-[#1557c2]" /> 外部 AI prompt
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={copyExternalAiPrompt}>
+                      <Copy size={14} /> 复制
+                    </Button>
+                  </div>
+                  <Textarea value={externalAiPromptExample} readOnly className="min-h-[160px] bg-white text-xs leading-5" />
+                  {promptCopyMessage && <Badge variant={promptCopyMessage.includes("已") ? "sage" : "secondary"} className="mt-3">{promptCopyMessage}</Badge>}
                 </div>
               )}
 
@@ -670,10 +796,10 @@ export function ProgressChecklistView({
               )}
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-bold text-[#25324a]">选择课程</label>
-                  <Select value={selectedCourseId} onChange={(event) => setSelectedCourseId(event.target.value)}>
+                  <Select value={selectedCourseId} onChange={(event) => { setSelectedCourseId(event.target.value); setSelectedLessonId(""); setSyncMessage(""); }}>
                     <option value="">请选择课程</option>
                     {courseOptions.map((course) => (
                       <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
@@ -681,6 +807,28 @@ export function ProgressChecklistView({
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-bold text-[#25324a]">清单日期</label>
+                  <Input
+                    type="date"
+                    value={targetDate}
+                    onChange={(event) => {
+                      setTargetDate(event.target.value);
+                      setSelectedCellDate(event.target.value);
+                      setSelectedLessonId("");
+                      setSyncMessage("");
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-[#25324a]">关联课时</label>
+                  <Select value={selectedLessonId} onChange={(event) => { setSelectedLessonId(event.target.value); setSyncMessage(""); }} disabled={!selectedCourse}>
+                    <option value="">按日期自动匹配</option>
+                    {targetDateLessons.map((lesson) => (
+                      <option key={lesson.id} value={lesson.id}>{lesson.startTime}-{lesson.endTime} · {lessonStudentsLabel(vault, lesson)}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-bold text-[#25324a]">选择模板</label>
                   <Select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
                     <option value="">请选择模板</option>
@@ -690,6 +838,16 @@ export function ProgressChecklistView({
                     ))}
                   </Select>
                 </div>
+                <label className={`flex items-center gap-3 rounded-[12px] border px-3 py-2 text-sm font-bold ${selectedLesson ? "border-[#bfdbfe] bg-[#eff6ff] text-[#1557c2]" : "border-[#e8eef6] bg-[#f8fbff] text-[#94a3b8]"}`}>
+                  <input
+                    type="checkbox"
+                    checked={showOnlyLessonStudents}
+                    onChange={(event) => setShowOnlyLessonStudents(event.target.checked)}
+                    disabled={!selectedLesson}
+                    className="h-4 w-4 accent-[#1557c2]"
+                  />
+                  只看本节学生
+                </label>
               </div>
 
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
@@ -718,7 +876,12 @@ export function ProgressChecklistView({
                   <Badge variant="secondary">{selectedCourse.subject}</Badge>
                   <Badge variant="secondary">{courseTypeLabel(vault, selectedCourse.type)}</Badge>
                   <Badge variant="secondary">{campusName(vault, selectedCourse.defaultCampusId)}</Badge>
-                  <Badge variant="sky">{selectedStudents.length} 人</Badge>
+                  <Badge variant="sky">显示 {selectedStudents.length}/{courseStudents.length} 人</Badge>
+                  {selectedLesson ? (
+                    <Badge variant="plum">选中课时 {selectedLesson.date} {selectedLesson.startTime}-{selectedLesson.endTime}</Badge>
+                  ) : (
+                    <Badge variant="secondary">当天 {targetDateLessons.length} 节课</Badge>
+                  )}
                   <Badge variant="amber">{fullyCompletedStudents} 人已全完成</Badge>
                 </div>
               )}
@@ -732,9 +895,10 @@ export function ProgressChecklistView({
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <div className="flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
-                        <RefreshCw size={16} className="text-[#1557c2]" /> 最近课时同步
+                        <RefreshCw size={16} className="text-[#1557c2]" /> 课时关联同步
                       </div>
                       <div className="mt-1 flex flex-wrap gap-2">
+                        <Badge variant={selectedLesson ? "plum" : "secondary"}>{selectedLesson ? `本节 ${selectedLesson.startTime}-${selectedLesson.endTime}` : "按日期就近匹配"}</Badge>
                         <Badge variant="sky">课堂待同步 {pendingLessonLinkCompletions.taught.length}</Badge>
                         <Badge variant="amber">作业待同步 {pendingLessonLinkCompletions.homework.length}</Badge>
                         {syncMessage && <Badge variant="sage">{syncMessage}</Badge>}
@@ -742,10 +906,10 @@ export function ProgressChecklistView({
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <Button type="button" variant="outline" disabled={pendingLessonLinkCompletions.taught.length === 0} onClick={() => syncLessonLinkedCompletions("taught")}>
-                        <RefreshCw size={15} /> 同步课堂关联
+                        <RefreshCw size={15} /> 同步本节课堂
                       </Button>
                       <Button type="button" variant="outline" disabled={pendingLessonLinkCompletions.homework.length === 0} onClick={() => syncLessonLinkedCompletions("homework")}>
-                        <RefreshCw size={15} /> 同步作业关联
+                        <RefreshCw size={15} /> 同步本节作业
                       </Button>
                     </div>
                   </div>
@@ -783,12 +947,22 @@ export function ProgressChecklistView({
                           <th className="sticky top-0 z-30 min-w-[210px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 text-xs font-extrabold text-[#25324a] md:left-0">
                             学生
                           </th>
-                          {visibleItems.map((item) => (
-                            <th key={item.id} className="sticky top-0 z-20 min-w-[150px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
-                              {item.chapter && <div className="mb-1 text-[10px] font-bold text-[#5161d6]">{item.chapter}</div>}
-                              <div className="max-h-[3.75rem] overflow-hidden leading-5">{formatChecklistItemTitle(item, allItems)}</div>
-                            </th>
-                          ))}
+                          {visibleItems.map((item) => {
+                            const linkSources = targetLessonLinkedItemSources.get(item.id) ?? [];
+                            return (
+                              <th key={item.id} className="sticky top-0 z-20 min-w-[150px] border-b border-r border-[#dbe4ef] bg-[#f8fbff] p-3 align-top text-xs font-extrabold text-[#25324a]">
+                                {item.chapter && <div className="mb-1 text-[10px] font-bold text-[#5161d6]">{item.chapter}</div>}
+                                <div className="max-h-[3.75rem] overflow-hidden leading-5">{formatChecklistItemTitle(item, allItems)}</div>
+                                {linkSources.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {linkSources.map((source) => (
+                                      <Badge key={source} variant={source === "taught" ? "sky" : "amber"} className="text-[10px]">{source === "taught" ? "本节内容" : "本节作业"}</Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
@@ -803,6 +977,7 @@ export function ProgressChecklistView({
                             {visibleItems.map((item) => {
                               const completion = completionMap.get(checklistCellKey(student.id, item.id));
                               const active = selectedCell?.studentId === student.id && selectedCell.itemId === item.id;
+                              const linkSources = targetLessonLinkedItemSources.get(item.id) ?? [];
                               return (
                                 <td key={`${student.id}-${item.id}`} className="border-b border-r border-[#dbe4ef] p-2 align-top">
                                   <button
@@ -827,7 +1002,12 @@ export function ProgressChecklistView({
                                         )}
                                       </>
                                     ) : (
-                                      <div className="text-xs font-bold text-[#94a3b8]">待完成</div>
+                                      <>
+                                        <div className="text-xs font-bold text-[#94a3b8]">待完成</div>
+                                        {linkSources.length > 0 && (
+                                          <div className="mt-1 text-[10px] font-extrabold text-[#1557c2]">本节已关联</div>
+                                        )}
+                                      </>
                                     )}
                                   </button>
                                 </td>
@@ -883,9 +1063,12 @@ export function ProgressChecklistView({
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <Button type="button" onClick={saveSelectedCompletion}>
                         <Save size={15} /> {selectedCompletion ? "保存日期" : "标记完成"}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={saveSelectedItemForCurrentStudents} disabled={selectedItemBatchStudents.length === 0}>
+                        <CheckCheck size={15} /> 批量标记 {selectedItemBatchStudents.length || ""}
                       </Button>
                       <Button type="button" variant="destructive" onClick={clearSelectedCompletion} disabled={!selectedCompletion}>
                         <Trash2 size={15} /> 清除勾选
@@ -893,31 +1076,31 @@ export function ProgressChecklistView({
                     </div>
 
                     <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-                      <div className="mb-2 text-sm font-extrabold text-[#25324a]">依托现有每日记录</div>
+                      <div className="mb-2 text-sm font-extrabold text-[#25324a]">依托选中日期/课时记录</div>
                       <div className="space-y-2 text-sm text-[#475569]">
                         <div>
-                          最近课时：
+                          匹配课时：
                           <span className="font-semibold text-[#061226]">
                             {selectedLatestContext?.lesson
-                              ? `${selectedLatestContext.lesson.date} ${selectedLatestContext.lesson.startTime}-${selectedLatestContext.lesson.endTime}`
+                              ? `${checklistContextRelationLabel(selectedLatestContext.relation)} ${selectedLatestContext.lesson.date} ${selectedLatestContext.lesson.startTime}-${selectedLatestContext.lesson.endTime}`
                               : " 暂无"}
                           </span>
                         </div>
                         <div>
-                          最近进度：
+                          匹配进度：
                           <span className="font-semibold text-[#061226]">
                             {selectedLatestContext?.record?.progressText?.trim() || " 暂无记录"}
                           </span>
                         </div>
 
                         <div>
-                          最近课堂关联：
+                          匹配课堂关联：
                           <span className="font-semibold text-[#061226]">
                             {formatLessonChecklistSummary(selectedLatestLessonChecklist?.taughtItems, selectedLatestLessonChecklist?.template?.items)}
                           </span>
                         </div>
                         <div>
-                          最近作业关联：
+                          匹配作业关联：
                           <span className="font-semibold text-[#061226]">
                             {formatLessonChecklistSummary(selectedLatestLessonChecklist?.homeworkItems, selectedLatestLessonChecklist?.template?.items)}
                           </span>
@@ -925,7 +1108,7 @@ export function ProgressChecklistView({
                       </div>
                       {selectedItem && isSelectedItemLinkedToLesson(selectedItem.id, selectedLatestLessonChecklist) && (
                         <Badge variant="sky" className="mt-3">
-                          最近课时已关联当前清单条目
+                          匹配课时已关联当前清单条目
                         </Badge>
                       )}
                     </div>
@@ -1041,27 +1224,41 @@ function formatLessonChecklistSummary(
   return ` ${items.map((item) => formatChecklistItemLine(item, orderedItems ?? items)).join("、")}`;
 }
 
+function buildLessonLinkedItemSourceMap(
+  lessonChecklist: {
+    taughtItems: ProgressChecklistTemplateItem[];
+    homeworkItems: ProgressChecklistTemplateItem[];
+  } | null
+): Map<string, ChecklistSyncSource[]> {
+  const result = new Map<string, ChecklistSyncSource[]>();
+  lessonChecklist?.taughtItems.forEach((item) => result.set(item.id, [...(result.get(item.id) ?? []), "taught"]));
+  lessonChecklist?.homeworkItems.forEach((item) => result.set(item.id, [...(result.get(item.id) ?? []), "homework"]));
+  return result;
+}
+
 function buildLessonLinkedCompletionCandidates(
   template: ProgressChecklistTemplate,
   students: Student[],
-  latestContextByStudent: Map<string, LatestChecklistContext>,
-  completionMap: Map<string, ProgressChecklistCompletion>
+  contextByStudent: Map<string, LatestChecklistContext>,
+  completionMap: Map<string, ProgressChecklistCompletion>,
+  selectedLesson?: Lesson
 ): Record<ChecklistSyncSource, ChecklistSyncCandidate[]> {
   const itemMap = new Map(template.items.map((item) => [item.id, item]));
   const result: Record<ChecklistSyncSource, ChecklistSyncCandidate[]> = { taught: [], homework: [] };
   const seen = new Set<string>();
+  const selectedLessonStudentIds = new Set(selectedLesson ? lessonStudentIds(selectedLesson) : []);
   students.forEach((student) => {
-    const context = latestContextByStudent.get(student.id);
-    const lesson = context?.lesson;
+    if (selectedLesson && !selectedLessonStudentIds.has(student.id)) return;
+    const context = contextByStudent.get(student.id);
+    const lesson = selectedLesson ?? context?.lesson;
     if (!lesson || lesson.content.checklistTemplateId !== template.id) return;
     (["taught", "homework"] as const).forEach((source) => {
       const itemIds = source === "taught" ? lesson.content.taughtChecklistItemIds ?? [] : lesson.content.homeworkChecklistItemIds ?? [];
       itemIds.forEach((itemId) => {
         const item = itemMap.get(itemId);
         const key = checklistCellKey(student.id, itemId);
-        const seenKey = `${source}::${key}`;
-        if (!item || completionMap.has(key) || seen.has(seenKey)) return;
-        seen.add(seenKey);
+        if (!item || completionMap.has(key) || seen.has(key)) return;
+        seen.add(key);
         result[source].push({ student, item, lesson, record: context?.record, source });
       });
     });
@@ -1083,10 +1280,13 @@ function isSelectedItemLinkedToLesson(
 function buildLatestChecklistContextMap(
   vault: TeacherVault,
   courseGroupId: string,
-  students: Student[]
+  students: Student[],
+  anchorDate: string,
+  preferredLessonId?: string
 ): Map<string, LatestChecklistContext> {
   const map = new Map<string, LatestChecklistContext>();
   if (!courseGroupId) return map;
+  const date = anchorDate || todayIso();
 
   students.forEach((student) => {
     const lessons = vault.lessons
@@ -1095,13 +1295,92 @@ function buildLatestChecklistContextMap(
     const records = (vault.studentProgressRecords ?? [])
       .filter((record) => record.courseGroupId === courseGroupId && record.studentId === student.id)
       .sort((a, b) => `${a.date} ${a.updatedAt}`.localeCompare(`${b.date} ${b.updatedAt}`));
+    const preferredLesson = preferredLessonId ? lessons.find((lesson) => lesson.id === preferredLessonId) : undefined;
+    const sameDayLesson = lessons.filter((lesson) => lesson.date === date).at(-1);
+    const lesson = preferredLesson ?? sameDayLesson ?? nearestLessonToDate(lessons, date);
+    const lessonRecord = lesson ? records.filter((record) => record.lessonId === lesson.id).at(-1) : undefined;
+    const sameDayRecord = records.filter((record) => record.date === date).at(-1);
+    const record = lessonRecord ?? sameDayRecord ?? nearestRecordToDate(records, date);
     map.set(student.id, {
-      lesson: lessons.at(-1),
-      record: records.at(-1)
+      lesson,
+      record,
+      relation: lesson ? checklistContextRelation(lesson, date, preferredLesson?.id) : record ? "record_only" : undefined
     });
   });
 
   return map;
+}
+
+function nearestLessonToDate(lessons: Lesson[], anchorDate: string): Lesson | undefined {
+  if (lessons.length === 0) return undefined;
+  const anchorTime = Date.parse(`${anchorDate}T12:00:00`);
+  return lessons
+    .slice()
+    .sort((a, b) => {
+      const diffA = Math.abs(lessonTimeValue(a) - anchorTime);
+      const diffB = Math.abs(lessonTimeValue(b) - anchorTime);
+      if (diffA !== diffB) return diffA - diffB;
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      return `${b.startTime} ${b.endTime}`.localeCompare(`${a.startTime} ${a.endTime}`);
+    })[0];
+}
+
+function nearestRecordToDate(records: StudentProgressRecord[], anchorDate: string): StudentProgressRecord | undefined {
+  if (records.length === 0) return undefined;
+  const anchorTime = Date.parse(`${anchorDate}T12:00:00`);
+  return records
+    .slice()
+    .sort((a, b) => {
+      const diffA = Math.abs(Date.parse(`${a.date}T12:00:00`) - anchorTime);
+      const diffB = Math.abs(Date.parse(`${b.date}T12:00:00`) - anchorTime);
+      if (diffA !== diffB) return diffA - diffB;
+      return `${b.date} ${b.updatedAt}`.localeCompare(`${a.date} ${a.updatedAt}`);
+    })[0];
+}
+
+function lessonTimeValue(lesson: Lesson): number {
+  const parsed = Date.parse(`${lesson.date}T${lesson.startTime || "00:00"}:00`);
+  return Number.isFinite(parsed) ? parsed : Date.parse(`${lesson.date}T12:00:00`);
+}
+
+function checklistContextRelation(lesson: Lesson, anchorDate: string, preferredLessonId?: string): ChecklistContextRelation {
+  if (preferredLessonId && lesson.id === preferredLessonId) return "selected";
+  if (lesson.date === anchorDate) return "same_day";
+  return lesson.date < anchorDate ? "previous" : "next";
+}
+
+function checklistContextRelationLabel(relation: ChecklistContextRelation | undefined): string {
+  if (relation === "selected") return "选中课时";
+  if (relation === "same_day") return "当天课时";
+  if (relation === "previous") return "前一课时";
+  if (relation === "next") return "后一课时";
+  if (relation === "record_only") return "仅有记录";
+  return "匹配课时";
+}
+
+function lessonStudentsLabel(vault: TeacherVault, lesson: Lesson): string {
+  const names = lessonStudentIds(lesson)
+    .map((studentId) => findStudent(vault, studentId))
+    .filter((student): student is Student => Boolean(student && student.status === "active"))
+    .map((student) => student.name);
+  if (names.length === 0) return "无学生";
+  if (names.length <= 2) return names.join("、");
+  return `${names.slice(0, 2).join("、")}等${names.length}人`;
+}
+
+function buildExternalChecklistPromptExample(prompt: string, courseName?: string, subject?: string): string {
+  const normalizedPrompt = prompt.trim() || "请按教材、真题、专题或题型要求生成一套可逐项勾选的学习清单模板。";
+  return [
+    "请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。",
+    courseName ? `课程：${courseName}` : "课程：请按我的描述判断",
+    subject ? `科目：${subject}` : "科目：请按我的描述判断",
+    "生成要求：",
+    normalizedPrompt,
+    "输出要求：只输出清单正文；每行一个条目；有分组时使用“分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。",
+    "示例：",
+    "第一章 整式｜整式乘法",
+    "第一章 整式｜平方差公式"
+  ].join("\n");
 }
 
 function buildChecklistAiInstruction(prompt: string): string {

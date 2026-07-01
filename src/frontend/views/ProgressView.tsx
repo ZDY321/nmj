@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { getCourse, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
+import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
 import {
   campusName,
   compareByName,
@@ -54,7 +55,8 @@ import type {
   StudentHomeworkStatus,
   StudentProgressRecord,
   StudentProgressStatus,
-  TeacherVault
+  TeacherVault,
+  UserRole
 } from "@/shared/types";
 
 type HomeworkFilter = "all" | StudentHomeworkStatus;
@@ -146,6 +148,8 @@ const emptyDraft: ProgressDraft = {
 export function ProgressView({
   vault,
   token,
+  role,
+  checklistFocus,
   onSaveProgressRecord,
   onSaveProgressRecords,
   onDeleteProgressRecord,
@@ -158,6 +162,8 @@ export function ProgressView({
 }: {
   vault: TeacherVault;
   token?: string;
+  role: UserRole;
+  checklistFocus?: ProgressChecklistFocus | null;
   onSaveProgressRecord: (record: StudentProgressRecord) => void;
   onSaveProgressRecords: (records: StudentProgressRecord[]) => void;
   onDeleteProgressRecord: (recordId: string) => void;
@@ -187,6 +193,10 @@ export function ProgressView({
   const [draft, setDraft] = useState<ProgressDraft>(emptyDraft);
   const [sectionView, setSectionView] = useState<ProgressSectionView>("ledger");
   const { confirm, dialog } = useConfirmDialog();
+
+  useEffect(() => {
+    if (checklistFocus) setSectionView("checklist");
+  }, [checklistFocus?.nonce]);
 
   const progressRecords = vault.studentProgressRecords ?? [];
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))).sort(compareByName);
@@ -406,6 +416,8 @@ export function ProgressView({
         <ProgressChecklistView
           vault={vault}
           token={token}
+          role={role}
+          focusRequest={checklistFocus}
           onSaveChecklistTemplate={onSaveChecklistTemplate}
           onDeleteChecklistTemplate={onDeleteChecklistTemplate}
           onSaveChecklistCompletion={onSaveChecklistCompletion}

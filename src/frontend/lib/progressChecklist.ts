@@ -1,5 +1,15 @@
 import type { ProgressChecklistTemplateItem } from "@/shared/types";
 
+export type ProgressChecklistFocus = {
+  courseGroupId?: string;
+  templateId?: string;
+  lessonId?: string;
+  date?: string;
+  studentId?: string;
+  itemId?: string;
+  nonce: number;
+};
+
 const CHINESE_NUMBER_VALUES: Record<string, number> = {
   "零": 0,
   "〇": 0,
