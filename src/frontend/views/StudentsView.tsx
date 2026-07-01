@@ -1164,6 +1164,15 @@ export function StudentsView({
     flashArchiveRow("students", student.id);
   }
 
+  function updateStudentStatusFromRow(student: Student, status: Student["status"]) {
+    if (student.status === status) return;
+    if (status !== "active") {
+      setCourseStudentIds((current) => current.filter((studentId) => studentId !== student.id));
+    }
+    onUpdateStudent({ ...student, status });
+    flashArchiveRow("students", student.id);
+  }
+
   function toggleStudentSelection(studentId: string) {
     setSelectedStudentIds((current) =>
       current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]
@@ -1184,7 +1193,7 @@ export function StudentsView({
     if (selectedStudents.length === 0) return;
     const apply = () => {
       const selectedIdSet = new Set(selectedStudents.map((student) => student.id));
-      if (status === "paused") {
+      if (status !== "active") {
         setCourseStudentIds((current) => current.filter((studentId) => !selectedIdSet.has(studentId)));
       }
       onUpdateStudents(selectedStudents.map((student) => ({ ...student, status })));
@@ -1588,6 +1597,7 @@ export function StudentsView({
             onOpenStudentEditor={openStudentEditor}
             onRequestArchiveStudent={requestArchiveStudent}
             onRestoreStudent={restoreStudent}
+            onUpdateStudentStatus={updateStudentStatusFromRow}
             setArchiveSearch={setArchiveSearch}
             setCustomGradeInput={setCustomGradeInput}
             setGradeFilter={setGradeFilter}

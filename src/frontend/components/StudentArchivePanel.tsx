@@ -1,6 +1,6 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { Archive, FileText, MapPin, Pencil, Plus, RotateCcw, Search, Trash2, Users } from "lucide-react";
+import { Archive, FileText, Hourglass, MapPin, Pencil, Plus, RotateCcw, Search, Trash2, UserCheck, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +41,7 @@ type StudentArchivePanelProps = {
   onOpenStudentEditor: (student: Student) => void;
   onRequestArchiveStudent: (student: Student) => void;
   onRestoreStudent: (student: Student) => void;
+  onUpdateStudentStatus: (student: Student, status: Student["status"]) => void;
   onToggleStudentSelection: (studentId: string) => void;
   onToggleVisibleStudentSelection: (checked: boolean) => void;
   onUpdateSelectedStudentsStatus: (status: Student["status"]) => void;
@@ -92,6 +93,7 @@ export function StudentArchivePanel({
   onOpenStudentEditor,
   onRequestArchiveStudent,
   onRestoreStudent,
+  onUpdateStudentStatus,
   onToggleStudentSelection,
   onToggleVisibleStudentSelection,
   onUpdateSelectedStudentsStatus,
@@ -301,6 +303,38 @@ export function StudentArchivePanel({
                     <Badge variant={studentStatusBadgeVariant(student.status)}>
                       {studentStatusLabel(student.status)}
                     </Badge>
+                    {student.status === "active" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 w-8 rounded-[9px] border-[#c7d2fe] bg-[#eef0ff] p-0 text-[#5161d6] hover:bg-[#e0e7ff] hover:text-[#4338ca]"
+                        title="设为过渡期"
+                        aria-label={`设为过渡期 ${student.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onUpdateStudentStatus(student, "transition");
+                        }}
+                      >
+                        <Hourglass size={13} />
+                      </Button>
+                    )}
+                    {student.status === "transition" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 w-8 rounded-[9px] border-[#bbf7d0] bg-[#f0fdf4] p-0 text-[#166534] hover:bg-[#dcfce7] hover:text-[#14532d]"
+                        title="设为在读"
+                        aria-label={`设为在读 ${student.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onUpdateStudentStatus(student, "active");
+                        }}
+                      >
+                        <UserCheck size={13} />
+                      </Button>
+                    )}
                     {archived ? (
                       <Button
                         type="button"

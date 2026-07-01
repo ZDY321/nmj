@@ -104,14 +104,27 @@ export function CourseArchiveListPanel({
             <CardTitle className="text-lg">课程档案列表</CardTitle>
             <CardDescription>筛选和数量只作用于下方已添加课程。</CardDescription>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="w-fit">
-              {visibleCourses.length} / {vault.courseGroups.length} 个
-              {courseStatusFilter !== "all" ? ` · ${courseStatusFilter === "active" ? "启用" : "暂停"}` : ""}
-            </Badge>
-            <Button type="button" size="sm" variant="outline" className="h-8 bg-[#f8fbff]" onClick={onRequestSyncVisibleCourses} disabled={visibleCourses.length === 0}>
-              <RefreshCw size={14} /> 同步当前筛选课程
-            </Button>
+          <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <Badge variant="secondary" className="w-fit">
+                {visibleCourses.length} / {vault.courseGroups.length} 个
+                {courseStatusFilter !== "all" ? ` · ${courseStatusFilter === "active" ? "启用" : "暂停"}` : ""}
+              </Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 border-[#1557c2] bg-[#1557c2] text-white shadow-sm hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white disabled:border-[#bfdbfe] disabled:bg-[#dbeafe] disabled:text-[#64748b]"
+                title="课程档案变更后，刷新当前筛选课程的未来待上课课节快照"
+                onClick={onRequestSyncVisibleCourses}
+                disabled={visibleCourses.length === 0}
+              >
+                <RefreshCw size={14} /> 同步当前筛选课程
+              </Button>
+            </div>
+            <div className="max-w-[420px] rounded-[10px] border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2 text-xs font-semibold leading-5 text-[#1557c2] sm:text-right">
+              修改课程档案的班型、校区、学生名单或金额后，用它刷新当前筛选课程的未来待上课课节；历史和已完成课节不会改。
+            </div>
           </div>
         </div>
       </CardHeader>
