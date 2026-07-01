@@ -217,10 +217,8 @@ export function ProgressView({
         ...row.students.flatMap((student) => [student.name, student.grade ?? "", student.school ?? ""]),
         row.latestLesson?.content.taught ?? "",
         row.latestLesson?.content.homework ?? "",
-        row.latestLesson?.content.nextLessonReminder ?? "",
         row.displayRecord?.progressText ?? "",
         row.displayRecord?.homeworkText ?? "",
-        row.displayRecord?.nextPlan ?? "",
         row.displayRecord?.note ?? ""
       ].join(" ").toLowerCase();
       const matchesQuery =
@@ -335,7 +333,7 @@ export function ProgressView({
       date: selectedLesson.date,
       progressText: draft.progressText.trim(),
       homeworkText: draft.homeworkText.trim(),
-      nextPlan: draft.nextPlan.trim(),
+      nextPlan: "",
       progressStatus: draft.progressStatus,
       homeworkStatus: draft.homeworkStatus,
       note: draft.note.trim() || undefined,
@@ -360,7 +358,7 @@ export function ProgressView({
         date: selectedLesson.date,
         progressText: draft.progressText.trim(),
         homeworkText: draft.homeworkText.trim(),
-        nextPlan: draft.nextPlan.trim(),
+        nextPlan: "",
         progressStatus: draft.progressStatus,
         homeworkStatus: draft.homeworkStatus,
         note: draft.note.trim() || undefined,
@@ -390,7 +388,7 @@ export function ProgressView({
       ...current,
       progressText: selectedLesson.content.taught,
       homeworkText: selectedLesson.content.homework,
-      nextPlan: selectedLesson.content.nextLessonReminder,
+      nextPlan: "",
       homeworkStatus: selectedLesson.content.homework.trim() ? current.homeworkStatus === "unassigned" ? "assigned" : current.homeworkStatus : "unassigned"
     }));
   }
@@ -539,7 +537,7 @@ export function ProgressView({
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle>进度与作业台账</CardTitle>
-              <CardDescription className="mt-1">行是课程，列是上课日期；点击课节后查看本节学生、共同内容、作业和下次提醒。</CardDescription>
+              <CardDescription className="mt-1">行是课程，列是上课日期；点击课节后查看本节学生、共同内容和作业。</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary" className="w-fit">{visibleRows.length} 组</Badge>
@@ -668,7 +666,6 @@ export function ProgressView({
                                     {cell.needsRecord && <Badge variant="amber" className="text-[10px]">未整理</Badge>}
                                     {cell.studentCount > 1 && <Badge variant="secondary" className="text-[10px]">{cell.studentCount}人</Badge>}
                                     {cell.hasDifferences && <Badge variant="destructive" className="text-[10px]">有差异</Badge>}
-                                    {cell.nextPlan && <Badge variant="sky" className="text-[10px]">下次</Badge>}
                                     {cell.note && <Badge variant="plum" className="text-[10px]">备注</Badge>}
                                   </div>
                                   <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -680,10 +677,7 @@ export function ProgressView({
                                     <div className="mt-0.5 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
                                       {cell.homeworkText || "未布置"}
                                     </div>
-                                    <div className="mt-2 text-[11px] font-extrabold text-[#5161d6]">下次</div>
-                                    <div className="mt-0.5 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#25324a]">
-                                      {cell.nextPlan || "未填写"}
-                                    </div>
+
                                   </div>
                                 </button>
                               ) : (
@@ -777,12 +771,7 @@ export function ProgressView({
                       tone="orange"
                       value={selectedLesson.content.homework}
                     />
-                    <ReadonlyBlock
-                      icon={<CalendarDays size={15} />}
-                      title="下节提醒"
-                      tone="purple"
-                      value={selectedLesson.content.nextLessonReminder}
-                    />
+
                   </div>
                 </div>
 
@@ -861,14 +850,6 @@ export function ProgressView({
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-[#5161d6]">下次处理</label>
-                  <Textarea
-                    value={draft.nextPlan}
-                    onChange={(event) => setDraft((current) => ({ ...current, nextPlan: event.target.value }))}
-                    placeholder="例如：下节课前 10 分钟先检查错题，再进入新内容"
-                  />
-                </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-[#7c3aed]">备注</label>
@@ -990,7 +971,7 @@ function recordToDraft(record: StudentProgressRecord | undefined, lesson: Lesson
   return {
     progressText: textOrFallback(record?.progressText, lesson.content.taught),
     homeworkText: textOrFallback(record?.homeworkText, lesson.content.homework),
-    nextPlan: textOrFallback(record?.nextPlan, lesson.content.nextLessonReminder),
+    nextPlan: "",
     progressStatus: record?.progressStatus ?? inferProgressStatus(lesson),
     homeworkStatus: record?.homeworkStatus ?? inferHomeworkStatus(lesson),
     note: record?.note ?? ""
@@ -1050,7 +1031,7 @@ function progressCellForDate(vault: TeacherVault, row: ProgressRow, date: string
     isCancelled: lesson?.status === "cancelled",
     progressText: lesson ? textOrFallback(lesson.content.taught, record?.progressText ?? "") : record?.progressText ?? "",
     homeworkText: lesson ? textOrFallback(lesson.content.homework, record?.homeworkText ?? "") : record?.homeworkText ?? "",
-    nextPlan: lesson ? textOrFallback(lesson.content.nextLessonReminder, record?.nextPlan ?? "") : record?.nextPlan ?? "",
+    nextPlan: "",
     note: lesson?.status === "cancelled" ? (lesson.note?.trim() || record?.note || "") : record?.note ?? "",
     progressStatus: aggregateProgressStatus(lessonRecords, lesson),
     homeworkStatus: aggregateHomeworkStatus(lessonRecords, lesson),
@@ -1062,7 +1043,7 @@ function recordsHaveDifferences(records: StudentProgressRecord[]): boolean {
   const signatures = records.map((record) => [
     record.progressText,
     record.homeworkText,
-    record.nextPlan,
+
     record.progressStatus,
     record.homeworkStatus,
     record.note ?? ""
@@ -1098,7 +1079,7 @@ function lessonHasStudentDifferences(vault: TeacherVault, lesson: Lesson): boole
     return [
       record?.progressText ?? lesson.content.taught,
       record?.homeworkText ?? lesson.content.homework,
-      record?.nextPlan ?? lesson.content.nextLessonReminder,
+
       record?.progressStatus ?? inferProgressStatus(lesson),
       record?.homeworkStatus ?? inferHomeworkStatus(lesson),
       record?.note ?? ""
@@ -1232,8 +1213,6 @@ function inferHomeworkStatus(lesson?: Lesson): StudentHomeworkStatus {
 function needsFollowUp(row: ProgressRow): boolean {
   if (!row.latestLesson && !row.displayRecord) return false;
   return (
-    row.needsLatestRecord ||
-    row.progressStatus === "on_track" ||
     row.progressStatus === "review_needed" ||
     row.progressStatus === "behind" ||
     row.homeworkStatus === "assigned" ||

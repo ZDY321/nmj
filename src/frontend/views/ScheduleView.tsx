@@ -542,6 +542,9 @@ export function ScheduleView({
   }).length;
   const selected = vault.lessons.find((lesson) => lesson.id === selectedId) ?? lessons[0];
   const selectedCourse = selected ? getCourse(vault, selected.courseGroupId) : undefined;
+  const detailCourseGroupOptions = selectedCourse && !courseSelectionOptions.some((course) => course.id === selectedCourse.id)
+    ? [selectedCourse, ...courseSelectionOptions]
+    : courseSelectionOptions;
   const selectedOriginalLesson = selected?.linkedOriginalLessonId
     ? vault.lessons.find((lesson) => lesson.id === selected.linkedOriginalLessonId)
     : undefined;
@@ -2213,7 +2216,7 @@ export function ScheduleView({
             attendanceStudentFilter={attendanceStudentFilter}
             availableTrialStudentOptionCount={availableTrialStudentOptionCount}
             campusOptions={campusOptions}
-            courseGroupOptions={courseGroupOptions}
+            courseGroupOptions={detailCourseGroupOptions}
             dateWithWeekday={dateWithWeekday}
             displayedTemporaryStudentOptions={displayedTemporaryStudentOptions}
             getDefaultTemporaryFeeForEntry={defaultTemporaryFeeForEntry}

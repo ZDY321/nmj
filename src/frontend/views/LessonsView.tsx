@@ -16,6 +16,7 @@ import {
   attendanceLabels,
   addDays,
   compareByName,
+  courseHasActiveStudent,
   courseName,
   courseSubject,
   courseTypeOptionsForVault,
@@ -43,7 +44,7 @@ function LessonForm({
   vault: TeacherVault;
   onAddLesson: (lesson: Lesson) => void;
 }) {
-  const courseOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active"));
+  const courseOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
   const courseOptionIds = courseOptions.map((course) => course.id).join("|");
   const [date, setDate] = useState(todayIso());
   const [courseGroupId, setCourseGroupId] = useState(courseOptions[0]?.id ?? "");
@@ -64,7 +65,7 @@ function LessonForm({
   function submit(event: FormEvent) {
     event.preventDefault();
     const course = getCourse(vault, courseGroupId);
-    if (!course || course.status !== "active") return;
+    if (!course || course.status !== "active" || !courseHasActiveStudent(vault, course)) return;
     onAddLesson(
       createLessonFromCourse(vault, course, {
         date,
