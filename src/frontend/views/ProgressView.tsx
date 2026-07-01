@@ -28,6 +28,7 @@ import { makeId } from "@/frontend/lib/crypto";
 import {
   campusName,
   compareByName,
+  courseHasActiveStudent,
   courseSubject,
   courseTypeLabel,
   findStudent,
@@ -186,7 +187,6 @@ export function ProgressView({
   const { confirm, dialog } = useConfirmDialog();
 
   const progressRecords = vault.studentProgressRecords ?? [];
-  const courseOptions = sortCoursesByName(vault.courseGroups);
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))).sort(compareByName);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const subjectOptions = subjectOptionsForVault(vault);
@@ -198,12 +198,9 @@ export function ProgressView({
     [vault]
   );
 
-  const scopedRows = rows.filter((row) => {
-    if (studentStatusScope === "all") return true;
-    return studentStatusScope === "archived"
-      ? row.students.some((student) => student.status === "paused")
-      : row.students.some((student) => student.status !== "paused");
-  });
+  const scopedRows = rows.filter((row) => rowMatchesStudentStatusScope(vault, row, studentStatusScope));
+  const courseOptions = sortCoursesByName(uniqueCoursesFromRows(scopedRows));
+  const courseOptionIds = courseOptions.map((course) => course.id).join("|");
 
   const visibleRows = scopedRows
     .filter((row) => {
@@ -292,6 +289,12 @@ export function ProgressView({
       </CardContent>
     </Card>
   );
+
+  useEffect(() => {
+    setCourseFilter((current) =>
+      current === "all" || courseOptions.some((course) => course.id === current) ? current : "all"
+    );
+  }, [courseOptionIds]);
 
   useEffect(() => {
     if (!selectedRow) {
@@ -911,6 +914,20 @@ function ReadonlyBlock({
       </div>
     </div>
   );
+}
+
+function uniqueCoursesFromRows(rows: ProgressRow[]): CourseGroup[] {
+  const courses = new Map<string, CourseGroup>();
+  rows.forEach((row) => courses.set(row.course.id, row.course));
+  return Array.from(courses.values());
+}
+
+function rowMatchesStudentStatusScope(vault: TeacherVault, row: ProgressRow, scope: StudentStatusScope): boolean {
+  if (scope === "all") return true;
+  if (scope === "archived") {
+    return row.course.status === "paused" || row.students.some((student) => student.status === "paused");
+  }
+  return row.course.status === "active" && courseHasActiveStudent(vault, row.course);
 }
 
 function buildProgressRows(vault: TeacherVault): ProgressRow[] {
