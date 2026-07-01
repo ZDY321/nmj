@@ -152,6 +152,7 @@ export function ProgressView({
   onSaveChecklistTemplate,
   onDeleteChecklistTemplate,
   onSaveChecklistCompletion,
+  onSaveChecklistCompletions,
   onDeleteChecklistCompletion,
   onOpenLessonInRecords
 }: {
@@ -163,6 +164,7 @@ export function ProgressView({
   onSaveChecklistTemplate: (template: ProgressChecklistTemplate) => void;
   onDeleteChecklistTemplate: (templateId: string) => void;
   onSaveChecklistCompletion: (completion: ProgressChecklistCompletion) => void;
+  onSaveChecklistCompletions: (completions: ProgressChecklistCompletion[]) => void;
   onDeleteChecklistCompletion: (completionId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
@@ -407,6 +409,7 @@ export function ProgressView({
           onSaveChecklistTemplate={onSaveChecklistTemplate}
           onDeleteChecklistTemplate={onDeleteChecklistTemplate}
           onSaveChecklistCompletion={onSaveChecklistCompletion}
+          onSaveChecklistCompletions={onSaveChecklistCompletions}
           onDeleteChecklistCompletion={onDeleteChecklistCompletion}
         />
       </div>

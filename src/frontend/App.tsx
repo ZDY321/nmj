@@ -994,12 +994,17 @@ export function App() {
   }
 
   function saveProgressChecklistCompletion(completion: ProgressChecklistCompletion) {
+    saveProgressChecklistCompletions([completion]);
+  }
+
+  function saveProgressChecklistCompletions(completionsToSave: ProgressChecklistCompletion[]) {
+    if (completionsToSave.length === 0) return;
     updateVault((draft) => {
-      const completions = draft.progressChecklistCompletions ?? [];
-      const exists = completions.some((item) => item.id === completion.id);
-      draft.progressChecklistCompletions = exists
-        ? completions.map((item) => (item.id === completion.id ? completion : item))
-        : [completion, ...completions];
+      const incomingIds = new Set(completionsToSave.map((completion) => completion.id));
+      draft.progressChecklistCompletions = [
+        ...completionsToSave,
+        ...(draft.progressChecklistCompletions ?? []).filter((completion) => !incomingIds.has(completion.id))
+      ];
     });
   }
 
@@ -1860,6 +1865,7 @@ export function App() {
                     onSaveChecklistTemplate={saveProgressChecklistTemplate}
                     onDeleteChecklistTemplate={deleteProgressChecklistTemplate}
                     onSaveChecklistCompletion={saveProgressChecklistCompletion}
+                    onSaveChecklistCompletions={saveProgressChecklistCompletions}
                     onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
                     onOpenLessonInRecords={openProgressLessonInScheduleRecords}
                   />
