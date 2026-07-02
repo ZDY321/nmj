@@ -189,7 +189,7 @@ export function CourseArchiveListPanel({
             <Button type="button" size="sm" variant="destructive" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedCoursesStatus("paused")}>暂停</Button>
           </div>
         </div>
-        <div className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
+        <div className="max-h-[520px] space-y-0 overflow-y-auto pr-0 sm:pr-2">
           {visibleCourses.map((course) => {
             const used = courseInUse(course.id);
             const effectivelyPaused = course.status === "paused" || !courseHasActiveStudent(vault, course);
@@ -210,8 +210,8 @@ export function CourseArchiveListPanel({
                   }
                 }}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1 sm:items-center">
                     <input
                       type="checkbox"
                       checked={selected}
@@ -223,17 +223,17 @@ export function CourseArchiveListPanel({
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf2ff]">
                       <GraduationCap size={16} className="text-[#1557c2]" />
                     </div>
-                    <div className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{course.name}</span>
-                      <span className="text-xs text-(--color-muted-foreground)">
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-extrabold text-[#061226]">{course.name}</span>
+                      <span className="mt-1 block truncate text-xs leading-5 text-(--color-muted-foreground)">
                         {courseTypeLabel(vault, course.type)} · {course.subject} · {studentNames(vault, course.studentIds) || "未关联学生"}
                       </span>
-                      <span className="mt-1 block whitespace-pre-line text-xs font-bold text-[#1557c2]">
+                      <span className="mt-1 block whitespace-pre-line break-words text-xs font-bold leading-5 text-[#1557c2]">
                         {courseFeeSummary(course)}
                       </span>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex w-full flex-wrap items-center gap-1 border-t border-[#eef2f7] pt-2 sm:w-auto sm:shrink-0 sm:justify-end sm:border-t-0 sm:pt-0">
                     <Badge variant={effectivelyPaused ? "secondary" : "sage"}>
                       {effectivelyPaused ? "暂停" : "启用"}
                     </Badge>

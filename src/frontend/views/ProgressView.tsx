@@ -718,17 +718,17 @@ export function ProgressView({
         {editModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/45 p-4 backdrop-blur-sm">
             <Card className="max-h-[92vh] w-full max-w-[920px] overflow-hidden shadow-[0_30px_90px_rgba(6,18,38,0.28)]">
-              <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-[#e8eef6]">
-                <div>
+              <CardHeader className="flex flex-col gap-3 border-b border-[#e8eef6] sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
                     <NotebookPen size={14} /> 学生记录
                   </div>
-                  <CardTitle>{selectedRow ? selectedRow.course.name : "选择课程"}</CardTitle>
-                  <CardDescription className="mt-1">
+                  <CardTitle className="break-words text-lg leading-6 sm:text-xl">{selectedRow ? selectedRow.course.name : "选择课程"}</CardTitle>
+                  <CardDescription className="mt-1 text-xs leading-5 sm:text-sm">
                     单独保存只改当前学生；应用到本节全部学生适合班课整体进度一致的情况。
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
                   {selectedLesson && onOpenLessonInRecords && (
                     <Button
                       type="button"
@@ -737,17 +737,17 @@ export function ProgressView({
                         setEditModalOpen(false);
                         onOpenLessonInRecords(selectedLesson);
                       }}
-                      className="border-[#dbe4ef] text-[#1557c2] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#0f4aa0]"
+                      className="min-w-0 flex-1 border-[#dbe4ef] text-[#1557c2] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#0f4aa0] sm:flex-none"
                     >
-                      <CalendarDays size={15} /> 跳到课时详情
+                      <CalendarDays size={15} /> <span className="truncate">跳到课时详情</span>
                     </Button>
                   )}
-                  <Button type="button" variant="ghost" size="icon" onClick={() => setEditModalOpen(false)} aria-label="关闭编辑">
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setEditModalOpen(false)} aria-label="关闭编辑" className="shrink-0">
                     <X size={18} />
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="max-h-[calc(92vh-118px)] space-y-5 overflow-y-auto p-5 sm:p-6">
+              <CardContent className="max-h-[calc(92vh-158px)] space-y-5 overflow-y-auto p-5 sm:max-h-[calc(92vh-118px)] sm:p-6">
             {!selectedRow || !selectedLesson ? (
               <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
                 请选择有课时的课程
