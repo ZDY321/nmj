@@ -254,7 +254,7 @@ export function StudentArchivePanel({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
+      <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-0 sm:pr-2">
         {visibleStudents.map((student) => {
           const used = studentInUse(student.id);
           const archived = student.status === "paused";
@@ -276,8 +276,8 @@ export function StudentArchivePanel({
               }}
             >
               <div className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1 sm:items-center">
                     <input
                       type="checkbox"
                       checked={selected}
@@ -289,17 +289,17 @@ export function StudentArchivePanel({
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#fff1e2]">
                       <span className="text-xs font-bold text-[#ff8617]">{student.name.slice(0, 1)}</span>
                     </div>
-                    <div className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{student.name}</span>
-                      <div className="mt-1 flex flex-wrap gap-1 text-xs text-(--color-muted-foreground)">
-                        <span className="flex items-center gap-1"><MapPin size={10} /> {campusName(vault, student.defaultCampusId)}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-extrabold text-[#061226]">{student.name}</span>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-(--color-muted-foreground)">
+                        <span className="inline-flex min-w-0 items-center gap-1"><MapPin size={10} className="shrink-0" /> <span className="truncate">{campusName(vault, student.defaultCampusId)}</span></span>
                         <span>{student.grade || "未设置年级"}</span>
                         <span>{student.school || "未填写学校"}</span>
                         {student.temporaryTrial && <span className="font-bold text-[#5161d6]">临时试听</span>}
                       </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                  <div className="flex w-full flex-wrap items-center gap-1 border-t border-[#eef2f7] pt-2 sm:w-auto sm:shrink-0 sm:justify-end sm:border-t-0 sm:pt-0">
                     <Badge variant={studentStatusBadgeVariant(student.status)}>
                       {studentStatusLabel(student.status)}
                     </Badge>
