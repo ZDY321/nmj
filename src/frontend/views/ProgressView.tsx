@@ -423,6 +423,7 @@ export function ProgressView({
           onSaveChecklistCompletion={onSaveChecklistCompletion}
           onSaveChecklistCompletions={onSaveChecklistCompletions}
           onDeleteChecklistCompletion={onDeleteChecklistCompletion}
+          onOpenLessonInRecords={onOpenLessonInRecords}
         />
       </div>
     );

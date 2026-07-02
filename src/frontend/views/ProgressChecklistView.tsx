@@ -5,6 +5,7 @@ import {
   CheckCheck,
   Copy,
   ClipboardList,
+  CornerUpLeft,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -29,6 +30,7 @@ import {
   campusName,
   compareByName,
   courseHasActiveStudent,
+  courseName,
   courseTypeLabel,
   findStudent,
   lessonStudentIds,
@@ -83,7 +85,8 @@ export function ProgressChecklistView({
   onDeleteChecklistTemplate,
   onSaveChecklistCompletion,
   onSaveChecklistCompletions,
-  onDeleteChecklistCompletion
+  onDeleteChecklistCompletion,
+  onOpenLessonInRecords
 }: {
   vault: TeacherVault;
   token?: string;
@@ -94,6 +97,7 @@ export function ProgressChecklistView({
   onSaveChecklistCompletion: (completion: ProgressChecklistCompletion) => void;
   onSaveChecklistCompletions: (completions: ProgressChecklistCompletion[]) => void;
   onDeleteChecklistCompletion: (completionId: string) => void;
+  onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -101,7 +105,7 @@ export function ProgressChecklistView({
   const [templateSubject, setTemplateSubject] = useState("");
   const [templateNote, setTemplateNote] = useState("");
   const [templateItemsText, setTemplateItemsText] = useState("");
-  const [templatePanelOpen, setTemplatePanelOpen] = useState(true);
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
   const [itemSearch, setItemSearch] = useState("");
   const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false);
   const [selectedCell, setSelectedCell] = useState<ChecklistCellSelection | null>(null);
@@ -172,6 +176,7 @@ export function ProgressChecklistView({
 
   const selectedCourse = courseOptions.find((course) => course.id === selectedCourseId);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
+  const focusLesson = focusRequest?.lessonId ? vault.lessons.find((lesson) => lesson.id === focusRequest.lessonId) : undefined;
 
   useEffect(() => {
     if (selectedTemplateId === NEW_TEMPLATE_ID) return;
@@ -248,6 +253,7 @@ export function ProgressChecklistView({
     if (focusRequest.studentId && focusRequest.itemId) {
       setSelectedCell({ studentId: focusRequest.studentId, itemId: focusRequest.itemId });
     }
+    setTemplatePanelOpen(false);
     setSyncMessage("");
   }, [focusRequest?.nonce]);
 
@@ -592,6 +598,18 @@ export function ProgressChecklistView({
     <div className="space-y-6">
       {dialog}
 
+      {focusLesson && onOpenLessonInRecords && (
+        <div className="flex flex-col gap-3 rounded-[14px] border border-[#bfdbfe] bg-[#f8fbff] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 text-sm font-semibold leading-6 text-[#475569]">
+            <div className="font-extrabold text-[#25324a]">来自课程详情</div>
+            <div>{courseName(vault, focusLesson.courseGroupId)} · {focusLesson.date} {focusLesson.startTime}-{focusLesson.endTime}</div>
+          </div>
+          <Button type="button" variant="outline" className="w-fit border-[#bfdbfe] bg-white text-[#1557c2]" onClick={() => onOpenLessonInRecords(focusLesson)}>
+            <CornerUpLeft size={15} /> 返回当前课时
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "清单模板", value: `${templates.length} 套`, icon: ClipboardList, tone: "bg-[#eaf2ff] text-[#1557c2]" },
@@ -673,7 +691,7 @@ export function ProgressChecklistView({
                 </div>
               </div>
 
-              {aiFeatureEnabled ? (
+              {aiFeatureEnabled && (
                 <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
                   <div className="mb-3 flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
                     <BookCheck size={16} className="text-[#1557c2]" /> AI 生成模板草稿
@@ -708,8 +726,9 @@ export function ProgressChecklistView({
                     )}
                   </div>
                 </div>
-              ) : (
-                <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+              )}
+
+              <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
                       <BookCheck size={16} className="text-[#1557c2]" /> 外部 AI prompt
@@ -720,8 +739,7 @@ export function ProgressChecklistView({
                   </div>
                   <Textarea value={externalAiPromptExample} readOnly className="min-h-[160px] bg-white text-xs leading-5" />
                   {promptCopyMessage && <Badge variant={promptCopyMessage.includes("已") ? "sage" : "secondary"} className="mt-3">{promptCopyMessage}</Badge>}
-                </div>
-              )}
+              </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-[#25324a]">模板名称</label>

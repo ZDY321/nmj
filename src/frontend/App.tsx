@@ -1870,6 +1870,7 @@ export function App() {
                     onAiSessionChange={updateAiScheduleSession}
                     onApplyAiDraft={applyAiScheduleDraft}
                     onReturnToView={returnToViewFromSchedule}
+                    onSaveChecklistCompletions={saveProgressChecklistCompletions}
                     onOpenProgressChecklist={openLessonInProgressChecklist}
                   />
                 )}

@@ -31,6 +31,18 @@ import {
 import type { LessonReturnTarget } from "@/frontend/lib/scheduleViewTypes";
 
 type LessonContentField = "taught" | "homework";
+type LessonChecklistSyncSource = "taught" | "homework";
+
+type LessonChecklistSyncSummary = {
+  templateName: string;
+  studentCount: number;
+  taughtLinkedItemCount: number;
+  homeworkLinkedItemCount: number;
+  taughtPendingCount: number;
+  homeworkPendingCount: number;
+  taughtCompletedCount: number;
+  homeworkCompletedCount: number;
+};
 
 type ScheduleLessonDetailPanelProps = {
   amountsVisible: boolean;
@@ -38,6 +50,8 @@ type ScheduleLessonDetailPanelProps = {
   attendanceStudentFilter: string;
   availableTrialStudentOptionCount: number;
   campusOptions: Campus[];
+  checklistSyncMessage?: string;
+  checklistSyncSummary?: LessonChecklistSyncSummary;
   courseGroupOptions: CourseGroup[];
   dateWithWeekday: (date: string) => string;
   displayedTemporaryStudentOptions: Student[];
@@ -58,6 +72,7 @@ type ScheduleLessonDetailPanelProps = {
   onGoBackToPreviousLesson: () => void;
   onOpenLesson: (lesson: Lesson) => void;
   onOpenProgressChecklist?: (lesson: Lesson) => void;
+  onSyncChecklistCompletions?: (source: LessonChecklistSyncSource) => void;
   onSelectDetailMakeupStudentIds: (studentIds: string[]) => void;
   onSelectedCourseChange: (courseId: string) => void;
   onSelectedDateChange: (date: string) => void;
@@ -116,6 +131,8 @@ export function ScheduleLessonDetailPanel({
   attendanceStudentFilter,
   availableTrialStudentOptionCount,
   campusOptions,
+  checklistSyncMessage,
+  checklistSyncSummary,
   courseGroupOptions,
   dateWithWeekday,
   displayedTemporaryStudentOptions,
@@ -136,6 +153,7 @@ export function ScheduleLessonDetailPanel({
   onGoBackToPreviousLesson,
   onOpenLesson,
   onOpenProgressChecklist,
+  onSyncChecklistCompletions,
   onSelectDetailMakeupStudentIds,
   onSelectedCourseChange,
   onSelectedDateChange,
@@ -459,6 +477,9 @@ export function ScheduleLessonDetailPanel({
             subjectHint={courseSubject(vault, selected.courseGroupId)}
             onChange={onChecklistContentChange}
             onOpenChecklist={onOpenProgressChecklist ? () => onOpenProgressChecklist(selected) : undefined}
+            onSyncChecklist={onSyncChecklistCompletions}
+            syncMessage={checklistSyncMessage}
+            syncSummary={checklistSyncSummary}
           />
         </CardContent>
       </Card>

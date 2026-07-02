@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookCheck, BookOpen, ExternalLink, NotebookPen, Search, X } from "lucide-react";
+import { BookCheck, BookOpen, ExternalLink, NotebookPen, RefreshCw, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,18 +10,35 @@ import type { LessonContent, ProgressChecklistTemplate, ProgressChecklistTemplat
 
 type ChecklistField = "taught" | "homework";
 
+type LessonChecklistSyncSummary = {
+  templateName: string;
+  studentCount: number;
+  taughtLinkedItemCount: number;
+  homeworkLinkedItemCount: number;
+  taughtPendingCount: number;
+  homeworkPendingCount: number;
+  taughtCompletedCount: number;
+  homeworkCompletedCount: number;
+};
+
 export function LessonChecklistLinker({
   vault,
   content,
   subjectHint,
   onChange,
-  onOpenChecklist
+  onOpenChecklist,
+  onSyncChecklist,
+  syncMessage,
+  syncSummary
 }: {
   vault: TeacherVault;
   content: LessonContent;
   subjectHint?: string;
   onChange: (content: LessonContent) => void;
   onOpenChecklist?: () => void;
+  onSyncChecklist?: (source: ChecklistField) => void;
+  syncMessage?: string;
+  syncSummary?: LessonChecklistSyncSummary;
 }) {
   const [itemSearch, setItemSearch] = useState("");
   const templates = useMemo(
@@ -115,6 +132,28 @@ export function LessonChecklistLinker({
           <Badge variant="amber">{homeworkItems.length} 项关联到课后作业</Badge>
         </div>
       </div>
+
+      {syncSummary && onSyncChecklist && (
+        <div className="mt-4 rounded-[12px] border border-[#dbeafe] bg-white p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 text-sm font-semibold leading-6 text-[#475569]">
+              <div className="font-extrabold text-[#25324a]">本节同步到学生清单</div>
+              <div>
+                {syncSummary.templateName} · {syncSummary.studentCount} 名在读学生 · 课堂 {syncSummary.taughtCompletedCount}/{syncSummary.taughtCompletedCount + syncSummary.taughtPendingCount} · 作业 {syncSummary.homeworkCompletedCount}/{syncSummary.homeworkCompletedCount + syncSummary.homeworkPendingCount}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => onSyncChecklist("taught")} disabled={syncSummary.taughtLinkedItemCount === 0 || syncSummary.taughtPendingCount === 0}>
+                <RefreshCw size={14} /> 同步课堂 {syncSummary.taughtPendingCount || ""}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => onSyncChecklist("homework")} disabled={syncSummary.homeworkLinkedItemCount === 0 || syncSummary.homeworkPendingCount === 0}>
+                <RefreshCw size={14} /> 同步作业 {syncSummary.homeworkPendingCount || ""}
+              </Button>
+            </div>
+          </div>
+          {syncMessage && <Badge variant={syncMessage.includes("已同步") || syncMessage.includes("全部") ? "sage" : "secondary"} className="mt-3">{syncMessage}</Badge>}
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-2">
