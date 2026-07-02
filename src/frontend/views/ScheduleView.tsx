@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CornerUpLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { ScheduleAdjustmentPanel, type ScheduleAdjustmentConflictPolicy, type ScheduleAdjustmentPreviewItem } from "@/frontend/components/ScheduleAdjustmentPanel";
 import { ScheduleAiPanel } from "@/frontend/components/ScheduleAiPanel";
 import { ScheduleCalendarDetailDialog } from "@/frontend/components/ScheduleCalendarDetailDialog";
 import { ScheduleCalendarFollowupPanels } from "@/frontend/components/ScheduleCalendarFollowupPanels";
@@ -1752,6 +1753,24 @@ export function ScheduleView({
     });
   }
 
+  function applyScheduleAdjustmentPreview(items: ScheduleAdjustmentPreviewItem[], conflictPolicy: ScheduleAdjustmentConflictPolicy) {
+    const writableItems = items.filter((item) => item.willApply);
+    if (writableItems.length === 0) {
+      showScheduleError("当前预览没有可写入的课节，请先选择课节并设置有效调整规则。");
+      return;
+    }
+    const conflictCount = writableItems.filter((item) => item.conflictLesson || item.movingConflictLesson).length;
+    const skippedCount = Math.max(items.length - writableItems.length, 0);
+    confirm({
+      title: `写入 ${writableItems.length} 节课表调整？`,
+      description: `系统会批量修改这些课节的日期、时间和校区，并按当前课程规则重新计算金额快照；学生、出勤、课程内容、作业、备注和状态会保留。${skippedCount > 0 ? ` 另有 ${skippedCount} 节因冲突、无变化或信息不完整会跳过。` : ""}${conflictCount > 0 && conflictPolicy === "allow" ? ` 其中 ${conflictCount} 节存在时间冲突，但已选择允许同时间多课。` : ""}`,
+      confirmLabel: "写入调整",
+      onConfirm: () => {
+        onUpdateLessons(writableItems.map((item) => recalculateLessonFee(item.nextLesson)));
+        showScheduleNotice(`已写入 ${writableItems.length} 节课表调整${skippedCount > 0 ? `，跳过 ${skippedCount} 节` : ""}。`);
+      }
+    });
+  }
   function findTimeConflict(lessonDate: string, lessonStartTime: string, lessonEndTime: string, ignoredLessonId?: string): Lesson | undefined {
     return vault.lessons.find(
       (lesson) =>
@@ -1977,6 +1996,14 @@ export function ScheduleView({
           singleStartTime={singleStartTime}
           singleSuggestedBillingHours={singleSuggestedBillingHours}
           visibleWeekdays={visibleWeekdays}
+        />
+      )}
+
+      {schedulePanel === "adjust" && (
+        <ScheduleAdjustmentPanel
+          campusOptions={campusOptions}
+          onApplyPreview={applyScheduleAdjustmentPreview}
+          vault={vault}
         />
       )}
 

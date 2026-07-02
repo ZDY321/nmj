@@ -3,7 +3,7 @@ import type { ViewKey } from "@/frontend/lib/helpers";
 
 export type LessonScope = "month" | "day" | "range" | "week";
 export type CourseTypeFilter = "all" | CourseType;
-export type SchedulePanel = "ai" | "schedule" | "calendar" | "records" | "studentStats" | "trash";
+export type SchedulePanel = "ai" | "schedule" | "adjust" | "calendar" | "records" | "studentStats" | "trash";
 
 export type CalendarOverviewReturnFocus = {
   selectedDate: string;
