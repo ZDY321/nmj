@@ -127,6 +127,20 @@ type LessonChecklistSyncSummary = {
   homeworkCompletedCount: number;
 };
 
+type LessonChecklistPerStudentStatus = {
+  studentId: string;
+  studentName: string;
+  taughtPendingCount: number;
+  homeworkPendingCount: number;
+};
+
+type LessonChecklistSyncResult = {
+  studentId: string;
+  studentName: string;
+  taughtSyncedCount: number;
+  homeworkSyncedCount: number;
+};
+
 function checklistCellKey(studentId: string, itemId: string): string {
   return `${studentId}::${itemId}`;
 }
@@ -334,6 +348,7 @@ export function ScheduleView({
   const [lessonHistory, setLessonHistory] = useState<string[]>([]);
   const [lessonReturnTarget, setLessonReturnTarget] = useState<LessonReturnTarget | null>(calendarFocus?.returnTarget ?? null);
   const [checklistSyncMessage, setChecklistSyncMessage] = useState("");
+  const [checklistSyncResult, setChecklistSyncResult] = useState<LessonChecklistSyncResult[]>([]);
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
@@ -767,8 +782,37 @@ export function ScheduleView({
       })
     : undefined;
 
+  const selectedChecklistPerStudentStatus: LessonChecklistPerStudentStatus[] = (() => {
+    if (!selected || !selectedChecklistTemplate) return [];
+    const studentMap = new Map<string, { taught: number; homework: number }>();
+    for (const candidate of selectedTaughtChecklistSyncCandidates) {
+      const entry = studentMap.get(candidate.studentId) ?? { taught: 0, homework: 0 };
+      entry.taught++;
+      studentMap.set(candidate.studentId, entry);
+    }
+    for (const candidate of selectedHomeworkChecklistSyncCandidates) {
+      const entry = studentMap.get(candidate.studentId) ?? { taught: 0, homework: 0 };
+      entry.homework++;
+      studentMap.set(candidate.studentId, entry);
+    }
+    for (const studentId of selectedChecklistStudentIds) {
+      if (!studentMap.has(studentId)) {
+        studentMap.set(studentId, { taught: 0, homework: 0 });
+      }
+    }
+    return Array.from(studentMap.entries())
+      .map(([studentId, counts]) => ({
+        studentId,
+        studentName: findStudent(vault, studentId)?.name ?? "未知学生",
+        taughtPendingCount: counts.taught,
+        homeworkPendingCount: counts.homework,
+      }))
+      .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
+  })();
+
   useEffect(() => {
     setChecklistSyncMessage("");
+    setChecklistSyncResult([]);
   }, [selected?.id]);
 
   function activeMakeupStudentIdsForOriginal(originalLessonId: string): Set<string> {
@@ -1471,6 +1515,31 @@ export function ScheduleView({
       setChecklistSyncMessage(source === "taught" ? "本节课堂关联已全部同步。" : "本节作业关联已全部同步。");
       return;
     }
+
+    // Snapshot per-student counts before persisting
+    const countsByStudent = new Map<string, number>();
+    for (const candidate of candidates) {
+      countsByStudent.set(candidate.studentId, (countsByStudent.get(candidate.studentId) ?? 0) + 1);
+    }
+    setChecklistSyncResult((prev) => {
+      const merged = new Map(prev.map((r) => [r.studentId, { ...r }]));
+      for (const [studentId, count] of countsByStudent) {
+        const existing = merged.get(studentId);
+        if (existing) {
+          if (source === "taught") existing.taughtSyncedCount += count;
+          else existing.homeworkSyncedCount += count;
+        } else {
+          merged.set(studentId, {
+            studentId,
+            studentName: findStudent(vault, studentId)?.name ?? "未知学生",
+            taughtSyncedCount: source === "taught" ? count : 0,
+            homeworkSyncedCount: source === "homework" ? count : 0
+          });
+        }
+      }
+      return Array.from(merged.values()).sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
+    });
+
     const now = new Date().toISOString();
     const sourceLabel = source === "taught" ? "课堂关联" : "作业关联";
     onSaveChecklistCompletions(candidates.map((candidate) => ({
@@ -2436,6 +2505,8 @@ export function ScheduleView({
             onOpenProgressChecklist={onOpenProgressChecklist}
             checklistSyncMessage={checklistSyncMessage}
             checklistSyncSummary={selectedChecklistSyncSummary}
+            checklistPerStudentStatus={selectedChecklistPerStudentStatus}
+            checklistSyncResult={checklistSyncResult}
             onSyncChecklistCompletions={syncSelectedLessonChecklist}
             onSelectDetailMakeupStudentIds={setDetailMakeupStudentIds}
             onSelectedCourseChange={updateSelectedCourse}

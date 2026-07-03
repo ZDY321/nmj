@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookCheck, BookOpen, ExternalLink, NotebookPen, RefreshCw, Search, X } from "lucide-react";
+import { BookCheck, BookOpen, ChevronDown, ExternalLink, NotebookPen, RefreshCw, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,20 @@ type LessonChecklistSyncSummary = {
   homeworkCompletedCount: number;
 };
 
+type LessonChecklistPerStudentStatus = {
+  studentId: string;
+  studentName: string;
+  taughtPendingCount: number;
+  homeworkPendingCount: number;
+};
+
+type LessonChecklistSyncResult = {
+  studentId: string;
+  studentName: string;
+  taughtSyncedCount: number;
+  homeworkSyncedCount: number;
+};
+
 export function LessonChecklistLinker({
   vault,
   content,
@@ -29,7 +43,9 @@ export function LessonChecklistLinker({
   onOpenChecklist,
   onSyncChecklist,
   syncMessage,
-  syncSummary
+  syncSummary,
+  perStudentStatus,
+  syncResult
 }: {
   vault: TeacherVault;
   content: LessonContent;
@@ -39,8 +55,11 @@ export function LessonChecklistLinker({
   onSyncChecklist?: (source: ChecklistField) => void;
   syncMessage?: string;
   syncSummary?: LessonChecklistSyncSummary;
+  perStudentStatus?: LessonChecklistPerStudentStatus[];
+  syncResult?: LessonChecklistSyncResult[];
 }) {
   const [itemSearch, setItemSearch] = useState("");
+  const [studentDetailExpanded, setStudentDetailExpanded] = useState(false);
   const templates = useMemo(
     () =>
       [...(vault.progressChecklistTemplates ?? [])].sort(
@@ -152,6 +171,51 @@ export function LessonChecklistLinker({
             </div>
           </div>
           {syncMessage && <Badge variant={syncMessage.includes("已同步") || syncMessage.includes("全部") ? "sage" : "secondary"} className="mt-3">{syncMessage}</Badge>}
+
+          {perStudentStatus && perStudentStatus.length > 0 && (
+            <div className="mt-3">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-left text-xs font-bold text-[#475569] transition-colors hover:bg-[#eef5ff]"
+                onClick={() => setStudentDetailExpanded((v) => !v)}
+              >
+                <span>学生同步明细 · {perStudentStatus.length} 人</span>
+                <ChevronDown size={14} className={`text-[#64748b] transition-transform ${studentDetailExpanded ? "rotate-180" : ""}`} />
+              </button>
+              {studentDetailExpanded && (
+                <div className="mt-2 max-h-[200px] space-y-1.5 overflow-y-auto pr-1">
+                  {perStudentStatus.map((student) => {
+                    const resultEntry = syncResult?.find((r) => r.studentId === student.studentId);
+                    const allSynced = student.taughtPendingCount === 0 && student.homeworkPendingCount === 0;
+                    return (
+                      <div
+                        key={student.studentId}
+                        className={`flex items-center justify-between rounded-[8px] border px-3 py-1.5 text-xs font-semibold ${
+                          allSynced ? "border-[#d1fae5] bg-[#ecfdf5] text-[#065f46]" : "border-[#e8eef6] bg-white text-[#475569]"
+                        }`}
+                      >
+                        <span className="font-bold text-[#25324a]">{student.studentName}</span>
+                        <span className="flex items-center gap-2">
+                          {student.taughtPendingCount > 0 && (
+                            <span className="text-[#1557c2]">课堂待同步 {student.taughtPendingCount}</span>
+                          )}
+                          {student.homeworkPendingCount > 0 && (
+                            <span className="text-[#c2410c]">作业待同步 {student.homeworkPendingCount}</span>
+                          )}
+                          {allSynced && <span>✓ 已完成</span>}
+                          {resultEntry && (resultEntry.taughtSyncedCount > 0 || resultEntry.homeworkSyncedCount > 0) && (
+                            <Badge variant="sage" className="px-1.5 py-0 text-[10px]">
+                              本次+{resultEntry.taughtSyncedCount + resultEntry.homeworkSyncedCount}
+                            </Badge>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

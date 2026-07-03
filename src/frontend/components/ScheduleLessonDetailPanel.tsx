@@ -50,7 +50,9 @@ type ScheduleLessonDetailPanelProps = {
   attendanceStudentFilter: string;
   availableTrialStudentOptionCount: number;
   campusOptions: Campus[];
+  checklistPerStudentStatus?: { studentId: string; studentName: string; taughtPendingCount: number; homeworkPendingCount: number }[];
   checklistSyncMessage?: string;
+  checklistSyncResult?: { studentId: string; studentName: string; taughtSyncedCount: number; homeworkSyncedCount: number }[];
   checklistSyncSummary?: LessonChecklistSyncSummary;
   courseGroupOptions: CourseGroup[];
   dateWithWeekday: (date: string) => string;
@@ -131,7 +133,9 @@ export function ScheduleLessonDetailPanel({
   attendanceStudentFilter,
   availableTrialStudentOptionCount,
   campusOptions,
+  checklistPerStudentStatus,
   checklistSyncMessage,
+  checklistSyncResult,
   checklistSyncSummary,
   courseGroupOptions,
   dateWithWeekday,
@@ -480,6 +484,8 @@ export function ScheduleLessonDetailPanel({
             onSyncChecklist={onSyncChecklistCompletions}
             syncMessage={checklistSyncMessage}
             syncSummary={checklistSyncSummary}
+            perStudentStatus={checklistPerStudentStatus}
+            syncResult={checklistSyncResult}
           />
         </CardContent>
       </Card>
