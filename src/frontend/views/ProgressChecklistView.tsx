@@ -972,9 +972,9 @@ export function ProgressChecklistView({
                                 {item.chapter && <div className="mb-1 text-[10px] font-bold text-[#5161d6]">{item.chapter}</div>}
                                 <div className="max-h-[3.75rem] overflow-hidden leading-5">{formatChecklistItemTitle(item, allItems)}</div>
                                 {linkSources.length > 0 && (
-                                  <div className="mt-2 flex flex-wrap gap-1">
+                                  <div className="mt-2 grid grid-cols-2 gap-1">
                                     {linkSources.map((source) => (
-                                      <Badge key={source} variant={source === "taught" ? "sky" : "amber"} className="text-[10px]">{source === "taught" ? "本节内容" : "本节作业"}</Badge>
+                                      <Badge key={source} variant={source === "taught" ? "sky" : "amber"} className="w-full justify-center whitespace-nowrap px-1.5 text-[10px]">{source === "taught" ? "上课内容" : "课后作业"}</Badge>
                                     ))}
                                   </div>
                                 )}
@@ -1071,6 +1071,37 @@ export function ProgressChecklistView({
                       <Input type="date" value={selectedCellDate} onChange={(event) => setSelectedCellDate(event.target.value)} />
                     </div>
 
+                    <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                      <div className="mb-2 text-sm font-extrabold text-[#25324a]">依托选中日期/课时记录</div>
+                      <div className="space-y-2 text-sm text-[#475569]">
+                        <div>
+                          匹配课时：
+                          <span className="font-semibold text-[#061226]">
+                            {selectedLatestContext?.lesson
+                              ? `${checklistContextRelationLabel(selectedLatestContext.relation)} ${selectedLatestContext.lesson.date} ${selectedLatestContext.lesson.startTime}-${selectedLatestContext.lesson.endTime}`
+                              : " 暂无"}
+                          </span>
+                        </div>
+                        <div>
+                          匹配课堂关联：
+                          <span className="font-semibold text-[#061226]">
+                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.taughtItems, selectedLatestLessonChecklist?.template?.items)}
+                          </span>
+                        </div>
+                        <div>
+                          匹配作业关联：
+                          <span className="font-semibold text-[#061226]">
+                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.homeworkItems, selectedLatestLessonChecklist?.template?.items)}
+                          </span>
+                        </div>
+                      </div>
+                      {selectedItem && isSelectedItemLinkedToLesson(selectedItem.id, selectedLatestLessonChecklist) && (
+                        <Badge variant="sky" className="mt-3">
+                          匹配课时已关联当前清单条目
+                        </Badge>
+                      )}
+                    </div>
+
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-[#25324a]">备注</label>
                       <Textarea
@@ -1091,44 +1122,6 @@ export function ProgressChecklistView({
                       <Button type="button" variant="destructive" onClick={clearSelectedCompletion} disabled={!selectedCompletion}>
                         <Trash2 size={15} /> 清除勾选
                       </Button>
-                    </div>
-
-                    <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
-                      <div className="mb-2 text-sm font-extrabold text-[#25324a]">依托选中日期/课时记录</div>
-                      <div className="space-y-2 text-sm text-[#475569]">
-                        <div>
-                          匹配课时：
-                          <span className="font-semibold text-[#061226]">
-                            {selectedLatestContext?.lesson
-                              ? `${checklistContextRelationLabel(selectedLatestContext.relation)} ${selectedLatestContext.lesson.date} ${selectedLatestContext.lesson.startTime}-${selectedLatestContext.lesson.endTime}`
-                              : " 暂无"}
-                          </span>
-                        </div>
-                        <div>
-                          匹配进度：
-                          <span className="font-semibold text-[#061226]">
-                            {selectedLatestContext?.record?.progressText?.trim() || " 暂无记录"}
-                          </span>
-                        </div>
-
-                        <div>
-                          匹配课堂关联：
-                          <span className="font-semibold text-[#061226]">
-                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.taughtItems, selectedLatestLessonChecklist?.template?.items)}
-                          </span>
-                        </div>
-                        <div>
-                          匹配作业关联：
-                          <span className="font-semibold text-[#061226]">
-                            {formatLessonChecklistSummary(selectedLatestLessonChecklist?.homeworkItems, selectedLatestLessonChecklist?.template?.items)}
-                          </span>
-                        </div>
-                      </div>
-                      {selectedItem && isSelectedItemLinkedToLesson(selectedItem.id, selectedLatestLessonChecklist) && (
-                        <Badge variant="sky" className="mt-3">
-                          匹配课时已关联当前清单条目
-                        </Badge>
-                      )}
                     </div>
                   </>
                 )}

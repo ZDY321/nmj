@@ -53,6 +53,7 @@ type ScheduleLessonDetailPanelProps = {
   checklistPerStudentStatus?: { studentId: string; studentName: string; taughtPendingCount: number; homeworkPendingCount: number }[];
   checklistSyncMessage?: string;
   checklistSyncResult?: { studentId: string; studentName: string; taughtSyncedCount: number; homeworkSyncedCount: number }[];
+  checklistLastSyncSource?: LessonChecklistSyncSource | null;
   checklistSyncSummary?: LessonChecklistSyncSummary;
   courseGroupOptions: CourseGroup[];
   dateWithWeekday: (date: string) => string;
@@ -136,6 +137,7 @@ export function ScheduleLessonDetailPanel({
   checklistPerStudentStatus,
   checklistSyncMessage,
   checklistSyncResult,
+  checklistLastSyncSource,
   checklistSyncSummary,
   courseGroupOptions,
   dateWithWeekday,
@@ -477,6 +479,8 @@ export function ScheduleLessonDetailPanel({
 
           <LessonChecklistLinker
             vault={vault}
+            lesson={selected}
+            previousLesson={selectedPreviousLesson}
             content={selected.content}
             subjectHint={courseSubject(vault, selected.courseGroupId)}
             onChange={onChecklistContentChange}
@@ -486,6 +490,7 @@ export function ScheduleLessonDetailPanel({
             syncSummary={checklistSyncSummary}
             perStudentStatus={checklistPerStudentStatus}
             syncResult={checklistSyncResult}
+            lastSyncSource={checklistLastSyncSource}
           />
         </CardContent>
       </Card>

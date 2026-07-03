@@ -349,6 +349,7 @@ export function ScheduleView({
   const [lessonReturnTarget, setLessonReturnTarget] = useState<LessonReturnTarget | null>(calendarFocus?.returnTarget ?? null);
   const [checklistSyncMessage, setChecklistSyncMessage] = useState("");
   const [checklistSyncResult, setChecklistSyncResult] = useState<LessonChecklistSyncResult[]>([]);
+  const [checklistLastSyncSource, setChecklistLastSyncSource] = useState<LessonChecklistSyncSource | null>(null);
   const [campusFilter, setCampusFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("");
   const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
@@ -813,6 +814,7 @@ export function ScheduleView({
   useEffect(() => {
     setChecklistSyncMessage("");
     setChecklistSyncResult([]);
+    setChecklistLastSyncSource(null);
   }, [selected?.id]);
 
   function activeMakeupStudentIdsForOriginal(originalLessonId: string): Set<string> {
@@ -1511,34 +1513,27 @@ export function ScheduleView({
   function syncSelectedLessonChecklist(source: LessonChecklistSyncSource) {
     if (!selected || !selectedChecklistTemplate) return;
     const candidates = source === "taught" ? selectedTaughtChecklistSyncCandidates : selectedHomeworkChecklistSyncCandidates;
+    setChecklistLastSyncSource(source);
     if (candidates.length === 0) {
+      setChecklistSyncResult([]);
       setChecklistSyncMessage(source === "taught" ? "本节课堂关联已全部同步。" : "本节作业关联已全部同步。");
       return;
     }
 
-    // Snapshot per-student counts before persisting
     const countsByStudent = new Map<string, number>();
     for (const candidate of candidates) {
       countsByStudent.set(candidate.studentId, (countsByStudent.get(candidate.studentId) ?? 0) + 1);
     }
-    setChecklistSyncResult((prev) => {
-      const merged = new Map(prev.map((r) => [r.studentId, { ...r }]));
-      for (const [studentId, count] of countsByStudent) {
-        const existing = merged.get(studentId);
-        if (existing) {
-          if (source === "taught") existing.taughtSyncedCount += count;
-          else existing.homeworkSyncedCount += count;
-        } else {
-          merged.set(studentId, {
-            studentId,
-            studentName: findStudent(vault, studentId)?.name ?? "未知学生",
-            taughtSyncedCount: source === "taught" ? count : 0,
-            homeworkSyncedCount: source === "homework" ? count : 0
-          });
-        }
-      }
-      return Array.from(merged.values()).sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
-    });
+    setChecklistSyncResult(
+      Array.from(countsByStudent.entries())
+        .map(([studentId, count]) => ({
+          studentId,
+          studentName: findStudent(vault, studentId)?.name ?? "未知学生",
+          taughtSyncedCount: source === "taught" ? count : 0,
+          homeworkSyncedCount: source === "homework" ? count : 0
+        }))
+        .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId))
+    );
 
     const now = new Date().toISOString();
     const sourceLabel = source === "taught" ? "课堂关联" : "作业关联";
@@ -2507,6 +2502,7 @@ export function ScheduleView({
             checklistSyncSummary={selectedChecklistSyncSummary}
             checklistPerStudentStatus={selectedChecklistPerStudentStatus}
             checklistSyncResult={checklistSyncResult}
+            checklistLastSyncSource={checklistLastSyncSource}
             onSyncChecklistCompletions={syncSelectedLessonChecklist}
             onSelectDetailMakeupStudentIds={setDetailMakeupStudentIds}
             onSelectedCourseChange={updateSelectedCourse}

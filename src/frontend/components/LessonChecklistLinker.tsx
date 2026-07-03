@@ -4,9 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { compareByName } from "@/frontend/lib/helpers";
+import { compareByName, findStudent, lessonStudentIds, lessonTimeRangeLabel } from "@/frontend/lib/helpers";
 import { formatChecklistItemLine, formatChecklistItemTitle } from "@/frontend/lib/progressChecklist";
-import type { LessonContent, ProgressChecklistTemplate, ProgressChecklistTemplateItem, TeacherVault } from "@/shared/types";
+import type { Lesson, LessonContent, ProgressChecklistTemplate, ProgressChecklistTemplateItem, TeacherVault } from "@/shared/types";
 
 type ChecklistField = "taught" | "homework";
 
@@ -35,8 +35,27 @@ type LessonChecklistSyncResult = {
   homeworkSyncedCount: number;
 };
 
+type PreviousLessonChecklistItemProgress = {
+  item: ProgressChecklistTemplateItem;
+  completedCount: number;
+  totalStudentCount: number;
+};
+
+type PreviousLessonChecklistProgress = {
+  lesson: Lesson;
+  template: ProgressChecklistTemplate;
+  studentCount: number;
+  totalCompletedCount: number;
+  totalPossibleCount: number;
+  taughtItems: PreviousLessonChecklistItemProgress[];
+  homeworkItems: PreviousLessonChecklistItemProgress[];
+  nextPendingItems: ProgressChecklistTemplateItem[];
+};
+
 export function LessonChecklistLinker({
   vault,
+  lesson,
+  previousLesson,
   content,
   subjectHint,
   onChange,
@@ -45,9 +64,12 @@ export function LessonChecklistLinker({
   syncMessage,
   syncSummary,
   perStudentStatus,
-  syncResult
+  syncResult,
+  lastSyncSource
 }: {
   vault: TeacherVault;
+  lesson?: Lesson;
+  previousLesson?: Lesson;
   content: LessonContent;
   subjectHint?: string;
   onChange: (content: LessonContent) => void;
@@ -57,6 +79,7 @@ export function LessonChecklistLinker({
   syncSummary?: LessonChecklistSyncSummary;
   perStudentStatus?: LessonChecklistPerStudentStatus[];
   syncResult?: LessonChecklistSyncResult[];
+  lastSyncSource?: ChecklistField | null;
 }) {
   const [itemSearch, setItemSearch] = useState("");
   const [studentDetailExpanded, setStudentDetailExpanded] = useState(false);
@@ -129,6 +152,10 @@ export function LessonChecklistLinker({
 
   const taughtItems = resolveSelectedItems(selectedTemplate, taughtItemIds);
   const homeworkItems = resolveSelectedItems(selectedTemplate, homeworkItemIds);
+  const previousChecklistProgress = useMemo(
+    () => buildPreviousLessonChecklistProgress(vault, lesson, previousLesson),
+    [vault, lesson, previousLesson]
+  );
 
   return (
     <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
@@ -179,14 +206,21 @@ export function LessonChecklistLinker({
                 className="flex w-full items-center justify-between rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-left text-xs font-bold text-[#475569] transition-colors hover:bg-[#eef5ff]"
                 onClick={() => setStudentDetailExpanded((v) => !v)}
               >
-                <span>学生同步明细 · {perStudentStatus.length} 人</span>
+                <span>学生同步明细 · {perStudentStatus.length} 人{lastSyncSource ? ` · 最近同步${lastSyncSource === "taught" ? "课堂" : "作业"}` : ""}</span>
                 <ChevronDown size={14} className={`text-[#64748b] transition-transform ${studentDetailExpanded ? "rotate-180" : ""}`} />
               </button>
               {studentDetailExpanded && (
                 <div className="mt-2 max-h-[200px] space-y-1.5 overflow-y-auto pr-1">
                   {perStudentStatus.map((student) => {
                     const resultEntry = syncResult?.find((r) => r.studentId === student.studentId);
-                    const allSynced = student.taughtPendingCount === 0 && student.homeworkPendingCount === 0;
+                    const focusedPendingCount = lastSyncSource === "taught"
+                      ? student.taughtPendingCount
+                      : lastSyncSource === "homework"
+                        ? student.homeworkPendingCount
+                        : student.taughtPendingCount + student.homeworkPendingCount;
+                    const allSynced = focusedPendingCount === 0;
+                    const showTaught = !lastSyncSource || lastSyncSource === "taught";
+                    const showHomework = !lastSyncSource || lastSyncSource === "homework";
                     return (
                       <div
                         key={student.studentId}
@@ -196,16 +230,21 @@ export function LessonChecklistLinker({
                       >
                         <span className="font-bold text-[#25324a]">{student.studentName}</span>
                         <span className="flex items-center gap-2">
-                          {student.taughtPendingCount > 0 && (
+                          {showTaught && student.taughtPendingCount > 0 && (
                             <span className="text-[#1557c2]">课堂待同步 {student.taughtPendingCount}</span>
                           )}
-                          {student.homeworkPendingCount > 0 && (
+                          {showHomework && student.homeworkPendingCount > 0 && (
                             <span className="text-[#c2410c]">作业待同步 {student.homeworkPendingCount}</span>
                           )}
-                          {allSynced && <span>✓ 已完成</span>}
-                          {resultEntry && (resultEntry.taughtSyncedCount > 0 || resultEntry.homeworkSyncedCount > 0) && (
+                          {allSynced && <span>{lastSyncSource === "taught" ? "课堂已完成" : lastSyncSource === "homework" ? "作业已完成" : "✓ 已完成"}</span>}
+                          {resultEntry && showTaught && resultEntry.taughtSyncedCount > 0 && (
                             <Badge variant="sage" className="px-1.5 py-0 text-[10px]">
-                              本次+{resultEntry.taughtSyncedCount + resultEntry.homeworkSyncedCount}
+                              课堂本次+{resultEntry.taughtSyncedCount}
+                            </Badge>
+                          )}
+                          {resultEntry && showHomework && resultEntry.homeworkSyncedCount > 0 && (
+                            <Badge variant="sage" className="px-1.5 py-0 text-[10px]">
+                              作业本次+{resultEntry.homeworkSyncedCount}
                             </Badge>
                           )}
                         </span>
@@ -219,6 +258,7 @@ export function LessonChecklistLinker({
         </div>
       )}
 
+      <PreviousLessonChecklistProgressCard progress={previousChecklistProgress} />
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-2">
           <label className="text-sm font-bold text-[#25324a]">清单模板</label>
@@ -324,6 +364,93 @@ export function LessonChecklistLinker({
   );
 }
 
+function PreviousLessonChecklistProgressCard({ progress }: { progress?: PreviousLessonChecklistProgress }) {
+  if (!progress) return null;
+  const completedLabel = progress.totalPossibleCount > 0
+    ? `${progress.totalCompletedCount}/${progress.totalPossibleCount}`
+    : "暂无学生";
+  return (
+    <div className="mt-4 rounded-[12px] border border-[#dbeafe] bg-white p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-sm font-extrabold text-[#25324a]">上一节学习清单进度</div>
+          <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+            来源：{progress.lesson.date} {lessonTimeRangeLabel(progress.lesson)} · {progress.template.name} · 当前学生累计 {completedLabel}
+          </div>
+        </div>
+        <Badge variant="secondary" className="w-fit">{progress.studentCount} 名学生</Badge>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <PreviousLessonChecklistProgressItems
+          title="上课内容"
+          tone="blue"
+          items={progress.taughtItems}
+          orderedItems={progress.template.items}
+          emptyText="上一节未关联上课内容"
+        />
+        <PreviousLessonChecklistProgressItems
+          title="课后作业"
+          tone="orange"
+          items={progress.homeworkItems}
+          orderedItems={progress.template.items}
+          emptyText="上一节未关联课后作业"
+        />
+      </div>
+
+      {progress.nextPendingItems.length > 0 && (
+        <div className="mt-3 rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] p-3">
+          <div className="mb-2 text-xs font-extrabold text-[#25324a]">未完成靠前条目</div>
+          <div className="flex flex-wrap gap-2">
+            {progress.nextPendingItems.map((item) => (
+              <Badge key={item.id} variant="outline" className="max-w-full whitespace-normal text-left leading-5">
+                {formatChecklistItemLabel(item, progress.template.items)}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PreviousLessonChecklistProgressItems({
+  title,
+  tone,
+  items,
+  orderedItems,
+  emptyText
+}: {
+  title: string;
+  tone: "blue" | "orange";
+  items: PreviousLessonChecklistItemProgress[];
+  orderedItems: ProgressChecklistTemplateItem[];
+  emptyText: string;
+}) {
+  const toneClass = tone === "blue" ? "text-[#1557c2]" : "text-[#c2410c]";
+  const badgeVariant = tone === "blue" ? "sky" : "amber";
+  return (
+    <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] p-3">
+      <div className={`mb-2 text-xs font-extrabold ${toneClass}`}>{title}</div>
+      {items.length === 0 ? (
+        <div className="text-xs font-semibold text-[#94a3b8]">{emptyText}</div>
+      ) : (
+        <div className="space-y-2">
+          {items.map(({ item, completedCount, totalStudentCount }) => (
+            <div key={item.id} className="flex items-start justify-between gap-2 rounded-[8px] border border-[#e8eef6] bg-white px-3 py-2">
+              <div className="min-w-0 text-xs font-bold leading-5 text-[#25324a]">
+                {formatChecklistItemLabel(item, orderedItems)}
+              </div>
+              <Badge variant={badgeVariant} className="shrink-0 px-1.5 py-0 text-[10px]">
+                {totalStudentCount > 0 ? `${completedCount}/${totalStudentCount}` : "暂无"}
+              </Badge>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function SelectedChecklistItems({
   title,
   tone,
@@ -380,6 +507,64 @@ function resolveSelectedItems(
     .filter((item): item is ProgressChecklistTemplateItem => Boolean(item));
 }
 
+function buildPreviousLessonChecklistProgress(
+  vault: TeacherVault,
+  lesson: Lesson | undefined,
+  previousLesson: Lesson | undefined
+): PreviousLessonChecklistProgress | undefined {
+  if (!previousLesson?.content.checklistTemplateId) return undefined;
+  const template = (vault.progressChecklistTemplates ?? []).find((item) => item.id === previousLesson.content.checklistTemplateId);
+  if (!template) return undefined;
+  const studentIds = activeLessonStudentIds(vault, lesson ?? previousLesson);
+  const completedKeys = new Set(
+    (vault.progressChecklistCompletions ?? [])
+      .filter((completion) =>
+        completion.templateId === template.id &&
+        completion.courseGroupId === previousLesson.courseGroupId &&
+        studentIds.includes(completion.studentId)
+      )
+      .map((completion) => checklistCompletionKey(completion.studentId, completion.itemId))
+  );
+  const itemProgress = (items: ProgressChecklistTemplateItem[]) => items.map((item) => ({
+    item,
+    totalStudentCount: studentIds.length,
+    completedCount: studentIds.filter((studentId) => completedKeys.has(checklistCompletionKey(studentId, item.id))).length
+  }));
+  const totalCompletedCount = template.items.reduce(
+    (sum, item) => sum + studentIds.filter((studentId) => completedKeys.has(checklistCompletionKey(studentId, item.id))).length,
+    0
+  );
+  const nextPendingItems = template.items
+    .slice()
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .filter((item) => studentIds.some((studentId) => !completedKeys.has(checklistCompletionKey(studentId, item.id))))
+    .slice(0, 4);
+
+  return {
+    lesson: previousLesson,
+    template,
+    studentCount: studentIds.length,
+    totalCompletedCount,
+    totalPossibleCount: template.items.length * studentIds.length,
+    taughtItems: itemProgress(resolveSelectedItems(template, uniqueIds(previousLesson.content.taughtChecklistItemIds ?? []))),
+    homeworkItems: itemProgress(resolveSelectedItems(template, uniqueIds(previousLesson.content.homeworkChecklistItemIds ?? []))),
+    nextPendingItems
+  };
+}
+
+function activeLessonStudentIds(vault: TeacherVault, lesson: Lesson): string[] {
+  const studentIds = lessonStudentIds(lesson);
+  const activeStudentIds = studentIds.filter((studentId) => findStudent(vault, studentId)?.status === "active");
+  return activeStudentIds.length > 0 ? activeStudentIds : studentIds;
+}
+
+function checklistCompletionKey(studentId: string, itemId: string): string {
+  return `${studentId}::${itemId}`;
+}
+
+function uniqueIds(ids: string[]): string[] {
+  return Array.from(new Set(ids));
+}
 function formatChecklistItemLabel(item: ProgressChecklistTemplateItem, orderedItems?: ProgressChecklistTemplateItem[]): string {
   return formatChecklistItemLine(item, orderedItems);
 }
