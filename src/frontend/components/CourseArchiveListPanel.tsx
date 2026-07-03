@@ -114,14 +114,14 @@ export function CourseArchiveListPanel({
               size="sm"
               variant="outline"
               className="h-8 border-[#1557c2] bg-[#1557c2] text-white shadow-sm hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white disabled:border-[#bfdbfe] disabled:bg-[#dbeafe] disabled:text-[#64748b]"
-              title="课程档案变更后，刷新当前筛选课程的未来待上课课节快照；历史和已完成课节不会改。"
+              title="调整学生阶段、名单或金额后，刷新当前筛选课程的未来待上课课节；历史和已完成课节保持不变。"
               onClick={onRequestSyncVisibleCourses}
               disabled={visibleCourses.length === 0}
             >
               <RefreshCw size={14} /> 同步当前筛选课程
             </Button>
-            <span className="min-w-0 max-w-[340px] truncate text-xs font-semibold text-[#64748b]" title="修改课程档案的班型、校区、学生名单或金额后，用它刷新当前筛选课程的未来待上课课节；历史和已完成课节不会改。">
-              档案变更后刷新未来课节；历史/已完成不改
+            <span className="min-w-0 max-w-[340px] truncate text-xs font-semibold text-[#64748b]" title="调整学生阶段、班型、学生名单或金额后，点此同步到未来待上课课节；历史和已完成课节保持不变。">
+              调整学生或阶段后，记得点同步刷新未来课节
             </span>
           </div>
         </div>
