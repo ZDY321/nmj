@@ -144,6 +144,9 @@ export function StudentArchivePanel({
             {studentStatusFilter !== "all" ? ` · ${studentStatusFilterLabel(studentStatusFilter)}` : ""}
           </Badge>
         </div>
+        <span className="text-xs font-semibold text-[#64748b]" title="修改学生年级或阶段后，请到右侧课程档案点击「同步当前筛选课程」，将变更同步到未来课节。">
+          修改学生阶段后，请到课程档案点同步以刷新未来课节
+        </span>
         <form onSubmit={onAddStudent} className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           <Input
             value={studentNameInput}
