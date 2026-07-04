@@ -107,6 +107,7 @@ type CalendarOverviewFocusState = {
 };
 
 type PayrollPanelFocus = "review" | "reconcile" | "mapping" | "guide";
+type StudentsPanelFocus = "profile" | "salaryRules" | "campuses" | "students" | "courses";
 
 type ScheduleCalendarFocus = {
   date: string;
@@ -160,6 +161,7 @@ export function App() {
   const [syncCountdownSeconds, setSyncCountdownSeconds] = useState(syncCheckIntervalSeconds);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
+  const [studentsPanelFocus, setStudentsPanelFocus] = useState<{ panel: StudentsPanelFocus; nonce: number } | null>(null);
   const [progressChecklistFocus, setProgressChecklistFocus] = useState<ProgressChecklistFocus | null>(null);
   const [calendarOverviewFocus, setCalendarOverviewFocus] = useState<(CalendarOverviewFocusState & { nonce: number }) | null>(null);
   const [payrollReviewFocus, setPayrollReviewFocus] = useState<{ panel: PayrollPanelFocus; nonce: number } | null>(null);
@@ -1338,9 +1340,12 @@ export function App() {
     });
   }
 
-  function openOnboardingStep(stepKey: OnboardingStepKey, nextView: ViewKey) {
+  function openOnboardingStep(stepKey: OnboardingStepKey, nextView: ViewKey, studentsPanel?: StudentsPanelFocus) {
     recordOnboardingStep(stepKey);
     dismissOnboarding();
+    if (nextView === "students" && studentsPanel) {
+      setStudentsPanelFocus({ panel: studentsPanel, nonce: Date.now() });
+    }
     setView(nextView);
   }
 
@@ -1895,6 +1900,7 @@ export function App() {
                   <StudentsView
                     vault={vault}
                     amountsVisible={amountsVisible}
+                    focusRequest={studentsPanelFocus}
                     onAddCampus={(campus) =>
                       updateVault((draft) => {
                         draft.campuses.push(campus);

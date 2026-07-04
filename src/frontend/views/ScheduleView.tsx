@@ -405,6 +405,9 @@ export function ScheduleView({
   const aiMessage = aiSession?.message ?? "";
   const { confirm, dialog } = useConfirmDialog();
   const isAdmin = role === "admin";
+  const aiScheduleEntryVisible = isAdmin
+    ? Boolean(vault.profile.aiSchedulingAdminEnabled ?? vault.profile.aiSchedulingEnabled)
+    : Boolean(vault.profile.aiSchedulingEnabled);
   const calendarViewCampusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const calendarViewGradeOptions = Array.from(
     new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))
@@ -457,10 +460,10 @@ export function ScheduleView({
   }, [isAdmin, token]);
 
   useEffect(() => {
-    if (schedulePanel === "ai" && !vault.profile.aiSchedulingEnabled) {
+    if (schedulePanel === "ai" && !aiScheduleEntryVisible) {
       setSchedulePanel("schedule");
     }
-  }, [schedulePanel, vault.profile.aiSchedulingEnabled]);
+  }, [aiScheduleEntryVisible, schedulePanel]);
 
   useEffect(() => {
     const fallbackCourseId = courseSelectionOptions[0]?.id ?? "";
@@ -1597,6 +1600,82 @@ export function ScheduleView({
     onUpdateLesson(recalculateLessonFee(nextLesson));
   }
 
+  function updateMakeupManagementAttendance(lesson: Lesson, studentId: string, status: AttendanceStatus) {
+    const hasAttendanceEntry = lesson.attendance.some((entry) => entry.studentId === studentId);
+    const nextLesson: Lesson = {
+      ...lesson,
+      attendance: [
+        ...lesson.attendance.map((entry) =>
+          entry.studentId === studentId ? { ...entry, status, makeupExempt: isMakeupAttendanceStatus(status) ? entry.makeupExempt : undefined } : entry
+        ),
+        ...(hasAttendanceEntry ? [] : [{ studentId, status }])
+      ]
+    };
+    if (lessonStudentIds(lesson).length <= 1) {
+      nextLesson.status = lessonStatusForAttendanceStatus(status);
+    } else if (nextLesson.status === "makeup_pending" && makeupNeededStudentIds(nextLesson).length === 0) {
+      nextLesson.status = statusAfterNoMakeupNeeded(nextLesson);
+    }
+    onUpdateLesson(recalculateLessonFee(nextLesson));
+  }
+
+  function updateMakeupManagementExempt(lesson: Lesson, studentId: string, makeupExempt: boolean) {
+    const hasAttendanceEntry = lesson.attendance.some((entry) => entry.studentId === studentId);
+    const nextLesson: Lesson = {
+      ...lesson,
+      attendance: [
+        ...lesson.attendance.map((entry) =>
+          entry.studentId === studentId ? { ...entry, makeupExempt: makeupExempt ? true : undefined } : entry
+        ),
+        ...(hasAttendanceEntry ? [] : [{ studentId, status: "makeup_pending" as AttendanceStatus, makeupExempt: makeupExempt ? true : undefined }])
+      ]
+    };
+    const neededStudentIds = makeupNeededStudentIds(nextLesson);
+    if (makeupExempt && nextLesson.status === "makeup_pending" && neededStudentIds.length === 0) {
+      nextLesson.status = statusAfterNoMakeupNeeded(nextLesson);
+    }
+    if (!makeupExempt && lessonStudentIds(lesson).length <= 1 && neededStudentIds.includes(studentId)) {
+      nextLesson.status = "makeup_pending";
+    }
+    onUpdateLesson(recalculateLessonFee(nextLesson));
+  }
+
+  function markOriginalStudentsMadeUp(lesson: Lesson, studentIds: string[]) {
+    if (studentIds.length === 0) return;
+    const studentIdSet = new Set(studentIds);
+    const existingStudentIds = new Set(lesson.attendance.map((entry) => entry.studentId));
+    const completedNote = `${todayIso()} 已补课完成`;
+    const nextLesson: Lesson = {
+      ...lesson,
+      attendance: [
+        ...lesson.attendance.map((entry) =>
+          studentIdSet.has(entry.studentId)
+            ? { ...entry, status: "makeup_completed" as AttendanceStatus, makeupExempt: undefined, note: entry.note || completedNote }
+            : entry
+        ),
+        ...studentIds
+          .filter((studentId) => !existingStudentIds.has(studentId))
+          .map((studentId) => ({ studentId, status: "makeup_completed" as AttendanceStatus, note: completedNote }))
+      ]
+    };
+    if ((nextLesson.status === "makeup_pending" || lesson.status === "makeup_pending") && makeupNeededStudentIds(nextLesson).length === 0) {
+      nextLesson.status = statusAfterNoMakeupNeeded(nextLesson);
+    }
+    onUpdateLesson(recalculateLessonFee(nextLesson));
+    showScheduleNotice(`已标记 ${studentIds.length} 名学生已补课。`);
+  }
+
+  function completeScheduledMakeupLessons(makeupLessons: Lesson[]) {
+    const activeLessons = makeupLessons.filter((lesson) => lesson.status !== "completed" && lesson.status !== "makeup_completed");
+    if (activeLessons.length === 0) return;
+    onUpdateLessons(activeLessons.map((lesson) => recalculateLessonFee({
+      ...lesson,
+      status: "makeup_completed",
+      attendance: lesson.attendance.map((entry) => ({ ...entry, status: "makeup_completed" as AttendanceStatus, makeupExempt: undefined }))
+    })));
+    showScheduleNotice(`已标记 ${activeLessons.length} 节补课完成。`);
+  }
+
   function updateAttendanceNote(studentId: string, note: string) {
     if (!selected) return;
     onUpdateLesson({
@@ -2098,7 +2177,7 @@ export function ScheduleView({
         deletedLessonCount={deletedLessons.length}
         onChange={switchSchedulePanel}
         role={role}
-        aiSchedulingEnabled={vault.profile.aiSchedulingEnabled}
+        aiSchedulingEnabled={aiScheduleEntryVisible}
       />
       {lessonReturnTarget?.kind === "view" && schedulePanel !== "records" && (
         <div className="flex flex-col gap-2 rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-4 py-3 text-sm font-semibold text-[#1557c2] sm:flex-row sm:items-center sm:justify-between">
@@ -2119,7 +2198,7 @@ export function ScheduleView({
         </div>
       )}
 
-      {schedulePanel === "ai" && vault.profile.aiSchedulingEnabled && (
+      {schedulePanel === "ai" && aiScheduleEntryVisible && (
         <ScheduleAiPanel
           aiActiveCourseCount={aiActiveCourseCount}
           aiActiveStudentCount={aiActiveStudentCount}
@@ -2377,9 +2456,13 @@ export function ScheduleView({
           makeupEntries={makeupEntries}
           makeupMarkerForLesson={makeupMarkerForLesson}
           makeupOriginalDateFilter={makeupOriginalDateFilter}
+          onCompleteScheduledMakeups={completeScheduledMakeupLessons}
           onDeleteLesson={askDeleteLesson}
           onMakeupOriginalDateFilterChange={setMakeupOriginalDateFilter}
+          onMarkOriginalStudentsMadeUp={markOriginalStudentsMadeUp}
           onOpenLesson={openLessonInRecords}
+          onUpdateOriginalAttendance={updateMakeupManagementAttendance}
+          onUpdateOriginalMakeupExempt={updateMakeupManagementExempt}
           optionalDateWithWeekday={optionalDateWithWeekday}
           pendingCount={selectedCalendarPendingCount}
           cancelledCount={selectedCalendarCancelledCount}

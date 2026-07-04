@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { Lesson, TeacherVault } from "@/shared/types";
+import { Select } from "@/components/ui/select";
+import type { AttendanceStatus, Lesson, TeacherVault } from "@/shared/types";
 import {
   attendanceLabels,
   attendedStudentNamesForLesson,
@@ -41,8 +42,12 @@ type ScheduleCalendarFollowupPanelsProps = {
   makeupEntries: CalendarMakeupEntry[];
   makeupMarkerForLesson: (lesson: Lesson) => string | null;
   makeupOriginalDateFilter: string;
+  onCompleteScheduledMakeups?: (lessons: Lesson[]) => void;
   onDeleteLesson: (lesson: Lesson) => void;
   onMakeupOriginalDateFilterChange: (value: string) => void;
+  onMarkOriginalStudentsMadeUp?: (lesson: Lesson, studentIds: string[]) => void;
+  onUpdateOriginalAttendance?: (lesson: Lesson, studentId: string, status: AttendanceStatus) => void;
+  onUpdateOriginalMakeupExempt?: (lesson: Lesson, studentId: string, makeupExempt: boolean) => void;
   onOpenLesson: (lesson: Lesson) => void;
   optionalDateWithWeekday: (date: string | null | undefined) => string;
   pendingCount: number;
@@ -62,9 +67,13 @@ export function ScheduleCalendarFollowupPanels({
   makeupEntries,
   makeupMarkerForLesson,
   makeupOriginalDateFilter,
+  onCompleteScheduledMakeups,
   onDeleteLesson,
   onMakeupOriginalDateFilterChange,
+  onMarkOriginalStudentsMadeUp,
   onOpenLesson,
+  onUpdateOriginalAttendance,
+  onUpdateOriginalMakeupExempt,
   optionalDateWithWeekday,
   pendingCount,
   cancelledCount,
@@ -75,6 +84,10 @@ export function ScheduleCalendarFollowupPanels({
   totalAmount,
   vault
 }: ScheduleCalendarFollowupPanelsProps) {
+  const incompleteScheduledMakeupLessons = scheduledMakeupEntries
+    .map((entry) => entry.lesson)
+    .filter((lesson) => lesson.status !== "completed" && lesson.status !== "makeup_completed");
+
   return (
     <div className={showDailyDetails ? "grid grid-cols-1 gap-6 xl:grid-cols-[0.95fr_1.05fr] xl:items-start" : "grid grid-cols-1 gap-6"}>
       {showDailyDetails && (
@@ -101,7 +114,7 @@ export function ScheduleCalendarFollowupPanels({
               </div>
             ))}
           </div>
-          <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
+          <div className="space-y-2">
             {selectedCalendarLessons.map((lesson) => {
               const makeupMarker = makeupMarkerForLesson(lesson);
               return (
@@ -146,7 +159,7 @@ export function ScheduleCalendarFollowupPanels({
             <RotateCcw size={14} /> 补课跟进
           </div>
           <CardTitle>需要补课的学生</CardTitle>
-          <CardDescription>按原课日期筛选待补课记录，点击课程到课程记录里安排补课。</CardDescription>
+          <CardDescription>{showDailyDetails ? "按原课日期筛选待补课记录，点击课程到课程记录里安排补课。" : "可直接调整待补学生状态、标记本次不补，或批量完成已安排补课。"}</CardDescription>
         </CardHeader>
         <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
@@ -159,10 +172,8 @@ export function ScheduleCalendarFollowupPanels({
             </Button>
           </div>
           {makeupEntries.map(({ lesson, entries, scheduledCount, wholeLesson }) => (
-            <button
+            <div
               key={lesson.id}
-              type="button"
-              onClick={() => onOpenLesson(lesson)}
               className="w-full rounded-[14px] border border-[#facc15] bg-[#fefce8] p-3 text-left transition-all hover:border-[#eab308] hover:bg-[#fef3c7]"
             >
               <div className="flex flex-col gap-3">
@@ -186,9 +197,18 @@ export function ScheduleCalendarFollowupPanels({
                       </Badge>
                     </div>
                   </div>
-                  <Badge variant="secondary" className="w-fit shrink-0">查看详情</Badge>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {onMarkOriginalStudentsMadeUp && entries.length > 1 && (
+                      <Button type="button" size="sm" variant="outline" className="border-[#fde68a] bg-white text-[#854d0e]" onClick={() => onMarkOriginalStudentsMadeUp(lesson, entries.map((entry) => entry.studentId))}>
+                        批量已补课
+                      </Button>
+                    )}
+                    <Button type="button" size="sm" variant="outline" className="bg-white" onClick={() => onOpenLesson(lesson)}>
+                      查看详情
+                    </Button>
+                  </div>
                 </div>
-                {!wholeLesson && (
+                {(!wholeLesson || !showDailyDetails || onUpdateOriginalAttendance || onMarkOriginalStudentsMadeUp || onUpdateOriginalMakeupExempt) && (
                   <div className="space-y-2">
                     {entries.map((entry) => {
                       const studentName = findStudent(vault, entry.studentId)?.name ?? "未知学生";
@@ -203,15 +223,39 @@ export function ScheduleCalendarFollowupPanels({
                             </div>
                             {entry.note && <div className="mt-1 text-xs font-semibold text-[#9a3412]">备注：{entry.note}</div>}
                           </div>
-                          <Badge variant="amber" className="w-fit shrink-0">待安排</Badge>
+                          <div className="flex shrink-0 flex-wrap items-center gap-2">
+                            {onUpdateOriginalAttendance && (
+                              <Select value={entry.status} onChange={(event) => onUpdateOriginalAttendance(lesson, entry.studentId, event.target.value as AttendanceStatus)} className="h-9 max-w-[136px] bg-white">
+                                <option value="leave_requested">请假</option>
+                                <option value="absent">缺席</option>
+                                <option value="makeup_pending">待补课</option>
+                                <option value="makeup_completed">已补课</option>
+                                <option value="attended">到课</option>
+                              </Select>
+                            )}
+                            {onMarkOriginalStudentsMadeUp && (
+                              <Button type="button" size="sm" variant="outline" className="border-[#bbf7d0] bg-white text-[#15803d]" onClick={() => onMarkOriginalStudentsMadeUp(lesson, [entry.studentId])}>
+                                已补课
+                              </Button>
+                            )}
+                            {onUpdateOriginalMakeupExempt && (
+                              <Button type="button" size="sm" variant="outline" className="border-[#fde68a] bg-white text-[#854d0e]" onClick={() => onUpdateOriginalMakeupExempt(lesson, entry.studentId, true)}>
+                                本次不补
+                              </Button>
+                            )}
+                            {!onUpdateOriginalAttendance && !onMarkOriginalStudentsMadeUp && !onUpdateOriginalMakeupExempt && (
+                              <Badge variant="amber" className="w-fit shrink-0">待安排</Badge>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
               </div>
-            </button>
+            </div>
           ))}
+
           {makeupEntries.length === 0 && (
             <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
               {makeupOriginalDateFilter ? "这个原课日期暂无待补课学生" : "暂无待补课学生"}
@@ -219,9 +263,23 @@ export function ScheduleCalendarFollowupPanels({
           )}
           {scheduledMakeupEntries.length > 0 && (
             <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm font-extrabold text-[#061226]">已安排补课</div>
-                <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">{scheduledMakeupEntries.length} 节</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  {onCompleteScheduledMakeups && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-[#bbf7d0] bg-white text-[#15803d]"
+                      disabled={incompleteScheduledMakeupLessons.length === 0}
+                      onClick={() => onCompleteScheduledMakeups(incompleteScheduledMakeupLessons)}
+                    >
+                      批量标记已补课
+                    </Button>
+                  )}
+                  <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">{scheduledMakeupEntries.length} 节</Badge>
+                </div>
               </div>
               <div className="space-y-2">
                 {scheduledMakeupEntries.map(({ lesson, original }) => (
@@ -243,6 +301,17 @@ export function ScheduleCalendarFollowupPanels({
                           </Badge>
                         </div>
                       </div>
+                      {onCompleteScheduledMakeups && lesson.status !== "completed" && lesson.status !== "makeup_completed" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="border-[#bbf7d0] bg-white text-[#15803d]"
+                          onClick={() => onCompleteScheduledMakeups([lesson])}
+                        >
+                          标记已补课
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         size="sm"

@@ -225,7 +225,7 @@ export function LoginScreen({
                   <span>
                     <span className="block">信任此设备 30 天</span>
                     <span className="mt-1 block text-xs font-semibold leading-5 text-[#64748b]">
-                      仅建议在自己的手机或电脑上开启；关闭后可自动恢复解锁，到期或退出后需要重新输入数据密码。
+                      仅建议在自己的手机或电脑上开启；勾选后 30 天内关闭页面再打开可直接进入工作台。到期、退出登录或清除本地缓存后，需要重新输入数据密码。
                     </span>
                   </span>
                 </label>

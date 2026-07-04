@@ -346,6 +346,7 @@ export type TeacherProfile = {
   monthlyObligationHours?: number;
   obligationHourlyDeduction?: number;
   manualObligationDeduction?: number;
+  aiSchedulingAdminEnabled?: boolean;
   aiSchedulingEnabled?: boolean;
   note?: string;
 };

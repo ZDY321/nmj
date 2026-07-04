@@ -56,6 +56,22 @@ const KEEP_CAMPUS = "__keep";
 const COURSE_DEFAULT_CAMPUS = "__course_default";
 const orderedWeekdays: Weekday[] = [1, 2, 3, 4, 5, 6, 0];
 
+function currentMonthStartIso(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}-01`;
+}
+
+function currentMonthEndIso(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const monthIndex = today.getMonth();
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+  const month = String(monthIndex + 1).padStart(2, "0");
+  return `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
+}
+
 function dateWithWeekday(date: string): string {
   return date ? `${date} · ${weekdayLabels[weekdayOfDateIso(date)]}` : "未设置";
 }
@@ -82,8 +98,8 @@ function previewStatusText(item: ScheduleAdjustmentPreviewItem): string {
 export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }: ScheduleAdjustmentPanelProps) {
   const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
   const subjectOptions = useMemo(() => subjectOptionsForVault(vault), [vault]);
-  const [dateStart, setDateStart] = useState("");
-  const [dateEnd, setDateEnd] = useState("");
+  const [dateStart, setDateStart] = useState(currentMonthStartIso);
+  const [dateEnd, setDateEnd] = useState(currentMonthEndIso);
   const [courseFilter, setCourseFilter] = useState("all");
   const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
   const [subjectFilter, setSubjectFilter] = useState("all");
@@ -340,13 +356,25 @@ export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <button type="button" onClick={() => setOperation("shift")} className={`rounded-[12px] border px-3 py-3 text-left text-sm font-bold transition-colors ${operation === "shift" ? "border-[#93c5fd] bg-[#eaf2ff] text-[#1557c2]" : "border-[#dbe4ef] bg-white text-[#25324a] hover:bg-[#f8fbff]"}`}>
-                <Clock3 size={16} className="mb-2" /> 整体平移
+                <Clock3 size={16} className="mb-2" />
+                <div>整体平移</div>
+                <div className={`mt-2 text-xs font-semibold leading-5 ${operation === "shift" ? "text-[#3768b8]" : "text-[#64748b]"}`}>
+                  选中的每节课按原日期统一前移或后移指定天数，适合整周顺延、假期前后整体调整。
+                </div>
               </button>
               <button type="button" onClick={() => setOperation("set_date")} className={`rounded-[12px] border px-3 py-3 text-left text-sm font-bold transition-colors ${operation === "set_date" ? "border-[#93c5fd] bg-[#eaf2ff] text-[#1557c2]" : "border-[#dbe4ef] bg-white text-[#25324a] hover:bg-[#f8fbff]"}`}>
-                <CalendarRange size={16} className="mb-2" /> 移到同一天
+                <CalendarRange size={16} className="mb-2" />
+                <div>移到同一天</div>
+                <div className={`mt-2 text-xs font-semibold leading-5 ${operation === "set_date" ? "text-[#3768b8]" : "text-[#64748b]"}`}>
+                  把选中的课全部改到同一个目标日期；可在下方保留原时间，或统一改成同一时间段。
+                </div>
               </button>
               <button type="button" onClick={() => setOperation("redistribute")} className={`rounded-[12px] border px-3 py-3 text-left text-sm font-bold transition-colors ${operation === "redistribute" ? "border-[#93c5fd] bg-[#eaf2ff] text-[#1557c2]" : "border-[#dbe4ef] bg-white text-[#25324a] hover:bg-[#f8fbff]"}`}>
-                <Shuffle size={16} className="mb-2" /> 日期段重排
+                <Shuffle size={16} className="mb-2" />
+                <div>日期段重排</div>
+                <div className={`mt-2 text-xs font-semibold leading-5 ${operation === "redistribute" ? "text-[#3768b8]" : "text-[#64748b]"}`}>
+                  按左侧选中课节顺序，依次分配到目标日期段内符合星期条件的日期，日期位不足会在预览中提示。
+                </div>
               </button>
             </div>
 

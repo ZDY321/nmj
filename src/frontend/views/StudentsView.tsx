@@ -53,10 +53,12 @@ export function StudentsView({
   onDeleteSubject,
   onTransferStudentCourse,
   onOpenSchedule,
-  amountsVisible
+  amountsVisible,
+  focusRequest
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
+  focusRequest?: { panel: ArchivePanel; nonce: number } | null;
   onAddCampus: (campus: Campus) => void;
   onUpdateCampus: (campus: Campus) => void;
   onDeleteCampus: (campusId: string) => void;
@@ -139,6 +141,12 @@ export function StudentsView({
   const [editingCourse, setEditingCourse] = useState<CourseGroup | null>(null);
   const [flashingArchiveItem, setFlashingArchiveItem] = useState<{ panel: ArchivePanel; id: string } | null>(null);
   const [archivePanel, setArchivePanel] = useState<ArchivePanel>("profile");
+
+  useEffect(() => {
+    if (focusRequest?.panel) {
+      setArchivePanel(focusRequest.panel);
+    }
+  }, [focusRequest?.nonce]);
   const [gradeFilter, setGradeFilter] = useState("all");
   const [studentCampusFilter, setStudentCampusFilter] = useState("all");
   const [studentStatusFilter, setStudentStatusFilter] = useState<StudentStatusFilter>("active");

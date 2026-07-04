@@ -122,7 +122,9 @@ export function ProgressChecklistView({
   const [promptCopyMessage, setPromptCopyMessage] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
-  const aiFeatureEnabled = role === "admin" || Boolean(vault.profile.aiSchedulingEnabled);
+  const aiFeatureEnabled = role === "admin"
+    ? Boolean(vault.profile.aiSchedulingAdminEnabled ?? vault.profile.aiSchedulingEnabled)
+    : Boolean(vault.profile.aiSchedulingEnabled);
 
   const courseOptions = useMemo(
     () => sortCoursesByName(vault.courseGroups).filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)),

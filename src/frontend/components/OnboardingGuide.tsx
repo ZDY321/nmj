@@ -17,6 +17,7 @@ type GuideStep = {
   description: string;
   detail: string;
   view: ViewKey;
+  studentsPanel?: "profile" | "salaryRules" | "campuses" | "students" | "courses";
   button: string;
   dataDone: boolean;
   visited: boolean;
@@ -33,7 +34,7 @@ export function OnboardingGuide({
 }: {
   vault: TeacherVault;
   visitedSteps: OnboardingStepKey[];
-  onOpenStep: (stepKey: OnboardingStepKey, view: ViewKey) => void;
+  onOpenStep: (stepKey: OnboardingStepKey, view: ViewKey, studentsPanel?: "profile" | "salaryRules" | "campuses" | "students" | "courses") => void;
   onDismiss: () => void;
 }) {
   const stepStates = getOnboardingStepStates(vault, visitedSteps);
@@ -42,18 +43,20 @@ export function OnboardingGuide({
     {
       key: "profile",
       title: "建立校区和个人档案",
-      description: "先录入常用校区、基本工资和义务课时规则。",
-      detail: "这些信息会被后续课程、课时费、工资核对自动引用，建议先把校区和基本工资填好。",
+      description: "先录入老师信息、默认校区、基本工资和义务课时规则。",
+      detail: "这些信息会被后续课程、课时费、工资核对自动引用，建议先把个人信息和工资规则填好。",
       view: "students",
-      button: "去档案信息"
+      studentsPanel: "profile",
+      button: "去个人信息"
     },
     {
       key: "student_course",
       title: "录入学生和课程",
-      description: "给学生建档，再创建一对一、一对二、班课或试听课程，并设置计费方式。",
-      detail: "课程会绑定学生、校区和收费规则；后面排课时只需要选择课程，金额会自动带出。",
+      description: "先在学生列表建档，再到添加课程档案创建一对一、一对二、班课或试听课程。",
+      detail: "课程会绑定学生、校区、科目和班型；后面排课时只需要选择课程，金额会按当前规则自动带出。",
       view: "students",
-      button: "添加学生课程"
+      studentsPanel: "students",
+      button: "去学生列表"
     },
     {
       key: "schedule",
@@ -145,7 +148,7 @@ export function OnboardingGuide({
                         <div className="mb-2 flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => onOpenStep(step.key, step.view)}
+                            onClick={() => onOpenStep(step.key, step.view, step.studentsPanel)}
                             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-extrabold text-[#1557c2] ring-1 ring-[#dbe4ef] transition-colors hover:bg-[#eaf2ff]"
                             aria-label={`进入第 ${index + 1} 步：${step.title}`}
                             title={step.button}
@@ -165,7 +168,7 @@ export function OnboardingGuide({
                         variant={step.done ? "outline" : "secondary"}
                         size="sm"
                         className="shrink-0"
-                        onClick={() => onOpenStep(step.key, step.view)}
+                        onClick={() => onOpenStep(step.key, step.view, step.studentsPanel)}
                       >
                         {step.button}
                       </Button>

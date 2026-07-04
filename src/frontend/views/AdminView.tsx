@@ -190,6 +190,8 @@ export function AdminView({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
+  const aiAdminEntryVisible = Boolean(vault.profile.aiSchedulingAdminEnabled ?? vault.profile.aiSchedulingEnabled);
+  const aiUserEntryVisible = Boolean(vault.profile.aiSchedulingEnabled);
 
   useEffect(() => {
     setTitle(vault.notice.title);
@@ -791,24 +793,51 @@ export function AdminView({
               </Button>
             </div>
 
-            <div className="flex flex-col gap-3 rounded-[14px] border border-[#c7d2fe] bg-[#eef0ff] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-3 rounded-[14px] border border-[#c7d2fe] bg-[#eef0ff] p-4">
               <div>
-                <div className="font-extrabold text-[#061226]">AI 排课助手</div>
+                <div className="font-extrabold text-[#061226]">AI 排课助手入口</div>
                 <div className="mt-1 text-sm font-semibold text-[#64748b]">
-                  当前状态：{vault.profile.aiSchedulingEnabled ? "入口已显示" : "入口已隐藏"}
+                  管理员和普通用户入口分开控制，方便只给管理员调试。
                 </div>
               </div>
-              <Button
-                variant={vault.profile.aiSchedulingEnabled ? "destructive" : "default"}
-                disabled={busy}
-                onClick={() => {
-                  const nextEnabled = !vault.profile.aiSchedulingEnabled;
-                  onUpdateProfile({ aiSchedulingEnabled: nextEnabled });
-                  setMessage(nextEnabled ? "AI 排课助手入口已显示。" : "AI 排课助手入口已隐藏。");
-                }}
-              >
-                {vault.profile.aiSchedulingEnabled ? "隐藏入口" : "显示入口"}
-              </Button>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-3 rounded-[12px] border border-[#c7d2fe] bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-extrabold text-[#061226]">管理员入口</div>
+                    <div className="mt-1 text-xs font-semibold text-[#64748b]">当前状态：{aiAdminEntryVisible ? "已显示" : "已隐藏"}</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={aiAdminEntryVisible ? "destructive" : "default"}
+                    disabled={busy}
+                    onClick={() => {
+                      const nextEnabled = !aiAdminEntryVisible;
+                      onUpdateProfile({ aiSchedulingAdminEnabled: nextEnabled });
+                      setMessage(nextEnabled ? "AI 排课助手管理员入口已显示。" : "AI 排课助手管理员入口已隐藏。");
+                    }}
+                  >
+                    {aiAdminEntryVisible ? "隐藏管理员入口" : "显示管理员入口"}
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-3 rounded-[12px] border border-[#c7d2fe] bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-extrabold text-[#061226]">普通用户入口</div>
+                    <div className="mt-1 text-xs font-semibold text-[#64748b]">当前状态：{aiUserEntryVisible ? "已显示" : "已隐藏"}</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={aiUserEntryVisible ? "destructive" : "default"}
+                    disabled={busy}
+                    onClick={() => {
+                      const nextEnabled = !aiUserEntryVisible;
+                      onUpdateProfile({ aiSchedulingEnabled: nextEnabled });
+                      setMessage(nextEnabled ? "AI 排课助手普通用户入口已显示。" : "AI 排课助手普通用户入口已隐藏。");
+                    }}
+                  >
+                    {aiUserEntryVisible ? "隐藏普通用户入口" : "显示普通用户入口"}
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -848,7 +877,7 @@ export function AdminView({
                 <span className="min-w-0">
                   <span className="block text-sm font-extrabold">信任此设备 30 天</span>
                   <span className="mt-1 block text-xs font-semibold leading-5 text-[#9a3412]">
-                    仅建议在自己的手机或电脑上开启。关闭后可自动恢复解锁，到期、退出或删除本地缓存后需要重新输入数据密码。
+                    仅建议在自己的手机或电脑上开启。勾选后 30 天内关闭页面再打开可直接进入工作台；到期、退出登录或删除本地缓存后需要重新输入数据密码。
                   </span>
                 </span>
               </label>
