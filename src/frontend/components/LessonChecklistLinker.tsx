@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookCheck, BookOpen, ChevronDown, ExternalLink, NotebookPen, RefreshCw, Search, X } from "lucide-react";
+import { BookCheck, BookOpen, CheckCheck, ChevronDown, ExternalLink, NotebookPen, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { compareByName, findStudent, lessonStudentIds, lessonTimeRangeLabel } from "@/frontend/lib/helpers";
-import { formatChecklistItemLine, formatChecklistItemTitle } from "@/frontend/lib/progressChecklist";
+import { checklistCompletionAppliesToSource, formatChecklistItemLine, formatChecklistItemTitle } from "@/frontend/lib/progressChecklist";
 import type { Lesson, LessonContent, ProgressChecklistTemplate, ProgressChecklistTemplateItem, TeacherVault } from "@/shared/types";
 
 type ChecklistField = "taught" | "homework";
@@ -183,21 +183,21 @@ export function LessonChecklistLinker({
         <div className="mt-4 rounded-[12px] border border-[#dbeafe] bg-white p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 text-sm font-semibold leading-6 text-[#475569]">
-              <div className="font-extrabold text-[#25324a]">本节同步到学生清单</div>
+              <div className="font-extrabold text-[#25324a]">本节完成到学生清单</div>
               <div>
                 {syncSummary.templateName} · {syncSummary.studentCount} 名在读学生 · 课堂 {syncSummary.taughtCompletedCount}/{syncSummary.taughtCompletedCount + syncSummary.taughtPendingCount} · 作业 {syncSummary.homeworkCompletedCount}/{syncSummary.homeworkCompletedCount + syncSummary.homeworkPendingCount}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => onSyncChecklist("taught")} disabled={syncSummary.taughtLinkedItemCount === 0 || syncSummary.taughtPendingCount === 0}>
-                <RefreshCw size={14} /> 同步课堂 {syncSummary.taughtPendingCount || ""}
+                <CheckCheck size={14} /> 完成课堂 {syncSummary.taughtPendingCount || ""}
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => onSyncChecklist("homework")} disabled={syncSummary.homeworkLinkedItemCount === 0 || syncSummary.homeworkPendingCount === 0}>
-                <RefreshCw size={14} /> 同步作业 {syncSummary.homeworkPendingCount || ""}
+                <CheckCheck size={14} /> 完成作业 {syncSummary.homeworkPendingCount || ""}
               </Button>
             </div>
           </div>
-          {syncMessage && <Badge variant={syncMessage.includes("已同步") || syncMessage.includes("全部") ? "sage" : "secondary"} className="mt-3">{syncMessage}</Badge>}
+          {syncMessage && <Badge variant={syncMessage.includes("已完成") || syncMessage.includes("全部") ? "sage" : "secondary"} className="mt-3">{syncMessage}</Badge>}
 
           {perStudentStatus && perStudentStatus.length > 0 && (
             <div className="mt-3">
@@ -206,7 +206,7 @@ export function LessonChecklistLinker({
                 className="flex w-full items-center justify-between rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-left text-xs font-bold text-[#475569] transition-colors hover:bg-[#eef5ff]"
                 onClick={() => setStudentDetailExpanded((v) => !v)}
               >
-                <span>学生同步明细 · {perStudentStatus.length} 人{lastSyncSource ? ` · 最近同步${lastSyncSource === "taught" ? "课堂" : "作业"}` : ""}</span>
+                <span>学生完成明细 · {perStudentStatus.length} 人{lastSyncSource ? ` · 最近完成${lastSyncSource === "taught" ? "课堂" : "作业"}` : ""}</span>
                 <ChevronDown size={14} className={`text-[#64748b] transition-transform ${studentDetailExpanded ? "rotate-180" : ""}`} />
               </button>
               {studentDetailExpanded && (
@@ -231,10 +231,10 @@ export function LessonChecklistLinker({
                         <span className="font-bold text-[#25324a]">{student.studentName}</span>
                         <span className="flex items-center gap-2">
                           {showTaught && student.taughtPendingCount > 0 && (
-                            <span className="text-[#1557c2]">课堂待同步 {student.taughtPendingCount}</span>
+                            <span className="text-[#1557c2]">课堂待完成 {student.taughtPendingCount}</span>
                           )}
                           {showHomework && student.homeworkPendingCount > 0 && (
-                            <span className="text-[#c2410c]">作业待同步 {student.homeworkPendingCount}</span>
+                            <span className="text-[#c2410c]">作业待完成 {student.homeworkPendingCount}</span>
                           )}
                           {allSynced && <span>{lastSyncSource === "taught" ? "课堂已完成" : lastSyncSource === "homework" ? "作业已完成" : "✓ 已完成"}</span>}
                           {resultEntry && showTaught && resultEntry.taughtSyncedCount > 0 && (
@@ -305,8 +305,18 @@ export function LessonChecklistLinker({
                 const homeworkSelected = homeworkItemIds.includes(item.id);
                 return (
                   <div key={item.id} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
-                    {item.chapter && <div className="text-[11px] font-bold text-[#5161d6]">{item.chapter}</div>}
-                    <div className="mt-1 text-sm font-extrabold text-[#061226]">{formatChecklistItemTitle(item, selectedTemplate?.items)}</div>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        {item.chapter && <div className="text-[11px] font-bold text-[#5161d6]">{item.chapter}</div>}
+                        <div className="mt-1 text-sm font-extrabold text-[#061226]">{formatChecklistItemTitle(item, selectedTemplate?.items)}</div>
+                      </div>
+                      {(taughtSelected || homeworkSelected) && (
+                        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                          {taughtSelected && <Badge variant="sky" className="px-1.5 py-0 text-[10px]">已关联到内容</Badge>}
+                          {homeworkSelected && <Badge variant="amber" className="px-1.5 py-0 text-[10px]">已关联到作业</Badge>}
+                        </div>
+                      )}
+                    </div>
                     {item.note && (
                       <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
                         {item.note}
@@ -516,28 +526,40 @@ function buildPreviousLessonChecklistProgress(
   const template = (vault.progressChecklistTemplates ?? []).find((item) => item.id === previousLesson.content.checklistTemplateId);
   if (!template) return undefined;
   const studentIds = activeLessonStudentIds(vault, lesson ?? previousLesson);
-  const completedKeys = new Set(
+  const completionKeysForSource = (source: ChecklistField) => new Set(
     (vault.progressChecklistCompletions ?? [])
       .filter((completion) =>
         completion.templateId === template.id &&
         completion.courseGroupId === previousLesson.courseGroupId &&
-        studentIds.includes(completion.studentId)
+        studentIds.includes(completion.studentId) &&
+        checklistCompletionAppliesToSource(completion, source)
       )
       .map((completion) => checklistCompletionKey(completion.studentId, completion.itemId))
   );
-  const itemProgress = (items: ProgressChecklistTemplateItem[]) => items.map((item) => ({
+  const taughtCompletedKeys = completionKeysForSource("taught");
+  const homeworkCompletedKeys = completionKeysForSource("homework");
+  const taughtSelectedItems = resolveSelectedItems(template, uniqueIds(previousLesson.content.taughtChecklistItemIds ?? []));
+  const homeworkSelectedItems = resolveSelectedItems(template, uniqueIds(previousLesson.content.homeworkChecklistItemIds ?? []));
+  const previousLinkedItems = Array.from(new Map([...taughtSelectedItems, ...homeworkSelectedItems].map((item) => [item.id, item])).values());
+  const itemProgress = (items: ProgressChecklistTemplateItem[], completedKeys: Set<string>) => items.map((item) => ({
     item,
     totalStudentCount: studentIds.length,
     completedCount: studentIds.filter((studentId) => completedKeys.has(checklistCompletionKey(studentId, item.id))).length
   }));
-  const totalCompletedCount = template.items.reduce(
-    (sum, item) => sum + studentIds.filter((studentId) => completedKeys.has(checklistCompletionKey(studentId, item.id))).length,
+  const totalCompletedCount = taughtSelectedItems.reduce(
+    (sum, item) => sum + studentIds.filter((studentId) => taughtCompletedKeys.has(checklistCompletionKey(studentId, item.id))).length,
+    0
+  ) + homeworkSelectedItems.reduce(
+    (sum, item) => sum + studentIds.filter((studentId) => homeworkCompletedKeys.has(checklistCompletionKey(studentId, item.id))).length,
     0
   );
-  const nextPendingItems = template.items
+  const nextPendingItems = previousLinkedItems
     .slice()
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-    .filter((item) => studentIds.some((studentId) => !completedKeys.has(checklistCompletionKey(studentId, item.id))))
+    .filter((item) => studentIds.some((studentId) =>
+      !taughtCompletedKeys.has(checklistCompletionKey(studentId, item.id)) ||
+      !homeworkCompletedKeys.has(checklistCompletionKey(studentId, item.id))
+    ))
     .slice(0, 4);
 
   return {
@@ -545,9 +567,9 @@ function buildPreviousLessonChecklistProgress(
     template,
     studentCount: studentIds.length,
     totalCompletedCount,
-    totalPossibleCount: template.items.length * studentIds.length,
-    taughtItems: itemProgress(resolveSelectedItems(template, uniqueIds(previousLesson.content.taughtChecklistItemIds ?? []))),
-    homeworkItems: itemProgress(resolveSelectedItems(template, uniqueIds(previousLesson.content.homeworkChecklistItemIds ?? []))),
+    totalPossibleCount: (taughtSelectedItems.length + homeworkSelectedItems.length) * studentIds.length,
+    taughtItems: itemProgress(taughtSelectedItems, taughtCompletedKeys),
+    homeworkItems: itemProgress(homeworkSelectedItems, homeworkCompletedKeys),
     nextPendingItems
   };
 }

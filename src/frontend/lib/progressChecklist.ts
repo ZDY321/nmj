@@ -1,4 +1,6 @@
-import type { ProgressChecklistTemplateItem } from "@/shared/types";
+import type { ProgressChecklistCompletion, ProgressChecklistTemplateItem } from "@/shared/types";
+
+export type ChecklistCompletionSource = "taught" | "homework";
 
 export type ProgressChecklistFocus = {
   courseGroupId?: string;
@@ -9,6 +11,26 @@ export type ProgressChecklistFocus = {
   itemId?: string;
   nonce: number;
 };
+
+export function checklistCellKey(studentId: string, itemId: string): string {
+  return `${studentId}::${itemId}`;
+}
+
+export function checklistCompletionSource(completion: Pick<ProgressChecklistCompletion, "source" | "note">): ChecklistCompletionSource | undefined {
+  if (completion.source === "taught" || completion.source === "homework") return completion.source;
+  const note = completion.note ?? "";
+  if (note.includes("课堂关联") || note.includes("课堂完成") || note.includes("本节课堂")) return "taught";
+  if (note.includes("作业关联") || note.includes("作业完成") || note.includes("本节作业")) return "homework";
+  return undefined;
+}
+
+export function checklistCompletionAppliesToSource(
+  completion: Pick<ProgressChecklistCompletion, "source" | "note">,
+  source: ChecklistCompletionSource
+): boolean {
+  const resolvedSource = checklistCompletionSource(completion);
+  return !resolvedSource || resolvedSource === source;
+}
 
 const CHINESE_NUMBER_VALUES: Record<string, number> = {
   "零": 0,

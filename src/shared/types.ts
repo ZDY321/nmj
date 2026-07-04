@@ -412,6 +412,7 @@ export type ProgressChecklistCompletion = {
   itemId: string;
   studentId: string;
   courseGroupId: string;
+  source?: "taught" | "homework";
   completedDate: string;
   lessonId?: string;
   progressRecordId?: string;
@@ -657,4 +658,3 @@ export type SalaryBreakdown = {
   obligationDeduction: number;
   total: number;
 };
-

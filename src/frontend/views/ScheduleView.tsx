@@ -81,6 +81,7 @@ import {
   textValue,
   timesOverlap
 } from "@/frontend/lib/scheduleViewHelpers";
+import { checklistCompletionAppliesToSource } from "@/frontend/lib/progressChecklist";
 import type { CalendarFocus, CourseTypeFilter, ExternalLessonReturnTarget, InternalLessonReturnTarget, LessonReturnTarget, LessonScope, SchedulePanel } from "@/frontend/lib/scheduleViewTypes";
 
 function dateWithWeekday(date: string): string {
@@ -175,7 +176,11 @@ function buildLessonChecklistSyncCandidates({
 
   const existingKeys = new Set(
     completions
-      .filter((completion) => completion.templateId === template.id && completion.courseGroupId === lesson.courseGroupId)
+      .filter((completion) =>
+        completion.templateId === template.id &&
+        completion.courseGroupId === lesson.courseGroupId &&
+        checklistCompletionAppliesToSource(completion, source)
+      )
       .map((completion) => checklistCellKey(completion.studentId, completion.itemId))
   );
   const progressRecordByStudentId = new Map<string, StudentProgressRecord>();
@@ -1525,7 +1530,7 @@ export function ScheduleView({
     setChecklistLastSyncSource(source);
     if (candidates.length === 0) {
       setChecklistSyncResult([]);
-      setChecklistSyncMessage(source === "taught" ? "本节课堂关联已全部同步。" : "本节作业关联已全部同步。");
+      setChecklistSyncMessage(source === "taught" ? "本节课堂关联已全部完成。" : "本节作业关联已全部完成。");
       return;
     }
 
@@ -1552,13 +1557,14 @@ export function ScheduleView({
       itemId: candidate.itemId,
       studentId: candidate.studentId,
       courseGroupId: selected.courseGroupId,
+      source,
       completedDate: selected.date || todayIso(),
       lessonId: selected.id,
       progressRecordId: candidate.progressRecordId,
-      note: `${sourceLabel}同步：${selected.date} ${selected.startTime}-${selected.endTime}`,
+      note: `${sourceLabel}完成：${selected.date} ${selected.startTime}-${selected.endTime}`,
       updatedAt: now
     })));
-    setChecklistSyncMessage(`已同步 ${candidates.length} 个${sourceLabel}条目。`);
+    setChecklistSyncMessage(`已完成 ${candidates.length} 个${sourceLabel}条目。`);
   }
 
   function updateAttendance(studentId: string, status: AttendanceStatus) {
