@@ -378,9 +378,8 @@ export function ProgressChecklistView({
       : [],
     [selectedItem, selectedStudents, completionMap]
   );
-  const externalAiPromptExample = useMemo(
-    () => buildExternalChecklistPromptExample(aiPrompt, selectedCourse?.name, currentTemplateSubject),
-    [aiPrompt, selectedCourse?.name, currentTemplateSubject]
+  const [externalPromptText, setExternalPromptText] = useState(
+    `请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。\n生成要求：\n请按连云港初中九年级化学人教版上册要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。\n输出要求：只输出清单正文；每行一个条目；有分组时使用“分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。\n示例：\n第一章 整式｜整式乘法\n第一章 整式｜平方差公式`
   );
 
   function startNewTemplate() {
@@ -522,7 +521,7 @@ export function ProgressChecklistView({
 
   async function copyExternalAiPrompt() {
     try {
-      await navigator.clipboard.writeText(externalAiPromptExample);
+      await navigator.clipboard.writeText(externalPromptText);
       setPromptCopyMessage("已复制提示词");
     } catch {
       setPromptCopyMessage("复制失败，请手动选中复制");
@@ -766,13 +765,13 @@ export function ProgressChecklistView({
               <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
-                      <BookCheck size={16} className="text-[#1557c2]" /> 外部AI提示词生成模板
+                      <BookCheck size={16} className="text-[#1557c2]" /> 外部AI提示词生成模板示例
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={copyExternalAiPrompt}>
                       <Copy size={14} /> 复制
                     </Button>
                   </div>
-                  <Textarea value={externalAiPromptExample} readOnly className="min-h-[160px] bg-white text-xs leading-5" />
+                  <Textarea value={externalPromptText} onChange={(event) => setExternalPromptText(event.target.value)} className="min-h-[160px] bg-white text-xs leading-5" />
                   {promptCopyMessage && <Badge variant={promptCopyMessage.includes("已") ? "sage" : "secondary"} className="mt-3">{promptCopyMessage}</Badge>}
               </div>
 
@@ -1053,11 +1052,27 @@ export function ProgressChecklistView({
                                         <div className="mt-1 text-xs font-bold text-[#166534]">{completion.completedDate.slice(5)}</div>
                                         {completedSources.length > 0 && (
                                           <div className="mt-1 flex flex-wrap justify-center gap-1">
-                                            {completedSources.map((source) => (
-                                              <Badge key={source} variant={source === "taught" ? "sky" : "amber"} className="px-1.5 py-0 text-[10px]">
-                                                {source === "taught" ? "课堂" : "作业"}
-                                              </Badge>
-                                            ))}
+                                            {completedSources.map((source) => {
+                                              const linkedCompletion = completions.find((c) => checklistCompletionSource(c) === source && c.lessonId);
+                                              const linkedLesson = linkedCompletion?.lessonId ? vault.lessons.find((l) => l.id === linkedCompletion.lessonId) : undefined;
+                                              if (linkedLesson && onOpenLessonInRecords) {
+                                                return (
+                                                  <Badge
+                                                    key={source}
+                                                    variant={source === "taught" ? "sky" : "amber"}
+                                                    className="cursor-pointer px-1.5 py-0 text-[10px] hover:opacity-80"
+                                                    onClick={(event: React.MouseEvent) => { event.stopPropagation(); onOpenLessonInRecords(linkedLesson); }}
+                                                  >
+                                                    {source === "taught" ? "课堂↗" : "作业↗"}
+                                                  </Badge>
+                                                );
+                                              }
+                                              return (
+                                                <Badge key={source} variant={source === "taught" ? "sky" : "amber"} className="px-1.5 py-0 text-[10px]">
+                                                  {source === "taught" ? "课堂" : "作业"}
+                                                </Badge>
+                                              );
+                                            })}
                                           </div>
                                         )}
                                         {completion.note && (
@@ -1444,20 +1459,6 @@ function lessonStudentsLabel(vault: TeacherVault, lesson: Lesson): string {
   return `${names.slice(0, 2).join("、")}等${names.length}人`;
 }
 
-function buildExternalChecklistPromptExample(prompt: string, courseName?: string, subject?: string): string {
-  const normalizedPrompt = prompt.trim() || "请按教材、真题、专题或题型要求生成一套可逐项勾选的学习清单模板。";
-  return [
-    "请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。",
-    courseName ? `课程：${courseName}` : "课程：请按我的描述判断",
-    subject ? `科目：${subject}` : "科目：请按我的描述判断",
-    "生成要求：",
-    normalizedPrompt,
-    "输出要求：只输出清单正文；每行一个条目；有分组时使用“分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。",
-    "示例：",
-    "第一章 整式｜整式乘法",
-    "第一章 整式｜平方差公式"
-  ].join("\n");
-}
 
 function buildChecklistAiInstruction(prompt: string): string {
   const normalized = prompt.trim();
