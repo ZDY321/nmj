@@ -672,27 +672,27 @@ export function ProgressChecklistView({
       <div className={`grid grid-cols-1 gap-4 ${templatePanelOpen ? "xl:grid-cols-[340px_minmax(0,1fr)]" : "xl:grid-cols-[minmax(0,1fr)]"}`}>
         {templatePanelOpen && (
           <Card className="overflow-hidden">
-            <CardHeader className="flex flex-row items-start justify-between gap-3">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+            <CardHeader className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
                   <ClipboardList size={14} /> 学习清单模板
                 </div>
-                <CardTitle>模板管理</CardTitle>
-                <CardDescription>把同一本书或同一套知识点整理成固定清单，后续可重复用于不同学生课程。</CardDescription>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="secondary" className="w-fit">{templates.length} 套</Badge>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTemplatePanelOpen(false)}
+                    className="border-[#bfdbfe] bg-[#eff6ff] text-[#1557c2] shadow-sm hover:border-[#93c5fd] hover:bg-[#dbeafe] hover:text-[#0f4aa0]"
+                  >
+                    <ChevronLeft size={14} />
+                    收起侧栏
+                  </Button>
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Badge variant="secondary" className="w-fit">{templates.length} 套</Badge>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTemplatePanelOpen(false)}
-                  className="border-[#bfdbfe] bg-[#eff6ff] text-[#1557c2] shadow-sm hover:border-[#93c5fd] hover:bg-[#dbeafe] hover:text-[#0f4aa0]"
-                >
-                  <ChevronLeft size={14} />
-                  收起侧栏
-                </Button>
-              </div>
+              <CardTitle>模板管理</CardTitle>
+              <CardDescription>把同一本书或同一套知识点整理成固定清单，后续可重复用于不同学生课程。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
