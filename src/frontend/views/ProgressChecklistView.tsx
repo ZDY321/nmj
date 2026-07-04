@@ -379,7 +379,7 @@ export function ProgressChecklistView({
     [selectedItem, selectedStudents, completionMap]
   );
   const [externalPromptText, setExternalPromptText] = useState(
-    `请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。\n生成要求：\n请按连云港初中九年级化学人教版上册要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。\n输出要求：只输出清单正文；每行一个条目；有分组时使用“分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。\n示例：\n第一章 整式｜整式乘法\n第一章 整式｜平方差公式`
+    `请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。\n生成要求：\n请按连云港【初中九年级化学人教版上册】要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。\n输出要求：只输出清单正文；每行一个条目；有分组时使用”分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。\n示例：\n第一章 整式｜整式乘法\n第一章 整式｜平方差公式`
   );
 
   function startNewTemplate() {
