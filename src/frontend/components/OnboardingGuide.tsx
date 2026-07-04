@@ -119,11 +119,14 @@ export function OnboardingGuide({
               <Badge variant="amber" className="mb-4 bg-white/12 text-white">
                 首次使用指引
               </Badge>
-              <h2 className="max-w-[640px] text-[28px] font-extrabold leading-tight sm:text-[36px]">
-                前期搭建基础资料和录入课程信息的时候会比较花时间，但后续的记录课时和核对工资等操作就会轻松很多
+              <h2 className="max-w-[640px] text-[28px] font-extrabold leading-tight sm:text-[34px]">
+                首次设置不用一次做完
               </h2>
+              <div className="mt-4 max-w-[640px] rounded-[14px] border border-white/12 bg-white/[0.055] px-4 py-3 text-sm font-semibold leading-7 text-white/76">
+                前期搭建基础资料和录入课程信息的时候会比较花时间，但后续的记录课时和核对工资等操作就会轻松很多。
+              </div>
               <p className="mt-4 max-w-[620px] text-sm font-semibold leading-7 text-white/72 sm:text-base">
-                这个页面只在空档案首次进入时显示。建议按顺序完成校区、学生、课程、排课、核对这几步；你也可以先跳过，系统不会自动写入示例数据。
+                建议按顺序完成校区、学生、课程、排课、核对这几步；也可以先进入系统，系统不会自动写入示例数据。
               </p>
               <div className="mt-6 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
                 <div className="rounded-[14px] border border-white/12 bg-white/[0.055] p-3">
