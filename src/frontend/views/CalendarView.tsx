@@ -67,6 +67,22 @@ function dateWithWeekday(date: string): string {
   return `${date} · ${fullWeekdayLabels[weekdayOfDateIso(date)]}`;
 }
 
+function isPresentMakeupMarker(marker: string | null): marker is string {
+  return Boolean(marker);
+}
+
+function isPendingMakeupMarker(marker: string): boolean {
+  return marker !== "已补课";
+}
+
+function dayMakeupLabel(markers: string[]): string | null {
+  if (markers.includes("待补课")) return "待补课";
+  if (markers.includes("部分已补")) return "部分已补";
+  if (markers.includes("已安排补课")) return "已安排补课";
+  if (markers.includes("补课")) return "补课";
+  if (markers.includes("已补课")) return "已补课";
+  return null;
+}
 function formatTimeFromMinutes(minutes: number): string {
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
@@ -303,14 +319,18 @@ export function CalendarView({
   }
 
   function makeupMarkerForLesson(lesson: Lesson): string | null {
-    if (lesson.linkedOriginalLessonId) return "补课";
+    const lessonCompleted = lesson.status === "completed" || lesson.status === "makeup_completed";
+    const hasCompletedMakeupAttendance = lesson.attendance.some((entry) => entry.status === "makeup_completed");
+    if (lesson.linkedOriginalLessonId) return lessonCompleted || hasCompletedMakeupAttendance ? "已补课" : "补课";
     const linkedMakeupLessons = activeMakeupLessonsByOriginal[lesson.id] ?? [];
     const completedMakeupCount = linkedMakeupLessons.filter((item) => item.status === "completed" || item.status === "makeup_completed").length;
-    if (completedMakeupCount > 0 && lesson.attendance.some((entry) => entry.status === "makeup_completed")) {
+    if (completedMakeupCount > 0 && (lesson.status === "makeup_completed" || hasCompletedMakeupAttendance)) {
       return completedMakeupCount === linkedMakeupLessons.length ? "已补课" : "部分已补";
     }
-    if (linkedMakeupLessons.length > 0) return "已安排补课";
-    if (lesson.status === "makeup_completed" || lesson.attendance.some((entry) => entry.status === "makeup_completed")) return "已补课";
+    if (linkedMakeupLessons.length > 0) {
+      return completedMakeupCount === linkedMakeupLessons.length && completedMakeupCount > 0 ? "已补课" : "已安排补课";
+    }
+    if (lesson.status === "makeup_completed" || hasCompletedMakeupAttendance) return "已补课";
     if (makeupNeededStudentIds(lesson).length > 0 || (lesson.status === "makeup_pending" && lesson.attendance.length === 0)) return "待补课";
     return null;
   }
@@ -490,7 +510,9 @@ export function CalendarView({
                   const hasPending = dayLessons.some((l) => l.status === "scheduled");
                   const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
                   const hasCancelled = dayLessons.some((l) => l.status === "cancelled");
-                  const hasMakeup = dayLessons.some((l) => makeupMarkerForLesson(l));
+                  const makeupMarkers = dayLessons.map((l) => makeupMarkerForLesson(l)).filter(isPresentMakeupMarker);
+                  const hasPendingMakeup = makeupMarkers.some(isPendingMakeupMarker);
+                  const makeupBadgeLabel = dayMakeupLabel(makeupMarkers);
                   const isAllCompleted = dayLessons.length > 0 && dayLessons.every((l) => l.status === "completed" || l.status === "makeup_completed");
                   const isCurrentMonth = date.startsWith(month);
                   const isSelected = date === selectedDate;
@@ -503,13 +525,13 @@ export function CalendarView({
                       onClick={() => selectCalendarDate(date)}
                       className={`relative flex min-h-[66px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[100px] sm:rounded-[14px] sm:p-2.5 ${
                         isSelected
-                          ? hasMakeup
+                          ? hasPendingMakeup
                             ? "border-[#facc15] bg-[#fef9c3] shadow-[0_10px_24px_rgba(202,138,4,0.14)]"
                             : isAllCompleted
                               ? "border-[#86efac] bg-[#f0fdf4] shadow-[0_10px_24px_rgba(22,163,74,0.12)]"
                               : "border-[#ff8617] bg-[#fff7ed] shadow-[0_10px_24px_rgba(255,134,23,0.14)]"
                         : isCurrentMonth
-                            ? hasMakeup
+                            ? hasPendingMakeup
                               ? "border-[#facc15] bg-[#fefce8] hover:shadow-[0_10px_24px_rgba(202,138,4,0.1)]"
                               : hasCancelled
                                 ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
@@ -519,20 +541,20 @@ export function CalendarView({
                             : "border-transparent bg-white opacity-40"
                       }`}
                     >
-                      <span className={`text-sm font-bold ${isSelected ? (hasMakeup ? "text-[#854d0e]" : isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
+                      <span className={`text-sm font-bold ${isSelected ? (hasPendingMakeup ? "text-[#854d0e]" : isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
                         {Number(date.slice(8))}
                       </span>
                       <div className="mt-2 flex gap-1 sm:hidden">
                         {hasDone && <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a]" />}
                         {hasCancelled && <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626]" />}
                         {hasPending && <span className="h-1.5 w-1.5 rounded-full bg-[#ff8617]" />}
-                        {hasMakeup && <span className="h-1.5 w-1.5 rounded-full bg-[#eab308]" />}
+                        {hasPendingMakeup && <span className="h-1.5 w-1.5 rounded-full bg-[#eab308]" />}
                       </div>
                       <div className="mt-1.5 hidden flex-wrap gap-1 sm:flex">
                         {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
                         {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                         {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
-                        {hasMakeup && <Badge variant="yellow" className="text-[10px] px-1.5 py-0">补课</Badge>}
+                        {makeupBadgeLabel && <Badge variant={hasPendingMakeup ? "yellow" : "sage"} className="text-[10px] px-1.5 py-0">{makeupBadgeLabel}</Badge>}
                         {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                       </div>
                       {dayLessons.slice(0, 2).map((l) => (
@@ -572,7 +594,8 @@ export function CalendarView({
                       {weekDates.map((date, index) => {
                         const dayLessons = weekLessons.filter((lesson) => lesson.date === date);
                         const dayTotal = dayLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
-                        const dayHasMakeup = dayLessons.some((lesson) => makeupMarkerForLesson(lesson));
+                        const dayMakeupMarkers = dayLessons.map((lesson) => makeupMarkerForLesson(lesson)).filter(isPresentMakeupMarker);
+                        const dayHasPendingMakeup = dayMakeupMarkers.some(isPendingMakeupMarker);
                         const isSelected = date === selectedDate;
                         return (
                           <button
@@ -580,11 +603,11 @@ export function CalendarView({
                             type="button"
                             onClick={() => selectCalendarDate(date)}
                             className={`border-r border-[#e8eef6] px-3 py-2 text-left transition-colors last:border-r-0 ${
-                              dayHasMakeup ? "bg-[#fef9c3] hover:bg-[#fef3c7]" : isSelected ? "bg-[#fff7ed]" : "hover:bg-[#f3f7fb]"
+                              dayHasPendingMakeup ? "bg-[#fef9c3] hover:bg-[#fef3c7]" : isSelected ? "bg-[#fff7ed]" : "hover:bg-[#f3f7fb]"
                             }`}
                           >
                             <span className="flex min-w-0 items-center justify-between gap-2">
-                              <span className={`truncate text-sm font-extrabold ${dayHasMakeup ? "text-[#854d0e]" : isSelected ? "text-[#ff8617]" : "text-[#061226]"}`}>
+                              <span className={`truncate text-sm font-extrabold ${dayHasPendingMakeup ? "text-[#854d0e]" : isSelected ? "text-[#ff8617]" : "text-[#061226]"}`}>
                                 {date.slice(5)}
                               </span>
                               <span className="shrink-0 text-[11px] font-extrabold text-[#1557c2]">
@@ -626,6 +649,7 @@ export function CalendarView({
                                 ) : (
                                   <span className="flex flex-col gap-2">
                                     {cellLessons.map((lesson) => {
+                                      const makeupMarker = makeupMarkerForLesson(lesson);
                                       const attendanceNoteText = lessonAttendanceNoteText(vault, lesson);
                                       return (
                                         <button
@@ -644,9 +668,9 @@ export function CalendarView({
                                           <span className="flex min-w-0 items-center justify-between gap-2">
                                             <strong className="truncate">{courseName(vault, lesson.courseGroupId)}</strong>
                                             <span className="flex shrink-0 gap-1">
-                                              {makeupMarkerForLesson(lesson) && (
-                                                <Badge variant="yellow" className="text-[10px]">
-                                                  {makeupMarkerForLesson(lesson)}
+                                              {makeupMarker && (
+                                                <Badge variant={makeupMarker === "已补课" ? "sage" : "yellow"} className="text-[10px]">
+                                                  {makeupMarker}
                                                 </Badge>
                                               )}
                                               <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">
@@ -724,6 +748,7 @@ export function CalendarView({
                 <p className="text-sm text-(--color-muted-foreground) text-center py-6">这一天还没有课程</p>
               )}
               {selectedLessons.map((lesson) => {
+                const makeupMarker = makeupMarkerForLesson(lesson);
                 const attendanceNoteText = lessonAttendanceNoteText(vault, lesson);
                 return (
                   <motion.button
@@ -742,9 +767,9 @@ export function CalendarView({
                         <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
                           {lessonStatusLabels[lesson.status]}
                         </Badge>
-                        {makeupMarkerForLesson(lesson) && (
-                          <Badge variant="yellow" className="shrink-0 text-[10px]">
-                            {makeupMarkerForLesson(lesson)}
+                        {makeupMarker && (
+                          <Badge variant={makeupMarker === "已补课" ? "sage" : "yellow"} className="shrink-0 text-[10px]">
+                            {makeupMarker}
                           </Badge>
                         )}
                         <Badge variant="secondary" className="shrink-0 text-[10px]">

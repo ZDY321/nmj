@@ -22,6 +22,22 @@ export type ScheduleCalendarGridProps = {
   weekStartPreference: WeekStart;
 };
 
+function isPresentMakeupMarker(marker: string | null): marker is string {
+  return Boolean(marker);
+}
+
+function isPendingMakeupMarker(marker: string): boolean {
+  return marker !== "已补课";
+}
+
+function dayMakeupLabel(markers: string[]): string | null {
+  if (markers.includes("待补课")) return "待补课";
+  if (markers.includes("部分已补")) return "部分已补";
+  if (markers.includes("已安排补课")) return "已安排补课";
+  if (markers.includes("补课")) return "补课";
+  if (markers.includes("已补课")) return "已补课";
+  return null;
+}
 export function ScheduleCalendarGrid({
   amountsVisible,
   calendarCourseGroupId,
@@ -48,7 +64,9 @@ export function ScheduleCalendarGrid({
         const hasCompleted = dayLessons.some((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
         const hasPending = dayLessons.some((lesson) => lesson.status === "scheduled");
         const isAllCompleted = dayLessons.length > 0 && dayLessons.every((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
-        const hasMakeup = dayLessons.some((lesson) => makeupMarkerForLesson(lesson));
+        const makeupMarkers = dayLessons.map((lesson) => makeupMarkerForLesson(lesson)).filter(isPresentMakeupMarker);
+        const hasPendingMakeup = makeupMarkers.some(isPendingMakeupMarker);
+        const makeupBadgeLabel = dayMakeupLabel(makeupMarkers);
         return (
           <motion.button
             key={calendarDate}
@@ -58,13 +76,13 @@ export function ScheduleCalendarGrid({
             disabled={calendarMode === "schedule" && !calendarCourseGroupId}
             className={`relative flex min-h-[74px] flex-col items-start rounded-[12px] border p-1.5 text-left transition-all duration-200 sm:min-h-[132px] sm:rounded-[14px] sm:p-2.5 xl:min-h-[150px] ${
               selectedCalendarDate === calendarDate
-                ? hasMakeup
+                ? hasPendingMakeup
                   ? "border-2 border-[#facc15] bg-[#fef9c3] shadow-[0_0_0_3px_rgba(250,204,21,0.2),0_14px_28px_rgba(202,138,4,0.14)]"
                   : isAllCompleted
                     ? "border-2 border-[#22c55e] bg-[#f0fdf4] shadow-[0_0_0_3px_rgba(34,197,94,0.16),0_14px_28px_rgba(22,163,74,0.14)]"
                     : "border-2 border-[#ff8617] bg-[#fff7ed] shadow-[0_0_0_3px_rgba(255,134,23,0.18),0_14px_30px_rgba(255,134,23,0.18)]"
                 : isCurrentMonth
-                  ? hasMakeup
+                  ? hasPendingMakeup
                     ? "border-[#facc15] bg-[#fefce8] hover:shadow-[0_10px_24px_rgba(202,138,4,0.1)]"
                     : hasCancelled
                       ? "border-[#fecaca] bg-[#fff1f2] hover:shadow-[0_10px_24px_rgba(127,29,29,0.08)]"
@@ -74,20 +92,20 @@ export function ScheduleCalendarGrid({
                   : "border-transparent bg-white opacity-40"
             }`}
           >
-            <span className={`text-sm font-bold ${selectedCalendarDate === calendarDate ? (hasMakeup ? "text-[#854d0e]" : isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
+            <span className={`text-sm font-bold ${selectedCalendarDate === calendarDate ? (hasPendingMakeup ? "text-[#854d0e]" : isAllCompleted ? "text-[#15803d]" : "text-[#ff8617]") : "text-[#061226]"}`}>
               {Number(calendarDate.slice(8))}
             </span>
             <div className="mt-2 flex gap-1 sm:hidden">
               {hasCompleted && <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a]" />}
               {hasCancelled && <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626]" />}
               {hasPending && <span className="h-1.5 w-1.5 rounded-full bg-[#ff8617]" />}
-              {hasMakeup && <span className="h-1.5 w-1.5 rounded-full bg-[#eab308]" />}
+              {hasPendingMakeup && <span className="h-1.5 w-1.5 rounded-full bg-[#eab308]" />}
             </div>
             <div className="mt-1.5 hidden flex-wrap gap-1 sm:flex">
               {hasCompleted && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
               {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
               {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
-              {hasMakeup && <Badge variant="yellow" className="text-[10px] px-1.5 py-0">补课</Badge>}
+              {makeupBadgeLabel && <Badge variant={hasPendingMakeup ? "yellow" : "sage"} className="text-[10px] px-1.5 py-0">{makeupBadgeLabel}</Badge>}
               {amount > 0 && <Badge variant="default" className="px-1.5 py-0 text-[10px]">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
             </div>
             {dayLessons.slice(0, 4).map((lesson) => {

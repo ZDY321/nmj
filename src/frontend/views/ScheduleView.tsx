@@ -1784,13 +1784,18 @@ export function ScheduleView({
   }
 
   function makeupMarkerForLesson(lesson: Lesson): string | null {
-    if (lesson.linkedOriginalLessonId) return "补课";
+    const lessonCompleted = isCompletedLessonStatus(lesson.status);
+    const hasCompletedMakeupAttendance = lesson.attendance.some((entry) => entry.status === "makeup_completed");
+    if (lesson.linkedOriginalLessonId) return lessonCompleted || hasCompletedMakeupAttendance ? "已补课" : "补课";
     const linkedMakeupLessons = activeMakeupLessonsByOriginal[lesson.id] ?? [];
     const completedMakeupCount = linkedMakeupLessons.filter((item) => isCompletedLessonStatus(item.status)).length;
-    if (completedMakeupCount > 0 && lesson.attendance.some((entry) => entry.status === "makeup_completed")) {
+    if (completedMakeupCount > 0 && (lesson.status === "makeup_completed" || hasCompletedMakeupAttendance)) {
       return completedMakeupCount === linkedMakeupLessons.length ? "已补课" : "部分已补";
     }
-    if (linkedMakeupLessons.length > 0) return "已安排补课";
+    if (linkedMakeupLessons.length > 0) {
+      return completedMakeupCount === linkedMakeupLessons.length && completedMakeupCount > 0 ? "已补课" : "已安排补课";
+    }
+    if (lesson.status === "makeup_completed" || hasCompletedMakeupAttendance) return "已补课";
     if (makeupNeededStudentIds(lesson).length > 0 || (lesson.status === "makeup_pending" && lesson.attendance.length === 0)) {
       return "待补课";
     }

@@ -109,7 +109,7 @@ export function ScheduleCalendarDetailDialog({
                             <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
                             <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
                             <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
-                            {makeupMarker && <Badge variant="yellow" className="text-[10px]">{makeupMarker}</Badge>}
+                            {makeupMarker && <Badge variant={makeupMarker === "已补课" ? "sage" : "yellow"} className="text-[10px]">{makeupMarker}</Badge>}
                           </div>
                           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
                             {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
