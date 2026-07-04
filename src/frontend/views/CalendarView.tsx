@@ -554,7 +554,7 @@ export function CalendarView({
                         {hasDone && <Badge variant="sage" className="text-[10px] px-1.5 py-0">完成</Badge>}
                         {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                         {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
-                        {makeupBadgeLabel && <Badge variant={hasPendingMakeup ? "yellow" : "sage"} className="text-[10px] px-1.5 py-0">{makeupBadgeLabel}</Badge>}
+                        {makeupBadgeLabel && <Badge variant="yellow" className="text-[10px] px-1.5 py-0">{makeupBadgeLabel}</Badge>}
                         {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                       </div>
                       {dayLessons.slice(0, 2).map((l) => (
