@@ -124,7 +124,7 @@ export function OnboardingGuide({
               </h2>
               <div className="mt-5 max-w-[640px] rounded-[16px] border border-white/20 bg-white/10 px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                 <p className="text-base font-bold leading-8 text-white/90 sm:text-lg">
-                  前期搭建基础资料和录入课程信息的时候会比较花时间，但后续的记录课时和核对工资等操作就会<span className="text-[#fbbf24]">轻松很多</span>。
+                  前期搭建基础资料和录入课程信息会<span className="text-[#f87171]">比较花时间</span>，但后续记录课时、核对工资等日常操作就会<span className="text-[#fbbf24]">轻松很多</span>。
                 </p>
                 <p className="mt-3 text-sm font-semibold leading-7 text-white/72">
                   建议按顺序完成校区、学生、课程、排课、核对这几步；也可以先进入系统，系统不会自动写入示例数据。
@@ -167,7 +167,7 @@ export function OnboardingGuide({
                     把系统理解成一条流水线：前面资料越完整，后面课时记录、补课处理、工资核对和教学复盘就越自动。
                   </p>
                 </div>
-                <Badge variant="sky" className="w-fit">点击节点可进入页面</Badge>
+                <Badge variant="sky" className="w-fit shrink-0 whitespace-nowrap">点击节点可进入页面</Badge>
               </div>
 
               <div className="rounded-[18px] border border-[#dbe4ef] bg-white p-4 shadow-sm">
