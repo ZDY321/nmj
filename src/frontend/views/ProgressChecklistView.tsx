@@ -771,6 +771,7 @@ export function ProgressChecklistView({
                       <Copy size={14} /> 复制
                     </Button>
                   </div>
+                  <div className="mb-2 text-xs font-semibold text-[#64748b]">建议使用 DeepSeek</div>
                   <Textarea value={externalPromptText} onChange={(event) => setExternalPromptText(event.target.value)} className="min-h-[160px] bg-white text-xs leading-5" />
                   {promptCopyMessage && <Badge variant={promptCopyMessage.includes("已") ? "sage" : "secondary"} className="mt-3">{promptCopyMessage}</Badge>}
               </div>
