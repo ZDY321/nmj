@@ -776,6 +776,9 @@ export function ProgressChecklistView({
                   <div className="mb-2 text-xs font-semibold text-[#64748b]">建议使用 DeepSeek</div>
                   <Textarea value={externalPromptText} onChange={(event) => setExternalPromptText(event.target.value)} className="min-h-[160px] bg-white text-xs leading-5" />
                   {promptCopyMessage && <Badge variant={promptCopyMessage.includes("已") ? "sage" : "secondary"} className="mt-3">{promptCopyMessage}</Badge>}
+                  <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
+                    格式说明：每行一个条目，用竖线（｜）分隔左右两列。左侧为分组标签，右侧为条目标题，具体内容可自行调整。
+                  </div>
               </div>
 
               <div className="space-y-2">
