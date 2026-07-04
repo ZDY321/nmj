@@ -457,6 +457,12 @@ export function ScheduleView({
   }, [isAdmin, token]);
 
   useEffect(() => {
+    if (schedulePanel === "ai" && !vault.profile.aiSchedulingEnabled) {
+      setSchedulePanel("schedule");
+    }
+  }, [schedulePanel, vault.profile.aiSchedulingEnabled]);
+
+  useEffect(() => {
     const fallbackCourseId = courseSelectionOptions[0]?.id ?? "";
     const hasCourse = (courseId: string) => courseSelectionOptions.some((course) => course.id === courseId);
     setSingleCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
@@ -1630,6 +1636,8 @@ export function ScheduleView({
           calendarMode,
           calendarDetailDate
         };
+      case "makeup":
+        return { kind: "panel", panel, label: "返回补课管理" };
       case "studentStats":
         return { kind: "panel", panel, label: "返回学生课次统计" };
       default:
@@ -2111,7 +2119,7 @@ export function ScheduleView({
         </div>
       )}
 
-      {schedulePanel === "ai" && (role === "admin" || vault.profile.aiSchedulingEnabled) && (
+      {schedulePanel === "ai" && vault.profile.aiSchedulingEnabled && (
         <ScheduleAiPanel
           aiActiveCourseCount={aiActiveCourseCount}
           aiActiveStudentCount={aiActiveStudentCount}
@@ -2359,6 +2367,29 @@ export function ScheduleView({
           vault={vault}
         />
       </div>
+      )}
+
+      {schedulePanel === "makeup" && (
+        <ScheduleCalendarFollowupPanels
+          amountsVisible={amountsVisible}
+          completedCount={selectedCalendarCompletedCount}
+          dateWithWeekday={dateWithWeekday}
+          makeupEntries={makeupEntries}
+          makeupMarkerForLesson={makeupMarkerForLesson}
+          makeupOriginalDateFilter={makeupOriginalDateFilter}
+          onDeleteLesson={askDeleteLesson}
+          onMakeupOriginalDateFilterChange={setMakeupOriginalDateFilter}
+          onOpenLesson={openLessonInRecords}
+          optionalDateWithWeekday={optionalDateWithWeekday}
+          pendingCount={selectedCalendarPendingCount}
+          cancelledCount={selectedCalendarCancelledCount}
+          scheduledMakeupEntries={scheduledMakeupEntries}
+          selectedCalendarDate={selectedCalendarDate}
+          selectedCalendarLessons={selectedCalendarLessons}
+          showDailyDetails={false}
+          totalAmount={selectedCalendarAmount}
+          vault={vault}
+        />
       )}
 
       {schedulePanel === "studentStats" && (

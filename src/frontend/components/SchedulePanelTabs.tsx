@@ -11,18 +11,19 @@ type SchedulePanelTabsProps = {
   aiSchedulingEnabled?: boolean;
 };
 
-export function SchedulePanelTabs({ activePanel, deletedLessonCount, onChange, role, aiSchedulingEnabled }: SchedulePanelTabsProps) {
+export function SchedulePanelTabs({ activePanel, deletedLessonCount, onChange, aiSchedulingEnabled }: SchedulePanelTabsProps) {
   const allItems: Array<{ key: SchedulePanel; label: string }> = [
     { key: "ai", label: "AI 排课助手" },
     { key: "schedule", label: "排课" },
     { key: "adjust", label: "课表调整" },
     { key: "calendar", label: "日历查看" },
     { key: "records", label: "课程记录" },
+    { key: "makeup", label: "补课管理" },
     { key: "studentStats", label: "学生课次统计" },
     { key: "trash", label: `回收站${deletedLessonCount > 0 ? ` ${deletedLessonCount}` : ""}` }
   ];
 
-  const items = allItems.filter(item => item.key !== "ai" || role === "admin" || aiSchedulingEnabled);
+  const items = allItems.filter((item) => item.key !== "ai" || Boolean(aiSchedulingEnabled));
 
   return (
     <div className="overflow-x-auto rounded-[16px] border border-[#dbe4ef] bg-white">

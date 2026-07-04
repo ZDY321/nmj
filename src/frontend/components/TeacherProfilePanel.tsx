@@ -160,19 +160,7 @@ export function TeacherProfilePanel({
               className="min-h-[76px]"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">AI 排课助手</label>
-            <Select
-              value={vault.profile.aiSchedulingEnabled ? "enabled" : "disabled"}
-              onChange={(event) => onUpdateProfile({ aiSchedulingEnabled: event.target.value === "enabled" })}
-            >
-              <option value="disabled">隐藏（仅管理员可见）</option>
-              <option value="enabled">启用（所有用户可见）</option>
-            </Select>
-            <div className="text-xs font-semibold text-[#64748b]">
-              控制"排课与课时"页面的"AI 排课助手"功能是否对所有用户可见
-            </div>
-          </div>
+
         </div>
 
         <div className="grid grid-cols-1 gap-3 rounded-[16px] border border-[#fecaca] bg-[#fff1f2] p-3 md:grid-cols-4">

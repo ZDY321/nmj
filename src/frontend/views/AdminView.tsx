@@ -795,7 +795,7 @@ export function AdminView({
               <div>
                 <div className="font-extrabold text-[#061226]">AI 排课助手</div>
                 <div className="mt-1 text-sm font-semibold text-[#64748b]">
-                  当前状态：{vault.profile.aiSchedulingEnabled ? "所有用户可见" : "仅管理员可见"}
+                  当前状态：{vault.profile.aiSchedulingEnabled ? "入口已显示" : "入口已隐藏"}
                 </div>
               </div>
               <Button
@@ -804,10 +804,10 @@ export function AdminView({
                 onClick={() => {
                   const nextEnabled = !vault.profile.aiSchedulingEnabled;
                   onUpdateProfile({ aiSchedulingEnabled: nextEnabled });
-                  setMessage(nextEnabled ? "AI 排课助手已对所有用户开启。" : "AI 排课助手已隐藏，仅管理员可见。");
+                  setMessage(nextEnabled ? "AI 排课助手入口已显示。" : "AI 排课助手入口已隐藏。");
                 }}
               >
-                {vault.profile.aiSchedulingEnabled ? "隐藏功能" : "开启功能"}
+                {vault.profile.aiSchedulingEnabled ? "隐藏入口" : "显示入口"}
               </Button>
             </div>
 

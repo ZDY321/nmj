@@ -48,6 +48,7 @@ type ScheduleCalendarFollowupPanelsProps = {
   pendingCount: number;
   cancelledCount: number;
   scheduledMakeupEntries: ScheduledMakeupEntry[];
+  showDailyDetails?: boolean;
   selectedCalendarDate: string;
   selectedCalendarLessons: Lesson[];
   totalAmount: number;
@@ -68,13 +69,15 @@ export function ScheduleCalendarFollowupPanels({
   pendingCount,
   cancelledCount,
   scheduledMakeupEntries,
+  showDailyDetails = true,
   selectedCalendarDate,
   selectedCalendarLessons,
   totalAmount,
   vault
 }: ScheduleCalendarFollowupPanelsProps) {
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.95fr_1.05fr] xl:items-start">
+    <div className={showDailyDetails ? "grid grid-cols-1 gap-6 xl:grid-cols-[0.95fr_1.05fr] xl:items-start" : "grid grid-cols-1 gap-6"}>
+      {showDailyDetails && (
       <Card className="overflow-hidden">
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
@@ -135,6 +138,7 @@ export function ScheduleCalendarFollowupPanels({
           </div>
         </CardContent>
       </Card>
+      )}
 
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <CardHeader>
