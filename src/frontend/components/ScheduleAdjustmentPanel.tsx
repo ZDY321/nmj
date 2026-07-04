@@ -10,6 +10,7 @@ import type { Campus, CourseType, Lesson, TeacherVault, Weekday } from "@/shared
 import {
   addDays,
   campusName,
+  courseHasActiveStudent,
   courseName,
   courseSubject,
   courseTypeLabel,
@@ -96,7 +97,7 @@ function previewStatusText(item: ScheduleAdjustmentPreviewItem): string {
 }
 
 export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }: ScheduleAdjustmentPanelProps) {
-  const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
+  const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups).filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)), [vault]);
   const subjectOptions = useMemo(() => subjectOptionsForVault(vault), [vault]);
   const [dateStart, setDateStart] = useState(currentMonthStartIso);
   const [dateEnd, setDateEnd] = useState(currentMonthEndIso);
@@ -118,6 +119,8 @@ export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }
   const [targetEndTime, setTargetEndTime] = useState("21:00");
   const [targetCampusId, setTargetCampusId] = useState(KEEP_CAMPUS);
   const [conflictPolicy, setConflictPolicy] = useState<ScheduleAdjustmentConflictPolicy>("skip");
+  const [filterStartTime, setFilterStartTime] = useState("");
+  const [filterEndTime, setFilterEndTime] = useState("");
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredLessons = useMemo(() => filterStudentStatsLessons(vault, {
@@ -126,12 +129,12 @@ export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }
     courseTypeFilter,
     dateEnd,
     dateStart,
-    endTime: "",
+    endTime: filterEndTime,
     normalizedNameFilter: normalizedSearch,
-    startTime: "",
+    startTime: filterStartTime,
     statusFilter,
     subjectFilter
-  }), [campusFilter, courseFilter, courseTypeFilter, dateEnd, dateStart, normalizedSearch, statusFilter, subjectFilter, vault]);
+  }), [campusFilter, courseFilter, courseTypeFilter, dateEnd, dateStart, filterEndTime, filterStartTime, normalizedSearch, statusFilter, subjectFilter, vault]);
 
   const visibleLessonIds = filteredLessons.map((lesson) => lesson.id);
   const selectedIdSet = new Set(selectedLessonIds);
@@ -295,6 +298,14 @@ export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }
                 <option value="all">全部校区</option>
                 {campusOptions.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}
               </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">开始时间</label>
+              <Input type="time" value={filterStartTime} onChange={(event) => setFilterStartTime(event.target.value)} placeholder="如 08:00" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">结束时间</label>
+              <Input type="time" value={filterEndTime} onChange={(event) => setFilterEndTime(event.target.value)} placeholder="如 21:00" />
             </div>
           </div>
 
