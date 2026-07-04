@@ -42,7 +42,8 @@ import {
   findStudent,
   lessonStudentIds,
   sortCoursesByName,
-  sortLessons
+  sortLessons,
+  subjectOptionsForVault
 } from "@/frontend/lib/helpers";
 import type {
   AiProviderConfig,
@@ -133,6 +134,7 @@ export function ProgressChecklistView({
     ? Boolean(vault.profile.aiSchedulingAdminEnabled ?? vault.profile.aiSchedulingEnabled)
     : Boolean(vault.profile.aiSchedulingEnabled);
 
+  const subjectOptions = useMemo(() => subjectOptionsForVault(vault), [vault]);
   const courseOptions = useMemo(
     () => sortCoursesByName(vault.courseGroups).filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)),
     [vault]
@@ -782,7 +784,12 @@ export function ProgressChecklistView({
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-[#25324a]">关联科目</label>
-                <Input value={templateSubject} onChange={(event) => setTemplateSubject(event.target.value)} placeholder="例如：数学 / 英语" />
+                <Select value={templateSubject} onChange={(event) => setTemplateSubject(event.target.value)}>
+                  <option value="">请选择科目</option>
+                  {subjectOptions.map((subject) => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-[#25324a]">条目清单</label>
