@@ -502,8 +502,12 @@ export function StudentsView({
       vault.lessons.some(
         (lesson) =>
           lesson.expectedStudentIds.includes(studentId) ||
+          lesson.makeupStudentId === studentId ||
           lesson.attendance.some((entry) => entry.studentId === studentId)
-      )
+      ) ||
+      (vault.studentProgressRecords ?? []).some((record) => record.studentId === studentId) ||
+      (vault.progressChecklistCompletions ?? []).some((completion) => completion.studentId === studentId) ||
+      (vault.gradeRecords ?? []).some((record) => record.studentId === studentId)
     );
   }
 
@@ -1220,6 +1224,26 @@ export function StudentsView({
     apply();
   }
 
+  function deleteSelectedArchivedStudents() {
+    const selectedArchivedStudents = visibleStudents.filter((student) => selectedStudentIds.includes(student.id) && student.status === "paused");
+    const deletableStudents = selectedArchivedStudents.filter((student) => !studentInUse(student.id));
+    const skippedCount = selectedArchivedStudents.length - deletableStudents.length;
+    if (deletableStudents.length === 0) return;
+    confirm({
+      title: `删除选中的 ${deletableStudents.length} 个归档学生？`,
+      description: skippedCount > 0
+        ? `会永久删除没有课程、课时、进度或成绩引用的归档学生；另有 ${skippedCount} 个学生已有历史记录，会继续保留为归档状态。`
+        : "会永久删除这些没有历史引用的归档学生档案。",
+      confirmLabel: "删除",
+      tone: "danger",
+      onConfirm: () => {
+        const deletedIdSet = new Set(deletableStudents.map((student) => student.id));
+        deletableStudents.forEach((student) => onDeleteStudent(student.id));
+        setSelectedStudentIds((current) => current.filter((id) => !deletedIdSet.has(id)));
+      }
+    });
+  }
+
   function toggleCourseSelection(courseId: string) {
     setSelectedCourseIds((current) =>
       current.includes(courseId) ? current.filter((id) => id !== courseId) : [...current, courseId]
@@ -1602,6 +1626,7 @@ export function StudentsView({
             hasUnsetGradeFilterOption={hasUnsetGradeFilterOption}
             onAddStudent={addStudent}
             onDeleteStudent={onDeleteStudent}
+            onDeleteSelectedArchivedStudents={deleteSelectedArchivedStudents}
             onOpenStudentEditor={openStudentEditor}
             onRequestArchiveStudent={requestArchiveStudent}
             onRestoreStudent={restoreStudent}

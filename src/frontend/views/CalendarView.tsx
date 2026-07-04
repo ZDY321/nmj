@@ -669,7 +669,7 @@ export function CalendarView({
                                             <strong className="truncate">{courseName(vault, lesson.courseGroupId)}</strong>
                                             <span className="flex shrink-0 gap-1">
                                               {makeupMarker && (
-                                                <Badge variant={makeupMarker === "已补课" ? "sage" : "yellow"} className="text-[10px]">
+                                                <Badge variant="yellow" className="text-[10px]">
                                                   {makeupMarker}
                                                 </Badge>
                                               )}
@@ -768,7 +768,7 @@ export function CalendarView({
                           {lessonStatusLabels[lesson.status]}
                         </Badge>
                         {makeupMarker && (
-                          <Badge variant={makeupMarker === "已补课" ? "sage" : "yellow"} className="shrink-0 text-[10px]">
+                          <Badge variant="yellow" className="shrink-0 text-[10px]">
                             {makeupMarker}
                           </Badge>
                         )}

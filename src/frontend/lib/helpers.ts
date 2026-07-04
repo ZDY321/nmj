@@ -192,7 +192,8 @@ function sortCourseTypeOptions<T extends { value: string; label: string }>(optio
 }
 
 export function lessonStatusVariant(status: LessonStatus): "sage" | "amber" | "yellow" | "destructive" | "secondary" | "sky" | "plum" {
-  if (status === "completed" || status === "makeup_completed") return "sage";
+  if (status === "completed") return "sage";
+  if (status === "makeup_completed") return "yellow";
   if (status === "cancelled") return "destructive";
   if (status === "makeup_pending") return "yellow";
   if (status === "scheduled") return "amber";

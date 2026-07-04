@@ -38,6 +38,7 @@ type StudentArchivePanelProps = {
   hasUnsetGradeFilterOption: boolean;
   onAddStudent: (event: FormEvent) => void;
   onDeleteStudent: (studentId: string) => void;
+  onDeleteSelectedArchivedStudents: () => void;
   onOpenStudentEditor: (student: Student) => void;
   onRequestArchiveStudent: (student: Student) => void;
   onRestoreStudent: (student: Student) => void;
@@ -90,6 +91,7 @@ export function StudentArchivePanel({
   hasUnsetGradeFilterOption,
   onAddStudent,
   onDeleteStudent,
+  onDeleteSelectedArchivedStudents,
   onOpenStudentEditor,
   onRequestArchiveStudent,
   onRestoreStudent,
@@ -128,7 +130,10 @@ export function StudentArchivePanel({
   vault,
   visibleStudents
 }: StudentArchivePanelProps) {
-  const selectedVisibleCount = visibleStudents.filter((student) => selectedStudentIds.includes(student.id)).length;
+  const selectedVisibleStudents = visibleStudents.filter((student) => selectedStudentIds.includes(student.id));
+  const selectedVisibleCount = selectedVisibleStudents.length;
+  const selectedVisibleArchivedCount = selectedVisibleStudents.filter((student) => student.status === "paused").length;
+  const selectedVisibleDeletableArchivedCount = selectedVisibleStudents.filter((student) => student.status === "paused" && !studentInUse(student.id)).length;
   const allVisibleSelected = visibleStudents.length > 0 && selectedVisibleCount === visibleStudents.length;
 
   return (
@@ -256,6 +261,17 @@ export function StudentArchivePanel({
             <Button type="button" size="sm" variant="outline" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("active")}>设为在读</Button>
             <Button type="button" size="sm" variant="outline" className="h-8 border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6] hover:bg-[#e0e7ff] hover:text-[#4338ca]" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("transition")}>设为过渡期</Button>
             <Button type="button" size="sm" variant="destructive" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("paused")}>归档</Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              className="h-8"
+              disabled={selectedVisibleDeletableArchivedCount === 0}
+              title={selectedVisibleArchivedCount > selectedVisibleDeletableArchivedCount ? "有历史课程或记录引用的归档学生会保留" : "删除选中的已归档学生"}
+              onClick={onDeleteSelectedArchivedStudents}
+            >
+              删除归档 {selectedVisibleDeletableArchivedCount || ""}
+            </Button>
           </div>
         </div>
       </CardHeader>
@@ -272,9 +288,13 @@ export function StudentArchivePanel({
               className={`${archiveRowClass("students", student.id)} ${selected ? "bg-[#f8fbff]" : ""} cursor-pointer transition-colors hover:bg-[#f8fbff]`}
               role="button"
               tabIndex={0}
-              onClick={() => onOpenStudentEditor(student)}
+              onClick={(event) => {
+                if (isStudentRowInteractiveTarget(event.target)) return;
+                onOpenStudentEditor(student);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
+                  if (isStudentRowInteractiveTarget(event.target)) return;
                   event.preventDefault();
                   onOpenStudentEditor(student);
                 }
@@ -385,27 +405,31 @@ export function StudentArchivePanel({
                     >
                       <Pencil size={13} />
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      className="h-8 w-8 rounded-[9px] p-0"
-                      disabled={used}
-                      title={used ? "已有课程或课时引用，不能直接删除" : "删除学生"}
-                      aria-label={`删除学生 ${student.name}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        confirm({
-                          title: `删除学生「${student.name}」？`,
-                          description: "已有历史课时建议保留为归档状态，确认删除后将从档案信息移除。",
-                          confirmLabel: "删除",
-                          tone: "danger",
-                          onConfirm: () => onDeleteStudent(student.id)
-                        });
-                      }}
-                    >
-                      <Trash2 size={13} />
-                    </Button>
+                    {archived && (
+                      <span onClick={(event) => event.stopPropagation()}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="h-8 w-8 rounded-[9px] p-0"
+                          disabled={used}
+                          title={used ? "已有课程、课时、进度或成绩引用，不能直接删除" : "删除归档学生"}
+                          aria-label={`删除归档学生 ${student.name}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            confirm({
+                              title: `删除归档学生「${student.name}」？`,
+                              description: "会永久移除这个学生档案。已有历史记录的学生请保留为归档状态。",
+                              confirmLabel: "删除",
+                              tone: "danger",
+                              onConfirm: () => onDeleteStudent(student.id)
+                            });
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      </span>
+                    )}
                   </div>
                 </div>
                 {student.note && (
@@ -426,6 +450,10 @@ export function StudentArchivePanel({
       </CardContent>
     </Card>
   );
+}
+
+function isStudentRowInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && Boolean(target.closest("button,input,select,textarea,a"));
 }
 
 function studentStatusFilterLabel(filter: StudentStatusFilter): string {

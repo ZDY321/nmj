@@ -152,6 +152,16 @@ export function LessonChecklistLinker({
 
   const taughtItems = resolveSelectedItems(selectedTemplate, taughtItemIds);
   const homeworkItems = resolveSelectedItems(selectedTemplate, homeworkItemIds);
+  const previousLinkedItemIds = useMemo(() => {
+    if (!selectedTemplate || previousLesson?.content.checklistTemplateId !== selectedTemplate.id) {
+      return { taught: new Set<string>(), homework: new Set<string>() };
+    }
+    const validItemIds = new Set(selectedTemplate.items.map((item) => item.id));
+    return {
+      taught: new Set(uniqueIds(previousLesson.content.taughtChecklistItemIds ?? []).filter((itemId) => validItemIds.has(itemId))),
+      homework: new Set(uniqueIds(previousLesson.content.homeworkChecklistItemIds ?? []).filter((itemId) => validItemIds.has(itemId)))
+    };
+  }, [previousLesson, selectedTemplate]);
   const previousChecklistProgress = useMemo(
     () => buildPreviousLessonChecklistProgress(vault, lesson, previousLesson),
     [vault, lesson, previousLesson]
@@ -303,17 +313,32 @@ export function LessonChecklistLinker({
               visibleItems.map((item) => {
                 const taughtSelected = taughtItemIds.includes(item.id);
                 const homeworkSelected = homeworkItemIds.includes(item.id);
+                const previousTaughtSelected = previousLinkedItemIds.taught.has(item.id);
+                const previousHomeworkSelected = previousLinkedItemIds.homework.has(item.id);
+                const hasCurrentLink = taughtSelected || homeworkSelected;
+                const hasPreviousLink = previousTaughtSelected || previousHomeworkSelected;
                 return (
-                  <div key={item.id} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
+                  <div
+                    key={item.id}
+                    className={`rounded-[12px] border p-3 ${
+                      hasCurrentLink
+                        ? "border-[#93c5fd] bg-white"
+                        : hasPreviousLink
+                          ? "border-[#facc15] bg-[#fffdf2]"
+                          : "border-[#dbe4ef] bg-white"
+                    }`}
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         {item.chapter && <div className="text-[11px] font-bold text-[#5161d6]">{item.chapter}</div>}
                         <div className="mt-1 text-sm font-extrabold text-[#061226]">{formatChecklistItemTitle(item, selectedTemplate?.items)}</div>
                       </div>
-                      {(taughtSelected || homeworkSelected) && (
+                      {(hasCurrentLink || hasPreviousLink) && (
                         <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                          {taughtSelected && <Badge variant="sky" className="px-1.5 py-0 text-[10px]">已关联到内容</Badge>}
-                          {homeworkSelected && <Badge variant="amber" className="px-1.5 py-0 text-[10px]">已关联到作业</Badge>}
+                          {taughtSelected && <Badge variant="sky" className="px-1.5 py-0 text-[10px]">本节内容</Badge>}
+                          {homeworkSelected && <Badge variant="amber" className="px-1.5 py-0 text-[10px]">本节作业</Badge>}
+                          {previousTaughtSelected && <Badge variant="outline" className="border-[#93c5fd] bg-[#eff6ff] px-1.5 py-0 text-[10px] text-[#1557c2]">上节内容</Badge>}
+                          {previousHomeworkSelected && <Badge variant="outline" className="border-[#fdba74] bg-[#fff7ed] px-1.5 py-0 text-[10px] text-[#c2410c]">上节作业</Badge>}
                         </div>
                       )}
                     </div>
