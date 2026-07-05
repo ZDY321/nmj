@@ -406,14 +406,16 @@ function PreviousLessonChecklistProgressCard({ progress }: { progress?: Previous
     : "暂无学生";
   return (
     <div className="mt-4 rounded-[12px] border border-[#dbeafe] bg-white p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div>
         <div>
-          <div className="text-sm font-extrabold text-[#25324a]">上一节学习清单进度</div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-extrabold text-[#25324a]">上一节学习清单进度</div>
+            <Badge variant="secondary" className="shrink-0 whitespace-nowrap">{progress.studentCount} 名学生</Badge>
+          </div>
           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
             来源：{progress.lesson.date} {lessonTimeRangeLabel(progress.lesson)} · {progress.template.name} · 当前学生累计 {completedLabel}
           </div>
         </div>
-        <Badge variant="secondary" className="w-fit">{progress.studentCount} 名学生</Badge>
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
