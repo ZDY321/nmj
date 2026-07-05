@@ -215,7 +215,7 @@ export function StudentArchivePanel({
                 每行一个学生，格式：姓名｜年级｜学校｜备注。只写姓名时，会沿用上方表单里的年级、学校、校区、试听状态和备注。
               </div>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={onBatchAddStudents} disabled={!batchStudentText.trim()}>
+            <Button type="button" size="sm" className="h-9 bg-[#ff8617] px-4 font-extrabold text-white shadow-[0_8px_18px_rgba(255,134,23,0.24)] hover:bg-[#ea760f]" onClick={onBatchAddStudents} disabled={!batchStudentText.trim()}>
               <Plus size={14} /> 批量添加
             </Button>
           </div>
