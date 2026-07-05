@@ -997,6 +997,15 @@ export function App() {
     });
   }
 
+  function saveExternalPromptTemplate(template: string) {
+    updateVault((draft) => {
+      draft.preferences = {
+        ...(draft.preferences ?? { weekStartsOn: 0 }),
+        checklistPromptTemplate: template
+      };
+    });
+  }
+
   function saveProgressChecklistCompletion(completion: ProgressChecklistCompletion) {
     saveProgressChecklistCompletions([completion]);
   }
@@ -1893,6 +1902,7 @@ export function App() {
                     onSaveChecklistCompletion={saveProgressChecklistCompletion}
                     onSaveChecklistCompletions={saveProgressChecklistCompletions}
                     onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
+                    onSaveExternalPromptTemplate={saveExternalPromptTemplate}
                     onOpenLessonInRecords={openProgressLessonInScheduleRecords}
                   />
                 )}

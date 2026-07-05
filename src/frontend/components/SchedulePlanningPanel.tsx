@@ -1,4 +1,4 @@
-import { CalendarCheck, CalendarDays, CheckCircle2, Plus, Search } from "lucide-react";
+import { CalendarCheck, CalendarDays, CheckCircle2, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,15 @@ import { weekdayLabels } from "@/frontend/lib/helpers";
 type DateShortcut = {
   label: string;
   value: string;
+};
+
+export type WeeklySchedulePatternSlot = {
+  id: string;
+  courseGroupId: string;
+  weekdays: Weekday[];
+  startTime: string;
+  endTime: string;
+  billingHours: string;
 };
 
 type SchedulePlanningPanelProps = {
@@ -26,8 +35,12 @@ type SchedulePlanningPanelProps = {
   isSingleTimeValid: boolean;
   onAddCustomPreset: () => void;
   onAddSingleLesson: (status: "scheduled" | "completed") => void;
+  onAddWeeklyPatternSlot: () => void;
+  onApplyWeeklyPatternSlot: (slot: WeeklySchedulePatternSlot) => void;
   onBatchGenerate: () => void;
   onDeleteCustomPreset: (preset: TimePreset) => void;
+  onDeleteWeeklyPatternSlot: (slotId: string) => void;
+  onGenerateWeeklyPattern: () => void;
   onGoToCalendarScheduling: () => void;
   onToggleWeekday: (day: Weekday) => void;
   rangeEnd: string;
@@ -65,6 +78,12 @@ type SchedulePlanningPanelProps = {
   singleStartTime: string;
   singleSuggestedBillingHours: number;
   visibleWeekdays: Weekday[];
+  weeklyPatternCandidateCount: number;
+  weeklyPatternConflictCount: number;
+  weeklyPatternCourseOptions: CourseGroup[];
+  weeklyPatternCreatableCount: number;
+  weeklyPatternInvalidSlotCount: number;
+  weeklyPatternSlots: WeeklySchedulePatternSlot[];
 };
 
 export function SchedulePlanningPanel({
@@ -81,8 +100,12 @@ export function SchedulePlanningPanel({
   isSingleTimeValid,
   onAddCustomPreset,
   onAddSingleLesson,
+  onAddWeeklyPatternSlot,
+  onApplyWeeklyPatternSlot,
   onBatchGenerate,
   onDeleteCustomPreset,
+  onDeleteWeeklyPatternSlot,
+  onGenerateWeeklyPattern,
   onGoToCalendarScheduling,
   onToggleWeekday,
   rangeEnd,
@@ -119,8 +142,29 @@ export function SchedulePlanningPanel({
   singleEndTime,
   singleStartTime,
   singleSuggestedBillingHours,
-  visibleWeekdays
+  visibleWeekdays,
+  weeklyPatternCandidateCount,
+  weeklyPatternConflictCount,
+  weeklyPatternCourseOptions,
+  weeklyPatternCreatableCount,
+  weeklyPatternInvalidSlotCount,
+  weeklyPatternSlots
 }: SchedulePlanningPanelProps) {
+  const weeklyPatternCourseById = new Map(weeklyPatternCourseOptions.map((course) => [course.id, course]));
+  const currentRuleCanJoinWeeklyPattern = Boolean(ruleCourseGroupId && selectedWeekdays.length > 0 && isBatchTimeValid);
+
+  function weeklyPatternSlotWeekdayLabel(slot: WeeklySchedulePatternSlot): string {
+    const labels = visibleWeekdays.filter((day) => slot.weekdays.includes(day)).map((day) => weekdayLabels[day]);
+    return labels.length > 0 ? labels.join("、") : "未选星期";
+  }
+
+  function weeklyPatternSlotBillingLabel(slot: WeeklySchedulePatternSlot): string {
+    const trimmed = slot.billingHours.trim();
+    if (!trimmed) return "计费自动";
+    const hours = Number(trimmed);
+    return Number.isFinite(hours) ? `计费 ${Math.max(hours, 0)} 小时` : "计费自动";
+  }
+
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       <Card className="overflow-hidden">
@@ -392,6 +436,93 @@ export function SchedulePlanningPanel({
           >
             <CalendarCheck size={16} /> 按日期范围生成待上课
           </Button>
+
+          <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">周循环模板</div>
+                <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                  把上方课程、星期和时间加入模板后，可一次生成多组每周重复课节。
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onAddWeeklyPatternSlot}
+                disabled={!currentRuleCanJoinWeeklyPattern}
+                className="shrink-0 border-[#bfdbfe] bg-white text-[#1557c2] hover:bg-[#eaf2ff] hover:text-[#0f3f8f]"
+              >
+                <Plus size={14} /> 加入模板
+              </Button>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {weeklyPatternSlots.map((slot) => {
+                const course = weeklyPatternCourseById.get(slot.courseGroupId);
+                return (
+                  <div key={slot.id} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-extrabold text-[#061226]">
+                          {course ? `${course.name} · ${course.subject}` : "课程档案已不存在"}
+                        </div>
+                        <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                          {weeklyPatternSlotWeekdayLabel(slot)} · {slot.startTime}-{slot.endTime} · {weeklyPatternSlotBillingLabel(slot)}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onApplyWeeklyPatternSlot(slot)}
+                          title="套用到上方表单"
+                          className="h-8 px-2"
+                        >
+                          <RotateCcw size={14} /> 套用
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onDeleteWeeklyPatternSlot(slot.id)}
+                          title="删除模板时段"
+                          aria-label="删除模板时段"
+                          className="h-8 px-2 text-[#b91c1c] hover:border-[#fecaca] hover:bg-[#fff1f2] hover:text-[#991b1b]"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {weeklyPatternSlots.length === 0 && (
+                <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white px-3 py-4 text-center text-xs font-semibold text-[#64748b]">
+                  暂无周循环模板
+                </div>
+              )}
+            </div>
+
+            {weeklyPatternSlots.length > 0 && (
+              <div className="mt-3 rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-extrabold text-[#25324a]">
+                模板范围内共 {weeklyPatternCandidateCount} 节，可生成 {weeklyPatternCreatableCount} 节
+                {weeklyPatternConflictCount > 0 ? `，${weeklyPatternConflictCount} 节冲突会跳过` : ""}
+                {weeklyPatternInvalidSlotCount > 0 ? `，${weeklyPatternInvalidSlotCount} 条模板需调整` : ""}。
+              </div>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full"
+              disabled={weeklyPatternSlots.length === 0}
+              onClick={onGenerateWeeklyPattern}
+            >
+              <CalendarCheck size={16} /> 按周循环模板生成待上课
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

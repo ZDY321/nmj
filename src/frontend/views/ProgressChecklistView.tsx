@@ -94,7 +94,8 @@ export function ProgressChecklistView({
   onSaveChecklistCompletion,
   onSaveChecklistCompletions,
   onDeleteChecklistCompletion,
-  onOpenLessonInRecords
+  onOpenLessonInRecords,
+  onSaveExternalPromptTemplate
 }: {
   vault: TeacherVault;
   token?: string;
@@ -106,6 +107,7 @@ export function ProgressChecklistView({
   onSaveChecklistCompletions: (completions: ProgressChecklistCompletion[]) => void;
   onDeleteChecklistCompletion: (completionId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
+  onSaveExternalPromptTemplate?: (template: string) => void;
 }) {
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -380,8 +382,9 @@ export function ProgressChecklistView({
       : [],
     [selectedItem, selectedStudents, completionMap]
   );
+  const defaultExternalPromptText = `请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。\n生成要求：\n请按连云港【初中物理苏科版八年级上册】要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。\n条目标题必须带上教材的章节小标序号（如 1.1、1.2、2.1），不要省略编号。\n如果是真题/试卷清单，分组用地区或年份，条目写试卷名称，不需要编号。\n如果是题型/专题清单，分组用题型名或专题名，条目写具体考点或知识点，不需要编号。\n输出要求：只输出清单正文；每行一个条目；有分组时使用”分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。\n\n教材章节示例：\n第一章 声现象｜1.1 声音是什么\n第一章 声现象｜1.2 乐音与噪声\n第二章 物态变化｜2.1 物质的三态 温度的测量\n\n真题试卷示例：\n2024年连云港卷｜2024年连云港中考物理试卷\n2023年南京卷｜2023年南京中考物理试卷\n\n题型专题示例：\n实验探究题｜凸透镜成像实验\n力学综合题｜浮力与压强综合\n电学专题｜串并联电路识别与计算`;
   const [externalPromptText, setExternalPromptText] = useState(
-    `请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。\n生成要求：\n请按连云港【初中物理苏科版八年级上册】要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。\n条目标题必须带上教材的章节小标序号（如 1.1、1.2、2.1），不要省略编号。\n如果是真题/试卷清单，分组用地区或年份，条目写试卷名称，不需要编号。\n如果是题型/专题清单，分组用题型名或专题名，条目写具体考点或知识点，不需要编号。\n输出要求：只输出清单正文；每行一个条目；有分组时使用”分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。\n\n教材章节示例：\n第一章 声现象｜1.1 声音是什么\n第一章 声现象｜1.2 乐音与噪声\n第二章 物态变化｜2.1 物质的三态 温度的测量\n\n真题试卷示例：\n2024年连云港卷｜2024年连云港中考物理试卷\n2023年南京卷｜2023年南京中考物理试卷\n\n题型专题示例：\n实验探究题｜凸透镜成像实验\n力学综合题｜浮力与压强综合\n电学专题｜串并联电路识别与计算`
+    vault.preferences?.checklistPromptTemplate || defaultExternalPromptText
   );
 
   function startNewTemplate() {
@@ -527,6 +530,13 @@ export function ProgressChecklistView({
       setPromptCopyMessage("已复制提示词");
     } catch {
       setPromptCopyMessage("复制失败，请手动选中复制");
+    }
+  }
+
+  function saveExternalPromptTemplate() {
+    if (onSaveExternalPromptTemplate) {
+      onSaveExternalPromptTemplate(externalPromptText);
+      setPromptCopyMessage("模板已保存");
     }
   }
 
@@ -769,9 +779,14 @@ export function ProgressChecklistView({
                     <div className="flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
                       <BookCheck size={16} className="text-[#1557c2]" /> 外部AI提示词生成模板示例
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={copyExternalAiPrompt}>
-                      <Copy size={14} /> 复制
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={saveExternalPromptTemplate} disabled={externalPromptText.trim() === (vault.preferences?.checklistPromptTemplate ?? "").trim()}>
+                        <Save size={14} /> 保存
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={copyExternalAiPrompt}>
+                        <Copy size={14} /> 复制
+                      </Button>
+                    </div>
                   </div>
                   <div className="mb-2 text-xs font-semibold text-[#64748b]">建议使用 DeepSeek</div>
                   <Textarea value={externalPromptText} onChange={(event) => setExternalPromptText(event.target.value)} className="min-h-[160px] bg-white text-xs leading-5" />

@@ -158,6 +158,7 @@ export function ProgressView({
   onSaveChecklistCompletion,
   onSaveChecklistCompletions,
   onDeleteChecklistCompletion,
+  onSaveExternalPromptTemplate,
   onOpenLessonInRecords
 }: {
   vault: TeacherVault;
@@ -172,6 +173,7 @@ export function ProgressView({
   onSaveChecklistCompletion: (completion: ProgressChecklistCompletion) => void;
   onSaveChecklistCompletions: (completions: ProgressChecklistCompletion[]) => void;
   onDeleteChecklistCompletion: (completionId: string) => void;
+  onSaveExternalPromptTemplate: (template: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -424,6 +426,7 @@ export function ProgressView({
           onSaveChecklistCompletions={onSaveChecklistCompletions}
           onDeleteChecklistCompletion={onDeleteChecklistCompletion}
           onOpenLessonInRecords={onOpenLessonInRecords}
+          onSaveExternalPromptTemplate={onSaveExternalPromptTemplate}
         />
       </div>
     );

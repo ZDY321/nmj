@@ -301,11 +301,11 @@ export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">开始时间</label>
-              <Input type="time" value={filterStartTime} onChange={(event) => setFilterStartTime(event.target.value)} placeholder="如 08:00" />
+              <TimeTextInput value={filterStartTime} onValueChange={setFilterStartTime} placeholder="如 08:00" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">结束时间</label>
-              <Input type="time" value={filterEndTime} onChange={(event) => setFilterEndTime(event.target.value)} placeholder="如 21:00" />
+              <TimeTextInput value={filterEndTime} onValueChange={setFilterEndTime} placeholder="如 21:00" />
             </div>
           </div>
 

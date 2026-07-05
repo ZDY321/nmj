@@ -557,6 +557,7 @@ export type AppPreferences = {
   courseTypeLabels?: Partial<Record<CourseType, string>>;
   disabledCourseTypes?: CourseType[];
   courseTypeFeeRules?: Partial<Record<CourseType, FeeRule>>;
+  checklistPromptTemplate?: string;
 };
 
 export type TeacherVault = {

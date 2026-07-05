@@ -599,12 +599,13 @@ export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentS
       const course = getCourse(vault, lesson.courseGroupId);
       const campusId = lesson.campusId ?? course?.defaultCampusId;
       const studentIds = lessonStudentIds(lesson);
+      const isVisibleCourse = course != null && course.status === "active" && courseHasActiveStudent(vault, course);
       const matchesStudent =
         !filters.normalizedNameFilter ||
         studentIds.some((studentId) =>
           (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(filters.normalizedNameFilter)
         );
-      const matchesCourse = filters.courseFilter === "all" || lesson.courseGroupId === filters.courseFilter;
+      const matchesCourse = filters.courseFilter === "all" ? isVisibleCourse : lesson.courseGroupId === filters.courseFilter;
       const matchesType = filters.courseTypeFilter === "all" || lesson.type === filters.courseTypeFilter;
       const matchesSubject = filters.subjectFilter === "all" || course?.subject === filters.subjectFilter;
       const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;

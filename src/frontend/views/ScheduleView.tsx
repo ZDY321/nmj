@@ -9,7 +9,7 @@ import { ScheduleCalendarFollowupPanels } from "@/frontend/components/ScheduleCa
 import { ScheduleCalendarPanel } from "@/frontend/components/ScheduleCalendarPanel";
 import { ScheduleLessonDetailPanel } from "@/frontend/components/ScheduleLessonDetailPanel";
 import { SchedulePanelTabs } from "@/frontend/components/SchedulePanelTabs";
-import { SchedulePlanningPanel } from "@/frontend/components/SchedulePlanningPanel";
+import { SchedulePlanningPanel, type WeeklySchedulePatternSlot } from "@/frontend/components/SchedulePlanningPanel";
 import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsListCard";
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
@@ -91,6 +91,19 @@ function dateWithWeekday(date: string): string {
 function optionalDateWithWeekday(date: string | null | undefined): string {
   return date ? dateWithWeekday(date) : "未知";
 }
+
+type WeeklyPatternCreatableItem = {
+  slot: WeeklySchedulePatternSlot;
+  date: string;
+  course: CourseGroup;
+};
+
+type WeeklyPatternPreview = {
+  candidateCount: number;
+  conflictCount: number;
+  invalidSlotCount: number;
+  creatableItems: WeeklyPatternCreatableItem[];
+};
 
 function timeTwoHoursLater(time: string): string {
   const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
@@ -307,7 +320,7 @@ export function ScheduleView({
   const weekStartPreference = weekStartsOn(vault);
   const initialWeekDates = weekDatesFor(initialFocusedDate, weekStartPreference);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
-  const courseGroupOptions = sortCoursesByName(vault.courseGroups);
+  const courseGroupOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
   const studentOptions = sortStudentsByName(vault.students);
   const courseSelectionOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
   const courseSelectionOptionIds = courseSelectionOptions.map((course) => course.id).join("|");
@@ -328,6 +341,7 @@ export function ScheduleView({
   const [rangeStart, setRangeStart] = useState(todayIso());
   const [rangeEnd, setRangeEnd] = useState(monthShift(todayIso().slice(0, 7), 1) + "-01");
   const [batchLessonTargetCount, setBatchLessonTargetCount] = useState("");
+  const [weeklyPatternSlots, setWeeklyPatternSlots] = useState<WeeklySchedulePatternSlot[]>([]);
   const [calendarCourseGroupId, setCalendarCourseGroupId] = useState(firstCourseId);
   const [calendarCourseSearch, setCalendarCourseSearch] = useState("");
   const [calendarStartTime, setCalendarStartTime] = useState("19:00");
@@ -435,6 +449,11 @@ export function ScheduleView({
   const batchConflictCount = isOrderedTimeRange(ruleStartTime, ruleEndTime)
     ? batchCandidateDates.filter((date) => findTimeConflict(date, ruleStartTime, ruleEndTime)).length
     : 0;
+  const weeklyPatternPreview = buildWeeklyPatternPreview();
+  const weeklyPatternCandidateCount = weeklyPatternPreview.candidateCount;
+  const weeklyPatternConflictCount = weeklyPatternPreview.conflictCount;
+  const weeklyPatternCreatableCount = weeklyPatternPreview.creatableItems.length;
+  const weeklyPatternInvalidSlotCount = weeklyPatternPreview.invalidSlotCount;
   const singleSuggestedBillingHours = suggestedBillingHoursForDraft(singleCourseGroupId, singleStartTime, singleEndTime);
   const ruleSuggestedBillingHours = suggestedBillingHoursForDraft(ruleCourseGroupId, ruleStartTime, ruleEndTime);
   const calendarSuggestedBillingHours = suggestedBillingHoursForDraft(calendarCourseGroupId, calendarStartTime, calendarEndTime);
@@ -1363,6 +1382,70 @@ export function ScheduleView({
     );
   }
 
+  function addWeeklyPatternSlot() {
+    if (!ruleCourseGroupId) {
+      showScheduleError("请先选择要加入周循环模板的课程。");
+      return;
+    }
+    if (selectedWeekdays.length === 0) {
+      showScheduleError("请先选择要加入周循环模板的星期。");
+      return;
+    }
+    if (!validateTimeRange(ruleStartTime, ruleEndTime)) return;
+    const course = getCourse(vault, ruleCourseGroupId);
+    if (!course || course.status !== "active") {
+      showScheduleError("这个课程已暂停或不存在，请先选择当前课程。");
+      return;
+    }
+    if (!courseHasActiveStudent(vault, course)) {
+      showScheduleError("这个课程没有在读学生，请先在档案信息中关联在读学生。");
+      return;
+    }
+
+    const weekdays = Array.from(new Set(selectedWeekdays)).sort((a, b) => a - b);
+    const billingHours = ruleBillingHours.trim();
+    setWeeklyPatternSlots((current) => {
+      const matchedIndex = current.findIndex(
+        (slot) =>
+          slot.courseGroupId === ruleCourseGroupId &&
+          slot.startTime === ruleStartTime &&
+          slot.endTime === ruleEndTime &&
+          slot.billingHours.trim() === billingHours
+      );
+      if (matchedIndex < 0) {
+        return [
+          ...current,
+          {
+            id: makeId("weekly_pattern"),
+            courseGroupId: ruleCourseGroupId,
+            weekdays,
+            startTime: ruleStartTime,
+            endTime: ruleEndTime,
+            billingHours
+          }
+        ];
+      }
+      return current.map((slot, index) =>
+        index === matchedIndex
+          ? { ...slot, weekdays: Array.from(new Set([...slot.weekdays, ...weekdays])).sort((a, b) => a - b) }
+          : slot
+      );
+    });
+    showScheduleNotice(`已加入周循环模板：${course.name} ${weekdays.map((day) => weekdayLabels[day]).join("、")} ${ruleStartTime}-${ruleEndTime}。`);
+  }
+
+  function applyWeeklyPatternSlot(slot: WeeklySchedulePatternSlot) {
+    setRuleCourseGroupId(slot.courseGroupId);
+    setSelectedWeekdays([...slot.weekdays].sort((a, b) => a - b));
+    setRuleStartTime(slot.startTime);
+    setRuleEndTime(slot.endTime);
+    setRuleBillingHours(slot.billingHours);
+  }
+
+  function deleteWeeklyPatternSlot(slotId: string) {
+    setWeeklyPatternSlots((current) => current.filter((slot) => slot.id !== slotId));
+  }
+
   function addCustomPreset() {
     if (!customPresetStart || !customPresetEnd) return;
     if (!validateTimeRange(customPresetStart, customPresetEnd, "自定义时段的结束时间必须晚于开始时间。")) return;
@@ -2101,6 +2184,58 @@ export function ScheduleView({
       }
     });
   }
+
+  function buildWeeklyPatternPreview(): WeeklyPatternPreview {
+    const preview: WeeklyPatternPreview = {
+      candidateCount: 0,
+      conflictCount: 0,
+      invalidSlotCount: 0,
+      creatableItems: []
+    };
+    if (!isOrderedDateRange(rangeStart, rangeEnd)) return preview;
+
+    const rangeDates = datesBetweenLocal(rangeStart, rangeEnd);
+    const plannedLessons: Array<Pick<Lesson, "date" | "startTime" | "endTime">> = [];
+
+    for (const slot of weeklyPatternSlots) {
+      const course = getCourse(vault, slot.courseGroupId);
+      const slotValid =
+        Boolean(course && course.status === "active" && courseHasActiveStudent(vault, course)) &&
+        slot.weekdays.length > 0 &&
+        isOrderedTimeRange(slot.startTime, slot.endTime);
+
+      if (!slotValid || !course) {
+        preview.invalidSlotCount += 1;
+        continue;
+      }
+
+      const slotDates = rangeDates.filter((date) => slot.weekdays.includes(weekdayOfDateIso(date)));
+      for (const date of slotDates) {
+        preview.candidateCount += 1;
+        const existingConflict = findTimeConflict(date, slot.startTime, slot.endTime);
+        const plannedConflict = plannedLessons.some(
+          (lesson) =>
+            lesson.date === date &&
+            timesOverlap(lesson.startTime, lesson.endTime, slot.startTime, slot.endTime)
+        );
+
+        if (existingConflict || plannedConflict) {
+          preview.conflictCount += 1;
+          continue;
+        }
+
+        preview.creatableItems.push({ slot, date, course });
+        plannedLessons.push({
+          date,
+          startTime: slot.startTime,
+          endTime: slot.endTime
+        });
+      }
+    }
+
+    return preview;
+  }
+
   function findTimeConflict(lessonDate: string, lessonStartTime: string, lessonEndTime: string, ignoredLessonId?: string): Lesson | undefined {
     return vault.lessons.find(
       (lesson) =>
@@ -2132,6 +2267,65 @@ export function ScheduleView({
   function hasBatchConflicts(): boolean {
     if (!isBatchDateRangeValid || !isBatchTimeValid) return false;
     return batchConflictCount > 0;
+  }
+
+  function validateWeeklyPattern(): boolean {
+    if (!validateDateRange(rangeStart, rangeEnd)) return false;
+    if (weeklyPatternSlots.length === 0) {
+      showScheduleError("请先加入至少一条周循环模板。");
+      return false;
+    }
+    const invalidTimeSlot = weeklyPatternSlots.find((slot) => slot.weekdays.length === 0 || !isOrderedTimeRange(slot.startTime, slot.endTime));
+    if (invalidTimeSlot) {
+      showScheduleError("周循环模板中有未选星期或时间无效的条目，请删除或套用后调整。");
+      return false;
+    }
+    const unavailableSlot = weeklyPatternSlots.find((slot) => {
+      const course = getCourse(vault, slot.courseGroupId);
+      return !course || course.status !== "active" || !courseHasActiveStudent(vault, course);
+    });
+    if (unavailableSlot) {
+      showScheduleError("周循环模板中有已暂停、已删除或没有在读学生的课程，请删除或调整后再生成。");
+      return false;
+    }
+    return true;
+  }
+
+  function generateWeeklyPatternLessons() {
+    if (!validateWeeklyPattern()) return;
+    const preview = buildWeeklyPatternPreview();
+    if (preview.candidateCount === 0) {
+      showScheduleError("当前日期范围和周循环模板没有匹配课节。");
+      return;
+    }
+    if (preview.creatableItems.length === 0) {
+      showScheduleError(
+        preview.conflictCount > 0
+          ? `${preview.conflictCount} 节均与已有课程或模板内时段冲突，没有新增课节。`
+          : "当前周循环模板没有可生成课节。"
+      );
+      return;
+    }
+
+    const lessonsToAdd = preview.creatableItems.map(({ slot, date, course }) =>
+      createLessonFromCourse(vault, course, {
+        date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        campusId: course.defaultCampusId,
+        manualBillingHours: parseOptionalBillingHours(slot.billingHours),
+        status: "scheduled"
+      })
+    );
+    onAddLessons(lessonsToAdd);
+    showScheduleNotice(
+      `已按周循环模板生成 ${lessonsToAdd.length} 节待上课${preview.conflictCount > 0 ? `，${preview.conflictCount} 节因时间冲突已跳过` : ""}。`
+    );
+  }
+
+  function hasWeeklyPatternConflicts(): boolean {
+    if (!isBatchDateRangeValid || weeklyPatternSlots.length === 0) return false;
+    return weeklyPatternConflictCount > 0;
   }
 
   function showScheduleError(message: string) {
@@ -2267,6 +2461,8 @@ export function ScheduleView({
           ruleSuggestedBillingHours={ruleSuggestedBillingHours}
           onAddCustomPreset={addCustomPreset}
           onAddSingleLesson={addSingleLesson}
+          onAddWeeklyPatternSlot={addWeeklyPatternSlot}
+          onApplyWeeklyPatternSlot={applyWeeklyPatternSlot}
           onBatchGenerate={() => {
             if (!validateDateRange(rangeStart, rangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
               return;
@@ -2291,6 +2487,20 @@ export function ScheduleView({
               onConfirm: () => onDeleteCustomTimePreset(preset.id)
             })
           }
+          onDeleteWeeklyPatternSlot={deleteWeeklyPatternSlot}
+          onGenerateWeeklyPattern={() => {
+            if (!validateWeeklyPattern()) return;
+            if (hasWeeklyPatternConflicts()) {
+              confirm({
+                title: "周循环模板中存在时间冲突",
+                description: `系统会跳过 ${weeklyPatternConflictCount} 节已经有课或模板内互相重叠的时间段，只生成没有冲突的课程。`,
+                confirmLabel: "跳过冲突并生成",
+                onConfirm: generateWeeklyPatternLessons
+              });
+              return;
+            }
+            generateWeeklyPatternLessons();
+          }}
           onGoToCalendarScheduling={goToCalendarSchedulingFromSingle}
           onToggleWeekday={toggleWeekday}
           rangeEnd={rangeEnd}
@@ -2326,6 +2536,12 @@ export function ScheduleView({
           singleStartTime={singleStartTime}
           singleSuggestedBillingHours={singleSuggestedBillingHours}
           visibleWeekdays={visibleWeekdays}
+          weeklyPatternCandidateCount={weeklyPatternCandidateCount}
+          weeklyPatternConflictCount={weeklyPatternConflictCount}
+          weeklyPatternCourseOptions={vault.courseGroups}
+          weeklyPatternCreatableCount={weeklyPatternCreatableCount}
+          weeklyPatternInvalidSlotCount={weeklyPatternInvalidSlotCount}
+          weeklyPatternSlots={weeklyPatternSlots}
         />
       )}
 
