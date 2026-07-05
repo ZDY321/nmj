@@ -9,7 +9,7 @@ import { ScheduleCalendarFollowupPanels } from "@/frontend/components/ScheduleCa
 import { ScheduleCalendarPanel } from "@/frontend/components/ScheduleCalendarPanel";
 import { ScheduleLessonDetailPanel } from "@/frontend/components/ScheduleLessonDetailPanel";
 import { SchedulePanelTabs } from "@/frontend/components/SchedulePanelTabs";
-import { SchedulePlanningPanel, type BatchRepeatMode, type WeeklySchedulePatternSlot } from "@/frontend/components/SchedulePlanningPanel";
+import { SchedulePlanningPanel, type BatchRepeatMode, type BatchTimeGroup, type WeeklySchedulePatternSlot } from "@/frontend/components/SchedulePlanningPanel";
 import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsListCard";
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
@@ -103,6 +103,14 @@ type WeeklyPatternPreview = {
   conflictCount: number;
   invalidSlotCount: number;
   creatableItems: WeeklyPatternCreatableItem[];
+};
+
+type BatchPerDayPreview = {
+  totalCount: number;
+  conflictCount: number;
+  unassignedWeekdays: Weekday[];
+  groupCounts: Array<{ groupId: string; count: number; conflictCount: number }>;
+  creatableItems: Array<{ group: BatchTimeGroup; date: string }>;
 };
 
 function timeTwoHoursLater(time: string): string {
@@ -349,6 +357,8 @@ export function ScheduleView({
   const [batchRepeatMode, setBatchRepeatMode] = useState<BatchRepeatMode>("end_date");
   const [batchRepeatWeeks, setBatchRepeatWeeks] = useState("4");
   const [weeklyPatternSlots, setWeeklyPatternSlots] = useState<WeeklySchedulePatternSlot[]>([]);
+  const [batchPerDayMode, setBatchPerDayMode] = useState(false);
+  const [batchTimeGroups, setBatchTimeGroups] = useState<BatchTimeGroup[]>([]);
   const [calendarCourseGroupId, setCalendarCourseGroupId] = useState(firstCourseId);
   const [calendarCourseSearch, setCalendarCourseSearch] = useState("");
   const [calendarStartTime, setCalendarStartTime] = useState("19:00");
@@ -465,6 +475,7 @@ export function ScheduleView({
   const weeklyPatternConflictCount = weeklyPatternPreview.conflictCount;
   const weeklyPatternCreatableCount = weeklyPatternPreview.creatableItems.length;
   const weeklyPatternInvalidSlotCount = weeklyPatternPreview.invalidSlotCount;
+  const batchPerDayPreview = buildBatchPerDayPreview();
   const singleSuggestedBillingHours = suggestedBillingHoursForDraft(singleCourseGroupId, singleStartTime, singleEndTime);
   const ruleSuggestedBillingHours = suggestedBillingHoursForDraft(ruleCourseGroupId, ruleStartTime, ruleEndTime);
   const calendarSuggestedBillingHours = suggestedBillingHoursForDraft(calendarCourseGroupId, calendarStartTime, calendarEndTime);
@@ -1462,6 +1473,66 @@ export function ScheduleView({
     setWeeklyPatternSlots((current) => current.filter((slot) => slot.id !== slotId));
   }
 
+  // --- Per-day time group handlers ---
+
+  function setBatchPerDayModeWithSync(value: boolean) {
+    if (value && !batchPerDayMode) {
+      // Turning ON: seed first group from current single-time values
+      setBatchTimeGroups([
+        {
+          id: makeId("btg"),
+          startTime: ruleStartTime,
+          endTime: ruleEndTime,
+          billingHours: ruleBillingHours,
+          weekdays: [...selectedWeekdays]
+        }
+      ]);
+    } else if (!value && batchPerDayMode) {
+      // Turning OFF: apply first group's time back to single inputs
+      const first = batchTimeGroups[0];
+      if (first) {
+        setRuleStartTime(first.startTime);
+        setRuleEndTime(first.endTime);
+        setRuleBillingHours(first.billingHours);
+      }
+    }
+    setBatchPerDayMode(value);
+  }
+
+  function addBatchTimeGroup() {
+    setBatchTimeGroups((current) => [
+      ...current,
+      {
+        id: makeId("btg"),
+        startTime: ruleStartTime,
+        endTime: ruleEndTime,
+        billingHours: ruleBillingHours,
+        weekdays: []
+      }
+    ]);
+  }
+
+  function updateBatchTimeGroup(id: string, updates: Partial<Omit<BatchTimeGroup, "id">>) {
+    setBatchTimeGroups((current) => current.map((group) => (group.id === id ? { ...group, ...updates } : group)));
+  }
+
+  function deleteBatchTimeGroup(id: string) {
+    setBatchTimeGroups((current) => current.filter((group) => group.id !== id));
+  }
+
+  function toggleBatchTimeGroupWeekday(groupId: string, day: Weekday) {
+    setBatchTimeGroups((current) =>
+      current.map((group) => {
+        if (group.id !== groupId) return group;
+        const has = group.weekdays.includes(day);
+        return {
+          ...group,
+          weekdays: has ? group.weekdays.filter((d) => d !== day) : [...group.weekdays, day].sort((a, b) => a - b)
+        };
+      })
+    );
+  }
+
   function addCustomPreset() {
     if (!customPresetStart || !customPresetEnd) return;
     if (!validateTimeRange(customPresetStart, customPresetEnd, "自定义时段的结束时间必须晚于开始时间。")) return;
@@ -2252,6 +2323,59 @@ export function ScheduleView({
     return preview;
   }
 
+  function buildBatchPerDayPreview(): BatchPerDayPreview {
+    const preview: BatchPerDayPreview = {
+      totalCount: 0,
+      conflictCount: 0,
+      unassignedWeekdays: [],
+      groupCounts: [],
+      creatableItems: []
+    };
+    if (!batchPerDayMode || !isBatchDateRangeValid || batchTimeGroups.length === 0) return preview;
+
+    const rangeDates = datesBetweenLocal(rangeStart, batchEffectiveRangeEnd);
+    const plannedLessons: Array<Pick<Lesson, "date" | "startTime" | "endTime">> = [];
+
+    // Find weekdays selected globally but not assigned to any group
+    const assignedWeekdays = new Set(batchTimeGroups.flatMap((g) => g.weekdays));
+    preview.unassignedWeekdays = selectedWeekdays.filter((d) => !assignedWeekdays.has(d));
+
+    for (const group of batchTimeGroups) {
+      const groupCount = { groupId: group.id, count: 0, conflictCount: 0 };
+      const groupValid = group.weekdays.length > 0 && isOrderedTimeRange(group.startTime, group.endTime);
+
+      if (!groupValid) {
+        preview.groupCounts.push(groupCount);
+        continue;
+      }
+
+      const groupDates = rangeDates.filter((d) => group.weekdays.includes(weekdayOfDateIso(d)));
+      for (const date of groupDates) {
+        preview.totalCount += 1;
+        groupCount.count += 1;
+
+        const existingConflict = findTimeConflict(date, group.startTime, group.endTime);
+        const plannedConflict = plannedLessons.some(
+          (lesson) =>
+            lesson.date === date &&
+            timesOverlap(lesson.startTime, lesson.endTime, group.startTime, group.endTime)
+        );
+
+        if (existingConflict || plannedConflict) {
+          preview.conflictCount += 1;
+          groupCount.conflictCount += 1;
+          continue;
+        }
+
+        preview.creatableItems.push({ group, date });
+        plannedLessons.push({ date, startTime: group.startTime, endTime: group.endTime });
+      }
+      preview.groupCounts.push(groupCount);
+    }
+
+    return preview;
+  }
+
   function findTimeConflict(lessonDate: string, lessonStartTime: string, lessonEndTime: string, ignoredLessonId?: string): Lesson | undefined {
     return vault.lessons.find(
       (lesson) =>
@@ -2287,6 +2411,66 @@ export function ScheduleView({
   function hasBatchConflicts(): boolean {
     if (!isBatchDateRangeValid || !isBatchTimeValid) return false;
     return batchConflictCount > 0;
+  }
+
+  function generateBatchPerDayLessons() {
+    if (!isBatchRepeatWeeksValid) {
+      showScheduleError("重复周数至少为 1。");
+      return;
+    }
+    if (!validateDateRange(rangeStart, batchEffectiveRangeEnd)) return;
+    if (batchTimeGroups.length === 0) {
+      showScheduleError("请添加至少一个时间分组。");
+      return;
+    }
+    const invalidGroup = batchTimeGroups.find(
+      (g) => g.weekdays.length === 0 || !isOrderedTimeRange(g.startTime, g.endTime)
+    );
+    if (invalidGroup) {
+      showScheduleError("时间分组中有未选星期或时间无效的条目，请调整后再生成。");
+      return;
+    }
+    if (batchPerDayPreview.unassignedWeekdays.length > 0) {
+      showScheduleError(
+        `星期${batchPerDayPreview.unassignedWeekdays.map((d) => weekdayLabels[d]).join("、")}尚未分配到任何时间组，请分配或取消选择。`
+      );
+      return;
+    }
+
+    const preview = buildBatchPerDayPreview();
+    if (preview.totalCount === 0) {
+      showScheduleError("当前日期范围和分时条件没有匹配课节。");
+      return;
+    }
+    if (preview.creatableItems.length === 0) {
+      showScheduleError(
+        preview.conflictCount > 0
+          ? `${preview.conflictCount} 节均与已有课程冲突，没有新增课节。`
+          : "当前分时条件没有可生成课节。"
+      );
+      return;
+    }
+
+    const course = getCourse(vault, ruleCourseGroupId);
+    if (!course || course.status !== "active" || !courseHasActiveStudent(vault, course)) {
+      showScheduleError("所选课程不可用（已暂停、已删除或没有在读学生），请重新选择。");
+      return;
+    }
+
+    const lessonsToAdd = preview.creatableItems.map(({ group, date }) =>
+      createLessonFromCourse(vault, course, {
+        date,
+        startTime: group.startTime,
+        endTime: group.endTime,
+        campusId: course.defaultCampusId,
+        manualBillingHours: parseOptionalBillingHours(group.billingHours),
+        status: "scheduled"
+      })
+    );
+    onAddLessons(lessonsToAdd);
+    showScheduleNotice(
+      `已按分时生成 ${lessonsToAdd.length} 节待上课${preview.conflictCount > 0 ? `，${preview.conflictCount} 节因时间冲突已跳过` : ""}。`
+    );
   }
 
   function validateWeeklyPattern(): boolean {
@@ -2474,8 +2658,14 @@ export function ScheduleView({
           batchConflictCount={batchConflictCount}
           batchEffectiveRangeEnd={batchEffectiveRangeEnd}
           batchLessonTargetCount={batchLessonTargetCount}
+          batchPerDayConflictCount={batchPerDayPreview.conflictCount}
+          batchPerDayGroupCounts={batchPerDayPreview.groupCounts}
+          batchPerDayMode={batchPerDayMode}
+          batchPerDayTotalCount={batchPerDayPreview.totalCount}
+          batchPerDayUnassignedWeekdays={batchPerDayPreview.unassignedWeekdays}
           batchRepeatMode={batchRepeatMode}
           batchRepeatWeeks={batchRepeatWeeks}
+          batchTimeGroups={batchTimeGroups}
           customPresetEnd={customPresetEnd}
           customPresetStart={customPresetStart}
           customTimePresets={customTimePresets}
@@ -2487,11 +2677,25 @@ export function ScheduleView({
           isSingleTimeValid={isSingleTimeValid}
           ruleBillingHours={ruleBillingHours}
           ruleSuggestedBillingHours={ruleSuggestedBillingHours}
+          onAddBatchTimeGroup={addBatchTimeGroup}
           onAddCustomPreset={addCustomPreset}
           onAddSingleLesson={addSingleLesson}
           onAddWeeklyPatternSlot={addWeeklyPatternSlot}
           onApplyWeeklyPatternSlot={applyWeeklyPatternSlot}
           onBatchGenerate={() => {
+            if (batchPerDayMode) {
+              if (batchPerDayPreview.conflictCount > 0) {
+                confirm({
+                  title: "按日分时排课中存在时间冲突",
+                  description: `系统会跳过 ${batchPerDayPreview.conflictCount} 节已经有课的时间段，只生成没有冲突的课程。`,
+                  confirmLabel: "跳过冲突并生成",
+                  onConfirm: generateBatchPerDayLessons
+                });
+                return;
+              }
+              generateBatchPerDayLessons();
+              return;
+            }
             if (!isBatchRepeatWeeksValid) {
               showScheduleError("重复周数至少为 1。");
               return;
@@ -2510,6 +2714,7 @@ export function ScheduleView({
             }
             generateBatchLessons();
           }}
+          onDeleteBatchTimeGroup={deleteBatchTimeGroup}
           onDeleteCustomPreset={(preset) =>
             confirm({
               title: `删除常用时段「${preset.label}」？`,
@@ -2534,7 +2739,10 @@ export function ScheduleView({
             generateWeeklyPatternLessons();
           }}
           onGoToCalendarScheduling={goToCalendarSchedulingFromSingle}
+          onSetBatchPerDayMode={setBatchPerDayModeWithSync}
+          onToggleBatchTimeGroupWeekday={toggleBatchTimeGroupWeekday}
           onToggleWeekday={toggleWeekday}
+          onUpdateBatchTimeGroup={updateBatchTimeGroup}
           rangeEnd={rangeEnd}
           rangeStart={rangeStart}
           ruleCourseGroupId={ruleCourseGroupId}

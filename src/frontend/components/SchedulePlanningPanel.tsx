@@ -21,6 +21,14 @@ export type WeeklySchedulePatternSlot = {
   billingHours: string;
 };
 
+export type BatchTimeGroup = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  billingHours: string;
+  weekdays: Weekday[];
+};
+
 export type BatchRepeatMode = "end_date" | "weeks";
 
 type SchedulePlanningPanelProps = {
@@ -28,8 +36,14 @@ type SchedulePlanningPanelProps = {
   batchConflictCount: number;
   batchEffectiveRangeEnd: string;
   batchLessonTargetCount: string;
+  batchPerDayConflictCount: number;
+  batchPerDayGroupCounts: Array<{ groupId: string; count: number; conflictCount: number }>;
+  batchPerDayMode: boolean;
+  batchPerDayTotalCount: number;
+  batchPerDayUnassignedWeekdays: Weekday[];
   batchRepeatMode: BatchRepeatMode;
   batchRepeatWeeks: string;
+  batchTimeGroups: BatchTimeGroup[];
   customPresetEnd: string;
   customPresetStart: string;
   customTimePresets: TimePreset[];
@@ -39,16 +53,21 @@ type SchedulePlanningPanelProps = {
   isBatchTimeValid: boolean;
   isCustomPresetTimeValid: boolean;
   isSingleTimeValid: boolean;
+  onAddBatchTimeGroup: () => void;
   onAddCustomPreset: () => void;
   onAddSingleLesson: (status: "scheduled" | "completed") => void;
   onAddWeeklyPatternSlot: () => void;
   onApplyWeeklyPatternSlot: (slot: WeeklySchedulePatternSlot) => void;
   onBatchGenerate: () => void;
+  onDeleteBatchTimeGroup: (id: string) => void;
   onDeleteCustomPreset: (preset: TimePreset) => void;
   onDeleteWeeklyPatternSlot: (slotId: string) => void;
   onGenerateWeeklyPattern: () => void;
   onGoToCalendarScheduling: () => void;
+  onSetBatchPerDayMode: (value: boolean) => void;
+  onToggleBatchTimeGroupWeekday: (groupId: string, day: Weekday) => void;
   onToggleWeekday: (day: Weekday) => void;
+  onUpdateBatchTimeGroup: (id: string, updates: Partial<Omit<BatchTimeGroup, "id">>) => void;
   rangeEnd: string;
   rangeStart: string;
   ruleBillingHours: string;
@@ -99,8 +118,14 @@ export function SchedulePlanningPanel({
   batchConflictCount,
   batchEffectiveRangeEnd,
   batchLessonTargetCount,
+  batchPerDayConflictCount,
+  batchPerDayGroupCounts,
+  batchPerDayMode,
+  batchPerDayTotalCount,
+  batchPerDayUnassignedWeekdays,
   batchRepeatMode,
   batchRepeatWeeks,
+  batchTimeGroups,
   customPresetEnd,
   customPresetStart,
   customTimePresets,
@@ -110,16 +135,21 @@ export function SchedulePlanningPanel({
   isBatchTimeValid,
   isCustomPresetTimeValid,
   isSingleTimeValid,
+  onAddBatchTimeGroup,
   onAddCustomPreset,
   onAddSingleLesson,
   onAddWeeklyPatternSlot,
   onApplyWeeklyPatternSlot,
   onBatchGenerate,
+  onDeleteBatchTimeGroup,
   onDeleteCustomPreset,
   onDeleteWeeklyPatternSlot,
   onGenerateWeeklyPattern,
   onGoToCalendarScheduling,
+  onSetBatchPerDayMode,
+  onToggleBatchTimeGroupWeekday,
   onToggleWeekday,
+  onUpdateBatchTimeGroup,
   rangeEnd,
   rangeStart,
   ruleBillingHours,
@@ -368,30 +398,102 @@ export function SchedulePlanningPanel({
                 ))}
               </Select>
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">开始</label>
-                <TimeTextInput value={ruleStartTime} onValueChange={setRuleStartTime} className={!isBatchTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">结束</label>
-                <TimeTextInput value={ruleEndTime} onValueChange={setRuleEndTime} className={!isBatchTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
-                {!isBatchTimeValid && (
-                  <div className="text-xs font-bold text-[#b91c1c]">结束时间必须晚于开始时间。</div>
+            {batchPerDayMode ? (
+              <div className="space-y-3">
+                {batchTimeGroups.map((group, groupIndex) => {
+                  const groupCount = batchPerDayGroupCounts.find((g) => g.groupId === group.id);
+                  const groupWeekdayLabels = selectedWeekdays.filter((d) => group.weekdays.includes(d)).map((d) => weekdayLabels[d]);
+                  return (
+                    <div key={group.id} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#64748b]">时间组 {groupIndex + 1}</span>
+                        {batchTimeGroups.length > 1 && (
+                          <button type="button" onClick={() => onDeleteBatchTimeGroup(group.id)} className="ml-auto text-[#94a3b8] hover:text-[#b91c1c]">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-[#64748b]">开始</label>
+                          <TimeTextInput value={group.startTime} onValueChange={(v) => onUpdateBatchTimeGroup(group.id, { startTime: v })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-[#64748b]">结束</label>
+                          <TimeTextInput value={group.endTime} onValueChange={(v) => onUpdateBatchTimeGroup(group.id, { endTime: v })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-[#64748b]">计费课时</label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.5}
+                            value={group.billingHours}
+                            onChange={(event) => onUpdateBatchTimeGroup(group.id, { billingHours: event.target.value })}
+                            placeholder={ruleSuggestedBillingHours ? `自动 ${ruleSuggestedBillingHours.toFixed(1)}` : "自动"}
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          {groupCount && (
+                            <span className="text-xs font-semibold text-[#64748b]">
+                              {groupCount.count} 节{groupCount.conflictCount > 0 ? `（${groupCount.conflictCount} 冲突）` : ""}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedWeekdays.map((day) => (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => onToggleBatchTimeGroupWeekday(group.id, day)}
+                            className={`rounded-md px-2 py-0.5 text-xs font-bold transition-colors ${group.weekdays.includes(day) ? "bg-[#1557c2] text-white" : "bg-[#f1f5f9] text-[#64748b] hover:bg-[#e2e8f0]"}`}
+                          >
+                            {weekdayLabels[day]}
+                          </button>
+                        ))}
+                      </div>
+                      {groupWeekdayLabels.length > 0 && (
+                        <div className="text-xs text-[#64748b]">已选: {groupWeekdayLabels.join("、")}</div>
+                      )}
+                    </div>
+                  );
+                })}
+                <Button type="button" variant="outline" size="sm" onClick={onAddBatchTimeGroup} className="w-full border-dashed">
+                  <Plus size={14} /> 添加时间组
+                </Button>
+                {batchPerDayUnassignedWeekdays.length > 0 && (
+                  <div className="rounded-[8px] border border-[#fca5a5] bg-[#fff1f2] px-3 py-2 text-xs font-bold text-[#b91c1c]">
+                    以下星期未分配到任何时间组: {batchPerDayUnassignedWeekdays.map((d) => weekdayLabels[d]).join("、")}
+                  </div>
                 )}
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">计费课时</label>
-                <Input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={ruleBillingHours}
-                  onChange={(event) => setRuleBillingHours(event.target.value)}
-                  placeholder={ruleSuggestedBillingHours ? `自动 ${ruleSuggestedBillingHours.toFixed(1)} 小时` : "自动按课程规则"}
-                />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">开始</label>
+                  <TimeTextInput value={ruleStartTime} onValueChange={setRuleStartTime} className={!isBatchTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">结束</label>
+                  <TimeTextInput value={ruleEndTime} onValueChange={setRuleEndTime} className={!isBatchTimeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                  {!isBatchTimeValid && (
+                    <div className="text-xs font-bold text-[#b91c1c]">结束时间必须晚于开始时间。</div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">计费课时</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={ruleBillingHours}
+                    onChange={(event) => setRuleBillingHours(event.target.value)}
+                    placeholder={ruleSuggestedBillingHours ? `自动 ${ruleSuggestedBillingHours.toFixed(1)} 小时` : "自动按课程规则"}
+                  />
+                </div>
               </div>
-            </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">生成方式</label>
               <div className="grid grid-cols-2 gap-2">
@@ -495,18 +597,36 @@ export function SchedulePlanningPanel({
             </div>
           </div>
 
+          {selectedWeekdays.length > 0 && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium">按日分时</label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={batchPerDayMode}
+                onClick={() => onSetBatchPerDayMode(!batchPerDayMode)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${batchPerDayMode ? "bg-[#1557c2]" : "bg-[#cbd6e3]"}`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${batchPerDayMode ? "translate-x-5" : "translate-x-0"}`} />
+              </button>
+              <span className="text-xs font-semibold text-[#64748b]">不同星期使用不同上课时间</span>
+            </div>
+          )}
+
           <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-extrabold text-[#25324a]">
-            当前条件共 {batchCandidateCount} 节{batchConflictCount > 0 ? `，其中 ${batchConflictCount} 节会因时间冲突跳过` : ""}。
+            {batchPerDayMode
+              ? `分时共 ${batchPerDayTotalCount} 节${batchPerDayConflictCount > 0 ? `，其中 ${batchPerDayConflictCount} 节会因时间冲突跳过` : ""}。`
+              : `当前条件共 ${batchCandidateCount} 节${batchConflictCount > 0 ? `，其中 ${batchConflictCount} 节会因时间冲突跳过` : ""}。`}
           </div>
 
           <Button
             type="button"
             variant="outline"
             className="w-full"
-            disabled={!ruleCourseGroupId || selectedWeekdays.length === 0}
+            disabled={batchPerDayMode ? !ruleCourseGroupId || batchTimeGroups.length === 0 : !ruleCourseGroupId || selectedWeekdays.length === 0}
             onClick={onBatchGenerate}
           >
-            <CalendarCheck size={16} /> {batchRepeatMode === "weeks" ? "按周重复生成待上课" : "按日期范围生成待上课"}
+            <CalendarCheck size={16} /> {batchPerDayMode ? "按日分时生成待上课" : batchRepeatMode === "weeks" ? "按周重复生成待上课" : "按日期范围生成待上课"}
           </Button>
 
           <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
