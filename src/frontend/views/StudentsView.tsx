@@ -32,6 +32,7 @@ export function StudentsView({
   onUpdateCampus,
   onDeleteCampus,
   onAddStudent,
+  onAddStudents,
   onUpdateStudent,
   onUpdateStudents,
   onDeleteStudent,
@@ -63,6 +64,7 @@ export function StudentsView({
   onUpdateCampus: (campus: Campus) => void;
   onDeleteCampus: (campusId: string) => void;
   onAddStudent: (student: Student) => void;
+  onAddStudents: (students: Student[]) => void;
   onUpdateStudent: (student: Student) => void;
   onUpdateStudents: (students: Student[]) => void;
   onDeleteStudent: (studentId: string) => void;
@@ -115,6 +117,8 @@ export function StudentsView({
   const [studentTemporaryTrialInput, setStudentTemporaryTrialInput] = useState(false);
   const [studentCampusInput, setStudentCampusInput] = useState(preferredCampusId);
   const [studentNoteInput, setStudentNoteInput] = useState("");
+  const [batchStudentText, setBatchStudentText] = useState("");
+  const [batchStudentMessage, setBatchStudentMessage] = useState("");
   const [courseNameInput, setCourseNameInput] = useState("");
   const [courseNameEdited, setCourseNameEdited] = useState(false);
   const [courseType, setCourseType] = useState<CourseType>("one_on_one");
@@ -401,6 +405,71 @@ export function StudentsView({
     setStudentSchoolInput("");
     setStudentTemporaryTrialInput(false);
     setStudentNoteInput("");
+  }
+
+  function addBatchStudents() {
+    submitBatchStudents();
+  }
+
+  function submitBatchStudents(forceMissingGrade = false) {
+    const rows = parseStudentBatchRows(batchStudentText).filter((row) => !row.isHeader);
+    if (rows.length === 0) {
+      setBatchStudentMessage("请先粘贴至少一行学生信息。");
+      return;
+    }
+
+    const defaultGrade = studentGradeInput === "自定义" ? customGradeInput.trim() : studentGradeInput;
+    const hasMissingGrade = rows.some((row) => !normalizeStudentGradeValue(row.grade) && !defaultGrade);
+    if (hasMissingGrade && !forceMissingGrade) {
+      confirm({
+        title: "批量添加包含未设置年级的学生？",
+        description: "学生年级会影响班课同年级筛选和暑假班、课时费结算判断。建议先设置默认年级，或在每行第 2 列写年级。",
+        confirmLabel: "仍然添加",
+        cancelLabel: "返回设置",
+        tone: "danger",
+        onConfirm: () => submitBatchStudents(true)
+      });
+      return;
+    }
+
+    const resolvedCampusId = studentCampusInput || preferredCampusId || undefined;
+    const defaultSchool = studentSchoolInput.trim();
+    const defaultNote = studentNoteInput.trim();
+    const batchDuplicateKeys = new Set<string>();
+    const studentsToAdd: Student[] = [];
+    let skippedDuplicateCount = 0;
+
+    rows.forEach((row) => {
+      const name = row.name.trim();
+      const grade = normalizeStudentGradeValue(row.grade) || defaultGrade || undefined;
+      const school = row.school?.trim() || defaultSchool || undefined;
+      const note = row.note?.trim() || defaultNote || undefined;
+      const duplicateKey = studentDuplicateKey(name, grade, resolvedCampusId);
+      if (batchDuplicateKeys.has(duplicateKey) || findDuplicateStudent(name, grade, resolvedCampusId)) {
+        skippedDuplicateCount += 1;
+        return;
+      }
+      batchDuplicateKeys.add(duplicateKey);
+      studentsToAdd.push({
+        id: makeId("student"),
+        name,
+        grade,
+        school,
+        temporaryTrial: studentTemporaryTrialInput,
+        defaultCampusId: resolvedCampusId,
+        note,
+        status: "active"
+      });
+    });
+
+    if (studentsToAdd.length === 0) {
+      setBatchStudentMessage(skippedDuplicateCount > 0 ? `没有新增学生，已跳过 ${skippedDuplicateCount} 条重复记录。` : "没有识别到可添加的学生。");
+      return;
+    }
+
+    onAddStudents(studentsToAdd);
+    setBatchStudentText("");
+    setBatchStudentMessage(`已批量添加 ${studentsToAdd.length} 名学生${skippedDuplicateCount > 0 ? `，跳过 ${skippedDuplicateCount} 条重复记录` : ""}。`);
   }
 
   function addCourse(e: FormEvent) {
@@ -1616,6 +1685,8 @@ export function StudentsView({
           <StudentArchivePanel
             archiveRowClass={archiveRowClass}
             archiveSearch={archiveSearch}
+            batchStudentMessage={batchStudentMessage}
+            batchStudentText={batchStudentText}
             campusOptions={campusOptions}
             confirm={confirm}
             courseTypeOptions={courseTypeOptions}
@@ -1625,6 +1696,7 @@ export function StudentsView({
             gradeOptions={gradeOptions}
             hasUnsetGradeFilterOption={hasUnsetGradeFilterOption}
             onAddStudent={addStudent}
+            onBatchAddStudents={addBatchStudents}
             onDeleteStudent={onDeleteStudent}
             onDeleteSelectedArchivedStudents={deleteSelectedArchivedStudents}
             onOpenStudentEditor={openStudentEditor}
@@ -1632,6 +1704,7 @@ export function StudentsView({
             onRestoreStudent={restoreStudent}
             onUpdateStudentStatus={updateStudentStatusFromRow}
             setArchiveSearch={setArchiveSearch}
+            setBatchStudentText={setBatchStudentText}
             setCustomGradeInput={setCustomGradeInput}
             setGradeFilter={setGradeFilter}
             setStudentCampusFilter={setStudentCampusFilter}
@@ -1839,6 +1912,69 @@ function normalizeCourseTypeLabel(value: string): string {
 
 function normalizedStudentIdKey(studentIds: string[]): string {
   return [...studentIds].sort().join("|");
+}
+
+type ParsedStudentBatchRow = {
+  name: string;
+  grade?: string;
+  school?: string;
+  note?: string;
+  isHeader: boolean;
+};
+
+function parseStudentBatchRows(text: string): ParsedStudentBatchRow[] {
+  return text
+    .split(/\r?\n/)
+    .map(parseStudentBatchLine)
+    .filter((row): row is ParsedStudentBatchRow => Boolean(row));
+}
+
+function parseStudentBatchLine(line: string): ParsedStudentBatchRow | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  const hasExplicitDelimiter = /[｜|\t,，]/.test(trimmed);
+  const parts = hasExplicitDelimiter
+    ? trimTrailingEmptyParts(trimmed.split(/[｜|\t,，]/).map((part) => part.trim()))
+    : trimmed.split(/\s+/).map((part) => part.trim()).filter(Boolean);
+  const [name = "", grade, school, ...noteParts] = parts;
+  if (!name) return null;
+  const note = noteParts.join("，");
+  return {
+    name,
+    grade,
+    school,
+    note: note || undefined,
+    isHeader: isStudentBatchHeader(name, grade, school)
+  };
+}
+
+function trimTrailingEmptyParts(parts: string[]): string[] {
+  const nextParts = [...parts];
+  while (nextParts.length > 0 && !nextParts[nextParts.length - 1]) {
+    nextParts.pop();
+  }
+  return nextParts;
+}
+
+function isStudentBatchHeader(name: string, grade?: string, school?: string): boolean {
+  const normalizedName = normalizeStudentDuplicateValue(name);
+  if (normalizedName !== "姓名" && normalizedName !== "学生姓名") return false;
+  const normalizedGrade = normalizeStudentDuplicateValue(grade ?? "");
+  const normalizedSchool = normalizeStudentDuplicateValue(school ?? "");
+  return !grade || normalizedGrade.includes("年级") || normalizedSchool.includes("学校");
+}
+
+function normalizeStudentGradeValue(value?: string): string {
+  const grade = value?.trim() ?? "";
+  return grade === "未设置年级" ? "" : grade;
+}
+
+function studentDuplicateKey(name: string, grade: string | undefined, campusId: string | undefined): string {
+  return [
+    normalizeStudentDuplicateValue(name),
+    normalizeStudentDuplicateValue(grade ?? ""),
+    campusId ?? ""
+  ].join("|");
 }
 
 function normalizeStudentDuplicateValue(value: string): string {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type { Campus, CourseType, Student, TeacherVault } from "@/shared/types";
 import { campusName } from "@/frontend/lib/helpers";
 
@@ -28,6 +29,8 @@ type StudentStatusFilter = "active" | "transition" | "archived" | "all";
 type StudentArchivePanelProps = {
   archiveRowClass: (panel: "students", id: string) => string;
   archiveSearch: string;
+  batchStudentMessage: string;
+  batchStudentText: string;
   campusOptions: Campus[];
   confirm: (request: ConfirmRequest) => void;
   courseTypeOptions: CourseTypeOption[];
@@ -37,6 +40,7 @@ type StudentArchivePanelProps = {
   gradeOptions: string[];
   hasUnsetGradeFilterOption: boolean;
   onAddStudent: (event: FormEvent) => void;
+  onBatchAddStudents: () => void;
   onDeleteStudent: (studentId: string) => void;
   onDeleteSelectedArchivedStudents: () => void;
   onOpenStudentEditor: (student: Student) => void;
@@ -48,6 +52,7 @@ type StudentArchivePanelProps = {
   onUpdateSelectedStudentsStatus: (status: Student["status"]) => void;
   selectedStudentIds: string[];
   setArchiveSearch: Dispatch<SetStateAction<string>>;
+  setBatchStudentText: Dispatch<SetStateAction<string>>;
   setCustomGradeInput: Dispatch<SetStateAction<string>>;
   setGradeFilter: Dispatch<SetStateAction<string>>;
   setStudentCampusFilter: Dispatch<SetStateAction<string>>;
@@ -81,6 +86,8 @@ type StudentArchivePanelProps = {
 export function StudentArchivePanel({
   archiveRowClass,
   archiveSearch,
+  batchStudentMessage,
+  batchStudentText,
   campusOptions,
   confirm,
   courseTypeOptions,
@@ -90,6 +97,7 @@ export function StudentArchivePanel({
   gradeOptions,
   hasUnsetGradeFilterOption,
   onAddStudent,
+  onBatchAddStudents,
   onDeleteStudent,
   onDeleteSelectedArchivedStudents,
   onOpenStudentEditor,
@@ -101,6 +109,7 @@ export function StudentArchivePanel({
   onUpdateSelectedStudentsStatus,
   selectedStudentIds,
   setArchiveSearch,
+  setBatchStudentText,
   setCustomGradeInput,
   setGradeFilter,
   setStudentCampusFilter,
@@ -196,6 +205,28 @@ export function StudentArchivePanel({
             <Plus size={15} /> 添加学生
           </Button>
         </form>
+        <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-extrabold text-[#25324a]">
+                <Users size={15} className="text-[#1557c2]" /> 批量添加学生
+              </div>
+              <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+                每行一个学生，格式：姓名｜年级｜学校｜备注。只写姓名时，会沿用上方表单里的年级、学校、校区、试听状态和备注。
+              </div>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={onBatchAddStudents} disabled={!batchStudentText.trim()}>
+              <Plus size={14} /> 批量添加
+            </Button>
+          </div>
+          <Textarea
+            value={batchStudentText}
+            onChange={(event) => setBatchStudentText(event.target.value)}
+            placeholder={"例如：\n张三｜初二｜实验中学｜一对一重点跟进\n李四｜初二｜外国语学校\n王五"}
+            className="mt-3 min-h-[120px] bg-white text-sm"
+          />
+          {batchStudentMessage && <Badge variant={batchStudentMessage.includes("已") ? "sage" : "secondary"} className="mt-3">{batchStudentMessage}</Badge>}
+        </div>
         <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold leading-5 text-[#9a3412]">
           暑假班期间（7~8月）学生的课时费按照原始年级来算，例如8升9按照八年级的课时费来算，9月开学后按照九年级算。所以设置的年级要注意，会影响结算课时费。
         </div>

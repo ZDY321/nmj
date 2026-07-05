@@ -1923,6 +1923,11 @@ export function App() {
                         draft.students.push(student);
                       })
                     }
+                    onAddStudents={(students) =>
+                      updateVault((draft) => {
+                        draft.students.push(...students);
+                      })
+                    }
                     onUpdateStudent={updateStudent}
                     onUpdateStudents={updateStudents}
                     onDeleteStudent={deleteStudent}
