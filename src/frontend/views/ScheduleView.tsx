@@ -9,7 +9,7 @@ import { ScheduleCalendarFollowupPanels } from "@/frontend/components/ScheduleCa
 import { ScheduleCalendarPanel } from "@/frontend/components/ScheduleCalendarPanel";
 import { ScheduleLessonDetailPanel } from "@/frontend/components/ScheduleLessonDetailPanel";
 import { SchedulePanelTabs } from "@/frontend/components/SchedulePanelTabs";
-import { SchedulePlanningPanel, type WeeklySchedulePatternSlot } from "@/frontend/components/SchedulePlanningPanel";
+import { SchedulePlanningPanel, type BatchRepeatMode, type WeeklySchedulePatternSlot } from "@/frontend/components/SchedulePlanningPanel";
 import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsListCard";
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
@@ -256,6 +256,11 @@ function endDateForLessonCount(startDate: string, weekdays: Weekday[], lessonCou
   return "";
 }
 
+function endDateForRepeatWeeks(startDate: string, weekCount: number): string {
+  if (!startDate || weekCount <= 0) return "";
+  return addDays(startDate, weekCount * 7 - 1);
+}
+
 export function ScheduleView({
   vault,
   amountsVisible,
@@ -320,11 +325,11 @@ export function ScheduleView({
   const weekStartPreference = weekStartsOn(vault);
   const initialWeekDates = weekDatesFor(initialFocusedDate, weekStartPreference);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
-  const courseGroupOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
+  const studentStatsCourseOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
   const studentOptions = sortStudentsByName(vault.students);
   const courseSelectionOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
   const courseSelectionOptionIds = courseSelectionOptions.map((course) => course.id).join("|");
-  const courseGroupOptionIds = courseGroupOptions.map((course) => course.id).join("|");
+  const studentStatsCourseOptionIds = studentStatsCourseOptions.map((course) => course.id).join("|");
   const firstCourseId = courseSelectionOptions[0]?.id ?? "";
   const [singleCourseGroupId, setSingleCourseGroupId] = useState(firstCourseId);
   const [singleCourseSearch, setSingleCourseSearch] = useState("");
@@ -341,6 +346,8 @@ export function ScheduleView({
   const [rangeStart, setRangeStart] = useState(todayIso());
   const [rangeEnd, setRangeEnd] = useState(monthShift(todayIso().slice(0, 7), 1) + "-01");
   const [batchLessonTargetCount, setBatchLessonTargetCount] = useState("");
+  const [batchRepeatMode, setBatchRepeatMode] = useState<BatchRepeatMode>("end_date");
+  const [batchRepeatWeeks, setBatchRepeatWeeks] = useState("4");
   const [weeklyPatternSlots, setWeeklyPatternSlots] = useState<WeeklySchedulePatternSlot[]>([]);
   const [calendarCourseGroupId, setCalendarCourseGroupId] = useState(firstCourseId);
   const [calendarCourseSearch, setCalendarCourseSearch] = useState("");
@@ -443,8 +450,11 @@ export function ScheduleView({
   const selectableSyncLessonIds = selectableSyncLessons.map((lesson) => lesson.id).join("|");
   const selectedWeekdayKey = selectedWeekdays.join("|");
   const batchTargetCount = Math.max(Math.floor(Number(batchLessonTargetCount)), 0);
-  const batchCandidateDates = isOrderedDateRange(rangeStart, rangeEnd)
-    ? datesBetweenLocal(rangeStart, rangeEnd).filter((date) => selectedWeekdays.includes(weekdayOfDateIso(date)))
+  const batchRepeatWeekCount = Math.max(Math.floor(Number(batchRepeatWeeks)), 0);
+  const isBatchRepeatWeeksValid = batchRepeatMode !== "weeks" || batchRepeatWeekCount > 0;
+  const batchEffectiveRangeEnd = batchRepeatMode === "weeks" ? endDateForRepeatWeeks(rangeStart, batchRepeatWeekCount) : rangeEnd;
+  const batchCandidateDates = isBatchRepeatWeeksValid && isOrderedDateRange(rangeStart, batchEffectiveRangeEnd)
+    ? datesBetweenLocal(rangeStart, batchEffectiveRangeEnd).filter((date) => selectedWeekdays.includes(weekdayOfDateIso(date)))
     : [];
   const batchConflictCount = isOrderedTimeRange(ruleStartTime, ruleEndTime)
     ? batchCandidateDates.filter((date) => findTimeConflict(date, ruleStartTime, ruleEndTime)).length
@@ -498,12 +508,12 @@ export function ScheduleView({
   }, [courseSelectionOptionIds]);
 
   useEffect(() => {
-    if (!batchTargetCount || selectedWeekdays.length === 0) return;
+    if (batchRepeatMode !== "end_date" || !batchTargetCount || selectedWeekdays.length === 0) return;
     const nextEndDate = endDateForLessonCount(rangeStart, selectedWeekdays, batchTargetCount);
     if (nextEndDate && nextEndDate !== rangeEnd) {
       setRangeEnd(nextEndDate);
     }
-  }, [batchTargetCount, rangeStart, selectedWeekdayKey]);
+  }, [batchRepeatMode, batchTargetCount, rangeStart, selectedWeekdayKey]);
 
   useEffect(() => {
     setCalendarViewCampusFilter((current) =>
@@ -542,6 +552,12 @@ export function ScheduleView({
       return selectableSyncLessons.map((lesson) => lesson.id);
     });
   }, [selectableSyncLessonIds]);
+
+  useEffect(() => {
+    setStudentStatsCourseFilter((current) =>
+      current === "all" || studentStatsCourseOptions.some((course) => course.id === current) ? current : "all"
+    );
+  }, [studentStatsCourseOptionIds]);
 
   useEffect(() => {
     setMakeupArrangementOpen(false);
@@ -937,7 +953,7 @@ export function ScheduleView({
   const isSingleTimeValid = isOrderedTimeRange(singleStartTime, singleEndTime);
   const isCustomPresetTimeValid = isOrderedTimeRange(customPresetStart, customPresetEnd);
   const isBatchTimeValid = isOrderedTimeRange(ruleStartTime, ruleEndTime);
-  const isBatchDateRangeValid = isOrderedDateRange(rangeStart, rangeEnd);
+  const isBatchDateRangeValid = isBatchRepeatWeeksValid && isOrderedDateRange(rangeStart, batchEffectiveRangeEnd);
   const isCalendarTimeValid = isOrderedTimeRange(calendarStartTime, calendarEndTime);
   const isMakeupTimeValid = isOrderedTimeRange(makeupStartTime, makeupEndTime);
   const aiActiveStudentCount = vault.students.filter((student) => student.status === "active").length;
@@ -2192,9 +2208,9 @@ export function ScheduleView({
       invalidSlotCount: 0,
       creatableItems: []
     };
-    if (!isOrderedDateRange(rangeStart, rangeEnd)) return preview;
+    if (!isBatchDateRangeValid) return preview;
 
-    const rangeDates = datesBetweenLocal(rangeStart, rangeEnd);
+    const rangeDates = datesBetweenLocal(rangeStart, batchEffectiveRangeEnd);
     const plannedLessons: Array<Pick<Lesson, "date" | "startTime" | "endTime">> = [];
 
     for (const slot of weeklyPatternSlots) {
@@ -2247,7 +2263,11 @@ export function ScheduleView({
   }
 
   function generateBatchLessons() {
-    if (!validateDateRange(rangeStart, rangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
+    if (!isBatchRepeatWeeksValid) {
+      showScheduleError("重复周数至少为 1。");
+      return;
+    }
+    if (!validateDateRange(rangeStart, batchEffectiveRangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
       return;
     }
     if (batchCandidateDates.length === 0) {
@@ -2255,7 +2275,7 @@ export function ScheduleView({
       return;
     }
     const manualBillingHours = parseOptionalBillingHours(ruleBillingHours);
-    onGenerateDrafts(rangeStart, rangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime, manualBillingHours);
+    onGenerateDrafts(rangeStart, batchEffectiveRangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime, manualBillingHours);
     const createdCount = Math.max(batchCandidateDates.length - batchConflictCount, 0);
     showScheduleNotice(
       createdCount > 0
@@ -2270,7 +2290,11 @@ export function ScheduleView({
   }
 
   function validateWeeklyPattern(): boolean {
-    if (!validateDateRange(rangeStart, rangeEnd)) return false;
+    if (!isBatchRepeatWeeksValid) {
+      showScheduleError("重复周数至少为 1。");
+      return false;
+    }
+    if (!validateDateRange(rangeStart, batchEffectiveRangeEnd)) return false;
     if (weeklyPatternSlots.length === 0) {
       showScheduleError("请先加入至少一条周循环模板。");
       return false;
@@ -2448,12 +2472,16 @@ export function ScheduleView({
         <SchedulePlanningPanel
           batchCandidateCount={batchCandidateDates.length}
           batchConflictCount={batchConflictCount}
+          batchEffectiveRangeEnd={batchEffectiveRangeEnd}
           batchLessonTargetCount={batchLessonTargetCount}
+          batchRepeatMode={batchRepeatMode}
+          batchRepeatWeeks={batchRepeatWeeks}
           customPresetEnd={customPresetEnd}
           customPresetStart={customPresetStart}
           customTimePresets={customTimePresets}
           dateShortcuts={dateShortcuts}
           isBatchDateRangeValid={isBatchDateRangeValid}
+          isBatchRepeatWeeksValid={isBatchRepeatWeeksValid}
           isBatchTimeValid={isBatchTimeValid}
           isCustomPresetTimeValid={isCustomPresetTimeValid}
           isSingleTimeValid={isSingleTimeValid}
@@ -2464,7 +2492,11 @@ export function ScheduleView({
           onAddWeeklyPatternSlot={addWeeklyPatternSlot}
           onApplyWeeklyPatternSlot={applyWeeklyPatternSlot}
           onBatchGenerate={() => {
-            if (!validateDateRange(rangeStart, rangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
+            if (!isBatchRepeatWeeksValid) {
+              showScheduleError("重复周数至少为 1。");
+              return;
+            }
+            if (!validateDateRange(rangeStart, batchEffectiveRangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
               return;
             }
             if (hasBatchConflicts()) {
@@ -2512,6 +2544,8 @@ export function ScheduleView({
           ruleStartTime={ruleStartTime}
           selectedWeekdays={selectedWeekdays}
           setBatchLessonTargetCount={setBatchLessonTargetCount}
+          setBatchRepeatMode={setBatchRepeatMode}
+          setBatchRepeatWeeks={setBatchRepeatWeeks}
           setCustomPresetEnd={setCustomPresetEnd}
           setCustomPresetStart={updateCustomPresetStartTime}
           setRangeEnd={updateRangeEndManually}
@@ -2707,7 +2741,7 @@ export function ScheduleView({
           amountsVisible={amountsVisible}
           campusOptions={campusOptions}
           completedCount={studentStatsCompletedCount}
-          courseGroupOptions={courseGroupOptions}
+          courseGroupOptions={studentStatsCourseOptions}
           expandedGroupIds={expandedStudentStatsGroupIds}
           groupedLessonRows={studentStatsGroupedLessonRows}
           lessonCount={studentStatsLessons.length}

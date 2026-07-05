@@ -21,15 +21,21 @@ export type WeeklySchedulePatternSlot = {
   billingHours: string;
 };
 
+export type BatchRepeatMode = "end_date" | "weeks";
+
 type SchedulePlanningPanelProps = {
   batchCandidateCount: number;
   batchConflictCount: number;
+  batchEffectiveRangeEnd: string;
   batchLessonTargetCount: string;
+  batchRepeatMode: BatchRepeatMode;
+  batchRepeatWeeks: string;
   customPresetEnd: string;
   customPresetStart: string;
   customTimePresets: TimePreset[];
   dateShortcuts: DateShortcut[];
   isBatchDateRangeValid: boolean;
+  isBatchRepeatWeeksValid: boolean;
   isBatchTimeValid: boolean;
   isCustomPresetTimeValid: boolean;
   isSingleTimeValid: boolean;
@@ -54,6 +60,8 @@ type SchedulePlanningPanelProps = {
   ruleSuggestedBillingHours: number;
   selectedWeekdays: Weekday[];
   setBatchLessonTargetCount: (value: string) => void;
+  setBatchRepeatMode: (value: BatchRepeatMode) => void;
+  setBatchRepeatWeeks: (value: string) => void;
   setCustomPresetEnd: (value: string) => void;
   setCustomPresetStart: (value: string) => void;
   setRangeEnd: (value: string) => void;
@@ -89,12 +97,16 @@ type SchedulePlanningPanelProps = {
 export function SchedulePlanningPanel({
   batchCandidateCount,
   batchConflictCount,
+  batchEffectiveRangeEnd,
   batchLessonTargetCount,
+  batchRepeatMode,
+  batchRepeatWeeks,
   customPresetEnd,
   customPresetStart,
   customTimePresets,
   dateShortcuts,
   isBatchDateRangeValid,
+  isBatchRepeatWeeksValid,
   isBatchTimeValid,
   isCustomPresetTimeValid,
   isSingleTimeValid,
@@ -119,6 +131,8 @@ export function SchedulePlanningPanel({
   ruleSuggestedBillingHours,
   selectedWeekdays,
   setBatchLessonTargetCount,
+  setBatchRepeatMode,
+  setBatchRepeatWeeks,
   setCustomPresetEnd,
   setCustomPresetStart,
   setRangeEnd,
@@ -330,11 +344,11 @@ export function SchedulePlanningPanel({
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <CalendarCheck size={14} /> 批量排课
           </div>
-          <CardTitle>按日期范围生成课时</CardTitle>
+          <CardTitle>批量生成课时</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
-            批量排课按“日期开始到日期结束”与下方勾选星期叠加生成；只会生成范围内匹配星期的日期。需要逐日选择时，可以切换到日历查看后点击日期排课。
+            批量排课可按结束日期生成，也可按重复周数向后循环生成；只会生成范围内匹配星期的日期。
           </div>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -378,30 +392,88 @@ export function SchedulePlanningPanel({
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">生成方式</label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={batchRepeatMode === "end_date" ? "default" : "outline"}
+                  onClick={() => setBatchRepeatMode("end_date")}
+                  className={batchRepeatMode === "end_date" ? "orange-gradient shadow-[0_10px_20px_rgba(255,134,23,0.18)]" : ""}
+                >
+                  按结束日期
+                </Button>
+                <Button
+                  type="button"
+                  variant={batchRepeatMode === "weeks" ? "default" : "outline"}
+                  onClick={() => setBatchRepeatMode("weeks")}
+                  className={batchRepeatMode === "weeks" ? "orange-gradient shadow-[0_10px_20px_rgba(255,134,23,0.18)]" : ""}
+                >
+                  按周重复
+                </Button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <label className="text-sm font-medium">日期开始</label>
-                <Input type="date" value={rangeStart} max={rangeEnd} onChange={(event) => setRangeStart(event.target.value)} className={!isBatchDateRangeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">日期结束</label>
-                <Input type="date" value={rangeEnd} min={rangeStart} onChange={(event) => setRangeEnd(event.target.value)} className={!isBatchDateRangeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
-                {!isBatchDateRangeValid && (
-                  <div className="text-xs font-bold text-[#b91c1c]">结束日期不能早于开始日期。</div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">目标节数</label>
                 <Input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={batchLessonTargetCount}
-                  onChange={(event) => setBatchLessonTargetCount(event.target.value)}
-                  placeholder="例如 20"
+                  type="date"
+                  value={rangeStart}
+                  max={batchRepeatMode === "end_date" ? rangeEnd : undefined}
+                  onChange={(event) => setRangeStart(event.target.value)}
+                  className={!isBatchDateRangeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
                 />
-                <div className="text-xs font-semibold text-[#64748b]">填写后按开始日期和星期自动计算结束日期。</div>
               </div>
+              {batchRepeatMode === "end_date" ? (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">日期结束</label>
+                    <Input type="date" value={rangeEnd} min={rangeStart} onChange={(event) => setRangeEnd(event.target.value)} className={!isBatchDateRangeValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined} />
+                    {!isBatchDateRangeValid && (
+                      <div className="text-xs font-bold text-[#b91c1c]">结束日期不能早于开始日期。</div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">目标节数</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={batchLessonTargetCount}
+                      onChange={(event) => setBatchLessonTargetCount(event.target.value)}
+                      placeholder="例如 20"
+                    />
+                    <div className="text-xs font-semibold text-[#64748b]">填写后按开始日期和星期自动计算结束日期。</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">重复周数</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={batchRepeatWeeks}
+                      onChange={(event) => setBatchRepeatWeeks(event.target.value)}
+                      placeholder="例如 8"
+                      className={!isBatchRepeatWeeksValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                    />
+                    {!isBatchRepeatWeeksValid ? (
+                      <div className="text-xs font-bold text-[#b91c1c]">重复周数至少为 1。</div>
+                    ) : (
+                      <div className="text-xs font-semibold text-[#64748b]">从开始日期起向后 {batchRepeatWeeks || 0} 周。</div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">实际结束日期</label>
+                    <div className="flex h-10 items-center rounded-md border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a]">
+                      {batchEffectiveRangeEnd || "未计算"}
+                    </div>
+                    <div className="text-xs font-semibold text-[#64748b]">按选择的星期和时间自动向后重复生成。</div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -434,7 +506,7 @@ export function SchedulePlanningPanel({
             disabled={!ruleCourseGroupId || selectedWeekdays.length === 0}
             onClick={onBatchGenerate}
           >
-            <CalendarCheck size={16} /> 按日期范围生成待上课
+            <CalendarCheck size={16} /> {batchRepeatMode === "weeks" ? "按周重复生成待上课" : "按日期范围生成待上课"}
           </Button>
 
           <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
