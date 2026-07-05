@@ -36,6 +36,7 @@ export function StudentsView({
   onUpdateStudent,
   onUpdateStudents,
   onDeleteStudent,
+  onDeleteStudents,
   onUpdateProfile,
   onAddCourse,
   onUpdateCourse,
@@ -68,6 +69,7 @@ export function StudentsView({
   onUpdateStudent: (student: Student) => void;
   onUpdateStudents: (students: Student[]) => void;
   onDeleteStudent: (studentId: string) => void;
+  onDeleteStudents: (studentIds: string[]) => void;
   onUpdateProfile: (profile: TeacherProfile) => void;
   onAddCourse: (course: CourseGroup) => void;
   onUpdateCourse: (course: CourseGroup) => void;
@@ -1306,8 +1308,9 @@ export function StudentsView({
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => {
-        const deletedIdSet = new Set(deletableStudents.map((student) => student.id));
-        deletableStudents.forEach((student) => onDeleteStudent(student.id));
+        const deletedIds = deletableStudents.map((student) => student.id);
+        const deletedIdSet = new Set(deletedIds);
+        onDeleteStudents(deletedIds);
         setSelectedStudentIds((current) => current.filter((id) => !deletedIdSet.has(id)));
       }
     });

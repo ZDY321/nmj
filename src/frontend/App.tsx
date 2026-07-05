@@ -596,8 +596,14 @@ export function App() {
   }
 
   function deleteStudent(studentId: string) {
+    deleteStudents([studentId]);
+  }
+
+  function deleteStudents(studentIds: string[]) {
+    if (studentIds.length === 0) return;
     updateVault((draft) => {
-      draft.students = draft.students.filter((student) => student.id !== studentId);
+      const studentIdSet = new Set(studentIds);
+      draft.students = draft.students.filter((student) => !studentIdSet.has(student.id));
     });
   }
 
@@ -1931,6 +1937,7 @@ export function App() {
                     onUpdateStudent={updateStudent}
                     onUpdateStudents={updateStudents}
                     onDeleteStudent={deleteStudent}
+                    onDeleteStudents={deleteStudents}
                     onUpdateProfile={updateProfile}
                     onAddCourse={addCourse}
 
