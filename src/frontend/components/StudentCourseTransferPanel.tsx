@@ -85,7 +85,7 @@ export function StudentCourseTransferPanel({
               <GraduationCap size={14} /> 班型调整
             </div>
             <CardTitle className="text-lg">学生课程关系</CardTitle>
-            <CardDescription>调整后只影响后续新建课时；已经生成的课时保留原学生、班型和费用快照。</CardDescription>
+            <CardDescription>调整只修改课程档案关系；已排课节和历史课时保留原学生、班型和费用快照，未来课节需在课程档案中手动同步后才会刷新。</CardDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant="sky" className="w-fit">{transferCurrentCourses.length} 个当前课程</Badge>
@@ -195,7 +195,7 @@ export function StudentCourseTransferPanel({
                       onChange={(event) => setTransferEndExisting(event.target.checked)}
                       className="h-3.5 w-3.5 accent-[#ff8617]"
                     />
-                    转班后从旧同科目课程中移除该学生
+                    转班后从旧同科目课程档案中移除该学生
                   </label>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -206,6 +206,9 @@ export function StudentCourseTransferPanel({
                   )) : (
                     <Badge variant="secondary">暂无当前课程</Badge>
                   )}
+                </div>
+                <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
+                  只影响课程档案名单，不会改已排课程；如需让未来待上课课节按新档案刷新，请到课程档案执行同步。
                 </div>
               </div>
               <Button type="submit" disabled={!transferStudentId || (transferTargetMode === "existing" && !transferTargetCourseId)}>
