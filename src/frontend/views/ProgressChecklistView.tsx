@@ -382,7 +382,7 @@ export function ProgressChecklistView({
       : [],
     [selectedItem, selectedStudents, completionMap]
   );
-  const defaultExternalPromptText = `请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。\n生成要求：\n请按连云港【初中物理苏科版八年级上册】要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。\n条目标题必须带上教材的章节小标序号（如 1.1、1.2、2.1），不要省略编号。\n如果是真题/试卷清单，分组用地区或年份，条目写试卷名称，不需要编号。\n如果是题型/专题清单，分组用题型名或专题名，条目写具体考点或知识点，不需要编号。\n输出要求：只输出清单正文；每行一个条目；有分组时使用”分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。\n\n教材章节示例：\n第一章 声现象｜1.1 声音是什么\n第一章 声现象｜1.2 乐音与噪声\n第二章 物态变化｜2.1 物质的三态 温度的测量\n\n真题试卷示例：\n2024年连云港卷｜2024年连云港中考物理试卷\n2023年南京卷｜2023年南京中考物理试卷\n\n题型专题示例：\n实验探究题｜凸透镜成像实验\n力学综合题｜浮力与压强综合\n电学专题｜串并联电路识别与计算`;
+  const defaultExternalPromptText = `请帮我生成一套学习清单模板，用于教务系统逐项勾选学生完成情况。\n生成内容：\n请按 新版连云港【初中物理苏科版八年级下册】教材要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。\n生成格式要求：\n如果是教材清单，条目标题必须带上教材的章节小标序号（如 1.1、1.2、2.1），不要省略编号。\n如果是真题/试卷清单，分组用地区或年份，条目写试卷名称，不需要编号。\n如果是题型/专题清单，分组用题型名或专题名，条目写具体考点或知识点，不需要编号。\n只输出清单正文；每行一个条目；有分组时使用”分组｜条目标题”的格式；不要输出 Markdown 表格；不要输出解释文字。\n\n教材章节示例：\n第一章 声现象｜1.1 声音是什么\n第一章 声现象｜1.2 乐音与噪声\n第二章 物态变化｜2.1 物质的三态 温度的测量\n\n真题试卷示例：\n2024年连云港卷｜2024年连云港中考物理试卷\n2023年南京卷｜2023年南京中考物理试卷\n\n题型专题示例：\n实验探究题｜凸透镜成像实验\n力学综合题｜浮力与压强综合\n电学专题｜串并联电路识别与计算`;
   const [externalPromptText, setExternalPromptText] = useState(
     vault.preferences?.checklistPromptTemplate || defaultExternalPromptText
   );
@@ -788,7 +788,7 @@ export function ProgressChecklistView({
                       </Button>
                     </div>
                   </div>
-                  <div className="mb-2 text-xs font-semibold text-[#64748b]">建议使用 DeepSeek</div>
+                  <div className="mb-2 text-xs font-semibold text-[#64748b]">建议使用豆包或DeepSeek</div>
                   <Textarea value={externalPromptText} onChange={(event) => setExternalPromptText(event.target.value)} className="min-h-[160px] bg-white text-xs leading-5" />
                   {promptCopyMessage && <Badge variant={promptCopyMessage.includes("已") ? "sage" : "secondary"} className="mt-3">{promptCopyMessage}</Badge>}
                   <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
