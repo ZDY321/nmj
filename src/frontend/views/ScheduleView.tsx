@@ -453,6 +453,7 @@ export function ScheduleView({
   const batchRepeatWeekCount = Math.max(Math.floor(Number(batchRepeatWeeks)), 0);
   const isBatchRepeatWeeksValid = batchRepeatMode !== "weeks" || batchRepeatWeekCount > 0;
   const batchEffectiveRangeEnd = batchRepeatMode === "weeks" ? endDateForRepeatWeeks(rangeStart, batchRepeatWeekCount) : rangeEnd;
+  const isBatchDateRangeValid = isBatchRepeatWeeksValid && isOrderedDateRange(rangeStart, batchEffectiveRangeEnd);
   const batchCandidateDates = isBatchRepeatWeeksValid && isOrderedDateRange(rangeStart, batchEffectiveRangeEnd)
     ? datesBetweenLocal(rangeStart, batchEffectiveRangeEnd).filter((date) => selectedWeekdays.includes(weekdayOfDateIso(date)))
     : [];
@@ -953,7 +954,6 @@ export function ScheduleView({
   const isSingleTimeValid = isOrderedTimeRange(singleStartTime, singleEndTime);
   const isCustomPresetTimeValid = isOrderedTimeRange(customPresetStart, customPresetEnd);
   const isBatchTimeValid = isOrderedTimeRange(ruleStartTime, ruleEndTime);
-  const isBatchDateRangeValid = isBatchRepeatWeeksValid && isOrderedDateRange(rangeStart, batchEffectiveRangeEnd);
   const isCalendarTimeValid = isOrderedTimeRange(calendarStartTime, calendarEndTime);
   const isMakeupTimeValid = isOrderedTimeRange(makeupStartTime, makeupEndTime);
   const aiActiveStudentCount = vault.students.filter((student) => student.status === "active").length;
