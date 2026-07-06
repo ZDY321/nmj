@@ -1608,7 +1608,9 @@ export function ScheduleView({
           startTime: ruleStartTime,
           endTime: ruleEndTime,
           billingHours: ruleBillingHours,
-          weekdays: [...selectedWeekdays]
+          weekdays: [...selectedWeekdays],
+          rangeStart,
+          rangeEnd: batchEffectiveRangeEnd
         }
       ]);
     } else if (!value && batchPerDayMode) {
@@ -1631,7 +1633,9 @@ export function ScheduleView({
         startTime: ruleStartTime,
         endTime: ruleEndTime,
         billingHours: ruleBillingHours,
-        weekdays: []
+        weekdays: Array.from(new Set(selectedWeekdays)).sort((a, b) => a - b),
+        rangeStart,
+        rangeEnd: batchEffectiveRangeEnd
       }
     ]);
   }
@@ -2469,9 +2473,8 @@ export function ScheduleView({
       groupCounts: [],
       creatableItems: []
     };
-    if (!batchPerDayMode || !isBatchDateRangeValid || batchTimeGroups.length === 0) return preview;
+    if (!batchPerDayMode || batchTimeGroups.length === 0) return preview;
 
-    const rangeDates = datesBetweenLocal(rangeStart, batchEffectiveRangeEnd);
     const plannedLessons: Array<Pick<Lesson, "date" | "startTime" | "endTime">> = [];
 
     // Find weekdays selected globally but not assigned to any group
@@ -2480,14 +2483,16 @@ export function ScheduleView({
 
     for (const group of batchTimeGroups) {
       const groupCount = { groupId: group.id, count: 0, conflictCount: 0, existingConflictCount: 0, internalConflictCount: 0 };
-      const groupValid = group.weekdays.length > 0 && isOrderedTimeRange(group.startTime, group.endTime);
+      const groupRangeStart = group.rangeStart || rangeStart;
+      const groupRangeEnd = group.rangeEnd || batchEffectiveRangeEnd;
+      const groupValid = group.weekdays.length > 0 && isOrderedTimeRange(group.startTime, group.endTime) && isOrderedDateRange(groupRangeStart, groupRangeEnd);
 
       if (!groupValid) {
         preview.groupCounts.push(groupCount);
         continue;
       }
 
-      const groupDates = rangeDates.filter((d) => group.weekdays.includes(weekdayOfDateIso(d)));
+      const groupDates = datesBetweenLocal(groupRangeStart, groupRangeEnd).filter((d) => group.weekdays.includes(weekdayOfDateIso(d)));
       for (const date of groupDates) {
         preview.totalCount += 1;
         groupCount.count += 1;
@@ -2565,20 +2570,17 @@ export function ScheduleView({
   }
 
   function generateBatchPerDayLessons() {
-    if (!isBatchRepeatWeeksValid) {
-      showScheduleError("重复周数至少为 1。");
-      return;
-    }
-    if (!validateDateRange(rangeStart, batchEffectiveRangeEnd)) return;
     if (batchTimeGroups.length === 0) {
       showScheduleError("请添加至少一个时间分组。");
       return;
     }
-    const invalidGroup = batchTimeGroups.find(
-      (g) => g.weekdays.length === 0 || !isOrderedTimeRange(g.startTime, g.endTime)
-    );
+    const invalidGroup = batchTimeGroups.find((g) => {
+      const groupRangeStart = g.rangeStart || rangeStart;
+      const groupRangeEnd = g.rangeEnd || batchEffectiveRangeEnd;
+      return g.weekdays.length === 0 || !isOrderedTimeRange(g.startTime, g.endTime) || !isOrderedDateRange(groupRangeStart, groupRangeEnd);
+    });
     if (invalidGroup) {
-      showScheduleError("时间分组中有未选星期或时间无效的条目，请调整后再生成。");
+      showScheduleError("时间分组中有未选星期、日期范围或时间无效的条目，请调整后再生成。");
       return;
     }
     if (batchPerDayPreview.unassignedWeekdays.length > 0) {

@@ -28,6 +28,8 @@ export type BatchTimeGroup = {
   endTime: string;
   billingHours: string;
   weekdays: Weekday[];
+  rangeStart?: string;
+  rangeEnd?: string;
 };
 
 export type BatchRepeatMode = "end_date" | "weeks";
@@ -199,18 +201,32 @@ export function SchedulePlanningPanel({
   const currentRuleCanJoinWeeklyPattern = Boolean(ruleCourseGroupId && selectedWeekdays.length > 0 && isBatchTimeValid);
   const selectedControlClass = "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2] shadow-[0_8px_18px_rgba(21,87,194,0.12)] hover:bg-[#dbeafe] hover:text-[#0f3f8f]";
   const primaryActionClass = "border-[#1557c2] bg-[#1557c2] text-white shadow-[0_12px_22px_rgba(21,87,194,0.18)] hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white";
-  const batchRangeDates = isBatchDateRangeValid ? datesBetweenLocal(rangeStart, batchEffectiveRangeEnd) : [];
 
   function compactDateLabel(date: string): string {
     const [, month = "", day = ""] = date.split("-");
     return `${Number(month)}月${Number(day)}日`;
   }
 
+  function batchTimeGroupRangeStart(group: BatchTimeGroup): string {
+    return group.rangeStart || rangeStart;
+  }
+
+  function batchTimeGroupRangeEnd(group: BatchTimeGroup): string {
+    return group.rangeEnd || batchEffectiveRangeEnd;
+  }
+
+  function batchTimeGroupRangeLabel(group: BatchTimeGroup): string {
+    const start = batchTimeGroupRangeStart(group);
+    const end = batchTimeGroupRangeEnd(group);
+    return start && end ? `${start} 至 ${end}` : "未设置日期范围";
+  }
+
   function batchTimeGroupDateRows(group: BatchTimeGroup): string[] {
+    const groupRangeDates = datesBetweenLocal(batchTimeGroupRangeStart(group), batchTimeGroupRangeEnd(group));
     return visibleWeekdays
       .filter((day) => group.weekdays.includes(day))
       .map((day) => {
-        const dates = batchRangeDates.filter((date) => weekdayOfDateIso(date) === day);
+        const dates = groupRangeDates.filter((date) => weekdayOfDateIso(date) === day);
         if (dates.length === 0) return `${weekdayLabels[day]} 当前范围内无日期`;
         const visibleDates = dates.slice(0, 8).map(compactDateLabel);
         return `${weekdayLabels[day]} ${visibleDates.join("、")}${dates.length > visibleDates.length ? ` 等 ${dates.length} 天` : ""}`;
@@ -425,7 +441,7 @@ export function SchedulePlanningPanel({
               <div className="space-y-3">
                 {batchTimeGroups.map((group, groupIndex) => {
                   const groupCount = batchPerDayGroupCounts.find((g) => g.groupId === group.id);
-                  const groupWeekdayLabels = selectedWeekdays.filter((d) => group.weekdays.includes(d)).map((d) => weekdayLabels[d]);
+                  const groupWeekdayLabels = visibleWeekdays.filter((d) => group.weekdays.includes(d)).map((d) => weekdayLabels[d]);
                   const groupDateRows = batchTimeGroupDateRows(group);
                   return (
                     <div key={group.id} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 space-y-2">
@@ -466,7 +482,7 @@ export function SchedulePlanningPanel({
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        {selectedWeekdays.map((day) => (
+                        {visibleWeekdays.map((day) => (
                           <button
                             key={day}
                             type="button"
@@ -480,6 +496,7 @@ export function SchedulePlanningPanel({
                       {groupWeekdayLabels.length > 0 && (
                         <div className="rounded-[8px] border border-[#dbe4ef] bg-[#f8fbff] px-2 py-1.5 text-xs font-semibold text-[#64748b]">
                           <div>已选: {groupWeekdayLabels.join("、")}</div>
+                          <div className="mt-1">范围: {batchTimeGroupRangeLabel(group)}</div>
                           <div className="mt-1 leading-5">日期: {groupDateRows.join("；")}</div>
                         </div>
                       )}

@@ -99,6 +99,9 @@ export function SalaryView({
   const currentMonth = todayIso().slice(0, 7);
   const currentYear = currentMonth.slice(0, 4);
   const trend = yearlyTrend(vault, year).filter((item) => year < currentYear || item.month <= currentMonth);
+  const annualIncome = trend.reduce((sum, item) => sum + item.total, 0);
+  const annualPayrollLessonCount = trend.reduce((sum, item) => sum + item.count, 0);
+  const annualAverageIncome = trend.length > 0 ? annualIncome / trend.length : 0;
   const yearOptions = Array.from(new Set([
     currentYear,
     ...vault.lessons.map((lesson) => lesson.date.slice(0, 4)),
@@ -312,6 +315,23 @@ export function SalaryView({
             </Select>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-[14px] border border-[#bfdbfe] bg-[#eaf2ff] p-4">
+                <div className="text-xs font-bold text-[#1557c2]">{year} 年度收入合计</div>
+                <div className="mt-2 break-words text-2xl font-extrabold leading-tight text-[#061226]">{formatPrivateMoney(annualIncome, amountsVisible)}</div>
+                <div className="mt-1 text-xs font-semibold text-[#64748b]">已统计 {trend.length} 个月</div>
+              </div>
+              <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                <div className="text-xs font-bold text-[#64748b]">年度计薪课次</div>
+                <div className="mt-2 text-2xl font-extrabold leading-tight text-[#061226]">{annualPayrollLessonCount} 节</div>
+                <div className="mt-1 text-xs font-semibold text-[#64748b]">与下方计薪课次同口径</div>
+              </div>
+              <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                <div className="text-xs font-bold text-[#64748b]">月均收入</div>
+                <div className="mt-2 break-words text-2xl font-extrabold leading-tight text-[#061226]">{formatPrivateMoney(annualAverageIncome, amountsVisible)}</div>
+                <div className="mt-1 text-xs font-semibold text-[#64748b]">按已统计月份平均</div>
+              </div>
+            </div>
             <AnnualIncomeLineChart trend={trend} selectedMonth={selectedMonth} amountsVisible={amountsVisible} onSelectMonth={setSelectedMonth} />
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-4">
               {trend.map((item) => (

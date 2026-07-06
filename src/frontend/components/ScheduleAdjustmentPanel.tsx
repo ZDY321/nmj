@@ -518,7 +518,12 @@ export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }
               <div className="text-xs font-semibold leading-5 text-[#64748b]">
                 确认写入只会修改日期、时间和校区；学生、出勤、课程内容、作业、备注和状态会保留。
               </div>
-              <Button type="button" onClick={() => onApplyPreview(previewItems, conflictPolicy)} disabled={applyCount === 0}>
+              <Button
+                type="button"
+                onClick={() => onApplyPreview(previewItems, conflictPolicy)}
+                disabled={applyCount === 0}
+                className="border-[#1557c2] bg-[#1557c2] text-white shadow-[0_12px_22px_rgba(21,87,194,0.18)] hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white"
+              >
                 <CheckSquare size={16} /> 确认写入 {applyCount} 节
               </Button>
             </div>
