@@ -661,7 +661,13 @@ export function SchedulePlanningPanel({
           </div>
 
           {batchPerDayMode && (
-            <Button type="button" variant="outline" size="sm" onClick={onAddBatchTimeGroup} className="w-full border-dashed bg-white text-[#1557c2] hover:border-[#93c5fd] hover:bg-[#eaf2ff] hover:text-[#0f3f8f]">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onAddBatchTimeGroup}
+              className="h-10 w-full border-[#93c5fd] bg-[#eaf2ff] text-[#1557c2] shadow-[0_8px_18px_rgba(21,87,194,0.10)] hover:border-[#60a5fa] hover:bg-[#dbeafe] hover:text-[#0f3f8f]"
+            >
               <Plus size={14} /> 添加时间组
             </Button>
           )}
