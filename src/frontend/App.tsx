@@ -1054,13 +1054,15 @@ export function App() {
     startTime: string,
     endTime: string,
     manualBillingHours?: number
-  ) {
-    if (!vault) return;
+  ): { candidateCount: number; createdCount: number; conflictCount: number } {
+    if (!vault) return { candidateCount: 0, createdCount: 0, conflictCount: 0 };
     const course = getCourse(vault, courseGroupId);
-    if (!course || course.status !== "active") return;
+    if (!course || course.status !== "active") return { candidateCount: 0, createdCount: 0, conflictCount: 0 };
     const dates = datesBetween(startDate, endDate).filter((date) =>
       weekdays.includes(weekdayOfDateIso(date))
     );
+    let createdCount = 0;
+    let conflictCount = 0;
     updateVault((draft) => {
       dates.forEach((date) => {
         const exists = draft.lessons.some(
@@ -1080,9 +1082,13 @@ export function App() {
               status: "scheduled"
             })
           );
+          createdCount += 1;
+        } else {
+          conflictCount += 1;
         }
       });
     });
+    return { candidateCount: dates.length, createdCount, conflictCount };
   }
 
   useEffect(() => {

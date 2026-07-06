@@ -7,7 +7,7 @@ import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
 import { calculateClassHeadcountFee, courseUsesStandardBillingHours, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
-import { formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
+import { courseRequiresSameGradeStudents, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
   value: CourseType;
@@ -85,6 +85,10 @@ export function CourseEditDialog({
   supportsSalaryGradeFee,
   vault
 }: CourseEditDialogProps) {
+  const requiresSameGradeStudents = editingCourse ? courseRequiresSameGradeStudents(vault, editingCourse.type, editingCourse.feeRule) : false;
+  const selectedCourseStudentGrade = editingCourse && requiresSameGradeStudents ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
+  const selectedCourseStudentGradeLabel = selectedCourseStudentGrade || "未设置年级";
+
   return (
     <AnimatePresence>
       {editingCourse && (
@@ -267,9 +271,9 @@ export function CourseEditDialog({
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm font-medium">
                     关联学生（{editingCourse.studentIds.length} 人）
-                    {editingCourse.type === "class" && (
+                    {requiresSameGradeStudents && (
                       <span className="ml-2 text-xs font-bold text-[#64748b]">
-                        班课需同年级{firstCourseStudentGrade(editingCourse.studentIds) !== undefined ? `：${firstCourseStudentGrade(editingCourse.studentIds) || "未设置年级"}` : ""}
+                        需同年级{selectedCourseStudentGrade !== undefined ? `：${selectedCourseStudentGradeLabel}` : ""}
                       </span>
                     )}
                     {studentLimitForCourseType(editingCourse.type) && editingCourse.type !== "one_on_one" && (
@@ -280,9 +284,9 @@ export function CourseEditDialog({
                   </div>
                   <span className="text-xs font-bold text-[#64748b]">当前显示 {editingCourseStudentOptions.length} 人</span>
                 </div>
-                {editingCourse.type === "class" && (
+                {requiresSameGradeStudents && (
                   <div className="rounded-[10px] border border-[#dbe4ef] bg-white px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
-                    调整班课档案学生只影响之后按课程档案生成的新课节；已经排好的课节会保留本节自己的学生名单。单节课排错时，可到课程详情里单独移除学生或填写备注。
+                    调整课程档案学生只影响之后按课程档案生成的新课节；已经排好的课节会保留本节自己的学生名单。单节课排错时，可到课程详情里单独移除学生或填写备注。
                   </div>
                 )}
                 <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
@@ -355,8 +359,9 @@ export function CourseEditDialog({
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                       {editingCourseStudentOptions.map((student) => {
                         const isSelected = editingCourse.studentIds.includes(student.id);
-                        const selectedGrade = editingCourse.type === "class" ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
-                        const isDifferentGrade = editingCourse.type === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
+                        const selectedGrade = requiresSameGradeStudents ? selectedCourseStudentGrade : undefined;
+                        const selectedGradeLabel = selectedGrade || "未设置年级";
+                        const isDifferentGrade = requiresSameGradeStudents && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
                         const isAtStudentLimit = !isSelected && Boolean(studentLimitForCourseType(editingCourse.type)) && editingCourse.studentIds.length >= (studentLimitForCourseType(editingCourse.type) ?? 0);
                         return (
                           <button
@@ -364,7 +369,7 @@ export function CourseEditDialog({
                             key={student.id}
                             onClick={() => onToggleCourseStudent(student.id)}
                             disabled={isDifferentGrade || isAtStudentLimit}
-                            title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(editingCourse.type)} 人` : undefined}
+                            title={isDifferentGrade ? `只能选择 ${selectedGradeLabel} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(editingCourse.type)} 人` : undefined}
                             className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
                               isSelected
                                 ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"

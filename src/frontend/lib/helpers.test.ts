@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyVault } from "@/frontend/lib/sampleData";
-import { linkSyncedLessonsToPreviousLessons, previousLesson } from "@/frontend/lib/helpers";
+import { courseRequiresSameGradeStudents, linkSyncedLessonsToPreviousLessons, previousLesson } from "@/frontend/lib/helpers";
 import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
 
 const course: CourseGroup = {
@@ -80,5 +80,45 @@ describe("lesson timeline helpers", () => {
 
     expect(linkedLesson.syncSourceLessonId).toBe(taughtLesson.id);
     expect(linkedLesson.syncSourceDate).toBe(taughtLesson.date);
+  });
+});
+
+describe("course student grade restrictions", () => {
+  it("requires same-grade students for built-in grouped course types", () => {
+    const vault = createEmptyVault("tester");
+
+    expect(courseRequiresSameGradeStudents(vault, "class", { mode: "salary_grade" })).toBe(true);
+    expect(courseRequiresSameGradeStudents(vault, "one_on_two", { mode: "salary_grade" })).toBe(true);
+    expect(courseRequiresSameGradeStudents(vault, "one_on_one", { mode: "salary_grade" })).toBe(false);
+    expect(courseRequiresSameGradeStudents(vault, "trial", { mode: "fixed", fixedFee: 0 })).toBe(false);
+  });
+
+  it("follows custom course type headcount templates", () => {
+    const vault = createEmptyVault("tester");
+    const preferences = vault.preferences!;
+    vault.preferences = {
+      ...preferences,
+      customCourseTypes: [
+        { id: "custom_group", label: "小组课" },
+        { id: "custom_pair", label: "一对多" }
+      ],
+      courseTypeFeeRules: {
+        custom_group: {
+          mode: "class_headcount",
+          classFeeTiers: [{ id: "tier_1_plus", minStudents: 5, baseFee: 80, perStudentFee: 10 }]
+        },
+        custom_pair: {
+          mode: "class_headcount",
+          classFeeTiers: [{ id: "tier_1_plus", minStudents: 1, baseFee: 80, perStudentFee: 10 }]
+        }
+      }
+    };
+
+    expect(courseRequiresSameGradeStudents(vault, "custom_group")).toBe(true);
+    expect(courseRequiresSameGradeStudents(vault, "custom_pair")).toBe(false);
+    expect(courseRequiresSameGradeStudents(vault, "custom_pair", {
+      mode: "class_headcount",
+      classFeeTiers: [{ id: "tier_1_plus", minStudents: 3, baseFee: 80, perStudentFee: 10 }]
+    })).toBe(true);
   });
 });

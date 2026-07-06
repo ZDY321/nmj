@@ -18,6 +18,7 @@ import type {
   CourseGroup,
   CourseType,
   CustomCourseTypeOption,
+  FeeRule,
   Lesson,
   LessonStatus,
   SalaryGradeStage,
@@ -27,7 +28,7 @@ import type {
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, courseUsesStandardBillingHours, getCourse, isSubstituteClassLesson, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, classHeadcountBaseStudentCountForRule, courseUsesStandardBillingHours, feeRuleForCourseType, getCourse, isSubstituteClassLesson, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { durationHours, timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
@@ -518,6 +519,13 @@ export function activeStudentIdsForCourse(vault: TeacherVault, course: CourseGro
 
 export function courseHasActiveStudent(vault: TeacherVault, course: CourseGroup): boolean {
   return activeStudentIdsForCourse(vault, course).length > 0;
+}
+
+export function courseRequiresSameGradeStudents(vault: TeacherVault, type: CourseType, feeRule?: FeeRule): boolean {
+  if (type === "one_on_one" || type === "trial") return false;
+  if (type === "class" || type === "one_on_two") return true;
+  const rule = feeRule?.mode === "class_headcount" ? feeRule : feeRuleForCourseType(vault, type);
+  return rule.mode === "class_headcount" && classHeadcountBaseStudentCountForRule(type, rule) > 1;
 }
 
 export function createLessonFromCourse(

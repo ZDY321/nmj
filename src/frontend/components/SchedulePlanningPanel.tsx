@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { TimeTextInput } from "@/components/ui/time-text-input";
 import type { CourseGroup, TimePreset, Weekday } from "@/shared/types";
-import { weekdayLabels } from "@/frontend/lib/helpers";
+import { weekdayLabels, weekdayOfDateIso } from "@/frontend/lib/helpers";
+import { datesBetweenLocal } from "@/frontend/lib/scheduleViewHelpers";
 
 type DateShortcut = {
   label: string;
@@ -196,6 +197,25 @@ export function SchedulePlanningPanel({
 }: SchedulePlanningPanelProps) {
   const weeklyPatternCourseById = new Map(weeklyPatternCourseOptions.map((course) => [course.id, course]));
   const currentRuleCanJoinWeeklyPattern = Boolean(ruleCourseGroupId && selectedWeekdays.length > 0 && isBatchTimeValid);
+  const selectedControlClass = "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2] shadow-[0_8px_18px_rgba(21,87,194,0.12)] hover:bg-[#dbeafe] hover:text-[#0f3f8f]";
+  const primaryActionClass = "border-[#1557c2] bg-[#1557c2] text-white shadow-[0_12px_22px_rgba(21,87,194,0.18)] hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white";
+  const batchRangeDates = isBatchDateRangeValid ? datesBetweenLocal(rangeStart, batchEffectiveRangeEnd) : [];
+
+  function compactDateLabel(date: string): string {
+    const [, month = "", day = ""] = date.split("-");
+    return `${Number(month)}月${Number(day)}日`;
+  }
+
+  function batchTimeGroupDateRows(group: BatchTimeGroup): string[] {
+    return visibleWeekdays
+      .filter((day) => group.weekdays.includes(day))
+      .map((day) => {
+        const dates = batchRangeDates.filter((date) => weekdayOfDateIso(date) === day);
+        if (dates.length === 0) return `${weekdayLabels[day]} 当前范围内无日期`;
+        const visibleDates = dates.slice(0, 8).map(compactDateLabel);
+        return `${weekdayLabels[day]} ${visibleDates.join("、")}${dates.length > visibleDates.length ? ` 等 ${dates.length} 天` : ""}`;
+      });
+  }
 
   function weeklyPatternSlotWeekdayLabel(slot: WeeklySchedulePatternSlot): string {
     const labels = visibleWeekdays.filter((day) => slot.weekdays.includes(day)).map((day) => weekdayLabels[day]);
@@ -213,7 +233,7 @@ export function SchedulePlanningPanel({
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       <Card className="overflow-hidden">
         <CardHeader>
-          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
+          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <Plus size={14} /> 单次排课 / 补录
           </div>
           <CardTitle>添加课程时间</CardTitle>
@@ -272,18 +292,21 @@ export function SchedulePlanningPanel({
             <div className="space-y-2">
               <div className="text-sm font-medium">快捷日期</div>
               <div className="grid grid-cols-3 gap-2">
-                {dateShortcuts.map((item) => (
-                  <Button
-                    key={item.label}
-                    type="button"
-                    size="sm"
-                    variant={singleDate === item.value ? "default" : "outline"}
-                    onClick={() => setSingleDate(item.value)}
-                    className="h-10"
-                  >
-                    {item.label}
-                  </Button>
-                ))}
+                {dateShortcuts.map((item) => {
+                  const active = singleDate === item.value;
+                  return (
+                    <Button
+                      key={item.label}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSingleDate(item.value)}
+                      className={`h-10 ${active ? selectedControlClass : ""}`}
+                    >
+                      {item.label}
+                    </Button>
+                  );
+                })}
               </div>
             </div>
             <div className="space-y-2">
@@ -296,12 +319,12 @@ export function SchedulePlanningPanel({
                       key={preset.id}
                       type="button"
                       size="sm"
-                      variant={active ? "default" : "outline"}
+                      variant="outline"
                       onClick={() => {
                         setSingleStartTime(preset.startTime);
                         setSingleEndTime(preset.endTime);
                       }}
-                      className="h-10"
+                      className={`h-10 ${active ? selectedControlClass : ""}`}
                     >
                       {preset.label}
                     </Button>
@@ -359,7 +382,7 @@ export function SchedulePlanningPanel({
             </Button>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Button type="button" onClick={() => onAddSingleLesson("scheduled")} disabled={!singleCourseGroupId}>
+            <Button type="button" variant="outline" onClick={() => onAddSingleLesson("scheduled")} disabled={!singleCourseGroupId} className={primaryActionClass}>
               <CalendarCheck size={16} /> 添加待上课
             </Button>
             <Button type="button" variant="outline" onClick={() => onAddSingleLesson("completed")} disabled={!singleCourseGroupId}>
@@ -403,6 +426,7 @@ export function SchedulePlanningPanel({
                 {batchTimeGroups.map((group, groupIndex) => {
                   const groupCount = batchPerDayGroupCounts.find((g) => g.groupId === group.id);
                   const groupWeekdayLabels = selectedWeekdays.filter((d) => group.weekdays.includes(d)).map((d) => weekdayLabels[d]);
+                  const groupDateRows = batchTimeGroupDateRows(group);
                   return (
                     <div key={group.id} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 space-y-2">
                       <div className="flex items-center gap-2">
@@ -454,7 +478,10 @@ export function SchedulePlanningPanel({
                         ))}
                       </div>
                       {groupWeekdayLabels.length > 0 && (
-                        <div className="text-xs text-[#64748b]">已选: {groupWeekdayLabels.join("、")}</div>
+                        <div className="rounded-[8px] border border-[#dbe4ef] bg-[#f8fbff] px-2 py-1.5 text-xs font-semibold text-[#64748b]">
+                          <div>已选: {groupWeekdayLabels.join("、")}</div>
+                          <div className="mt-1 leading-5">日期: {groupDateRows.join("；")}</div>
+                        </div>
                       )}
                     </div>
                   );
@@ -499,17 +526,17 @@ export function SchedulePlanningPanel({
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
-                  variant={batchRepeatMode === "end_date" ? "default" : "outline"}
+                  variant="outline"
                   onClick={() => setBatchRepeatMode("end_date")}
-                  className={batchRepeatMode === "end_date" ? "orange-gradient shadow-[0_10px_20px_rgba(255,134,23,0.18)]" : ""}
+                  className={batchRepeatMode === "end_date" ? selectedControlClass : ""}
                 >
                   按结束日期
                 </Button>
                 <Button
                   type="button"
-                  variant={batchRepeatMode === "weeks" ? "default" : "outline"}
+                  variant="outline"
                   onClick={() => setBatchRepeatMode("weeks")}
-                  className={batchRepeatMode === "weeks" ? "orange-gradient shadow-[0_10px_20px_rgba(255,134,23,0.18)]" : ""}
+                  className={batchRepeatMode === "weeks" ? selectedControlClass : ""}
                 >
                   按周重复
                 </Button>
@@ -586,10 +613,10 @@ export function SchedulePlanningPanel({
                 <Button
                   key={day}
                   type="button"
-                  variant={selectedWeekdays.includes(day) ? "default" : "outline"}
+                  variant="outline"
                   size="sm"
                   onClick={() => onToggleWeekday(day)}
-                  className={selectedWeekdays.includes(day) ? "orange-gradient shadow-[0_10px_20px_rgba(255,134,23,0.18)]" : ""}
+                  className={selectedWeekdays.includes(day) ? selectedControlClass : ""}
                 >
                   {weekdayLabels[day]}
                 </Button>
@@ -622,7 +649,7 @@ export function SchedulePlanningPanel({
           <Button
             type="button"
             variant="outline"
-            className="w-full"
+            className={`w-full ${primaryActionClass}`}
             disabled={batchPerDayMode ? !ruleCourseGroupId || batchTimeGroups.length === 0 : !ruleCourseGroupId || selectedWeekdays.length === 0}
             onClick={onBatchGenerate}
           >

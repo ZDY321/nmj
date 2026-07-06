@@ -59,7 +59,6 @@ export function usePayrollReviewData({
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
     [vault.campuses, vault.profile.homeCampusId]
   );
-  const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
   const courseTypeOptions = useMemo(() => courseTypeOptionsForVault(vault), [vault]);
   const gradeOptions = useMemo(
     () => Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[])).sort(compareByName),
@@ -99,6 +98,10 @@ export function usePayrollReviewData({
       .sort(sortLessons),
     [campusFilter, gradeFilter, monthPayrollLessons, statusFilter, typeFilter, vault]
   );
+  const courseOptions = useMemo(() => {
+    const courseIds = new Set(filteredLessons.map((lesson) => lesson.courseGroupId));
+    return sortCoursesByName(vault.courseGroups.filter((course) => courseIds.has(course.id)));
+  }, [filteredLessons, vault.courseGroups]);
   const detailLessons = useMemo(
     () => filteredLessons
       .filter((lesson) => {

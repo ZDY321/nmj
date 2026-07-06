@@ -110,6 +110,12 @@ export function PayrollReviewView({
   }, [panelFocus?.nonce]);
 
   useEffect(() => {
+    if (detailCourseFilter !== "all" && !courseOptions.some((course) => course.id === detailCourseFilter)) {
+      setDetailCourseFilter("all");
+    }
+  }, [courseOptions, detailCourseFilter]);
+
+  useEffect(() => {
     if (!token || !password) {
       setScheduleImportArchive(vault.scheduleImport ?? null);
       setScheduleImportArchiveLoading(false);

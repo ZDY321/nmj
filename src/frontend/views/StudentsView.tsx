@@ -18,7 +18,7 @@ import { TeacherSalaryRulesPanel } from "@/frontend/components/TeacherSalaryRule
 import { NewCourseFormPanel } from "@/frontend/components/NewCourseFormPanel";
 import { makeId } from "@/frontend/lib/crypto";
 import { backupFeeRuleForCourseType, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, classHeadcountFeeRuleForCourseType, classHeadcountStageRateForRule, courseUsesClassBilling, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeRuleById, salaryGradeRulesForVault, salaryGradeAmountForCount, salaryGradeStageForCourse, salaryGradeStageForStudentIds, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
-import { builtInCourseTypeOptions, campusName, compareByName, courseHasActiveStudent, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
+import { builtInCourseTypeOptions, campusName, compareByName, courseHasActiveStudent, courseRequiresSameGradeStudents, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
@@ -289,8 +289,9 @@ export function StudentsView({
         const searchable = studentCourseSearchText(vault, student);
         const matchesSearch = matchesKeywordSearch(searchable, normalizedCourseStudentSearch);
         const matchesGrade = matchesGradeFilter(student.grade, courseStudentGradeFilter);
-        const selectedGrade = editingCourse.type === "class" ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
-        const matchesSelectedGrade = editingCourse.type !== "class" || selectedGrade === undefined || isSelected || (student.grade ?? "") === selectedGrade;
+        const requiresSameGrade = courseRequiresSameGradeStudents(vault, editingCourse.type, editingCourse.feeRule);
+        const selectedGrade = requiresSameGrade ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
+        const matchesSelectedGrade = !requiresSameGrade || selectedGrade === undefined || isSelected || (student.grade ?? "") === selectedGrade;
         const matchesCampus = courseStudentCampusFilter === "all" || student.defaultCampusId === courseStudentCampusFilter;
         return matchesScope && matchesSearch && matchesGrade && matchesSelectedGrade && matchesCampus;
       })
@@ -482,7 +483,8 @@ export function StudentsView({
   function submitCourse(forceDuplicate = false) {
     const resolvedName = courseNameInput.trim() || suggestedCourseName;
     if (!resolvedName) return;
-    const normalizedStudentIds = normalizeCourseStudentIds(courseType, activeCourseStudentIds(courseStudentIds));
+    const feeRule = normalizeCourseFeeRuleForType(courseType, courseFeeRule);
+    const normalizedStudentIds = normalizeCourseStudentIds(courseType, activeCourseStudentIds(courseStudentIds), feeRule);
     const resolvedCampusId = courseCampusInput || firstCourseStudentCampus(normalizedStudentIds) || preferredCampusId;
     const resolvedSubject = courseSubjectInput.trim() || subjectOptions[0] || "未设置";
     const duplicateCourse = findDuplicateCourse(courseType, resolvedCampusId, resolvedSubject, normalizedStudentIds);
@@ -496,7 +498,6 @@ export function StudentsView({
       });
       return;
     }
-    const feeRule = normalizeCourseFeeRuleForType(courseType, courseFeeRule);
     onAddCourse({
       id: makeId("course"),
       name: resolvedName,
@@ -670,9 +671,16 @@ export function StudentsView({
     setCourseCampusCustomized(true);
   }
 
-  function normalizeCourseStudentIds(type: CourseType, studentIds: string[]): string[] {
+  function normalizeCourseStudentIds(type: CourseType, studentIds: string[], feeRule?: FeeRule): string[] {
+    let nextStudentIds = studentIds;
+    if (courseRequiresSameGradeStudents(vault, type, feeRule)) {
+      const selectedGrade = firstCourseStudentGrade(nextStudentIds);
+      if (selectedGrade !== undefined) {
+        nextStudentIds = nextStudentIds.filter((studentId) => (vault.students.find((student) => student.id === studentId)?.grade ?? "") === selectedGrade);
+      }
+    }
     const limit = studentLimitForCourseType(type);
-    return limit ? studentIds.slice(0, limit) : studentIds;
+    return limit ? nextStudentIds.slice(0, limit) : nextStudentIds;
   }
 
   function courseTypeDefaultFeeRule(type: CourseType): FeeRule {
@@ -709,40 +717,50 @@ export function StudentsView({
     return rule.salaryGradeSource === "specific" ? "salary_specific" : "salary_default";
   }
 
+  function applyNewCourseFeeRule(nextRule: FeeRule) {
+    setCourseFeeRule(nextRule);
+    setCourseStudentIds((current) => normalizeCourseStudentIds(courseType, current, nextRule));
+  }
+
   function changeNewCourseFeeMode(mode: "salary_default" | "salary_specific" | "custom") {
     if (mode === "salary_default") {
-      setCourseFeeRule(salaryGradeDefaultFeeRule());
+      applyNewCourseFeeRule(salaryGradeDefaultFeeRule());
       return;
     }
     if (mode === "salary_specific") {
-      setCourseFeeRule(salaryGradeSpecificFeeRule());
+      applyNewCourseFeeRule(salaryGradeSpecificFeeRule());
       return;
     }
-    setCourseFeeRule(customFeeRuleForCourseType(courseType));
+    applyNewCourseFeeRule(customFeeRuleForCourseType(courseType));
   }
 
   function changeNewCourseSalaryGrade(salaryGradeId: string) {
-    setCourseFeeRule(salaryGradeSpecificFeeRule(salaryGradeId as SalaryGradeId));
+    applyNewCourseFeeRule(salaryGradeSpecificFeeRule(salaryGradeId as SalaryGradeId));
   }
 
   function changeEditingCourseFeeMode(mode: "salary_default" | "salary_specific" | "custom") {
     setEditingCourse((current) => {
       if (!current) return current;
       if (mode === "salary_default") {
-        return { ...current, feeRule: salaryGradeDefaultFeeRule() };
+        const feeRule = salaryGradeDefaultFeeRule();
+        return { ...current, feeRule, studentIds: normalizeCourseStudentIds(current.type, current.studentIds, feeRule) };
       }
       if (mode === "salary_specific") {
         const currentGradeId = current.feeRule.mode === "salary_grade" ? current.feeRule.salaryGradeId : undefined;
-        return { ...current, feeRule: salaryGradeSpecificFeeRule(currentGradeId) };
+        const feeRule = salaryGradeSpecificFeeRule(currentGradeId);
+        return { ...current, feeRule, studentIds: normalizeCourseStudentIds(current.type, current.studentIds, feeRule) };
       }
-      return { ...current, feeRule: customFeeRuleForCourseType(current.type) };
+      const feeRule = customFeeRuleForCourseType(current.type);
+      return { ...current, feeRule, studentIds: normalizeCourseStudentIds(current.type, current.studentIds, feeRule) };
     });
   }
 
   function changeEditingCourseSalaryGrade(salaryGradeId: string) {
-    setEditingCourse((current) =>
-      current ? { ...current, feeRule: salaryGradeSpecificFeeRule(salaryGradeId as SalaryGradeId) } : current
-    );
+    setEditingCourse((current) => {
+      if (!current) return current;
+      const feeRule = salaryGradeSpecificFeeRule(salaryGradeId as SalaryGradeId);
+      return { ...current, feeRule, studentIds: normalizeCourseStudentIds(current.type, current.studentIds, feeRule) };
+    });
   }
 
   function updateDefaultSalaryGrade(salaryGradeId: string) {
@@ -788,10 +806,11 @@ export function StudentsView({
   }
 
   function changeNewCourseType(nextType: CourseType) {
-    const nextStudentIds = normalizeCourseStudentIds(nextType, activeCourseStudentIds(courseStudentIds));
+    const nextFeeRule = courseTypeDefaultFeeRule(nextType);
+    const nextStudentIds = normalizeCourseStudentIds(nextType, activeCourseStudentIds(courseStudentIds), nextFeeRule);
     setCourseType(nextType);
     setCourseStudentIds(nextStudentIds);
-    setCourseFeeRule(courseTypeDefaultFeeRule(nextType));
+    setCourseFeeRule(nextFeeRule);
     syncNewCourseCampusFromStudents(nextStudentIds);
   }
 
@@ -1088,33 +1107,31 @@ export function StudentsView({
   }
 
   function updateNewCourseFee(patch: Partial<FeeRule>) {
-    setCourseFeeRule((current) => ({ ...current, ...patch }));
+    applyNewCourseFeeRule({ ...courseFeeRule, ...patch });
   }
 
   function updateNewTrialFixedFee(fixedFee: number) {
-    setCourseFeeRule((current) => ({
-      ...current,
+    applyNewCourseFeeRule({
+      ...courseFeeRule,
       mode: "fixed",
       fixedFee,
       hourlyRate: undefined,
       baseFee: undefined,
       perPresentStudentFee: undefined,
       classFeeTiers: undefined
-    }));
+    });
   }
 
   function replaceNewClassFeeTiers(nextTiers: ClassFeeTier[]) {
-    setCourseFeeRule((current) => {
-      const sortedTiers = [...nextTiers].sort((a, b) => a.minStudents - b.minStudents);
-      const firstTier = sortedTiers[0];
-      return {
-        ...current,
-        mode: "class_headcount",
-        baseFee: firstTier?.baseFee ?? current.baseFee,
-        perPresentStudentFee: firstTier?.perStudentFee ?? current.perPresentStudentFee,
-        classFeeTiers: sortedTiers,
-        stageRates: firstTier ? stageRatesFromTierForCourseType(courseType, firstTier) : current.stageRates
-      };
+    const sortedTiers = [...nextTiers].sort((a, b) => a.minStudents - b.minStudents);
+    const firstTier = sortedTiers[0];
+    applyNewCourseFeeRule({
+      ...courseFeeRule,
+      mode: "class_headcount",
+      baseFee: firstTier?.baseFee ?? courseFeeRule.baseFee,
+      perPresentStudentFee: firstTier?.perStudentFee ?? courseFeeRule.perPresentStudentFee,
+      classFeeTiers: sortedTiers,
+      stageRates: firstTier ? stageRatesFromTierForCourseType(courseType, firstTier) : courseFeeRule.stageRates
     });
   }
 
@@ -1124,7 +1141,7 @@ export function StudentsView({
   }
 
   function setNewCourseStudents(nextStudentIds: string[]) {
-    const normalizedStudentIds = normalizeCourseStudentIds(courseType, activeCourseStudentIds(nextStudentIds));
+    const normalizedStudentIds = normalizeCourseStudentIds(courseType, activeCourseStudentIds(nextStudentIds), courseFeeRule);
     setCourseStudentIds(normalizedStudentIds);
     syncNewCourseCampusFromStudents(normalizedStudentIds);
   }
@@ -1139,25 +1156,20 @@ export function StudentsView({
   function toggleNewCourseStudent(studentId: string) {
     const isSelected = courseStudentIds.includes(studentId);
     const student = vault.students.find((item) => item.id === studentId);
-    if (!isSelected && student?.status !== "active") return;
-    const limit = studentLimitForCourseType(courseType);
-    if (limit) {
-      if (isSelected) {
-        setNewCourseStudents(courseStudentIds.filter((id) => id !== studentId));
-      } else if (courseStudentIds.length < limit) {
-        setNewCourseStudents([...courseStudentIds, studentId]);
-      }
-      return;
-    }
-    if (courseType === "class" && !isSelected) {
-      const selectedGrade = firstCourseStudentGrade(courseStudentIds);
-      if (selectedGrade !== undefined && (student?.grade ?? "") !== selectedGrade) {
-        return;
-      }
+    if (!isSelected) {
+      if (student?.status !== "active") return;
+      if (!canAddStudentToCourse(courseType, courseFeeRule, courseStudentIds, student)) return;
     }
     setNewCourseStudents(
       isSelected ? courseStudentIds.filter((id) => id !== studentId) : [...courseStudentIds, studentId]
     );
+  }
+
+  function canAddStudentToCourse(type: CourseType, feeRule: FeeRule | undefined, selectedStudentIds: string[], student: Student): boolean {
+    const selectedGrade = courseRequiresSameGradeStudents(vault, type, feeRule) ? firstCourseStudentGrade(selectedStudentIds) : undefined;
+    if (selectedGrade !== undefined && (student.grade ?? "") !== selectedGrade) return false;
+    const limit = studentLimitForCourseType(type);
+    return !limit || selectedStudentIds.length < limit;
   }
 
   function updateEditingCourse(patch: Partial<CourseGroup>) {
@@ -1194,16 +1206,18 @@ export function StudentsView({
       if (!current) return current;
       const sortedTiers = [...nextTiers].sort((a, b) => a.minStudents - b.minStudents);
       const firstTier = sortedTiers[0];
+      const feeRule: FeeRule = {
+        ...current.feeRule,
+        mode: "class_headcount",
+        baseFee: firstTier?.baseFee ?? current.feeRule.baseFee,
+        perPresentStudentFee: firstTier?.perStudentFee ?? current.feeRule.perPresentStudentFee,
+        classFeeTiers: sortedTiers,
+        stageRates: firstTier ? stageRatesFromTierForCourseType(current.type, firstTier) : current.feeRule.stageRates
+      };
       return {
         ...current,
-        feeRule: {
-          ...current.feeRule,
-          mode: "class_headcount",
-          baseFee: firstTier?.baseFee ?? current.feeRule.baseFee,
-          perPresentStudentFee: firstTier?.perStudentFee ?? current.feeRule.perPresentStudentFee,
-          classFeeTiers: sortedTiers,
-          stageRates: firstTier ? stageRatesFromTierForCourseType(current.type, firstTier) : current.feeRule.stageRates
-        }
+        feeRule,
+        studentIds: normalizeCourseStudentIds(current.type, current.studentIds, feeRule)
       };
     });
   }
@@ -1388,28 +1402,11 @@ export function StudentsView({
       if (!current) return current;
       const isSelected = current.studentIds.includes(studentId);
       const student = vault.students.find((item) => item.id === studentId);
-      if (!isSelected && student?.status !== "active") return current;
-      const limit = studentLimitForCourseType(current.type);
-      if (limit) {
-        if (!isSelected && current.studentIds.length >= limit) {
-          return current;
-        }
-        const studentIds = isSelected
-          ? current.studentIds.filter((id) => id !== studentId)
-          : [...current.studentIds, studentId];
-        return {
-          ...current,
-          studentIds,
-          defaultCampusId: !isSelected ? student?.defaultCampusId ?? current.defaultCampusId : current.defaultCampusId
-        };
+      if (!isSelected) {
+        if (student?.status !== "active") return current;
+        if (!canAddStudentToCourse(current.type, current.feeRule, current.studentIds, student)) return current;
       }
-      if (current.type === "class" && !isSelected) {
-        const selectedGrade = firstCourseStudentGrade(current.studentIds);
-        if (selectedGrade !== undefined && (student?.grade ?? "") !== selectedGrade) {
-          return current;
-        }
-      }
-      const studentIds = current.studentIds.includes(studentId)
+      const studentIds = isSelected
         ? current.studentIds.filter((id) => id !== studentId)
         : [...current.studentIds, studentId];
       return {
@@ -1450,10 +1447,10 @@ export function StudentsView({
 
   function changeEditingCourseType(nextType: CourseType) {
     if (!editingCourse) return;
-    const nextStudentIds = normalizeCourseStudentIds(nextType, editingCourse.studentIds);
     const nextFeeRule = supportsSalaryGradeFee(nextType) && editingCourse.feeRule.mode === "salary_grade"
       ? editingCourse.feeRule
       : courseTypeDefaultFeeRule(nextType);
+    const nextStudentIds = normalizeCourseStudentIds(nextType, editingCourse.studentIds, nextFeeRule);
     updateEditingCourse({
       type: nextType,
       feeRule: nextFeeRule,
@@ -1466,10 +1463,13 @@ export function StudentsView({
     if (!editingCourse?.name.trim()) return;
     const courseId = editingCourse.id;
     const feeRule = normalizeCourseFeeRuleForType(editingCourse.type, editingCourse.feeRule);
+    const studentIds = normalizeCourseStudentIds(editingCourse.type, editingCourse.studentIds, feeRule);
     onUpdateCourse({
       ...editingCourse,
       name: editingCourse.name.trim(),
       subject: editingCourse.subject.trim() || "未设置",
+      studentIds,
+      defaultCampusId: firstCourseStudentCampus(studentIds) ?? editingCourse.defaultCampusId,
       feeRule
     });
     setEditingCourse(null);
@@ -1874,7 +1874,7 @@ function canJoinCourse(vault: TeacherVault, course: CourseGroup, student: Studen
   if (student.status === "paused") return false;
   const limit = studentLimitForCourseType(course.type);
   if (limit && course.studentIds.length >= limit) return false;
-  if (course.type !== "class" || course.studentIds.length === 0) return true;
+  if (!courseRequiresSameGradeStudents(vault, course.type, course.feeRule) || course.studentIds.length === 0) return true;
   const existingGrade = vault.students.find((item) => item.id === course.studentIds[0])?.grade ?? "";
   return existingGrade === (student.grade ?? "");
 }

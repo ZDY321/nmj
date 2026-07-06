@@ -111,7 +111,7 @@ export function PayrollLessonDetailsCard({
             <Select value={courseFilter} onChange={(event) => onCourseFilterChange(event.target.value)}>
               <option value="all">全部课程</option>
               {courseOptions.map((course) => (
-                <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
+                <option key={course.id} value={course.id}>{course.name} · {course.subject}{course.status === "paused" ? " · 已暂停" : ""}</option>
               ))}
             </Select>
           </div>

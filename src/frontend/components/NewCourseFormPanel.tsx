@@ -8,7 +8,7 @@ import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
 import { calculateClassHeadcountFee, courseTypeUsesStandardBillingHours, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
-import { campusName, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
+import { campusName, courseRequiresSameGradeStudents, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
   value: CourseType;
@@ -100,9 +100,11 @@ export function NewCourseFormPanel({
     : usesStandardBilling
       ? "按标准课时统计；例：10:10-12:00 实际 110 分钟，默认计费 2 小时，可在课节详情手动改为 1 小时等拆课课时。"
       : "按实际上课时长折算。";
-  const selectedCourseStudentGrade = courseType === "class" ? firstCourseStudentGrade(courseStudentIds) : undefined;
+  const requiresSameGradeStudents = courseRequiresSameGradeStudents(vault, courseType, courseFeeRule);
+  const selectedCourseStudentGrade = requiresSameGradeStudents ? firstCourseStudentGrade(courseStudentIds) : undefined;
+  const selectedCourseStudentGradeLabel = selectedCourseStudentGrade || "未设置年级";
   const visibleAddCourseStudentOptions = addCourseStudentOptions.filter((student) => {
-    if (courseType !== "class" || selectedCourseStudentGrade === undefined) return true;
+    if (!requiresSameGradeStudents || selectedCourseStudentGrade === undefined) return true;
     return courseStudentIds.includes(student.id) || (student.grade ?? "") === selectedCourseStudentGrade;
   });
 
@@ -278,9 +280,9 @@ export function NewCourseFormPanel({
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm font-medium">
                 关联学生（{courseStudentIds.length} / {activeStudentCount}）
-                {courseType === "class" && (
+                {requiresSameGradeStudents && (
                   <span className="ml-2 text-xs font-bold text-[#64748b]">
-                    班课需同年级{firstCourseStudentGrade(courseStudentIds) !== undefined ? `：${firstCourseStudentGrade(courseStudentIds) || "未设置年级"}` : ""}
+                    需同年级{selectedCourseStudentGrade !== undefined ? `：${selectedCourseStudentGradeLabel}` : ""}
                   </span>
                 )}
                 {studentLimitForCourseType(courseType) && courseType !== "one_on_one" && (
@@ -328,8 +330,9 @@ export function NewCourseFormPanel({
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {visibleAddCourseStudentOptions.map((student) => {
                   const isSelected = courseStudentIds.includes(student.id);
-                  const selectedGrade = courseType === "class" ? firstCourseStudentGrade(courseStudentIds) : undefined;
-                  const isDifferentGrade = courseType === "class" && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
+                  const selectedGrade = requiresSameGradeStudents ? selectedCourseStudentGrade : undefined;
+                  const selectedGradeLabel = selectedGrade || "未设置年级";
+                  const isDifferentGrade = requiresSameGradeStudents && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
                   const isAtStudentLimit = !isSelected && Boolean(studentLimitForCourseType(courseType)) && courseStudentIds.length >= (studentLimitForCourseType(courseType) ?? 0);
                   return (
                     <button
@@ -337,7 +340,7 @@ export function NewCourseFormPanel({
                       key={student.id}
                       onClick={() => onToggleCourseStudent(student.id)}
                       disabled={isDifferentGrade || isAtStudentLimit}
-                      title={isDifferentGrade ? `班课只能选择 ${selectedGrade} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(courseType)} 人` : undefined}
+                      title={isDifferentGrade ? `只能选择 ${selectedGradeLabel} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(courseType)} 人` : undefined}
                       className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
                         isSelected
                           ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"

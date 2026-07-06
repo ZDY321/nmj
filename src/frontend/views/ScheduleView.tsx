@@ -111,8 +111,10 @@ type WeeklyPatternPreview = {
 type BatchPerDayPreview = {
   totalCount: number;
   conflictCount: number;
+  existingConflictCount: number;
+  internalConflictCount: number;
   unassignedWeekdays: Weekday[];
-  groupCounts: Array<{ groupId: string; count: number; conflictCount: number }>;
+  groupCounts: Array<{ groupId: string; count: number; conflictCount: number; existingConflictCount: number; internalConflictCount: number }>;
   creatableItems: Array<{ group: BatchTimeGroup; date: string }>;
 };
 
@@ -317,7 +319,7 @@ export function ScheduleView({
     startTime: string,
     endTime: string,
     manualBillingHours?: number
-  ) => void;
+  ) => { candidateCount: number; createdCount: number; conflictCount: number };
   onWeekStartChange: (weekStart: WeekStart) => void;
   role: UserRole;
   token: string;
@@ -2461,6 +2463,8 @@ export function ScheduleView({
     const preview: BatchPerDayPreview = {
       totalCount: 0,
       conflictCount: 0,
+      existingConflictCount: 0,
+      internalConflictCount: 0,
       unassignedWeekdays: [],
       groupCounts: [],
       creatableItems: []
@@ -2475,7 +2479,7 @@ export function ScheduleView({
     preview.unassignedWeekdays = selectedWeekdays.filter((d) => !assignedWeekdays.has(d));
 
     for (const group of batchTimeGroups) {
-      const groupCount = { groupId: group.id, count: 0, conflictCount: 0 };
+      const groupCount = { groupId: group.id, count: 0, conflictCount: 0, existingConflictCount: 0, internalConflictCount: 0 };
       const groupValid = group.weekdays.length > 0 && isOrderedTimeRange(group.startTime, group.endTime);
 
       if (!groupValid) {
@@ -2498,6 +2502,13 @@ export function ScheduleView({
         if (existingConflict || plannedConflict) {
           preview.conflictCount += 1;
           groupCount.conflictCount += 1;
+          if (existingConflict) {
+            preview.existingConflictCount += 1;
+            groupCount.existingConflictCount += 1;
+          } else {
+            preview.internalConflictCount += 1;
+            groupCount.internalConflictCount += 1;
+          }
           continue;
         }
 
@@ -2508,6 +2519,13 @@ export function ScheduleView({
     }
 
     return preview;
+  }
+
+  function describeBatchPerDayConflicts(preview: BatchPerDayPreview): string {
+    const parts: string[] = [];
+    if (preview.existingConflictCount > 0) parts.push(`${preview.existingConflictCount} 节与日历已有课程重叠`);
+    if (preview.internalConflictCount > 0) parts.push(`${preview.internalConflictCount} 节是本次时间组之间重复或重叠`);
+    return parts.join("，");
   }
 
   function findTimeConflict(lessonDate: string, lessonStartTime: string, lessonEndTime: string, ignoredLessonId?: string): Lesson | undefined {
@@ -2533,12 +2551,11 @@ export function ScheduleView({
       return;
     }
     const manualBillingHours = parseOptionalBillingHours(ruleBillingHours);
-    onGenerateDrafts(rangeStart, batchEffectiveRangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime, manualBillingHours);
-    const createdCount = Math.max(batchCandidateDates.length - batchConflictCount, 0);
+    const result = onGenerateDrafts(rangeStart, batchEffectiveRangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime, manualBillingHours);
     showScheduleNotice(
-      createdCount > 0
-        ? `已生成 ${createdCount} 节待上课${batchConflictCount > 0 ? `，${batchConflictCount} 节因时间冲突已跳过` : ""}。`
-        : `没有新增课节，${batchConflictCount > 0 ? `${batchConflictCount} 节均与已有课程冲突。` : "当前条件没有可生成课节。"}`
+      result.createdCount > 0
+        ? `已生成 ${result.createdCount} 节待上课${result.conflictCount > 0 ? `，${result.conflictCount} 节因时间冲突已跳过` : ""}。`
+        : `没有新增课节，${result.conflictCount > 0 ? `${result.conflictCount} 节均与已有课程冲突。` : "当前条件没有可生成课节。"}`
     );
   }
 
@@ -2577,9 +2594,10 @@ export function ScheduleView({
       return;
     }
     if (preview.creatableItems.length === 0) {
+      const conflictDescription = describeBatchPerDayConflicts(preview);
       showScheduleError(
         preview.conflictCount > 0
-          ? `${preview.conflictCount} 节均与已有课程冲突，没有新增课节。`
+          ? `${preview.conflictCount} 节均存在时间冲突${conflictDescription ? `（${conflictDescription}）` : ""}，没有新增课节。`
           : "当前分时条件没有可生成课节。"
       );
       return;
@@ -2602,8 +2620,9 @@ export function ScheduleView({
       })
     );
     onAddLessons(lessonsToAdd);
+    const conflictDescription = describeBatchPerDayConflicts(preview);
     showScheduleNotice(
-      `已按分时生成 ${lessonsToAdd.length} 节待上课${preview.conflictCount > 0 ? `，${preview.conflictCount} 节因时间冲突已跳过` : ""}。`
+      `已按分时生成 ${lessonsToAdd.length} 节待上课${preview.conflictCount > 0 ? `，跳过 ${preview.conflictCount} 节时间冲突${conflictDescription ? `（${conflictDescription}）` : ""}` : ""}。`
     );
   }
 
@@ -2819,9 +2838,10 @@ export function ScheduleView({
           onBatchGenerate={() => {
             if (batchPerDayMode) {
               if (batchPerDayPreview.conflictCount > 0) {
+                const conflictDescription = describeBatchPerDayConflicts(batchPerDayPreview);
                 confirm({
-                  title: "按日分时排课中存在时间冲突",
-                  description: `系统会跳过 ${batchPerDayPreview.conflictCount} 节已经有课的时间段，只生成没有冲突的课程。`,
+                  title: batchPerDayPreview.existingConflictCount > 0 ? "按日分时排课中存在时间冲突" : "按日分时时间组有重叠",
+                  description: `系统会跳过 ${batchPerDayPreview.conflictCount} 节时间段${conflictDescription ? `（${conflictDescription}）` : ""}，只生成没有冲突的课程。`,
                   confirmLabel: "跳过冲突并生成",
                   onConfirm: generateBatchPerDayLessons
                 });
