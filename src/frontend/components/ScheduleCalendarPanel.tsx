@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { TimeTextInput } from "@/components/ui/time-text-input";
 import type { Campus, CourseGroup, WeekStart } from "@/shared/types";
+import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { ScheduleCalendarGrid, type ScheduleCalendarGridProps } from "@/frontend/components/ScheduleCalendarGrid";
 import { ScheduleCalendarSyncPanel, type ScheduleCalendarSyncPanelProps } from "@/frontend/components/ScheduleCalendarSyncPanel";
 
@@ -28,6 +29,7 @@ type ScheduleCalendarPanelProps = {
   calendarViewGradeOptions: string[];
   calendarViewStudentFilter: string;
   calendarViewSubjectFilter: string;
+  calendarViewMakeupFilter: MakeupLessonFilter;
   calendarViewSubjectOptions: string[];
   isCalendarTimeValid: boolean;
   onCalendarModeChange: (mode: CalendarMode) => void;
@@ -48,6 +50,7 @@ type ScheduleCalendarPanelProps = {
   setCalendarViewGradeFilter: (value: string) => void;
   setCalendarViewStudentFilter: (value: string) => void;
   setCalendarViewSubjectFilter: (value: string) => void;
+  setCalendarViewMakeupFilter: (value: MakeupLessonFilter) => void;
   syncPanelProps: ScheduleCalendarSyncPanelProps;
   weekStartPreference: WeekStart;
 };
@@ -70,6 +73,7 @@ export function ScheduleCalendarPanel({
   calendarViewGradeOptions,
   calendarViewStudentFilter,
   calendarViewSubjectFilter,
+  calendarViewMakeupFilter,
   calendarViewSubjectOptions,
   isCalendarTimeValid,
   onCalendarModeChange,
@@ -90,6 +94,7 @@ export function ScheduleCalendarPanel({
   setCalendarViewGradeFilter,
   setCalendarViewStudentFilter,
   setCalendarViewSubjectFilter,
+  setCalendarViewMakeupFilter,
   syncPanelProps,
   weekStartPreference
 }: ScheduleCalendarPanelProps) {
@@ -204,7 +209,7 @@ export function ScheduleCalendarPanel({
           </div>
         )}
         <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[auto_minmax(130px,0.75fr)_minmax(130px,0.75fr)_minmax(130px,0.75fr)_minmax(220px,1.35fr)_auto_auto] xl:items-end">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[auto_minmax(120px,0.7fr)_minmax(120px,0.7fr)_minmax(120px,0.7fr)_minmax(138px,0.8fr)_minmax(220px,1.35fr)_auto_auto] xl:items-end">
             <div className="min-w-[116px]">
               <div className="text-sm font-extrabold text-[#061226]">查看课程筛选</div>
               <div className="mt-0.5 text-xs font-bold text-[#64748b]">
@@ -236,6 +241,15 @@ export function ScheduleCalendarPanel({
                 {calendarViewSubjectOptions.map((subject) => (
                   <option key={subject} value={subject}>{subject}</option>
                 ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">补课筛选</label>
+              <Select value={calendarViewMakeupFilter} onChange={(event) => setCalendarViewMakeupFilter(event.target.value as MakeupLessonFilter)} className="h-10 bg-white">
+                <option value="all">全部课程</option>
+                <option value="any_makeup">全部补课</option>
+                <option value="regular_makeup">正式补课</option>
+                <option value="substitute_class">代班补课</option>
               </Select>
             </div>
             <label className="relative block">

@@ -11,17 +11,17 @@ import {
   addDays,
   calendarDates,
   compareByName,
-  courseName,
   courseTypeLabel,
   campusName,
   formatPrivateMoney,
-  courseSubject,
   findStudent,
   lessonAttendanceNoteText,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
   lessonCampusId,
+  lessonDisplayName,
+  lessonDisplaySubject,
   lessonStudentDisplay,
   lessonStudentIds,
   lessonTimeRangeLabel,
@@ -41,7 +41,8 @@ import {
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
-import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
+import { attendanceStatusForLessonStatus, matchesMakeupLessonFilter } from "@/frontend/lib/scheduleViewHelpers";
+import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { timeToMinutes } from "@/frontend/lib/time";
 
 type CalendarOverviewPage = "month" | "week";
@@ -60,6 +61,7 @@ type CalendarOverviewFocusState = {
   weekGradeFilter: string;
   weekSubjectFilter: string;
   weekStudentFilter: string;
+  weekMakeupFilter: MakeupLessonFilter;
 };
 type CalendarOverviewFocusRequest = CalendarOverviewFocusState & { nonce: number };
 
@@ -154,6 +156,7 @@ export function CalendarView({
   const [weekGradeFilter, setWeekGradeFilter] = useState(() => focusRequest?.weekGradeFilter ?? "all");
   const [weekSubjectFilter, setWeekSubjectFilter] = useState(() => focusRequest?.weekSubjectFilter ?? "all");
   const [weekStudentFilter, setWeekStudentFilter] = useState(() => focusRequest?.weekStudentFilter ?? "");
+  const [weekMakeupFilter, setWeekMakeupFilter] = useState<MakeupLessonFilter>(() => focusRequest?.weekMakeupFilter ?? "all");
   const [refreshMessage, setRefreshMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const { confirm, dialog } = useConfirmDialog();
   const weekStartPreference = weekStartsOn(vault);
@@ -198,6 +201,7 @@ export function CalendarView({
     setWeekGradeFilter(focusRequest.weekGradeFilter);
     setWeekSubjectFilter(focusRequest.weekSubjectFilter);
     setWeekStudentFilter(focusRequest.weekStudentFilter);
+    setWeekMakeupFilter(focusRequest.weekMakeupFilter ?? "all");
   }, [focusRequest?.nonce]);
 
   function selectCalendarDate(date: string) {
@@ -214,6 +218,7 @@ export function CalendarView({
       weekGradeFilter,
       weekSubjectFilter,
       weekStudentFilter,
+      weekMakeupFilter,
       ...overrides
     };
   }
@@ -291,12 +296,11 @@ export function CalendarView({
   }
 
   function matchesCalendarLessonFilter(lesson: Lesson): boolean {
-    const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
     const campusId = lessonCampusId(vault, lesson);
     const studentIds = lessonStudentIds(lesson);
     const searchable = [
-      courseName(vault, lesson.courseGroupId),
-      courseSubject(vault, lesson.courseGroupId),
+      lessonDisplayName(vault, lesson),
+      lessonDisplaySubject(vault, lesson),
       campusName(vault, campusId),
       studentNames(vault, studentIds),
       lesson.note ?? "",
@@ -308,14 +312,16 @@ export function CalendarView({
     ]
       .join(" ")
       .toLowerCase();
+    const subject = lessonDisplaySubject(vault, lesson);
     const matchesCampus = weekCampusFilter === "all" || campusId === weekCampusFilter;
-    const matchesSubject = weekSubjectFilter === "all" || course?.subject === weekSubjectFilter;
+    const matchesSubject = weekSubjectFilter === "all" || subject === weekSubjectFilter;
     const matchesGrade =
       weekGradeFilter === "all" ||
       studentIds.some((studentId) => findStudent(vault, studentId)?.grade?.trim() === weekGradeFilter);
     const matchesStudent =
       !normalizedWeekStudentFilter || normalizedWeekStudentFilter.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
-    return matchesCampus && matchesSubject && matchesGrade && matchesStudent;
+    const matchesMakeup = matchesMakeupLessonFilter(lesson, weekMakeupFilter);
+    return matchesCampus && matchesSubject && matchesGrade && matchesStudent && matchesMakeup;
   }
 
   function makeupMarkerForLesson(lesson: Lesson): string | null {
@@ -445,7 +451,7 @@ export function CalendarView({
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
-            <div className="mb-4 grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-[minmax(130px,0.75fr)_minmax(130px,0.75fr)_minmax(130px,0.75fr)_minmax(220px,1.4fr)_auto] xl:items-end">
+            <div className="mb-4 grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-[minmax(120px,0.7fr)_minmax(120px,0.7fr)_minmax(120px,0.7fr)_minmax(138px,0.8fr)_minmax(220px,1.4fr)_auto] xl:items-end">
               <div className="space-y-2">
                 <label className="text-sm font-medium">校区</label>
                 <Select value={weekCampusFilter} onChange={(event) => setWeekCampusFilter(event.target.value)} className="h-10 bg-white">
@@ -474,6 +480,15 @@ export function CalendarView({
                 </Select>
               </div>
               <div className="space-y-2">
+                <label className="text-sm font-medium">补课筛选</label>
+                <Select value={weekMakeupFilter} onChange={(event) => setWeekMakeupFilter(event.target.value as MakeupLessonFilter)} className="h-10 bg-white">
+                  <option value="all">全部课程</option>
+                  <option value="any_makeup">全部补课</option>
+                  <option value="regular_makeup">正式补课</option>
+                  <option value="substitute_class">代班补课</option>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <label className="text-sm font-medium">搜索筛选</label>
                 <label className="relative block">
                   <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
@@ -491,9 +506,10 @@ export function CalendarView({
                   setWeekCampusFilter("all");
                   setWeekGradeFilter("all");
                   setWeekSubjectFilter("all");
+                  setWeekMakeupFilter("all");
                   setWeekStudentFilter("");
                 }}
-                disabled={weekCampusFilter === "all" && weekGradeFilter === "all" && weekSubjectFilter === "all" && !weekStudentFilter}
+                disabled={weekCampusFilter === "all" && weekGradeFilter === "all" && weekSubjectFilter === "all" && weekMakeupFilter === "all" && !weekStudentFilter}
                 className="h-10 rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a] transition-colors hover:bg-[#eef4fb] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 清除
@@ -559,7 +575,7 @@ export function CalendarView({
                       </div>
                       {dayLessons.slice(0, 2).map((l) => (
                         <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
-                          {l.startTime} {courseTypeLabel(vault, l.type)} · {courseName(vault, l.courseGroupId)} · {courseSubject(vault, l.courseGroupId)}
+                          {l.startTime} {courseTypeLabel(vault, l.type)} · {lessonDisplayName(vault, l)} · {lessonDisplaySubject(vault, l)}
                           {makeupMarkerForLesson(l) ? ` · ${makeupMarkerForLesson(l)}` : ""}
                         </span>
                       ))}
@@ -666,7 +682,7 @@ export function CalendarView({
                                             {lessonTimeRangeLabel(lesson)}
                                           </span>
                                           <span className="flex min-w-0 items-center justify-between gap-2">
-                                            <strong className="truncate">{courseName(vault, lesson.courseGroupId)}</strong>
+                                            <strong className="truncate">{lessonDisplayName(vault, lesson)}</strong>
                                             <span className="flex shrink-0 gap-1">
                                               {makeupMarker && (
                                                 <Badge variant="yellow" className="text-[10px]">
@@ -682,7 +698,7 @@ export function CalendarView({
                                             {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)}
                                           </span>
                                           <span className="mt-0.5 block truncate text-[11px] font-semibold opacity-80">
-                                            {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
+                                            {lessonDisplaySubject(vault, lesson)} · {lessonStudentDisplay(vault, lesson)}
                                           </span>
                                           {lesson.note && (
                                             <span className="mt-1 block truncate text-[11px] font-semibold text-[#7f1d1d]">
@@ -762,7 +778,7 @@ export function CalendarView({
                     <div className="min-w-0">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <strong className="block truncate text-sm">
-                        {lessonTimeRangeLabel(lesson)} · {courseName(vault, lesson.courseGroupId)}
+                        {lessonTimeRangeLabel(lesson)} · {lessonDisplayName(vault, lesson)}
                       </strong>
                         <Badge variant={lessonStatusVariant(lesson.status)} className="shrink-0 text-[10px]">
                           {lessonStatusLabels[lesson.status]}
@@ -773,14 +789,14 @@ export function CalendarView({
                           </Badge>
                         )}
                         <Badge variant="secondary" className="shrink-0 text-[10px]">
-                          {courseSubject(vault, lesson.courseGroupId)}
+                          {lessonDisplaySubject(vault, lesson)}
                         </Badge>
                         <Badge variant="secondary" className="shrink-0 text-[10px]">
                           {courseTypeLabel(vault, lesson.type)}
                         </Badge>
                       </div>
                       <span className="text-xs text-(--color-muted-foreground)">
-                        {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
+                        {campusName(vault, lesson.campusId)} · {lessonDisplaySubject(vault, lesson)} · {lessonStudentDisplay(vault, lesson)}
                       </span>
                       {lesson.note && (
                         <div className="mt-2 rounded-[10px] bg-white/72 px-3 py-2 text-xs font-semibold text-[#7f1d1d]">

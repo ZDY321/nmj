@@ -291,6 +291,10 @@ export function ScheduleLessonDetailPanel({
             <div className="rounded-[14px] border border-[#bfdbfe] bg-[#eff6ff] p-4">
               <div className="mb-3 text-sm font-extrabold text-[#1557c2]">代班补课信息</div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-xs font-bold text-[#475569]">课程标题</label>
+                  <Input value={substituteInfo?.title ?? ""} onChange={(event) => updateSubstituteInfo({ title: event.target.value.trim() || undefined })} className="bg-white" />
+                </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-[#475569]">外部班级</label>
                   <Input value={substituteInfo?.externalClassName ?? ""} onChange={(event) => updateSubstituteInfo({ externalClassName: event.target.value.trim() || undefined })} className="bg-white" />

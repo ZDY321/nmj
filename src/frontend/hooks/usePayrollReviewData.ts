@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
+import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, isSubstituteClassLesson, lessonBillableHoursForVault, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
+import { matchesMakeupLessonFilter } from "@/frontend/lib/scheduleViewHelpers";
 import {
   campusName,
   compareByName,
@@ -37,7 +39,8 @@ export function usePayrollReviewData({
   detailEndDateFilter,
   detailCourseFilter,
   detailStudentFilter,
-  detailStatusFilter
+  detailStatusFilter,
+  detailMakeupFilter
 }: {
   vault: TeacherVault;
   selectedMonth: string;
@@ -50,6 +53,7 @@ export function usePayrollReviewData({
   detailCourseFilter: string;
   detailStudentFilter: string;
   detailStatusFilter: PayrollLessonStatusFilter;
+  detailMakeupFilter: MakeupLessonFilter;
 }) {
   const campusOptions = useMemo(
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
@@ -107,6 +111,7 @@ export function usePayrollReviewData({
           studentNames(vault, lessonStudentIds(lesson)),
           lessonStudentDisplay(vault, lesson),
           lessonAttendanceNoteText(vault, lesson),
+          lesson.substituteClass?.title ?? "",
           lesson.substituteClass?.externalClassName ?? "",
           lesson.substituteClass?.originalTeacherName ?? "",
           lesson.substituteClass?.subject ?? "",
@@ -117,10 +122,11 @@ export function usePayrollReviewData({
           studentSearchTerms.length === 0 ||
           studentSearchTerms.every((term) => studentSearchText.includes(term));
         const matchesStatus = detailStatusFilter === "all" || lesson.status === detailStatusFilter;
-        return matchesDate && matchesCourse && matchesStudent && matchesStatus;
+        const matchesMakeup = matchesMakeupLessonFilter(lesson, detailMakeupFilter);
+        return matchesDate && matchesCourse && matchesStudent && matchesStatus && matchesMakeup;
       })
       .sort(sortLessons),
-    [detailCourseFilter, detailEndDateFilter, detailStartDateFilter, detailStatusFilter, detailStudentFilter, filteredLessons, vault]
+    [detailCourseFilter, detailEndDateFilter, detailMakeupFilter, detailStartDateFilter, detailStatusFilter, detailStudentFilter, filteredLessons, vault]
   );
 
   const breakdown = useMemo(() => salaryBreakdown(vault, selectedMonth), [selectedMonth, vault]);

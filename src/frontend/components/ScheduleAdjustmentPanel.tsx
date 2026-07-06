@@ -133,7 +133,8 @@ export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }
     normalizedNameFilter: normalizedSearch,
     startTime: filterStartTime,
     statusFilter,
-    subjectFilter
+    subjectFilter,
+    makeupFilter: "all"
   }), [campusFilter, courseFilter, courseTypeFilter, dateEnd, dateStart, filterEndTime, filterStartTime, normalizedSearch, statusFilter, subjectFilter, vault]);
 
   const visibleLessonIds = filteredLessons.map((lesson) => lesson.id);

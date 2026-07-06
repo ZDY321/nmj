@@ -19,6 +19,7 @@ type SubstituteClassLessonPanelProps = {
   billingHours: string;
   campusId: string;
   subject: string;
+  title: string;
   externalClassName: string;
   originalTeacherName: string;
   salaryGradeStage: SalaryGradeStage;
@@ -38,6 +39,7 @@ type SubstituteClassLessonPanelProps = {
   setBillingHours: (value: string) => void;
   setCampusId: (value: string) => void;
   setSubject: (value: string) => void;
+  setTitle: (value: string) => void;
   setExternalClassName: (value: string) => void;
   setOriginalTeacherName: (value: string) => void;
   setSalaryGradeStage: (value: SalaryGradeStage) => void;
@@ -57,6 +59,7 @@ export function SubstituteClassLessonPanel({
   billingHours,
   campusId,
   subject,
+  title,
   externalClassName,
   originalTeacherName,
   salaryGradeStage,
@@ -76,6 +79,7 @@ export function SubstituteClassLessonPanel({
   setBillingHours,
   setCampusId,
   setSubject,
+  setTitle,
   setExternalClassName,
   setOriginalTeacherName,
   setSalaryGradeStage,
@@ -145,6 +149,10 @@ export function SubstituteClassLessonPanel({
                   <option key={stage} value={stage}>{salaryGradeStageLabels[stage]}</option>
                 ))}
               </Select>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium">课程标题</label>
+              <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：初三数学代班补课 7月6日" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">外部班级</label>

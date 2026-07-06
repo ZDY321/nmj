@@ -9,6 +9,7 @@ import { PayrollScheduleExportGuide } from "@/frontend/components/PayrollSchedul
 import { ScheduleImportCourseMappingPanel } from "@/frontend/components/ScheduleImportCourseMappingPanel";
 import { ScheduleImportPanel } from "@/frontend/components/ScheduleImportPanel";
 import type { CourseType, Lesson, ScheduleImportVaultState, TeacherVault } from "@/shared/types";
+import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { todayIso } from "@/frontend/lib/calculations";
 import { campusName, formatPrivateMoney } from "@/frontend/lib/helpers";
 import { usePayrollReviewData } from "@/frontend/hooks/usePayrollReviewData";
@@ -53,6 +54,7 @@ export function PayrollReviewView({
   const [detailCourseFilter, setDetailCourseFilter] = useState("all");
   const [detailStudentFilter, setDetailStudentFilter] = useState("");
   const [detailStatusFilter, setDetailStatusFilter] = useState<LessonStatusFilter>("all");
+  const [detailMakeupFilter, setDetailMakeupFilter] = useState<MakeupLessonFilter>("all");
   const [payrollPanel, setPayrollPanel] = useState<PayrollPanel>(() => panelFocus?.panel ?? "review");
   const [scheduleImportArchive, setScheduleImportArchive] = useState<ScheduleImportVaultState | null>(vault.scheduleImport ?? null);
   const [scheduleImportArchiveLoading, setScheduleImportArchiveLoading] = useState(false);
@@ -97,7 +99,8 @@ export function PayrollReviewView({
     detailEndDateFilter,
     detailCourseFilter,
     detailStudentFilter,
-    detailStatusFilter
+    detailStatusFilter,
+    detailMakeupFilter
   });
 
   useEffect(() => {
@@ -320,11 +323,13 @@ export function PayrollReviewView({
         courseFilter={detailCourseFilter}
         studentFilter={detailStudentFilter}
         statusFilter={detailStatusFilter}
+        makeupFilter={detailMakeupFilter}
         onStartDateChange={setDetailStartDateFilter}
         onEndDateChange={setDetailEndDateFilter}
         onCourseFilterChange={setDetailCourseFilter}
         onStudentFilterChange={setDetailStudentFilter}
         onStatusFilterChange={setDetailStatusFilter}
+        onMakeupFilterChange={setDetailMakeupFilter}
         onOpenLesson={onOpenReviewLessonInCalendar}
       />
 

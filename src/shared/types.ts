@@ -279,6 +279,7 @@ export type FeeSnapshot = {
 };
 
 export type SubstituteClassInfo = {
+  title?: string;
   externalClassName?: string;
   originalTeacherName?: string;
   subject?: string;

@@ -359,6 +359,8 @@ export function courseSubject(vault: TeacherVault, courseId: string): string {
 
 export function lessonDisplayName(vault: TeacherVault, lesson: Pick<Lesson, "courseGroupId"> & Partial<Pick<Lesson, "substituteClass" | "lessonSource">>): string {
   if (isSubstituteClassLesson(lesson)) {
+    const title = lesson.substituteClass?.title?.trim();
+    if (title) return title;
     const className = lesson.substituteClass?.externalClassName?.trim();
     return className ? `代班补课 · ${className}` : "代班补课";
   }
@@ -576,6 +578,7 @@ export function createSubstituteClassLesson(
     endTime: string;
     campusId?: string;
     subject?: string;
+    title?: string;
     externalClassName?: string;
     originalTeacherName?: string;
     salaryGradeStage?: SalaryGradeStage;
@@ -598,6 +601,7 @@ export function createSubstituteClassLesson(
     status: values.status ?? "completed",
     lessonSource: "substitute_class",
     substituteClass: {
+      title: values.title?.trim() || undefined,
       externalClassName: values.externalClassName?.trim() || undefined,
       originalTeacherName: values.originalTeacherName?.trim() || undefined,
       subject: values.subject?.trim() || undefined,

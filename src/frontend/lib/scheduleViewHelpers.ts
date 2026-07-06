@@ -16,6 +16,7 @@ import {
   findStudent,
   formatDateIso,
   isMakeupAttendanceStatus,
+  isMakeupNeededAttendanceEntry,
   lessonAttendanceNoteText,
   lessonDisplayName,
   lessonDisplaySubject,
@@ -28,7 +29,7 @@ import {
   weekdayLabels,
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
-import type { CourseTypeFilter, LessonScope } from "@/frontend/lib/scheduleViewTypes";
+import type { CourseTypeFilter, LessonScope, MakeupLessonFilter, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
 
 export { arrayValue, isPlainRecord, textValue } from "@/frontend/lib/typeGuards";
 export { timesOverlap } from "@/frontend/lib/time";
@@ -246,6 +247,27 @@ export function isStudentStatsTimeRangeValid(startTime: string, endTime: string)
   return !startTime || !endTime || timeToMinutes(startTime) <= timeToMinutes(endTime);
 }
 
+export function isRegularMakeupRelatedLesson(lesson: Lesson): boolean {
+  if (isSubstituteClassLesson(lesson)) return false;
+  return (
+    makeupNeededStudentIds(lesson).length > 0 ||
+    (lesson.status === "makeup_pending" && lesson.attendance.length === 0) ||
+    lesson.status === "makeup_completed" ||
+    Boolean(lesson.linkedOriginalLessonId) ||
+    Boolean(lesson.makeupOriginalDate) ||
+    lesson.attendance.some((entry) => isMakeupNeededAttendanceEntry(entry) || entry.status === "makeup_completed")
+  );
+}
+
+export function matchesMakeupLessonFilter(lesson: Lesson, filter: MakeupLessonFilter | StudentStatsMakeupFilter): boolean {
+  if (filter === "all") return true;
+  const isRegularMakeup = isRegularMakeupRelatedLesson(lesson);
+  const isSubstitute = isSubstituteClassLesson(lesson);
+  if (filter === "regular_makeup") return isRegularMakeup;
+  if (filter === "substitute_class") return isSubstitute;
+  return isRegularMakeup || isSubstitute;
+}
+
 export function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {
   const course = getCourse(vault, lesson.courseGroupId);
   const studentFields = lessonStudentIds(lesson).flatMap((studentId) => {
@@ -262,6 +284,7 @@ export function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {
     lessonDisplaySubject(vault, lesson),
     course?.name ?? "",
     course?.subject ?? "",
+    lesson.substituteClass?.title ?? "",
     lesson.substituteClass?.externalClassName ?? "",
     lesson.substituteClass?.originalTeacherName ?? "",
     lesson.substituteClass?.subject ?? "",
@@ -512,6 +535,7 @@ export type CalendarLessonFilters = {
   gradeFilter: string;
   subjectFilter: string;
   studentFilter: string;
+  makeupFilter: MakeupLessonFilter;
 };
 
 export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson, filters: CalendarLessonFilters): boolean {
@@ -524,6 +548,7 @@ export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson
     lessonDisplaySubject(vault, lesson),
     campusName(vault, campusId),
     studentNames(vault, studentIds),
+    lesson.substituteClass?.title ?? "",
     lesson.substituteClass?.externalClassName ?? "",
     lesson.substituteClass?.originalTeacherName ?? "",
     lesson.substituteClass?.studentNamesText ?? "",
@@ -542,7 +567,8 @@ export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson
   const matchesSubject = filters.subjectFilter === "all" || subject === filters.subjectFilter;
   const searchTerms = filters.studentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const matchesStudent = searchTerms.length === 0 || searchTerms.every((term) => searchable.includes(term));
-  return matchesCampus && matchesGrade && matchesSubject && matchesStudent;
+  const matchesMakeup = matchesMakeupLessonFilter(lesson, filters.makeupFilter);
+  return matchesCampus && matchesGrade && matchesSubject && matchesStudent && matchesMakeup;
 }
 
 export function calendarLessonsForDateWithFilters(vault: TeacherVault, date: string, filters: CalendarLessonFilters): Lesson[] {
@@ -583,12 +609,7 @@ export function filterScheduleRecordLessons(vault: TeacherVault, filters: Schedu
       const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;
       const matchesType = filters.courseTypeFilter === "all" || lesson.type === filters.courseTypeFilter;
       const matchesStudent = searchTerms.length === 0 || searchTerms.every((term) => searchText.includes(term));
-      const matchesMakeup =
-        !filters.showOnlyMakeup ||
-        makeupNeededStudentIds(lesson).length > 0 ||
-        (lesson.status === "makeup_pending" && lesson.attendance.length === 0) ||
-        Boolean(lesson.linkedOriginalLessonId) ||
-        isSubstituteClassLesson(lesson);
+      const matchesMakeup = !filters.showOnlyMakeup || matchesMakeupLessonFilter(lesson, "any_makeup");
       return matchesScope && matchesCampus && matchesType && matchesStudent && matchesMakeup;
     })
     .sort(sortLessons)
@@ -606,6 +627,7 @@ export type StudentStatsLessonFilters = {
   startTime: string;
   statusFilter: "all" | Lesson["status"];
   subjectFilter: string;
+  makeupFilter: StudentStatsMakeupFilter;
 };
 
 export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentStatsLessonFilters): Lesson[] {
@@ -626,6 +648,7 @@ export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentS
       const matchesSubject = filters.subjectFilter === "all" || course?.subject === filters.subjectFilter;
       const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;
       const matchesStatus = filters.statusFilter === "all" || lesson.status === filters.statusFilter;
+      const matchesMakeup = matchesMakeupLessonFilter(lesson, filters.makeupFilter);
       const matchesDate =
         (!filters.dateStart || lesson.date >= filters.dateStart) &&
         (!filters.dateEnd || lesson.date <= filters.dateEnd) &&
@@ -634,7 +657,7 @@ export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentS
         (!filters.startTime || timeToMinutes(lesson.startTime) >= timeToMinutes(filters.startTime)) &&
         (!filters.endTime || timeToMinutes(lesson.endTime) <= timeToMinutes(filters.endTime)) &&
         (!filters.startTime || !filters.endTime || timeToMinutes(filters.startTime) <= timeToMinutes(filters.endTime));
-      return matchesStudent && matchesCourse && matchesType && matchesSubject && matchesCampus && matchesStatus && matchesDate && matchesTime;
+      return matchesStudent && matchesCourse && matchesType && matchesSubject && matchesCampus && matchesStatus && matchesMakeup && matchesDate && matchesTime;
     })
     .sort(sortLessons);
 }

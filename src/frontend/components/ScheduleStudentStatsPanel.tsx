@@ -21,7 +21,7 @@ import {
   isStudentStatsTimeRangeValid
 } from "@/frontend/lib/scheduleViewHelpers";
 import type { buildStudentStatsGroupedLessonRows, buildStudentStatsRows } from "@/frontend/lib/scheduleViewHelpers";
-import type { CourseTypeFilter } from "@/frontend/lib/scheduleViewTypes";
+import type { CourseTypeFilter, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
 
 type StudentStatsRows = ReturnType<typeof buildStudentStatsRows>;
 type StudentStatsGroupedLessonRows = ReturnType<typeof buildStudentStatsGroupedLessonRows>;
@@ -48,6 +48,7 @@ type ScheduleStudentStatsPanelProps = {
   setEndTime: (value: string) => void;
   setStatusFilter: (value: StudentStatsStatusFilter) => void;
   setSubjectFilter: (value: string) => void;
+  setMakeupFilter: (value: StudentStatsMakeupFilter) => void;
   studentLessonCount: number;
   subjectOptions: string[];
   totalFee: number;
@@ -62,6 +63,7 @@ type ScheduleStudentStatsPanelProps = {
     startTime: string;
     statusFilter: StudentStatsStatusFilter;
     subjectFilter: string;
+    makeupFilter: StudentStatsMakeupFilter;
   };
   vault: TeacherVault;
 };
@@ -87,6 +89,7 @@ export function ScheduleStudentStatsPanel({
   setEndTime,
   setStatusFilter,
   setSubjectFilter,
+  setMakeupFilter,
   studentLessonCount,
   subjectOptions,
   totalFee,
@@ -104,7 +107,7 @@ export function ScheduleStudentStatsPanel({
           <CardDescription>学生、课程、科目、校区、日期、时间和状态会同时生效，筛选结果为合并条件后的交集。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5 xl:grid-cols-6">
             <label className="relative block">
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
               <Input
@@ -180,6 +183,13 @@ export function ScheduleStudentStatsPanel({
                 {Object.entries(lessonStatusLabels).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
                 ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">补课筛选</label>
+              <Select value={values.makeupFilter} onChange={(event) => setMakeupFilter(event.target.value as StudentStatsMakeupFilter)}>
+                <option value="all">全部课程</option>
+                <option value="regular_makeup">仅正式补课</option>
               </Select>
             </div>
           </div>

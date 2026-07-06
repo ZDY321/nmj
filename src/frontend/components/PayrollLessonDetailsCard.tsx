@@ -29,6 +29,7 @@ import {
   studentNames
 } from "@/frontend/lib/helpers";
 import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
+import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { isSubstituteClassLesson } from "@/frontend/lib/calculations";
 
 type LessonStatusFilter = "all" | Lesson["status"];
@@ -45,11 +46,13 @@ export function PayrollLessonDetailsCard({
   courseFilter,
   studentFilter,
   statusFilter,
+  makeupFilter,
   onStartDateChange,
   onEndDateChange,
   onCourseFilterChange,
   onStudentFilterChange,
   onStatusFilterChange,
+  onMakeupFilterChange,
   onOpenLesson
 }: {
   vault: TeacherVault;
@@ -63,11 +66,13 @@ export function PayrollLessonDetailsCard({
   courseFilter: string;
   studentFilter: string;
   statusFilter: LessonStatusFilter;
+  makeupFilter: MakeupLessonFilter;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
   onCourseFilterChange: (value: string) => void;
   onStudentFilterChange: (value: string) => void;
   onStatusFilterChange: (value: LessonStatusFilter) => void;
+  onMakeupFilterChange: (value: MakeupLessonFilter) => void;
   onOpenLesson?: (lesson: Lesson) => void;
 }) {
   const [sortField, setSortField] = useState<LessonDetailSortField>("date");
@@ -92,7 +97,7 @@ export function PayrollLessonDetailsCard({
         <CardDescription>这里展示课程记录与课时费明细，可在当前月份、校区、类型、状态和年级基础上继续筛选。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-7">
+        <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-8">
           <div className="space-y-2">
             <label className="text-sm font-medium">开始日期</label>
             <Input type="date" value={startDateFilter} onChange={(event) => onStartDateChange(event.target.value)} />
@@ -121,6 +126,15 @@ export function PayrollLessonDetailsCard({
               {Object.entries(lessonStatusLabels).map(([status, label]) => (
                 <option key={status} value={status}>{label}</option>
               ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">补课筛选</label>
+            <Select value={makeupFilter} onChange={(event) => onMakeupFilterChange(event.target.value as MakeupLessonFilter)}>
+              <option value="all">全部课程</option>
+              <option value="any_makeup">全部补课</option>
+              <option value="regular_makeup">正式补课</option>
+              <option value="substitute_class">代班补课</option>
             </Select>
           </div>
           <div className="space-y-2">

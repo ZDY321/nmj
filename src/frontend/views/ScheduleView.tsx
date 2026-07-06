@@ -85,7 +85,7 @@ import {
   timesOverlap
 } from "@/frontend/lib/scheduleViewHelpers";
 import { checklistCompletionAppliesToSource } from "@/frontend/lib/progressChecklist";
-import type { CalendarFocus, CourseTypeFilter, ExternalLessonReturnTarget, InternalLessonReturnTarget, LessonReturnTarget, LessonScope, SchedulePanel } from "@/frontend/lib/scheduleViewTypes";
+import type { CalendarFocus, CourseTypeFilter, ExternalLessonReturnTarget, InternalLessonReturnTarget, LessonReturnTarget, LessonScope, MakeupLessonFilter, SchedulePanel, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
 
 function dateWithWeekday(date: string): string {
   return `${date} · ${weekdayLabels[weekdayOfDateIso(date)]}`;
@@ -374,6 +374,7 @@ export function ScheduleView({
   const [calendarViewGradeFilter, setCalendarViewGradeFilter] = useState("all");
   const [calendarViewSubjectFilter, setCalendarViewSubjectFilter] = useState("all");
   const [calendarViewStudentFilter, setCalendarViewStudentFilter] = useState("");
+  const [calendarViewMakeupFilter, setCalendarViewMakeupFilter] = useState<MakeupLessonFilter>("all");
   const [syncSourceDate, setSyncSourceDate] = useState(addDays(initialFocusedDate, -7));
   const [syncTargetDate, setSyncTargetDate] = useState(initialFocusedDate);
   const [syncRangeSourceStart, setSyncRangeSourceStart] = useState(addDays(initialWeekDates[0] ?? initialFocusedDate, -7));
@@ -398,6 +399,7 @@ export function ScheduleView({
   const [studentStatsSubjectFilter, setStudentStatsSubjectFilter] = useState("all");
   const [studentStatsCampusFilter, setStudentStatsCampusFilter] = useState("all");
   const [studentStatsStatusFilter, setStudentStatsStatusFilter] = useState<"all" | Lesson["status"]>("all");
+  const [studentStatsMakeupFilter, setStudentStatsMakeupFilter] = useState<StudentStatsMakeupFilter>("all");
   const [studentStatsDateStart, setStudentStatsDateStart] = useState(todayIso().slice(0, 7) + "-01");
   const [studentStatsDateEnd, setStudentStatsDateEnd] = useState(todayIso());
   const [studentStatsStartTime, setStudentStatsStartTime] = useState("");
@@ -434,6 +436,7 @@ export function ScheduleView({
   const [substituteBillingHours, setSubstituteBillingHours] = useState("");
   const [substituteCampusId, setSubstituteCampusId] = useState(vault.profile.homeCampusId ?? vault.campuses[0]?.id ?? "");
   const [substituteSubject, setSubstituteSubject] = useState("");
+  const [substituteTitle, setSubstituteTitle] = useState("");
   const [substituteExternalClassName, setSubstituteExternalClassName] = useState("");
   const [substituteOriginalTeacherName, setSubstituteOriginalTeacherName] = useState("");
   const [substituteSalaryGradeStage, setSubstituteSalaryGradeStage] = useState<SalaryGradeStage>("junior_3");
@@ -673,7 +676,8 @@ export function ScheduleView({
     campusFilter: calendarViewCampusFilter,
     gradeFilter: calendarViewGradeFilter,
     subjectFilter: calendarViewSubjectFilter,
-    studentFilter: calendarViewStudentFilter
+    studentFilter: calendarViewStudentFilter,
+    makeupFilter: calendarViewMakeupFilter
   };
   const matchesCalendarLessonFilter = (lesson: Lesson) => matchesCalendarLessonFilters(vault, lesson, calendarLessonFilters);
   const calendarLessonsForDate = (date: string) => calendarLessonsForDateWithFilters(vault, date, calendarLessonFilters);
@@ -717,7 +721,8 @@ export function ScheduleView({
     normalizedNameFilter: normalizedStudentStatsNameFilter,
     startTime: studentStatsStartTime,
     statusFilter: studentStatsStatusFilter,
-    subjectFilter: studentStatsSubjectFilter
+    subjectFilter: studentStatsSubjectFilter,
+    makeupFilter: studentStatsMakeupFilter
   });
   const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
   const studentStatsGroupedLessonRows = buildStudentStatsGroupedLessonRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
@@ -998,6 +1003,7 @@ export function ScheduleView({
     status: substituteStatus,
     lessonSource: "substitute_class",
     substituteClass: {
+      title: substituteTitle.trim() || undefined,
       externalClassName: substituteExternalClassName.trim() || undefined,
       originalTeacherName: substituteOriginalTeacherName.trim() || undefined,
       subject: substituteSubject.trim() || undefined,
@@ -1330,6 +1336,7 @@ export function ScheduleView({
       endTime: substituteEndTime,
       campusId: substituteCampusId || undefined,
       subject: substituteSubject,
+      title: substituteTitle,
       externalClassName: substituteExternalClassName,
       originalTeacherName: substituteOriginalTeacherName,
       salaryGradeStage: substituteSalaryGradeStage,
@@ -1346,6 +1353,7 @@ export function ScheduleView({
     setLessonDay(substituteDate);
     setScheduleError("");
     showScheduleNotice(`已添加 ${dateWithWeekday(substituteDate)} ${substituteStartTime}-${substituteEndTime} 的代班补课记录。`);
+    setSubstituteTitle("");
     setSubstituteExternalClassName("");
     setSubstituteOriginalTeacherName("");
     setSubstitutePresentStudentCount("");
@@ -2910,6 +2918,7 @@ export function ScheduleView({
           billingHours={substituteBillingHours}
           campusId={substituteCampusId}
           subject={substituteSubject}
+          title={substituteTitle}
           externalClassName={substituteExternalClassName}
           originalTeacherName={substituteOriginalTeacherName}
           salaryGradeStage={substituteSalaryGradeStage}
@@ -2929,6 +2938,7 @@ export function ScheduleView({
           setBillingHours={setSubstituteBillingHours}
           setCampusId={setSubstituteCampusId}
           setSubject={setSubstituteSubject}
+          setTitle={setSubstituteTitle}
           setExternalClassName={setSubstituteExternalClassName}
           setOriginalTeacherName={setSubstituteOriginalTeacherName}
           setSalaryGradeStage={setSubstituteSalaryGradeStage}
@@ -2955,7 +2965,7 @@ export function ScheduleView({
           calendarCourseOptions={calendarCourseOptions}
           calendarCourseSearch={calendarCourseSearch}
           calendarEndTime={calendarEndTime}
-          calendarFiltersClearDisabled={calendarViewCampusFilter === "all" && calendarViewGradeFilter === "all" && calendarViewSubjectFilter === "all" && !calendarViewStudentFilter}
+          calendarFiltersClearDisabled={calendarViewCampusFilter === "all" && calendarViewGradeFilter === "all" && calendarViewSubjectFilter === "all" && calendarViewMakeupFilter === "all" && !calendarViewStudentFilter}
           calendarGridProps={{
             amountsVisible,
             calendarCourseGroupId,
@@ -2987,6 +2997,7 @@ export function ScheduleView({
           calendarViewGradeOptions={calendarViewGradeOptions}
           calendarViewStudentFilter={calendarViewStudentFilter}
           calendarViewSubjectFilter={calendarViewSubjectFilter}
+          calendarViewMakeupFilter={calendarViewMakeupFilter}
           calendarViewSubjectOptions={calendarViewSubjectOptions}
           isCalendarTimeValid={isCalendarTimeValid}
           onCalendarModeChange={setCalendarMode}
@@ -2994,6 +3005,7 @@ export function ScheduleView({
             setCalendarViewCampusFilter("all");
             setCalendarViewGradeFilter("all");
             setCalendarViewSubjectFilter("all");
+            setCalendarViewMakeupFilter("all");
             setCalendarViewStudentFilter("");
           }}
           onNextMonth={() => setCalendarMonth((month) => monthShift(month, 1))}
@@ -3012,6 +3024,7 @@ export function ScheduleView({
           setCalendarViewGradeFilter={setCalendarViewGradeFilter}
           setCalendarViewStudentFilter={setCalendarViewStudentFilter}
           setCalendarViewSubjectFilter={setCalendarViewSubjectFilter}
+          setCalendarViewMakeupFilter={setCalendarViewMakeupFilter}
           syncPanelProps={{
             isOpen: syncPanelOpen,
             onClearSyncLessons: () => setAllSyncLessons(false),
@@ -3118,6 +3131,7 @@ export function ScheduleView({
           setStartTime={setStudentStatsStartTime}
           setStatusFilter={setStudentStatsStatusFilter}
           setSubjectFilter={setStudentStatsSubjectFilter}
+          setMakeupFilter={setStudentStatsMakeupFilter}
           studentLessonCount={studentStatsStudentLessonCount}
           subjectOptions={studentStatsSubjects}
           totalFee={studentStatsTotalFee}
@@ -3131,7 +3145,8 @@ export function ScheduleView({
             nameFilter: studentStatsNameFilter,
             startTime: studentStatsStartTime,
             statusFilter: studentStatsStatusFilter,
-            subjectFilter: studentStatsSubjectFilter
+            subjectFilter: studentStatsSubjectFilter,
+            makeupFilter: studentStatsMakeupFilter
           }}
           vault={vault}
         />

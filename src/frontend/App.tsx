@@ -104,6 +104,7 @@ type CalendarOverviewFocusState = {
   weekGradeFilter: string;
   weekSubjectFilter: string;
   weekStudentFilter: string;
+  weekMakeupFilter: "all" | "any_makeup" | "regular_makeup" | "substitute_class";
 };
 
 type PayrollPanelFocus = "review" | "reconcile" | "mapping" | "guide";
