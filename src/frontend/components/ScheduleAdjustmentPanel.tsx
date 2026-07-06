@@ -520,6 +520,7 @@ export function ScheduleAdjustmentPanel({ campusOptions, onApplyPreview, vault }
               </div>
               <Button
                 type="button"
+                variant="outline"
                 onClick={() => onApplyPreview(previewItems, conflictPolicy)}
                 disabled={applyCount === 0}
                 className="border-[#1557c2] bg-[#1557c2] text-white shadow-[0_12px_22px_rgba(21,87,194,0.18)] hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white"

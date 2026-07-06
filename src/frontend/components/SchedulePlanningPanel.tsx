@@ -503,9 +503,6 @@ export function SchedulePlanningPanel({
                     </div>
                   );
                 })}
-                <Button type="button" variant="outline" size="sm" onClick={onAddBatchTimeGroup} className="w-full border-dashed">
-                  <Plus size={14} /> 添加时间组
-                </Button>
                 {batchPerDayUnassignedWeekdays.length > 0 && (
                   <div className="rounded-[8px] border border-[#fca5a5] bg-[#fff1f2] px-3 py-2 text-xs font-bold text-[#b91c1c]">
                     以下星期未分配到任何时间组: {batchPerDayUnassignedWeekdays.map((d) => weekdayLabels[d]).join("、")}
@@ -662,6 +659,12 @@ export function SchedulePlanningPanel({
               ? `分时共 ${batchPerDayTotalCount} 节${batchPerDayConflictCount > 0 ? `，其中 ${batchPerDayConflictCount} 节会因时间冲突跳过` : ""}。`
               : `当前条件共 ${batchCandidateCount} 节${batchConflictCount > 0 ? `，其中 ${batchConflictCount} 节会因时间冲突跳过` : ""}。`}
           </div>
+
+          {batchPerDayMode && (
+            <Button type="button" variant="outline" size="sm" onClick={onAddBatchTimeGroup} className="w-full border-dashed bg-white text-[#1557c2] hover:border-[#93c5fd] hover:bg-[#eaf2ff] hover:text-[#0f3f8f]">
+              <Plus size={14} /> 添加时间组
+            </Button>
+          )}
 
           <Button
             type="button"

@@ -2839,17 +2839,18 @@ export function ScheduleView({
           onApplyWeeklyPatternSlot={applyWeeklyPatternSlot}
           onBatchGenerate={() => {
             if (batchPerDayMode) {
-              if (batchPerDayPreview.conflictCount > 0) {
-                const conflictDescription = describeBatchPerDayConflicts(batchPerDayPreview);
-                confirm({
-                  title: batchPerDayPreview.existingConflictCount > 0 ? "按日分时排课中存在时间冲突" : "按日分时时间组有重叠",
-                  description: `系统会跳过 ${batchPerDayPreview.conflictCount} 节时间段${conflictDescription ? `（${conflictDescription}）` : ""}，只生成没有冲突的课程。`,
-                  confirmLabel: "跳过冲突并生成",
-                  onConfirm: generateBatchPerDayLessons
-                });
-                return;
-              }
-              generateBatchPerDayLessons();
+              const conflictDescription = describeBatchPerDayConflicts(batchPerDayPreview);
+              const conflictText = batchPerDayPreview.conflictCount > 0
+                ? `系统会跳过 ${batchPerDayPreview.conflictCount} 节时间段${conflictDescription ? `（${conflictDescription}）` : ""}，只生成没有冲突的课程。`
+                : `系统将按当前 ${batchTimeGroups.length} 个时间组生成 ${batchPerDayPreview.totalCount} 节待上课课节。`;
+              confirm({
+                title: batchPerDayPreview.conflictCount > 0
+                  ? batchPerDayPreview.existingConflictCount > 0 ? "按日分时排课中存在时间冲突" : "按日分时时间组有重叠"
+                  : "确认按日分时生成课时？",
+                description: conflictText,
+                confirmLabel: batchPerDayPreview.conflictCount > 0 ? "跳过冲突并生成" : "确认生成",
+                onConfirm: generateBatchPerDayLessons
+              });
               return;
             }
             if (!isBatchRepeatWeeksValid) {
