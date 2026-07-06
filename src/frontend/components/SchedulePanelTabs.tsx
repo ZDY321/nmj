@@ -15,6 +15,7 @@ export function SchedulePanelTabs({ activePanel, deletedLessonCount, onChange, a
   const allItems: Array<{ key: SchedulePanel; label: string }> = [
     { key: "ai", label: "AI 排课助手" },
     { key: "schedule", label: "排课" },
+    { key: "substitute", label: "代班补课" },
     { key: "adjust", label: "课表调整" },
     { key: "calendar", label: "日历查看" },
     { key: "records", label: "课程记录" },
