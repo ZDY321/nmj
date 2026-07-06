@@ -274,7 +274,7 @@ export function PayrollReviewView({
               ? `归入 ${campusName(vault, effectiveObligationCampusId)}`
               : currentCampusObligation.mode === "manual"
               ? "手动填写扣除"
-              : `课程已抵 ${obligationCourseDeductedHours.toFixed(1)} 小时 · 补扣缺口 ${currentCampusObligation.fallbackHours.toFixed(1)} 小时`,
+              : `最多扣 ${currentCampusObligation.requiredHours.toFixed(1)} 小时 · 已扣 ${obligationCourseDeductedHours.toFixed(1)} 小时 · 未抵不补扣 ${currentCampusObligation.missingHours.toFixed(1)} 小时`,
             icon: SlidersHorizontal,
             danger: true
           },

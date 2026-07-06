@@ -3,6 +3,7 @@ import {
   buildFeeSnapshot,
   buildSubstituteClassFeeSnapshot,
   completedAmount,
+  obligationSummary,
   payrollExcludedSplitMergeLessonIds,
   salaryBreakdown
 } from "@/frontend/lib/calculations";
@@ -304,5 +305,61 @@ describe("salary calculations", () => {
     expect(breakdown.oneOnOne).toBe(120);
     expect(breakdown.obligationDeduction).toBe(120);
     expect(breakdown.total).toBe(0);
+  });
+
+  it("does not add fallback obligation deductions when completed hours are insufficient", () => {
+    const baseVault = makeVault({
+      profile: {
+        displayName: "Teacher",
+        baseSalary: 0,
+        currency: "CNY",
+        homeCampusId: campus.id,
+        monthlyObligationHours: 10,
+        obligationHourlyDeduction: 50
+      }
+    });
+    const lesson = lessonWithSnapshot(baseVault, oneOnOneCourse, {
+      id: "lesson_obligation_short",
+      expectedStudentIds: ["student_1"],
+      attendance: [attended("student_1")]
+    });
+    const vault = makeVault({ ...baseVault, lessons: [lesson] });
+    const obligation = obligationSummary(vault, "2026-06");
+    const breakdown = salaryBreakdown(vault, "2026-06");
+
+    expect(obligation.requiredHours).toBe(10);
+    expect(obligation.deductedHours).toBe(2);
+    expect(obligation.missingHours).toBe(8);
+    expect(obligation.fallbackAmount).toBe(0);
+    expect(breakdown.obligationDeduction).toBe(120);
+  });
+
+  it("caps automatic obligation deductions at ten hours per month", () => {
+    const baseVault = makeVault({
+      profile: {
+        displayName: "Teacher",
+        baseSalary: 0,
+        currency: "CNY",
+        homeCampusId: campus.id,
+        monthlyObligationHours: 12,
+        obligationHourlyDeduction: 50
+      }
+    });
+    const lessons = Array.from({ length: 6 }, (_, index) => lessonWithSnapshot(baseVault, oneOnOneCourse, {
+      id: `lesson_obligation_cap_${index + 1}`,
+      date: `2026-06-${String(index + 1).padStart(2, "0")}`,
+      expectedStudentIds: ["student_1"],
+      attendance: [attended("student_1")]
+    }));
+    const vault = makeVault({ ...baseVault, lessons });
+    const obligation = obligationSummary(vault, "2026-06");
+    const breakdown = salaryBreakdown(vault, "2026-06");
+
+    expect(obligation.requiredHours).toBe(10);
+    expect(obligation.deductedHours).toBe(10);
+    expect(obligation.missingHours).toBe(0);
+    expect(breakdown.oneOnOne).toBe(720);
+    expect(breakdown.obligationDeduction).toBe(600);
+    expect(breakdown.total).toBe(120);
   });
 });

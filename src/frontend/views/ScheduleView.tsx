@@ -16,7 +16,7 @@ import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
 import { SubstituteClassLessonPanel } from "@/frontend/components/SubstituteClassLessonPanel";
 import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, ProgressChecklistCompletion, ProgressChecklistTemplate, SalaryGradeStage, StudentProgressRecord, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, substituteClassPresentCount, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -413,6 +413,7 @@ export function ScheduleView({
   const [lessonWeek, setLessonWeek] = useState(isoWeekValue(todayIso()));
   const [syncRecordsWithCalendarDate, setSyncRecordsWithCalendarDate] = useState(true);
   const [showOnlyMakeup, setShowOnlyMakeup] = useState(false);
+  const [makeupManagementTab, setMakeupManagementTab] = useState<"regular" | "substitute">("regular");
   const [schedulePanel, setSchedulePanel] = useState<SchedulePanel>(initialTargetPanel);
   const [customPresetStart, setCustomPresetStart] = useState("08:00");
   const [customPresetEnd, setCustomPresetEnd] = useState("10:00");
@@ -726,7 +727,15 @@ export function ScheduleView({
   });
   const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
   const studentStatsGroupedLessonRows = buildStudentStatsGroupedLessonRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
-  const studentStatsStudentLessonCount = studentStatsLessons.reduce((sum, lesson) => sum + filteredStudentIdsForStats(vault, lesson, normalizedStudentStatsNameFilter).length, 0);
+  const studentStatsExternalStudentCount = studentStatsLessons.reduce(
+    (sum, lesson) => sum + (isSubstituteClassLesson(lesson) ? substituteClassPresentCount(lesson) : 0),
+    0
+  );
+  const studentStatsStudentLessonCount = studentStatsLessons.reduce(
+    (sum, lesson) => sum + (isSubstituteClassLesson(lesson) ? substituteClassPresentCount(lesson) : filteredStudentIdsForStats(vault, lesson, normalizedStudentStatsNameFilter).length),
+    0
+  );
+  const studentStatsInvolvedStudentCount = studentStatsRows.length + studentStatsExternalStudentCount;
   const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const deletedLessons = sortDeletedLessons(vault.deletedLessons ?? []);
@@ -1989,7 +1998,12 @@ export function ScheduleView({
   }
 
   function switchSchedulePanel(nextPanel: SchedulePanel) {
-    setSchedulePanel(nextPanel);
+    if (nextPanel === "substitute") {
+      setMakeupManagementTab("substitute");
+      setSchedulePanel("makeup");
+    } else {
+      setSchedulePanel(nextPanel);
+    }
     if (nextPanel !== "records") {
       setLessonReturnTarget(null);
     }
@@ -3083,30 +3097,90 @@ export function ScheduleView({
       )}
 
       {schedulePanel === "makeup" && (
-        <ScheduleCalendarFollowupPanels
-          amountsVisible={amountsVisible}
-          completedCount={selectedCalendarCompletedCount}
-          dateWithWeekday={dateWithWeekday}
-          makeupEntries={makeupEntries}
-          makeupMarkerForLesson={makeupMarkerForLesson}
-          makeupOriginalDateFilter={makeupOriginalDateFilter}
-          onCompleteScheduledMakeups={completeScheduledMakeupLessons}
-          onDeleteLesson={askDeleteLesson}
-          onMakeupOriginalDateFilterChange={setMakeupOriginalDateFilter}
-          onMarkOriginalStudentsMadeUp={markOriginalStudentsMadeUp}
-          onOpenLesson={openLessonInRecords}
-          onUpdateOriginalAttendance={updateMakeupManagementAttendance}
-          onUpdateOriginalMakeupExempt={updateMakeupManagementExempt}
-          optionalDateWithWeekday={optionalDateWithWeekday}
-          pendingCount={selectedCalendarPendingCount}
-          cancelledCount={selectedCalendarCancelledCount}
-          scheduledMakeupEntries={scheduledMakeupEntries}
-          selectedCalendarDate={selectedCalendarDate}
-          selectedCalendarLessons={selectedCalendarLessons}
-          showDailyDetails={false}
-          totalAmount={selectedCalendarAmount}
-          vault={vault}
-        />
+        <div className="space-y-4">
+          <div className="inline-grid grid-cols-2 rounded-[14px] border border-[#dbe4ef] bg-white p-1 shadow-[0_8px_22px_rgba(15,35,66,0.06)]">
+            <button
+              type="button"
+              onClick={() => setMakeupManagementTab("regular")}
+              className={`rounded-[10px] px-4 py-2 text-sm font-extrabold transition-colors ${makeupManagementTab === "regular" ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"}`}
+            >
+              正式补课
+            </button>
+            <button
+              type="button"
+              onClick={() => setMakeupManagementTab("substitute")}
+              className={`rounded-[10px] px-4 py-2 text-sm font-extrabold transition-colors ${makeupManagementTab === "substitute" ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"}`}
+            >
+              代班补课
+            </button>
+          </div>
+          {makeupManagementTab === "regular" ? (
+            <ScheduleCalendarFollowupPanels
+              amountsVisible={amountsVisible}
+              completedCount={selectedCalendarCompletedCount}
+              dateWithWeekday={dateWithWeekday}
+              makeupEntries={makeupEntries}
+              makeupMarkerForLesson={makeupMarkerForLesson}
+              makeupOriginalDateFilter={makeupOriginalDateFilter}
+              onCompleteScheduledMakeups={completeScheduledMakeupLessons}
+              onDeleteLesson={askDeleteLesson}
+              onMakeupOriginalDateFilterChange={setMakeupOriginalDateFilter}
+              onMarkOriginalStudentsMadeUp={markOriginalStudentsMadeUp}
+              onOpenLesson={openLessonInRecords}
+              onUpdateOriginalAttendance={updateMakeupManagementAttendance}
+              onUpdateOriginalMakeupExempt={updateMakeupManagementExempt}
+              optionalDateWithWeekday={optionalDateWithWeekday}
+              pendingCount={selectedCalendarPendingCount}
+              cancelledCount={selectedCalendarCancelledCount}
+              scheduledMakeupEntries={scheduledMakeupEntries}
+              selectedCalendarDate={selectedCalendarDate}
+              selectedCalendarLessons={selectedCalendarLessons}
+              showDailyDetails={false}
+              totalAmount={selectedCalendarAmount}
+              vault={vault}
+            />
+          ) : (
+            <SubstituteClassLessonPanel
+              amountsVisible={amountsVisible}
+              campusOptions={campusOptions}
+              subjectOptions={studentStatsSubjects}
+              date={substituteDate}
+              startTime={substituteStartTime}
+              endTime={substituteEndTime}
+              billingHours={substituteBillingHours}
+              campusId={substituteCampusId}
+              subject={substituteSubject}
+              title={substituteTitle}
+              externalClassName={substituteExternalClassName}
+              originalTeacherName={substituteOriginalTeacherName}
+              salaryGradeStage={substituteSalaryGradeStage}
+              presentStudentCount={substitutePresentStudentCount}
+              studentNamesText={substituteStudentNamesText}
+              note={substituteNote}
+              status={substituteStatus}
+              isTimeValid={isSubstituteTimeValid}
+              estimatedAmount={substitutePreviewSnapshot.amount}
+              estimatedHours={substitutePreviewSnapshot.hours ?? 0}
+              estimatedPerStudentFee={substitutePreviewSnapshot.perPresentStudentFee ?? 0}
+              salaryGradeLabel={substitutePreviewSnapshot.salaryGradeLabel ?? "未设置"}
+              onAdd={addSubstituteClassRecord}
+              setDate={setSubstituteDate}
+              setStartTime={setSubstituteStartTime}
+              setEndTime={setSubstituteEndTime}
+              setBillingHours={setSubstituteBillingHours}
+              setCampusId={setSubstituteCampusId}
+              setSubject={setSubstituteSubject}
+              setTitle={setSubstituteTitle}
+              setExternalClassName={setSubstituteExternalClassName}
+              setOriginalTeacherName={setSubstituteOriginalTeacherName}
+              setSalaryGradeStage={setSubstituteSalaryGradeStage}
+              setPresentStudentCount={setSubstitutePresentStudentCount}
+              setStudentNamesText={setSubstituteStudentNamesText}
+              setNote={setSubstituteNote}
+              setStatus={setSubstituteStatus}
+            />
+          )}
+        </div>
       )}
 
       {schedulePanel === "studentStats" && (
@@ -3117,6 +3191,7 @@ export function ScheduleView({
           courseGroupOptions={studentStatsCourseOptions}
           expandedGroupIds={expandedStudentStatsGroupIds}
           groupedLessonRows={studentStatsGroupedLessonRows}
+          involvedStudentCount={studentStatsInvolvedStudentCount}
           lessonCount={studentStatsLessons.length}
           onOpenLesson={openLessonInRecords}
           onToggleGroup={toggleExpandedStudentStatsGroup}

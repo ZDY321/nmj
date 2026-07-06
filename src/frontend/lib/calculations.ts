@@ -1071,7 +1071,8 @@ export type ObligationLessonDeduction = {
 export function obligationSummary(vault: TeacherVault, month: string, campusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId): ObligationSummary {
   const courseId = vault.profile.obligationCourseGroupId;
   const mode = vault.profile.obligationDeductionMode ?? "auto_gap";
-  const requiredHours = Math.max(vault.profile.monthlyObligationHours ?? 0, 0);
+  const configuredRequiredHours = Math.max(vault.profile.monthlyObligationHours ?? 0, 0);
+  const requiredHours = Math.min(configuredRequiredHours, 10);
   const hourlyDeduction = Math.max(vault.profile.obligationHourlyDeduction ?? 0, 0);
   const manualAmount = Math.max(vault.profile.manualObligationDeduction ?? 0, 0);
   const targetAmount = Math.round(requiredHours * hourlyDeduction);
@@ -1159,11 +1160,10 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
     .map((item) => ({ ...item, amount: Math.round(item.amount) }))
     .filter((item) => item.deductedHours > 0)
     .sort((a, b) => a.firstDeductOrder - b.firstDeductOrder);
-  const fallbackHours = mode === "manual"
-    ? 0
-    : Math.max(remainingHours, 0);
-  const fallbackAmount = Math.round(fallbackHours * hourlyDeduction);
-  const autoAmount = Math.round(courseDeductionAmount) + fallbackAmount;
+  const missingHours = mode === "manual" ? 0 : Math.max(remainingHours, 0);
+  const fallbackHours = 0;
+  const fallbackAmount = 0;
+  const autoAmount = Math.round(courseDeductionAmount);
 
   return {
     campus,
@@ -1171,8 +1171,8 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
     mode,
     requiredHours,
     completedHours: availableHours,
-    deductedHours: mode === "manual" ? 0 : courseDeductedHours + fallbackHours,
-    missingHours: fallbackHours,
+    deductedHours: mode === "manual" ? 0 : courseDeductedHours,
+    missingHours,
     hourlyDeduction,
     manualAmount,
     targetAmount,

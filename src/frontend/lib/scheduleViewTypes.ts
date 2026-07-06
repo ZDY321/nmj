@@ -4,7 +4,7 @@ import type { ViewKey } from "@/frontend/lib/helpers";
 export type LessonScope = "month" | "day" | "range" | "week";
 export type CourseTypeFilter = "all" | CourseType;
 export type MakeupLessonFilter = "all" | "any_makeup" | "regular_makeup" | "substitute_class";
-export type StudentStatsMakeupFilter = "all" | "regular_makeup";
+export type StudentStatsMakeupFilter = MakeupLessonFilter;
 export type SchedulePanel = "ai" | "schedule" | "substitute" | "adjust" | "calendar" | "records" | "makeup" | "studentStats" | "trash";
 
 export type CalendarOverviewReturnFocus = {

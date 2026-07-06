@@ -32,7 +32,7 @@ export function PayrollObligationDeductionCard({
           <CardTitle>义务课时扣费明细</CardTitle>
           <CardDescription className="mt-2">
             {deductionApplies
-              ? `${selectedMonth} · ${campusName(vault, effectiveObligationCampusId)}，先扣本校区单节总课时费较低的课次；本校区不够时，再把其他校区课次合并后从低到高继续抵扣，试听不参与。`
+              ? `${selectedMonth} · ${campusName(vault, effectiveObligationCampusId)}，每月最多自动扣 10 小时；先扣本校区单节总课时费较低的课次，本校区不够时再合并其他校区课次继续抵扣，实际课时不足不额外补扣。`
               : `当前筛选校区不单独扣义务课时；扣费归入 ${campusName(vault, effectiveObligationCampusId)}，可切换到全部校区或义务本校区查看明细。`}
           </CardDescription>
         </div>
@@ -61,9 +61,9 @@ export function PayrollObligationDeductionCard({
           <>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {[
-                { label: "义务目标", value: `${obligation.requiredHours.toFixed(1)} 小时` },
+                { label: "义务上限", value: `${obligation.requiredHours.toFixed(1)} 小时` },
                 { label: "课程抵扣", value: formatPrivateMoney(obligation.courseDeductionAmount, amountsVisible) },
-                { label: "补扣缺口", value: `${obligation.fallbackHours.toFixed(1)} 小时` },
+                { label: "未抵小时", value: `${obligation.missingHours.toFixed(1)} 小时` },
                 { label: "扣费合计", value: `-${formatPrivateMoney(obligation.amount, amountsVisible)}` }
               ].map((item) => (
                 <div key={item.label} className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] p-3">
@@ -95,17 +95,16 @@ export function PayrollObligationDeductionCard({
                   </div>
                 );
               })}
-              {obligation.fallbackHours > 0 && (
-                <div className="rounded-[14px] border border-[#fecaca] bg-[#fff1f2] p-3">
-                  <div className="text-sm font-extrabold text-[#7f1d1d]">未抵完义务小时补扣</div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#991b1b]">
-                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#fecaca]">缺口 {obligation.fallbackHours.toFixed(1)} 小时</span>
-                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#fecaca]">每小时 {formatPrivateMoney(obligation.hourlyDeduction, amountsVisible)}</span>
-                    <span className="rounded-full bg-[#fee2e2] px-2.5 py-1">扣 {formatPrivateMoney(obligation.fallbackAmount, amountsVisible)}</span>
+              {obligation.missingHours > 0 && (
+                <div className="rounded-[14px] border border-[#fed7aa] bg-[#fff7ed] p-3">
+                  <div className="text-sm font-extrabold text-[#9a3412]">未抵完义务小时</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#9a3412]">
+                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#fed7aa]">未抵 {obligation.missingHours.toFixed(1)} 小时</span>
+                    <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#fed7aa]">不足部分不额外补扣</span>
                   </div>
                 </div>
               )}
-              {deductedCourses.length === 0 && obligation.fallbackHours <= 0 && (
+              {deductedCourses.length === 0 && obligation.missingHours <= 0 && (
                 <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
                   本月没有产生义务课时扣费。
                 </div>

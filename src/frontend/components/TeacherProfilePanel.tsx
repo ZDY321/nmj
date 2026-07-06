@@ -45,7 +45,7 @@ export function TeacherProfilePanel({
           <Settings size={14} /> 个人与义务课时设置
         </div>
         <CardTitle>老师个人信息</CardTitle>
-        <CardDescription>义务课时自动从本校区非试听课里按单节总课时费从低到高抵扣，本校区不足时再合并其他校区课次继续抵扣。</CardDescription>
+        <CardDescription>义务课时自动从本校区非试听课里按单节总课时费从低到高抵扣，每月最多自动扣 10 小时；实际课时不足时不额外补扣。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -77,7 +77,7 @@ export function TeacherProfilePanel({
               value={obligationMode}
               onChange={(event) => onUpdateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
             >
-              <option value="auto_gap">按单节总课时费从低到高自动抵扣，不足按小时补扣</option>
+              <option value="auto_gap">按单节总课时费从低到高自动抵扣，不足不补扣</option>
               <option value="manual">手动填写扣除金额</option>
             </Select>
           </div>
@@ -92,7 +92,7 @@ export function TeacherProfilePanel({
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">每小时补扣费用</label>
+            <label className="text-sm font-medium">缺口参考单价</label>
             <SensitiveAmountField visible={amountsVisible}>
               <Input
                 type="number"
@@ -167,7 +167,7 @@ export function TeacherProfilePanel({
           {[
             { label: "义务目标", value: `${obligation.requiredHours.toFixed(1)} 小时` },
             { label: "本月应扣", value: `${obligation.deductedHours.toFixed(1)} 小时` },
-            { label: "补扣小时", value: `${obligation.fallbackHours.toFixed(1)} 小时` },
+            { label: "未抵小时", value: `${obligation.missingHours.toFixed(1)} 小时` },
             { label: "本月扣费", value: formatPrivateMoney(obligation.amount, amountsVisible) }
           ].map((item) => (
             <div key={item.label} className="rounded-[12px] border border-[#fecaca] bg-[#fee2e2] p-3">

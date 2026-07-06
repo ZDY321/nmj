@@ -1,6 +1,6 @@
 import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import { aiEndpointUrlForProvider } from "@/shared/aiEndpoint";
-import { formatAppDateTime, getCourse, isSubstituteClassLesson, lessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
+import { formatAppDateTime, getCourse, isSubstituteClassLesson, lessonBillableHoursForVault, substituteClassPresentCount, todayIso } from "@/frontend/lib/calculations";
 import { timeToMinutes } from "@/frontend/lib/time";
 import { isPlainRecord } from "@/frontend/lib/typeGuards";
 import {
@@ -457,8 +457,8 @@ export function buildStudentStatsRows(vault: TeacherVault, lessons: Lesson[], no
 }
 
 export function buildStudentStatsGroupedLessonRows(vault: TeacherVault, lessons: Lesson[], normalizedNameFilter: string) {
-  const oneToOneLessons = lessons.filter((lesson) => isOneOnOneStatsLesson(vault, lesson));
-  const groupedLessons = lessons.filter((lesson) => !isOneOnOneStatsLesson(vault, lesson));
+  const oneToOneLessons = lessons.filter((lesson) => !isSubstituteClassLesson(lesson) && isOneOnOneStatsLesson(vault, lesson));
+  const groupedLessons = lessons.filter((lesson) => isSubstituteClassLesson(lesson) || !isOneOnOneStatsLesson(vault, lesson));
   const oneToOneRows = buildStudentStatsRows(
     vault,
     oneToOneLessons,
@@ -467,9 +467,58 @@ export function buildStudentStatsGroupedLessonRows(vault: TeacherVault, lessons:
 
   const groupedRows = groupedLessons
     .map((lesson) => {
+      const hours = lessonBillableHoursForVault(vault, lesson);
+      if (isSubstituteClassLesson(lesson)) {
+        const presentCount = substituteClassPresentCount(lesson);
+        const namesText = lesson.substituteClass?.studentNamesText?.trim() ?? "";
+        const searchable = [
+          lessonDisplayName(vault, lesson),
+          lessonDisplaySubject(vault, lesson),
+          campusName(vault, lesson.campusId),
+          lesson.substituteClass?.externalClassName ?? "",
+          lesson.substituteClass?.originalTeacherName ?? "",
+          namesText,
+          lesson.substituteClass?.note ?? "",
+          lesson.note ?? ""
+        ].join(" ").toLowerCase();
+        if (normalizedNameFilter && !searchable.includes(normalizedNameFilter)) return null;
+        const names = namesText.split(/[、,，;；\n\r]+/).map((name) => name.trim()).filter(Boolean);
+        const visibleNames = normalizedNameFilter ? names.filter((name) => name.toLowerCase().includes(normalizedNameFilter)) : names;
+        const students = visibleNames.map((name, index) => ({
+          studentId: `${lesson.id}-external-${index}`,
+          studentName: name,
+          attendanceStatus: "attended" as AttendanceStatus,
+          note: "代班补课"
+        }));
+        const remainingCount = Math.max(presentCount - students.length, 0);
+        if (remainingCount > 0 || students.length === 0) {
+          students.push({
+            studentId: `${lesson.id}-external-count`,
+            studentName: remainingCount > 0 ? `外部学生 ${remainingCount} 人` : "外部学生",
+            attendanceStatus: "attended" as AttendanceStatus,
+            note: namesText || lesson.substituteClass?.note || "按到课人数统计"
+          });
+        }
+        return {
+          kind: "grouped" as const,
+          groupId: `lesson-${lesson.id}`,
+          lessonId: lesson.id,
+          courseName: lessonDisplayName(vault, lesson),
+          subject: lessonDisplaySubject(vault, lesson),
+          courseTypeLabel: "代班补课",
+          campusName: campusName(vault, lesson.campusId),
+          date: lesson.date,
+          startTime: lesson.startTime,
+          endTime: lesson.endTime,
+          status: lesson.status,
+          studentCount: presentCount,
+          hours,
+          amount: lesson.feeSnapshot.amount,
+          students
+        };
+      }
       const filteredStudentIds = filteredStudentIdsForStats(vault, lesson, normalizedNameFilter);
       if (filteredStudentIds.length === 0) return null;
-      const hours = lessonBillableHoursForVault(vault, lesson);
       return {
         kind: "grouped" as const,
         groupId: `lesson-${lesson.id}`,
@@ -633,19 +682,30 @@ export type StudentStatsLessonFilters = {
 export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentStatsLessonFilters): Lesson[] {
   return vault.lessons
     .filter((lesson) => {
-      if (isSubstituteClassLesson(lesson)) return false;
+      const isSubstitute = isSubstituteClassLesson(lesson);
       const course = getCourse(vault, lesson.courseGroupId);
       const campusId = lesson.campusId ?? course?.defaultCampusId;
       const studentIds = lessonStudentIds(lesson);
       const isVisibleCourse = course != null && course.status === "active" && courseHasActiveStudent(vault, course);
-      const matchesStudent =
-        !filters.normalizedNameFilter ||
-        studentIds.some((studentId) =>
-          (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(filters.normalizedNameFilter)
-        );
-      const matchesCourse = filters.courseFilter === "all" ? isVisibleCourse : lesson.courseGroupId === filters.courseFilter;
+      const substituteSearchText = [
+        lessonDisplayName(vault, lesson),
+        lessonDisplaySubject(vault, lesson),
+        lesson.substituteClass?.externalClassName ?? "",
+        lesson.substituteClass?.originalTeacherName ?? "",
+        lesson.substituteClass?.studentNamesText ?? "",
+        lesson.substituteClass?.note ?? "",
+        lesson.note ?? ""
+      ].join(" ").toLowerCase();
+      const matchesStudent = isSubstitute
+        ? !filters.normalizedNameFilter || substituteSearchText.includes(filters.normalizedNameFilter)
+        : !filters.normalizedNameFilter ||
+          studentIds.some((studentId) =>
+            (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(filters.normalizedNameFilter)
+          );
+      const matchesCourse = filters.courseFilter === "all" ? (isSubstitute || isVisibleCourse) : lesson.courseGroupId === filters.courseFilter;
       const matchesType = filters.courseTypeFilter === "all" || lesson.type === filters.courseTypeFilter;
-      const matchesSubject = filters.subjectFilter === "all" || course?.subject === filters.subjectFilter;
+      const subject = isSubstitute ? lessonDisplaySubject(vault, lesson) : course?.subject;
+      const matchesSubject = filters.subjectFilter === "all" || subject === filters.subjectFilter;
       const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;
       const matchesStatus = filters.statusFilter === "all" || lesson.status === filters.statusFilter;
       const matchesMakeup = matchesMakeupLessonFilter(lesson, filters.makeupFilter);

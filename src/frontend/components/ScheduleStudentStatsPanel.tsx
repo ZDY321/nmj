@@ -34,6 +34,7 @@ type ScheduleStudentStatsPanelProps = {
   courseGroupOptions: CourseGroup[];
   expandedGroupIds: string[];
   groupedLessonRows: StudentStatsGroupedLessonRows;
+  involvedStudentCount: number;
   lessonCount: number;
   onOpenLesson: (lesson: Lesson) => void;
   onToggleGroup: (groupId: string) => void;
@@ -75,6 +76,7 @@ export function ScheduleStudentStatsPanel({
   courseGroupOptions,
   expandedGroupIds,
   groupedLessonRows,
+  involvedStudentCount,
   lessonCount,
   onOpenLesson,
   onToggleGroup,
@@ -107,98 +109,121 @@ export function ScheduleStudentStatsPanel({
           <CardDescription>学生、课程、科目、校区、日期、时间和状态会同时生效，筛选结果为合并条件后的交集。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5 xl:grid-cols-6">
-            <label className="relative block">
-              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-              <Input
-                className="pl-9"
-                value={values.nameFilter}
-                onChange={(event) => setNameFilter(event.target.value)}
-                placeholder="筛选学生姓名"
-              />
-            </label>
-            <Select value={values.courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
-              <option value="all">全部课程</option>
-              {courseGroupOptions.map((course) => (
-                <option key={course.id} value={course.id}>{course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}</option>
-              ))}
-            </Select>
-            <Select value={values.courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as CourseTypeFilter)}>
-              <option value="all">全部班型</option>
-              {courseTypeOptionsForVault(vault).map((type) => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </Select>
-            <Select value={values.subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)}>
-              <option value="all">全部科目</option>
-              {subjectOptions.map((subject) => (
-                <option key={subject} value={subject}>{subject}</option>
-              ))}
-            </Select>
-            <Select value={values.campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
-              <option value="all">全部校区</option>
-              {campusOptions.map((campus) => (
-                <option key={campus.id} value={campus.id}>{campus.name}</option>
-              ))}
-            </Select>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">开始日期</label>
-              <Input
-                type="date"
-                value={values.dateStart}
-                onChange={(event) => setDateStart(event.target.value)}
-                className={!isStudentStatsDateRangeValid(values.dateStart, values.dateEnd) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
-              />
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">学生姓名</label>
+                <label className="relative block">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#94a3b8]">
+                    <Search size={16} />
+                  </span>
+                  <Input
+                    className="h-11 pl-9"
+                    value={values.nameFilter}
+                    onChange={(event) => setNameFilter(event.target.value)}
+                    placeholder="筛选学生姓名"
+                  />
+                </label>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">课程</label>
+                <Select value={values.courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
+                  <option value="all">全部课程</option>
+                  {courseGroupOptions.map((course) => (
+                    <option key={course.id} value={course.id}>{course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">班型</label>
+                <Select value={values.courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as CourseTypeFilter)}>
+                  <option value="all">全部班型</option>
+                  {courseTypeOptionsForVault(vault).map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">科目</label>
+                <Select value={values.subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)}>
+                  <option value="all">全部科目</option>
+                  {subjectOptions.map((subject) => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">校区</label>
+                <Select value={values.campusFilter} onChange={(event) => setCampusFilter(event.target.value)}>
+                  <option value="all">全部校区</option>
+                  {campusOptions.map((campus) => (
+                    <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  ))}
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">结束日期</label>
-              <Input
-                type="date"
-                value={values.dateEnd}
-                min={values.dateStart}
-                onChange={(event) => setDateEnd(event.target.value)}
-                className={!isStudentStatsDateRangeValid(values.dateStart, values.dateEnd) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">开始时间</label>
-              <TimeTextInput
-                value={values.startTime}
-                onValueChange={setStartTime}
-                className={!isStudentStatsTimeRangeValid(values.startTime, values.endTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">结束时间</label>
-              <TimeTextInput
-                value={values.endTime}
-                onValueChange={setEndTime}
-                className={!isStudentStatsTimeRangeValid(values.startTime, values.endTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">上课状态</label>
-              <Select value={values.statusFilter} onChange={(event) => setStatusFilter(event.target.value as StudentStatsStatusFilter)}>
-                <option value="all">全部状态</option>
-                {Object.entries(lessonStatusLabels).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">补课筛选</label>
-              <Select value={values.makeupFilter} onChange={(event) => setMakeupFilter(event.target.value as StudentStatsMakeupFilter)}>
-                <option value="all">全部课程</option>
-                <option value="regular_makeup">仅正式补课</option>
-              </Select>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">开始日期</label>
+                <Input
+                  type="date"
+                  value={values.dateStart}
+                  onChange={(event) => setDateStart(event.target.value)}
+                  className={!isStudentStatsDateRangeValid(values.dateStart, values.dateEnd) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">结束日期</label>
+                <Input
+                  type="date"
+                  value={values.dateEnd}
+                  min={values.dateStart}
+                  onChange={(event) => setDateEnd(event.target.value)}
+                  className={!isStudentStatsDateRangeValid(values.dateStart, values.dateEnd) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">开始时间</label>
+                <TimeTextInput
+                  value={values.startTime}
+                  onValueChange={setStartTime}
+                  className={!isStudentStatsTimeRangeValid(values.startTime, values.endTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">结束时间</label>
+                <TimeTextInput
+                  value={values.endTime}
+                  onValueChange={setEndTime}
+                  className={!isStudentStatsTimeRangeValid(values.startTime, values.endTime) ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">上课状态</label>
+                <Select value={values.statusFilter} onChange={(event) => setStatusFilter(event.target.value as StudentStatsStatusFilter)}>
+                  <option value="all">全部状态</option>
+                  {Object.entries(lessonStatusLabels).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">补课筛选</label>
+                <Select value={values.makeupFilter} onChange={(event) => setMakeupFilter(event.target.value as StudentStatsMakeupFilter)}>
+                  <option value="all">全部课程</option>
+                  <option value="any_makeup">全部补课</option>
+                  <option value="regular_makeup">正式补课</option>
+                  <option value="substitute_class">代班补课</option>
+                </Select>
+              </div>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {[
               { label: "实际课节", value: `${lessonCount} 节` },
               { label: "学生课次", value: `${studentLessonCount} 人次` },
-              { label: "涉及学生", value: `${rows.length} 人` },
+              { label: "涉及学生", value: `${involvedStudentCount} 人` },
               { label: "已完成", value: `${completedCount} 节` },
               { label: "课时费合计", value: formatPrivateMoney(totalFee, amountsVisible) }
             ].map((item) => (
@@ -218,7 +243,7 @@ export function ScheduleStudentStatsPanel({
             <CardDescription className="mt-1">一对一按学生展示；非一对一班型会放在同一节课里折叠，展开后查看每个学生。</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary" className="w-fit">{rows.length} 人</Badge>
+            <Badge variant="secondary" className="w-fit">{involvedStudentCount} 人</Badge>
             <Badge variant="sky" className="w-fit">{groupedLessonRows.length} 组</Badge>
           </div>
         </CardHeader>

@@ -231,7 +231,7 @@ export function SalaryView({
                       {obligation.campus?.name ?? "未设置义务校区"}
                       {obligation.mode === "manual"
                         ? ` · 手动扣 ${formatPrivateMoney(obligation.manualAmount, amountsVisible)}`
-                        : `${obligation.course ? ` · ${obligation.course.name}` : ""} · 课程扣 ${formatPrivateMoney(obligation.courseDeductionAmount, amountsVisible)}，补扣 ${obligation.fallbackHours.toFixed(1)} / ${obligation.requiredHours || 0} 小时`}
+                        : `${obligation.course ? ` · ${obligation.course.name}` : ""} · 课程扣 ${formatPrivateMoney(obligation.courseDeductionAmount, amountsVisible)}，未抵 ${obligation.missingHours.toFixed(1)} / ${obligation.requiredHours || 0} 小时`}
                     </div>
                   </div>
                   <div className="shrink-0 text-sm font-extrabold text-[#b91c1c]">
