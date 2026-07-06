@@ -36,6 +36,7 @@ export type PayrollOverviewCampusAmounts = {
   oneOnOne: PayrollCampusAmountDetail[];
   classLessons: PayrollCampusAmountDetail[];
   makeup: PayrollCampusAmountDetail[];
+  substituteClass: PayrollCampusAmountDetail[];
 };
 
 export function PayrollOverviewGrid({
@@ -150,6 +151,7 @@ export function PayrollOverviewGrid({
               { label: "一对一", value: breakdown.oneOnOne, details: lessonCampusAmounts.oneOnOne },
               { label: "班课", value: breakdown.classLessons, details: lessonCampusAmounts.classLessons },
               { label: "补课", value: breakdown.makeup, details: lessonCampusAmounts.makeup },
+              { label: "代班补课", value: breakdown.substituteClass, details: lessonCampusAmounts.substituteClass },
               { label: "其他加减项", value: breakdown.adjustments },
               { label: "义务课时扣费", value: -breakdown.obligationDeduction }
             ].map((item) => {

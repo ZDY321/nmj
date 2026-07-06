@@ -1,3 +1,4 @@
+import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "../../shared/types";
 import type {
   AttendanceStatus,
   Campus,
@@ -458,6 +459,7 @@ export function salaryGradeStageForCourse(vault: TeacherVault, course: CourseGro
 }
 
 export function salaryGradeStageForLesson(vault: TeacherVault, course: CourseGroup | undefined, lesson: Lesson): SalaryGradeStage | undefined {
+  if (isSubstituteClassLesson(lesson)) return lesson.substituteClass?.salaryGradeStage;
   const lessonStage = salaryGradeStageForStudentIds(vault, lesson.expectedStudentIds);
   return lessonStage ?? (course ? salaryGradeStageForCourse(vault, course) : undefined);
 }
@@ -491,6 +493,51 @@ export function lessonDurationMultiplierForCourse(course: Pick<CourseGroup, "typ
   return (lesson.feeSnapshot && Number.isFinite(lesson.feeSnapshot.hours)
     ? Math.max(lesson.feeSnapshot.hours ?? 0, 0)
     : billableHoursForCourseLesson(course, lesson, vault)) / lessonFeeUnitHours;
+}
+
+export function isSubstituteClassLesson(lesson: Pick<Lesson, "courseGroupId"> & Partial<Pick<Lesson, "lessonSource" | "substituteClass">>): boolean {
+  return lesson.lessonSource === "substitute_class" || lesson.courseGroupId === SUBSTITUTE_CLASS_COURSE_GROUP_ID || Boolean(lesson.substituteClass);
+}
+
+export function substituteClassPresentCount(lesson: Pick<Lesson, "substituteClass">): number {
+  return nonNegativeInteger(lesson.substituteClass?.presentStudentCount);
+}
+
+export function substituteClassPerStudentFee(vault: TeacherVault, lesson: Pick<Lesson, "substituteClass">): number {
+  const gradeRule = salaryGradeRuleById(vault.profile.defaultSalaryGradeId, vault) ?? defaultSalaryGradeRule(vault);
+  return salaryGradeRateForStage(gradeRule, lesson.substituteClass?.salaryGradeStage).headcountIncrementFee;
+}
+
+export function buildSubstituteClassFeeSnapshot(vault: TeacherVault, lesson: Lesson): FeeSnapshot {
+  const gradeRule = salaryGradeRuleById(vault.profile.defaultSalaryGradeId, vault) ?? defaultSalaryGradeRule(vault);
+  const stage = lesson.substituteClass?.salaryGradeStage;
+  const rate = salaryGradeRateForStage(gradeRule, stage);
+  const presentStudentCount = substituteClassPresentCount(lesson);
+  const suggestedHours = billableHoursForLesson({ ...lesson, type: "class" });
+  const existingHours = lesson.feeSnapshot.hours;
+  const manualHours = lesson.feeSnapshot.manualHours === true && Number.isFinite(existingHours);
+  const hours = manualHours ? Math.max(existingHours ?? 0, 0) : suggestedHours;
+  const durationMultiplier = hours / lessonFeeUnitHours;
+  const unitAmount = presentStudentCount * rate.headcountIncrementFee;
+
+  return {
+    ...lesson.feeSnapshot,
+    baseFee: 0,
+    perPresentStudentFee: rate.headcountIncrementFee,
+    salaryGradeId: gradeRule.id,
+    salaryGradeLabel: salaryGradeLabel(gradeRule),
+    salaryGradeStage: stage,
+    salaryGradeStageLabel: stage ? salaryGradeStageLabels[stage] : undefined,
+    headcountBaseStudentCount: 0,
+    headcountIncrementFee: rate.headcountIncrementFee,
+    lessonUnitHours: lessonFeeUnitHours,
+    durationMultiplier,
+    unitAmount,
+    presentStudentCount,
+    hours,
+    manualHours: manualHours ? true : undefined,
+    amount: Math.round(unitAmount * durationMultiplier)
+  };
 }
 
 export function proratedLessonUnitAmount(unitAmount: number, lesson: Pick<Lesson, "startTime" | "endTime" | "type">, rule?: FeeRule): number {
@@ -697,6 +744,9 @@ export function calculateFee(rule: FeeRule, lesson: Lesson): number {
 }
 
 export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: FeeRule, lesson: Lesson, course?: CourseGroup): number {
+  if (vault && isSubstituteClassLesson(lesson)) {
+    return buildSubstituteClassFeeSnapshot(vault, lesson).amount;
+  }
   if (isOriginalFullyMadeUp(lesson) || isLessonFullyMissedAndMakeupExempt(lesson)) {
     return 0;
   }
@@ -1036,6 +1086,7 @@ export function obligationSummary(vault: TeacherVault, month: string, campusId =
   const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, month);
   const eligibleLessons = vault.lessons
     .filter((lesson) => monthOf(lesson.date) === month && lesson.type !== "trial" && completedHours(lesson, vault) > 0)
+    .filter((lesson) => !isSubstituteClassLesson(lesson))
     .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
     .map((lesson) => {
       const lessonCourse = getCourse(vault, lesson.courseGroupId);
@@ -1144,7 +1195,9 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
       if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return totals;
       const amount = completedAmount(lesson);
       const course = getCourse(vault, lesson.courseGroupId);
-      if (lesson.status === "makeup_completed") {
+      if (isSubstituteClassLesson(lesson)) {
+        totals.substituteClass += amount;
+      } else if (lesson.status === "makeup_completed") {
         totals.makeup += amount;
       } else if (course ? courseUsesClassBilling(course, vault) : lesson.type === "class") {
         totals.classLessons += amount;
@@ -1153,7 +1206,7 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
       }
       return totals;
     },
-    { oneOnOne: 0, classLessons: 0, makeup: 0 }
+    { oneOnOne: 0, classLessons: 0, makeup: 0, substituteClass: 0 }
   );
 
   const adjustments = monthAdjustments.reduce((sum, item) => sum + item.amount, 0);
@@ -1164,6 +1217,7 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
     oneOnOne: lessonTotals.oneOnOne,
     classLessons: lessonTotals.classLessons,
     makeup: lessonTotals.makeup,
+    substituteClass: lessonTotals.substituteClass,
     adjustments,
     obligationDeduction,
     total:
@@ -1171,6 +1225,7 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
       lessonTotals.oneOnOne +
       lessonTotals.classLessons +
       lessonTotals.makeup +
+      lessonTotals.substituteClass +
       adjustments -
       obligationDeduction
   };

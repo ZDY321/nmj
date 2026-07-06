@@ -1,6 +1,6 @@
 import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import { aiEndpointUrlForProvider } from "@/shared/aiEndpoint";
-import { formatAppDateTime, getCourse, lessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
+import { formatAppDateTime, getCourse, isSubstituteClassLesson, lessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { timeToMinutes } from "@/frontend/lib/time";
 import { isPlainRecord } from "@/frontend/lib/typeGuards";
 import {
@@ -17,6 +17,8 @@ import {
   formatDateIso,
   isMakeupAttendanceStatus,
   lessonAttendanceNoteText,
+  lessonDisplayName,
+  lessonDisplaySubject,
   lessonStatusLabels,
   lessonStudentIds,
   makeupNeededStudentIds,
@@ -256,8 +258,15 @@ export function lessonSearchText(vault: TeacherVault, lesson: Lesson): string {
     ];
   });
   return [
+    lessonDisplayName(vault, lesson),
+    lessonDisplaySubject(vault, lesson),
     course?.name ?? "",
     course?.subject ?? "",
+    lesson.substituteClass?.externalClassName ?? "",
+    lesson.substituteClass?.originalTeacherName ?? "",
+    lesson.substituteClass?.subject ?? "",
+    lesson.substituteClass?.studentNamesText ?? "",
+    lesson.substituteClass?.note ?? "",
     courseTypeLabel(vault, lesson.type),
     campusName(vault, lesson.campusId ?? course?.defaultCampusId),
     lessonStatusLabels[lesson.status],
@@ -284,7 +293,7 @@ export function deletedLessonSearchText(vault: TeacherVault, item: DeletedLesson
 }
 
 export function canRestoreDeletedLesson(vault: TeacherVault, activeLessonIds: Set<string>, item: DeletedLesson): boolean {
-  return !activeLessonIds.has(item.lesson.id) && Boolean(getCourse(vault, item.lesson.courseGroupId));
+  return !activeLessonIds.has(item.lesson.id) && (isSubstituteClassLesson(item.lesson) || Boolean(getCourse(vault, item.lesson.courseGroupId)));
 }
 
 export function deletedLessonSourceLabel(source: DeletedLesson["source"]): string {
@@ -442,8 +451,8 @@ export function buildStudentStatsGroupedLessonRows(vault: TeacherVault, lessons:
         kind: "grouped" as const,
         groupId: `lesson-${lesson.id}`,
         lessonId: lesson.id,
-        courseName: courseName(vault, lesson.courseGroupId),
-        subject: courseSubject(vault, lesson.courseGroupId),
+        courseName: lessonDisplayName(vault, lesson),
+        subject: lessonDisplaySubject(vault, lesson),
         courseTypeLabel: courseTypeLabel(vault, lesson.type),
         campusName: campusName(vault, lesson.campusId),
         date: lesson.date,
@@ -509,11 +518,16 @@ export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson
   const course = getCourse(vault, lesson.courseGroupId);
   const campusId = lesson.campusId ?? course?.defaultCampusId;
   const studentIds = lessonStudentIds(lesson);
+  const subject = isSubstituteClassLesson(lesson) ? lesson.substituteClass?.subject : course?.subject;
   const searchable = [
-    courseName(vault, lesson.courseGroupId),
-    courseSubject(vault, lesson.courseGroupId),
+    lessonDisplayName(vault, lesson),
+    lessonDisplaySubject(vault, lesson),
     campusName(vault, campusId),
     studentNames(vault, studentIds),
+    lesson.substituteClass?.externalClassName ?? "",
+    lesson.substituteClass?.originalTeacherName ?? "",
+    lesson.substituteClass?.studentNamesText ?? "",
+    lesson.substituteClass?.note ?? "",
     lesson.note ?? "",
     lessonAttendanceNoteText(vault, lesson),
     ...studentIds.map((studentId) => {
@@ -525,7 +539,7 @@ export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson
   const matchesGrade =
     filters.gradeFilter === "all" ||
     studentIds.some((studentId) => findStudent(vault, studentId)?.grade?.trim() === filters.gradeFilter);
-  const matchesSubject = filters.subjectFilter === "all" || course?.subject === filters.subjectFilter;
+  const matchesSubject = filters.subjectFilter === "all" || subject === filters.subjectFilter;
   const searchTerms = filters.studentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const matchesStudent = searchTerms.length === 0 || searchTerms.every((term) => searchable.includes(term));
   return matchesCampus && matchesGrade && matchesSubject && matchesStudent;
@@ -573,7 +587,8 @@ export function filterScheduleRecordLessons(vault: TeacherVault, filters: Schedu
         !filters.showOnlyMakeup ||
         makeupNeededStudentIds(lesson).length > 0 ||
         (lesson.status === "makeup_pending" && lesson.attendance.length === 0) ||
-        Boolean(lesson.linkedOriginalLessonId);
+        Boolean(lesson.linkedOriginalLessonId) ||
+        isSubstituteClassLesson(lesson);
       return matchesScope && matchesCampus && matchesType && matchesStudent && matchesMakeup;
     })
     .sort(sortLessons)
@@ -596,6 +611,7 @@ export type StudentStatsLessonFilters = {
 export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentStatsLessonFilters): Lesson[] {
   return vault.lessons
     .filter((lesson) => {
+      if (isSubstituteClassLesson(lesson)) return false;
       const course = getCourse(vault, lesson.courseGroupId);
       const campusId = lesson.campusId ?? course?.defaultCampusId;
       const studentIds = lessonStudentIds(lesson);
@@ -717,8 +733,8 @@ export function buildScheduleAiContext(
       startTime: lesson.startTime,
       endTime: lesson.endTime,
       courseId: lesson.courseGroupId,
-      courseName: courseName(vault, lesson.courseGroupId),
-      subject: courseSubject(vault, lesson.courseGroupId),
+      courseName: lessonDisplayName(vault, lesson),
+      subject: lessonDisplaySubject(vault, lesson),
       campus: campusName(vault, lesson.campusId),
       status: lessonStatusLabels[lesson.status],
       students: attendedStudentNamesForLesson(vault, lesson) || studentNames(vault, lessonStudentIds(lesson))
@@ -737,8 +753,8 @@ export function buildScheduleAiContext(
         startTime: lesson.startTime,
         endTime: lesson.endTime,
         courseId: lesson.courseGroupId,
-        courseName: courseName(vault, lesson.courseGroupId),
-        subject: courseSubject(vault, lesson.courseGroupId),
+        courseName: lessonDisplayName(vault, lesson),
+        subject: lessonDisplaySubject(vault, lesson),
         courseType: courseTypeLabel(vault, lesson.type),
         campus: campusName(vault, lesson.campusId ?? course?.defaultCampusId),
         status: lesson.status,

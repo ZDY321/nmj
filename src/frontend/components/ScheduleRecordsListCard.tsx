@@ -8,8 +8,8 @@ import { Select } from "@/components/ui/select";
 import type { Campus, CourseType, Lesson, TeacherVault } from "@/shared/types";
 import {
   campusName,
-  courseName,
-  courseSubject,
+  lessonDisplayName,
+  lessonDisplaySubject,
   courseTypeLabel,
   courseTypeOptionsForVault,
   formatPrivateMoney,
@@ -223,9 +223,9 @@ export function ScheduleRecordsListCard({
                   <GraduationCap size={14} className="text-(--color-muted-foreground)" />
                 </div>
                 <div className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{courseName(vault, lesson.courseGroupId)}</span>
+                  <span className="block truncate text-sm font-medium">{lessonDisplayName(vault, lesson)}</span>
                   <span className="text-xs text-(--color-muted-foreground)">
-                    {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {dateWithWeekday(lesson.date)} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)}
+                    {lessonDisplaySubject(vault, lesson)} · {courseTypeLabel(vault, lesson.type)} · {dateWithWeekday(lesson.date)} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)}
                   </span>
                 </div>
               </div>

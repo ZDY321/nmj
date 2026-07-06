@@ -1,4 +1,4 @@
-import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, buildSubstituteClassFeeSnapshot, getCourse, isSubstituteClassLesson, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import { activeStudentIdsForCourse, lessonStudentIds, makeupNeededStudentIds, studentLimitForCourseType } from "@/frontend/lib/helpers";
 import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
@@ -15,6 +15,13 @@ import type {
 export type CourseLessonSyncScope = "future_scheduled" | "all_unfinished" | "all" | "none";
 
 export function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson): Lesson {
+  if (isSubstituteClassLesson(lesson)) {
+    return {
+      ...lesson,
+      type: "class",
+      feeSnapshot: buildSubstituteClassFeeSnapshot(vault, lesson)
+    };
+  }
   const course = getCourse(vault, lesson.courseGroupId);
   if (!course) return lesson;
   const normalizedLesson: Lesson = {

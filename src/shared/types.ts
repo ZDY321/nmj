@@ -104,6 +104,10 @@ export type LessonStatus =
   | "makeup_pending"
   | "makeup_completed";
 
+export const SUBSTITUTE_CLASS_COURSE_GROUP_ID = "__substitute_class__";
+
+export type LessonSource = "regular" | "student_makeup" | "substitute_class";
+
 export type AttendanceStatus =
   | "attended"
   | "leave_requested"
@@ -274,6 +278,16 @@ export type FeeSnapshot = {
   amount: number;
 };
 
+export type SubstituteClassInfo = {
+  externalClassName?: string;
+  originalTeacherName?: string;
+  subject?: string;
+  salaryGradeStage?: SalaryGradeStage;
+  presentStudentCount: number;
+  studentNamesText?: string;
+  note?: string;
+};
+
 export type LessonContent = {
   taught: string;
   performance?: string;
@@ -294,6 +308,8 @@ export type Lesson = {
   campusId?: string;
   type: CourseType;
   status: LessonStatus;
+  lessonSource?: LessonSource;
+  substituteClass?: SubstituteClassInfo;
   expectedStudentIds: string[];
   attendance: AttendanceEntry[];
   trialStudentCount?: number;
@@ -655,6 +671,7 @@ export type SalaryBreakdown = {
   oneOnOne: number;
   classLessons: number;
   makeup: number;
+  substituteClass: number;
   adjustments: number;
   obligationDeduction: number;
   total: number;

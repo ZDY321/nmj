@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
-import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, lessonBillableHoursForVault, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
+import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, isSubstituteClassLesson, lessonBillableHoursForVault, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
 import {
   campusName,
   compareByName,
   courseTypeOptionsForVault,
   lessonAttendanceNoteText,
   lessonCampusId,
+  lessonStudentDisplay,
   lessonStudentIds,
   sortLessons,
   sortCampusesForProfile,
@@ -16,7 +17,7 @@ import {
 
 export type PayrollCourseTypeFilter = "all" | CourseType;
 export type PayrollLessonStatusFilter = "all" | Lesson["status"];
-type OverviewCampusKey = "oneOnOne" | "classLessons" | "makeup";
+type OverviewCampusKey = "oneOnOne" | "classLessons" | "makeup" | "substituteClass";
 
 type PayrollCampusAmountDetail = {
   key: string;
@@ -104,7 +105,13 @@ export function usePayrollReviewData({
         const studentSearchTerms = detailStudentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
         const studentSearchText = [
           studentNames(vault, lessonStudentIds(lesson)),
-          lessonAttendanceNoteText(vault, lesson)
+          lessonStudentDisplay(vault, lesson),
+          lessonAttendanceNoteText(vault, lesson),
+          lesson.substituteClass?.externalClassName ?? "",
+          lesson.substituteClass?.originalTeacherName ?? "",
+          lesson.substituteClass?.subject ?? "",
+          lesson.substituteClass?.studentNamesText ?? "",
+          lesson.substituteClass?.note ?? ""
         ].join(" ").toLowerCase();
         const matchesStudent =
           studentSearchTerms.length === 0 ||
@@ -117,7 +124,7 @@ export function usePayrollReviewData({
   );
 
   const breakdown = useMemo(() => salaryBreakdown(vault, selectedMonth), [selectedMonth, vault]);
-  const lessonFeeTotal = breakdown.oneOnOne + breakdown.classLessons + breakdown.makeup;
+  const lessonFeeTotal = breakdown.oneOnOne + breakdown.classLessons + breakdown.makeup + breakdown.substituteClass;
   const estimatedIncome = useMemo(() => estimatedMonthlyIncome(vault, selectedMonth), [selectedMonth, vault]);
   const monthObligation = useMemo(
     () => obligationSummary(vault, selectedMonth),
@@ -153,7 +160,8 @@ export function usePayrollReviewData({
     const buckets: Record<OverviewCampusKey, Record<string, PayrollCampusAmountDetail>> = {
       oneOnOne: {},
       classLessons: {},
-      makeup: {}
+      makeup: {},
+      substituteClass: {}
     };
 
     function addDetail(bucket: OverviewCampusKey, campusId: string | undefined, amount: number) {
@@ -174,7 +182,9 @@ export function usePayrollReviewData({
       const campusId = lessonCampusId(vault, lesson);
       const amount = completedAmount(lesson);
       const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
-      if (lesson.status === "makeup_completed") {
+      if (isSubstituteClassLesson(lesson)) {
+        addDetail("substituteClass", campusId, amount);
+      } else if (lesson.status === "makeup_completed") {
         addDetail("makeup", campusId, amount);
       } else if (course ? courseUsesClassBilling(course, vault) : lesson.type === "class") {
         addDetail("classLessons", campusId, amount);
@@ -186,7 +196,8 @@ export function usePayrollReviewData({
     return {
       oneOnOne: Object.values(buckets.oneOnOne).sort((a, b) => b.amount - a.amount),
       classLessons: Object.values(buckets.classLessons).sort((a, b) => b.amount - a.amount),
-      makeup: Object.values(buckets.makeup).sort((a, b) => b.amount - a.amount)
+      makeup: Object.values(buckets.makeup).sort((a, b) => b.amount - a.amount),
+      substituteClass: Object.values(buckets.substituteClass).sort((a, b) => b.amount - a.amount)
     };
   }, [monthLessons, splitMergeExcludedLessonIds, vault]);
 

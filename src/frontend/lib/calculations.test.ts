@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFeeSnapshot,
+  buildSubstituteClassFeeSnapshot,
   completedAmount,
   payrollExcludedSplitMergeLessonIds,
   salaryBreakdown
 } from "@/frontend/lib/calculations";
+import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
 import type {
   AttendanceEntry,
   CourseGroup,
@@ -173,10 +175,42 @@ describe("salary calculations", () => {
       oneOnOne: 120,
       classLessons: 104,
       makeup: 120,
+      substituteClass: 0,
       adjustments: 150,
       obligationDeduction: 0,
       total: 3494
     });
+  });
+
+  it("calculates substitute class records from teacher grade headcount fees", () => {
+    const vault = makeVault({
+      profile: {
+        displayName: "Teacher",
+        baseSalary: 3000,
+        currency: "CNY",
+        homeCampusId: campus.id,
+        defaultSalaryGradeId: "advanced_1"
+      }
+    });
+    const lesson = makeLesson({
+      id: "lesson_substitute",
+      courseGroupId: SUBSTITUTE_CLASS_COURSE_GROUP_ID,
+      type: "class",
+      lessonSource: "substitute_class",
+      substituteClass: {
+        subject: "Math",
+        salaryGradeStage: "junior_3",
+        presentStudentCount: 6
+      }
+    });
+    const substituteLesson = { ...lesson, feeSnapshot: buildSubstituteClassFeeSnapshot(vault, lesson) };
+    const breakdown = salaryBreakdown(makeVault({ ...vault, lessons: [substituteLesson] }), "2026-06");
+
+    expect(substituteLesson.feeSnapshot.perPresentStudentFee).toBe(15);
+    expect(substituteLesson.feeSnapshot.amount).toBe(90);
+    expect(breakdown.substituteClass).toBe(90);
+    expect(breakdown.classLessons).toBe(0);
+    expect(breakdown.total).toBe(3090);
   });
 
   it("does not count trial students as class headcount but keeps explicit trial income", () => {

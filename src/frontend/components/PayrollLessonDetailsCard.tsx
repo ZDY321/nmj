@@ -15,12 +15,13 @@ import {
 } from "@/frontend/lib/lessonDetailSort";
 import {
   campusName,
-  courseName,
-  courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
   lessonAttendanceNoteText,
   lessonCampusId,
+  lessonDisplayName,
+  lessonDisplaySubject,
+  lessonStudentDisplay,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
@@ -28,6 +29,7 @@ import {
   studentNames
 } from "@/frontend/lib/helpers";
 import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
+import { isSubstituteClassLesson } from "@/frontend/lib/calculations";
 
 type LessonStatusFilter = "all" | Lesson["status"];
 
@@ -166,10 +168,11 @@ export function PayrollLessonDetailsCard({
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <strong className="text-base text-[#061226]">{courseName(vault, lesson.courseGroupId)}</strong>
-                    <Badge variant="secondary">{courseSubject(vault, lesson.courseGroupId)}</Badge>
+                    <strong className="text-base text-[#061226]">{lessonDisplayName(vault, lesson)}</strong>
+                    <Badge variant="secondary">{lessonDisplaySubject(vault, lesson)}</Badge>
                     <Badge variant={lessonStatusVariant(lesson.status)}>{lessonStatusLabels[lesson.status]}</Badge>
                     <Badge variant="secondary">{courseTypeLabel(vault, lesson.type)}</Badge>
+                    {isSubstituteClassLesson(lesson) && <Badge variant="sky">代班补课</Badge>}
                     {obligationDeduction && (
                       <Badge variant="destructive">
                         义务扣除 {obligationDeduction.deductedHours.toFixed(1)}h · {formatPrivateMoney(obligationDeduction.amount, amountsVisible)}
@@ -179,7 +182,7 @@ export function PayrollLessonDetailsCard({
                   <div className="mt-2 text-sm font-semibold text-[#475569]">
                     {lesson.date} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lessonCampusId(vault, lesson))}
                   </div>
-                  <div className="mt-1 text-sm text-[#64748b]">{studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}</div>
+                  <div className="mt-1 text-sm text-[#64748b]">{lessonStudentDisplay(vault, lesson)}</div>
                   {hasException && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {lesson.attendance

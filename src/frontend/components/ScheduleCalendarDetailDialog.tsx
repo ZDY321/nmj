@@ -6,8 +6,8 @@ import type { Lesson, TeacherVault } from "@/shared/types";
 import { formatPrivateMoney } from "@/frontend/lib/helpers";
 import {
   campusName,
-  courseName,
-  courseSubject,
+  lessonDisplayName,
+  lessonDisplaySubject,
   courseTypeLabel,
   lessonAttendanceNoteText,
   lessonStatusLabels,
@@ -105,14 +105,14 @@ export function ScheduleCalendarDetailDialog({
                           className="min-w-0 flex-1 text-left"
                         >
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
-                            <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
+                            <span className="truncate text-sm font-extrabold text-[#061226]">{lessonDisplayName(vault, lesson)}</span>
+                            <Badge variant="secondary" className="text-[10px]">{lessonDisplaySubject(vault, lesson)}</Badge>
                             <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
                             <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
                             {makeupMarker && <Badge variant="yellow" className="text-[10px]">{makeupMarker}</Badge>}
                           </div>
                           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                            {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
+                            {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)} · {lessonDisplaySubject(vault, lesson)} · {lessonStudentDisplay(vault, lesson)}
                           </div>
                         </button>
                         <Button type="button" size="sm" variant="destructive" onClick={() => onDeleteLesson(lesson)}>

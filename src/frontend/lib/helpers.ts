@@ -9,6 +9,7 @@ import {
   Users,
   WalletCards
 } from "lucide-react";
+import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
 import type {
   AttendanceEntry,
   AttendanceStatus,
@@ -19,13 +20,14 @@ import type {
   CustomCourseTypeOption,
   Lesson,
   LessonStatus,
+  SalaryGradeStage,
   Student,
   TeacherVault,
   UserRole,
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { billableHoursForCourseLesson, buildFeeSnapshot, courseUsesStandardBillingHours, getCourse, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, courseUsesStandardBillingHours, getCourse, isSubstituteClassLesson, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { durationHours, timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
@@ -161,7 +163,8 @@ export function courseTypeOptionsForVault(vault: TeacherVault): Array<{ value: C
 export function subjectOptionsForVault(vault: TeacherVault): string[] {
   const subjects = [
     ...(vault.preferences?.subjects ?? []),
-    ...vault.courseGroups.map((course) => course.subject)
+    ...vault.courseGroups.map((course) => course.subject),
+    ...vault.lessons.map((lesson) => lesson.substituteClass?.subject ?? "")
   ]
     .map((subject) => subject.trim())
     .filter(Boolean);
@@ -345,11 +348,28 @@ export function findStudent(vault: TeacherVault, studentId: string): Student | u
 }
 
 export function courseName(vault: TeacherVault, courseId: string): string {
+  if (courseId === SUBSTITUTE_CLASS_COURSE_GROUP_ID) return "代班补课";
   return getCourse(vault, courseId)?.name ?? "未命名课程";
 }
 
 export function courseSubject(vault: TeacherVault, courseId: string): string {
+  if (courseId === SUBSTITUTE_CLASS_COURSE_GROUP_ID) return "外部班课";
   return getCourse(vault, courseId)?.subject ?? "未设置科目";
+}
+
+export function lessonDisplayName(vault: TeacherVault, lesson: Pick<Lesson, "courseGroupId"> & Partial<Pick<Lesson, "substituteClass" | "lessonSource">>): string {
+  if (isSubstituteClassLesson(lesson)) {
+    const className = lesson.substituteClass?.externalClassName?.trim();
+    return className ? `代班补课 · ${className}` : "代班补课";
+  }
+  return courseName(vault, lesson.courseGroupId);
+}
+
+export function lessonDisplaySubject(vault: TeacherVault, lesson: Pick<Lesson, "courseGroupId"> & Partial<Pick<Lesson, "substituteClass" | "lessonSource">>): string {
+  if (isSubstituteClassLesson(lesson)) {
+    return lesson.substituteClass?.subject?.trim() || "外部班课";
+  }
+  return courseSubject(vault, lesson.courseGroupId);
 }
 
 export function campusName(vault: TeacherVault, campusId?: string): string {
@@ -422,7 +442,13 @@ export function lessonBillingSummary(vault: TeacherVault, lesson: Pick<Lesson, "
   return `${lesson.feeSnapshot?.manualHours ? "手动计费课时" : "计费课时"} ${formatDurationHours(hours)}`;
 }
 
-export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "type" | "expectedStudentIds" | "attendance" | "linkedOriginalLessonId">): string {
+export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "type" | "expectedStudentIds" | "attendance" | "linkedOriginalLessonId"> & Partial<Pick<Lesson, "courseGroupId" | "lessonSource" | "substituteClass">>): string {
+  if (isSubstituteClassLesson(lesson as Pick<Lesson, "courseGroupId"> & Partial<Pick<Lesson, "lessonSource" | "substituteClass">>)) {
+    const names = lesson.substituteClass?.studentNamesText?.trim();
+    if (names) return names;
+    const count = Math.max(Math.floor(lesson.substituteClass?.presentStudentCount ?? 0), 0);
+    return count > 0 ? `${count} 人` : "未填写人数";
+  }
   const expectedStudentCount = new Set(lesson.expectedStudentIds).size;
   const attendedIds = attendedStudentIdsForLesson(lesson);
   const attendedCount = attendedIds.length;
@@ -516,6 +542,7 @@ export function createLessonFromCourse(
     campusId: values.campusId ?? course.defaultCampusId,
     type: course.type,
     status: values.status ?? "scheduled",
+    lessonSource: "regular",
     expectedStudentIds: [...studentIds],
     attendance: studentIds.map((studentId) => ({
       studentId,
@@ -538,6 +565,64 @@ export function createLessonFromCourse(
   };
 
   lesson.feeSnapshot = buildFeeSnapshot(vault, course, lesson);
+  return lesson;
+}
+
+export function createSubstituteClassLesson(
+  vault: TeacherVault,
+  values: {
+    date: string;
+    startTime: string;
+    endTime: string;
+    campusId?: string;
+    subject?: string;
+    externalClassName?: string;
+    originalTeacherName?: string;
+    salaryGradeStage?: SalaryGradeStage;
+    presentStudentCount: number;
+    studentNamesText?: string;
+    note?: string;
+    manualBillingHours?: number;
+    status?: Extract<LessonStatus, "scheduled" | "completed">;
+  }
+): Lesson {
+  const presentStudentCount = Math.max(Math.floor(values.presentStudentCount), 0);
+  const lesson: Lesson = {
+    id: makeId("lesson"),
+    date: values.date,
+    startTime: values.startTime,
+    endTime: values.endTime,
+    courseGroupId: SUBSTITUTE_CLASS_COURSE_GROUP_ID,
+    campusId: values.campusId,
+    type: "class",
+    status: values.status ?? "completed",
+    lessonSource: "substitute_class",
+    substituteClass: {
+      externalClassName: values.externalClassName?.trim() || undefined,
+      originalTeacherName: values.originalTeacherName?.trim() || undefined,
+      subject: values.subject?.trim() || undefined,
+      salaryGradeStage: values.salaryGradeStage,
+      presentStudentCount,
+      studentNamesText: values.studentNamesText?.trim() || undefined,
+      note: values.note?.trim() || undefined
+    },
+    expectedStudentIds: [],
+    attendance: [],
+    feeSnapshot: Number.isFinite(values.manualBillingHours)
+      ? { amount: 0, hours: Math.max(values.manualBillingHours ?? 0, 0), manualHours: true }
+      : { amount: 0 },
+    linkedOriginalLessonId: null,
+    content: {
+      taught: "",
+      performance: "",
+      homework: "",
+      nextLessonReminder: "",
+      internalNote: ""
+    },
+    note: values.note?.trim() || undefined
+  };
+
+  lesson.feeSnapshot = buildSubstituteClassFeeSnapshot(vault, lesson);
   return lesson;
 }
 

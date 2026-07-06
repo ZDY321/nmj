@@ -35,12 +35,13 @@ import {
 import {
   attendanceLabels,
   campusName,
-  courseName,
-  courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
   lessonAttendanceNoteText,
   lessonCampusId,
+  lessonDisplayName,
+  lessonDisplaySubject,
+  lessonStudentDisplay,
   lessonStudentIds,
   lessonStatusLabels,
   lessonStatusVariant,
@@ -173,8 +174,9 @@ export function SalaryView({
         <MetricCard label="基本工资" value={formatPrivateMoney(breakdown.baseSalary, amountsVisible)} hint="月固定项" variant={1} index={0} showSparkline={false} />
         <MetricCard label="一对一" value={formatPrivateMoney(breakdown.oneOnOne, amountsVisible)} hint="已完成课程" variant={2} index={1} showSparkline={false} />
         <MetricCard label="班课" value={formatPrivateMoney(breakdown.classLessons, amountsVisible)} hint="按到课人数" variant={3} index={2} showSparkline={false} />
-        <MetricCard label="合计" value={formatPrivateMoney(breakdown.total, amountsVisible)} hint="含补贴/扣款" variant={1} index={3} showSparkline={false} />
-        <MetricCard label="预估本月收入" value={formatPrivateMoney(estimatedIncome, amountsVisible)} hint="含本月待上课课节预估" variant={2} index={4} showSparkline={false} />
+        <MetricCard label="代班补课" value={formatPrivateMoney(breakdown.substituteClass, amountsVisible)} hint="外部班课人头费" variant={2} index={3} showSparkline={false} />
+        <MetricCard label="合计" value={formatPrivateMoney(breakdown.total, amountsVisible)} hint="含补贴/扣款" variant={1} index={4} showSparkline={false} />
+        <MetricCard label="预估本月收入" value={formatPrivateMoney(estimatedIncome, amountsVisible)} hint="含本月待上课课节预估" variant={2} index={5} showSparkline={false} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -195,6 +197,7 @@ export function SalaryView({
                   { label: "一对一", value: breakdown.oneOnOne, icon: Users, color: "text-[#1557c2] bg-[#eaf2ff]" },
                   { label: "班课", value: breakdown.classLessons, icon: BookOpen, color: "text-[#ff8617] bg-[#fff1e2]" },
                   { label: "补课", value: breakdown.makeup, icon: Clock, color: "text-[#1557c2] bg-[#eaf2ff]" },
+                  { label: "代班补课", value: breakdown.substituteClass, icon: Users, color: "text-[#7c3aed] bg-[#f3e8ff]" },
                   { label: "其他加减项", value: breakdown.adjustments, icon: TrendingUp, color: "text-[#16a34a] bg-[#e8f8ef]" },
                   { label: "义务课时扣费", value: -breakdown.obligationDeduction, icon: FileCheck2, color: "text-[#b91c1c] bg-[#fff1f2]", danger: true },
                   { label: "本月工资合计", value: breakdown.total, icon: Banknote, color: "text-[#061226] bg-[#eef0ff]", total: true }
@@ -503,11 +506,11 @@ export function SalaryView({
                         {lesson.date} · {lessonTimeRangeLabel(lesson)}
                       </div>
                       <div className="mt-1 break-words text-base font-extrabold text-[#061226]">
-                        {courseName(vault, lesson.courseGroupId)}
+                        {lessonDisplayName(vault, lesson)}
                       </div>
-                      <div className="mt-1 text-xs font-semibold text-[#64748b]">{courseSubject(vault, lesson.courseGroupId)}</div>
+                      <div className="mt-1 text-xs font-semibold text-[#64748b]">{lessonDisplaySubject(vault, lesson)}</div>
                       <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        {studentNames(vault, lesson.expectedStudentIds) || "未设置学生"}
+                        {lessonStudentDisplay(vault, lesson)}
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
@@ -577,14 +580,14 @@ export function SalaryView({
                     </td>
                     <td className="px-4 py-3">
                       <div className="max-w-[220px] truncate font-semibold text-[#061226]">
-                        {courseName(vault, lesson.courseGroupId)}
+                        {lessonDisplayName(vault, lesson)}
                       </div>
-                      <div className="mt-1 text-xs text-[#64748b]">{courseSubject(vault, lesson.courseGroupId)}</div>
+                      <div className="mt-1 text-xs text-[#64748b]">{lessonDisplaySubject(vault, lesson)}</div>
                       <div className="mt-1 text-xs text-[#64748b]">
                         {lessonTimeRangeLabel(lesson)} · {courseTypeLabel(vault, lesson.type)}
                       </div>
                     </td>
-                    <td className="max-w-[200px] truncate px-4 py-3">{studentNames(vault, lesson.expectedStudentIds)}</td>
+                    <td className="max-w-[200px] truncate px-4 py-3">{lessonStudentDisplay(vault, lesson)}</td>
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-1 whitespace-nowrap">
                         <MapPin size={13} className="text-[#94a3b8]" />

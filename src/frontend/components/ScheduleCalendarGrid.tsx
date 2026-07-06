@@ -3,8 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import type { Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import {
   calendarDates,
-  courseName,
-  courseSubject,
+  lessonDisplayName,
+  lessonDisplaySubject,
   formatPrivateMoney,
 } from "@/frontend/lib/helpers";
 
@@ -112,7 +112,7 @@ export function ScheduleCalendarGrid({
               const makeupMarker = makeupMarkerForLesson(lesson);
               return (
                 <span key={lesson.id} className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-(--color-muted-foreground) sm:block">
-                  {lesson.startTime}-{lesson.endTime} · {courseSubject(vault, lesson.courseGroupId)} · {courseName(vault, lesson.courseGroupId)}
+                  {lesson.startTime}-{lesson.endTime} · {lessonDisplaySubject(vault, lesson)} · {lessonDisplayName(vault, lesson)}
                   {makeupMarker ? ` · ${makeupMarker}` : ""}
                 </span>
               );

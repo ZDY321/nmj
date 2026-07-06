@@ -9,11 +9,11 @@ import {
   attendanceLabels,
   attendedStudentNamesForLesson,
   campusName,
-  courseName,
-  courseSubject,
   courseTypeLabel,
   findStudent,
   formatPrivateMoney,
+  lessonDisplayName,
+  lessonDisplaySubject,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
@@ -122,15 +122,15 @@ export function ScheduleCalendarFollowupPanels({
                   <div className="flex items-start justify-between gap-3">
                     <button type="button" onClick={() => onOpenLesson(lesson)} className="min-w-0 flex-1 text-left">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</span>
-                        <Badge variant="secondary" className="text-[10px]">{courseSubject(vault, lesson.courseGroupId)}</Badge>
+                        <span className="truncate text-sm font-extrabold text-[#061226]">{lessonDisplayName(vault, lesson)}</span>
+                        <Badge variant="secondary" className="text-[10px]">{lessonDisplaySubject(vault, lesson)}</Badge>
                         <Badge variant="secondary" className="text-[10px]">{courseTypeLabel(vault, lesson.type)}</Badge>
                         <Badge variant="sky" className="text-[10px]">{lessonStudentDisplay(vault, lesson)}</Badge>
                         <Badge variant={lessonStatusVariant(lesson.status)} className="text-[10px]">{lessonStatusLabels[lesson.status]}</Badge>
                         {makeupMarker && <Badge variant="yellow" className="text-[10px]">{makeupMarker}</Badge>}
                       </div>
                       <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                        {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)} · {courseSubject(vault, lesson.courseGroupId)} · {lessonStudentDisplay(vault, lesson)}
+                        {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)} · {lessonDisplaySubject(vault, lesson)} · {lessonStudentDisplay(vault, lesson)}
                       </div>
                     </button>
                     <Button type="button" size="sm" variant="destructive" onClick={() => onDeleteLesson(lesson)}>
@@ -179,9 +179,9 @@ export function ScheduleCalendarFollowupPanels({
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</div>
+                    <div className="truncate text-sm font-extrabold text-[#061226]">{lessonDisplayName(vault, lesson)}</div>
                     <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                      {courseSubject(vault, lesson.courseGroupId)} · 原课：{dateWithWeekday(lesson.date)} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)}
+                      {lessonDisplaySubject(vault, lesson)} · 原课：{dateWithWeekday(lesson.date)} · {lessonTimeRangeLabel(lesson)} · {campusName(vault, lesson.campusId)}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge variant="amber" className="px-2 py-0.5 text-[10px]">
@@ -287,10 +287,10 @@ export function ScheduleCalendarFollowupPanels({
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-extrabold text-[#061226]">
-                          {courseName(vault, lesson.courseGroupId)} · {attendedStudentNamesForLesson(vault, lesson) || studentNames(vault, lesson.expectedStudentIds)}
+                          {lessonDisplayName(vault, lesson)} · {attendedStudentNamesForLesson(vault, lesson) || studentNames(vault, lesson.expectedStudentIds)}
                         </div>
                         <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-                          {courseSubject(vault, lesson.courseGroupId)} · 原课：{optionalDateWithWeekday(original?.date ?? lesson.makeupOriginalDate)} · 补课：{optionalDateWithWeekday(lesson.makeupScheduledDate ?? lesson.date)} · {lessonTimeRangeLabel(lesson)}
+                          {lessonDisplaySubject(vault, lesson)} · 原课：{optionalDateWithWeekday(original?.date ?? lesson.makeupOriginalDate)} · 补课：{optionalDateWithWeekday(lesson.makeupScheduledDate ?? lesson.date)} · {lessonTimeRangeLabel(lesson)}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Badge variant={lessonStatusVariant(lesson.status)} className="px-2 py-0.5 text-[10px]">

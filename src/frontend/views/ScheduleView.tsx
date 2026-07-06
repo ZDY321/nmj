@@ -13,8 +13,10 @@ import { SchedulePlanningPanel, type BatchRepeatMode, type BatchTimeGroup, type 
 import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsListCard";
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
-import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, ProgressChecklistCompletion, ProgressChecklistTemplate, StudentProgressRecord, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { billableHoursForCourseLesson, buildFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
+import { SubstituteClassLessonPanel } from "@/frontend/components/SubstituteClassLessonPanel";
+import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
+import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, ProgressChecklistCompletion, ProgressChecklistTemplate, SalaryGradeStage, StudentProgressRecord, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
+import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -27,6 +29,7 @@ import {
   courseHasActiveStudent,
   courseName,
   createLessonFromCourse,
+  createSubstituteClassLesson,
   findStudent,
   formatDateIso,
   isMakeupNeededAttendanceEntry,
@@ -425,6 +428,19 @@ export function ScheduleView({
   const [makeupDate, setMakeupDate] = useState(todayIso());
   const [makeupStartTime, setMakeupStartTime] = useState("19:00");
   const [makeupEndTime, setMakeupEndTime] = useState("21:00");
+  const [substituteDate, setSubstituteDate] = useState(todayIso());
+  const [substituteStartTime, setSubstituteStartTime] = useState("19:00");
+  const [substituteEndTime, setSubstituteEndTime] = useState("21:00");
+  const [substituteBillingHours, setSubstituteBillingHours] = useState("");
+  const [substituteCampusId, setSubstituteCampusId] = useState(vault.profile.homeCampusId ?? vault.campuses[0]?.id ?? "");
+  const [substituteSubject, setSubstituteSubject] = useState("");
+  const [substituteExternalClassName, setSubstituteExternalClassName] = useState("");
+  const [substituteOriginalTeacherName, setSubstituteOriginalTeacherName] = useState("");
+  const [substituteSalaryGradeStage, setSubstituteSalaryGradeStage] = useState<SalaryGradeStage>("junior_3");
+  const [substitutePresentStudentCount, setSubstitutePresentStudentCount] = useState("");
+  const [substituteStudentNamesText, setSubstituteStudentNamesText] = useState("");
+  const [substituteNote, setSubstituteNote] = useState("");
+  const [substituteStatus, setSubstituteStatus] = useState<"scheduled" | "completed">("completed");
   const [detailMakeupStudentIds, setDetailMakeupStudentIds] = useState<string[]>([]);
   const [makeupArrangementOpen, setMakeupArrangementOpen] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
@@ -548,6 +564,7 @@ export function ScheduleView({
     setSyncRangeTargetStart(selectedWeekDates[0] ?? selectedCalendarDate);
     setSyncRangeTargetEnd(selectedWeekDates[6] ?? selectedCalendarDate);
     setMakeupDate(selectedCalendarDate);
+    setSubstituteDate(selectedCalendarDate);
   }, [selectedCalendarDate, weekStartPreference]);
 
   useEffect(() => {
@@ -967,6 +984,44 @@ export function ScheduleView({
   const isBatchTimeValid = isOrderedTimeRange(ruleStartTime, ruleEndTime);
   const isCalendarTimeValid = isOrderedTimeRange(calendarStartTime, calendarEndTime);
   const isMakeupTimeValid = isOrderedTimeRange(makeupStartTime, makeupEndTime);
+  const isSubstituteTimeValid = isOrderedTimeRange(substituteStartTime, substituteEndTime);
+  const substitutePresentCountNumber = Math.max(Math.floor(Number(substitutePresentStudentCount)), 0);
+  const substituteManualBillingHours = parseOptionalBillingHours(substituteBillingHours);
+  const substitutePreviewLesson: Lesson = {
+    id: "preview_substitute_lesson",
+    date: substituteDate || todayIso(),
+    startTime: substituteStartTime,
+    endTime: substituteEndTime,
+    courseGroupId: SUBSTITUTE_CLASS_COURSE_GROUP_ID,
+    campusId: substituteCampusId || undefined,
+    type: "class",
+    status: substituteStatus,
+    lessonSource: "substitute_class",
+    substituteClass: {
+      externalClassName: substituteExternalClassName.trim() || undefined,
+      originalTeacherName: substituteOriginalTeacherName.trim() || undefined,
+      subject: substituteSubject.trim() || undefined,
+      salaryGradeStage: substituteSalaryGradeStage,
+      presentStudentCount: substitutePresentCountNumber,
+      studentNamesText: substituteStudentNamesText.trim() || undefined,
+      note: substituteNote.trim() || undefined
+    },
+    expectedStudentIds: [],
+    attendance: [],
+    feeSnapshot: substituteManualBillingHours !== undefined
+      ? { amount: 0, hours: substituteManualBillingHours, manualHours: true }
+      : { amount: 0 },
+    linkedOriginalLessonId: null,
+    content: {
+      taught: "",
+      performance: "",
+      homework: "",
+      nextLessonReminder: "",
+      internalNote: ""
+    },
+    note: substituteNote.trim() || undefined
+  };
+  const substitutePreviewSnapshot = buildSubstituteClassFeeSnapshot(vault, substitutePreviewLesson);
   const aiActiveStudentCount = vault.students.filter((student) => student.status === "active").length;
   const aiActiveCourseCount = vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)).length;
   const aiPendingLessonCount = vault.lessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "makeup_pending").length;
@@ -1246,6 +1301,56 @@ export function ScheduleView({
       })
     );
     showScheduleNotice(`已添加 ${dateWithWeekday(lessonDate)} ${lessonStartTime}-${lessonEndTime} 的课节。`);
+  }
+
+  function addSubstituteClassRecord(force = false) {
+    if (!substituteDate) {
+      showScheduleError("请选择代班补课日期。");
+      return;
+    }
+    if (!validateTimeRange(substituteStartTime, substituteEndTime, "代班补课结束时间必须晚于开始时间。")) return;
+    if (substitutePresentCountNumber <= 0) {
+      showScheduleError("请填写代班补课到课人数。");
+      return;
+    }
+    const conflict = findTimeConflict(substituteDate, substituteStartTime, substituteEndTime);
+    if (conflict && !force) {
+      confirm({
+        title: "代班补课时间已有课程",
+        description: `${substituteDate} ${substituteStartTime}-${substituteEndTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要添加。`,
+        confirmLabel: "仍然添加",
+        tone: "danger",
+        onConfirm: () => addSubstituteClassRecord(true)
+      });
+      return;
+    }
+    const lesson = createSubstituteClassLesson(vault, {
+      date: substituteDate,
+      startTime: substituteStartTime,
+      endTime: substituteEndTime,
+      campusId: substituteCampusId || undefined,
+      subject: substituteSubject,
+      externalClassName: substituteExternalClassName,
+      originalTeacherName: substituteOriginalTeacherName,
+      salaryGradeStage: substituteSalaryGradeStage,
+      presentStudentCount: substitutePresentCountNumber,
+      studentNamesText: substituteStudentNamesText,
+      note: substituteNote,
+      manualBillingHours: substituteManualBillingHours,
+      status: substituteStatus
+    });
+    onAddLesson(lesson);
+    setSelectedId(lesson.id);
+    setSelectedCalendarDate(substituteDate);
+    setCalendarMonth(substituteDate.slice(0, 7));
+    setLessonDay(substituteDate);
+    setScheduleError("");
+    showScheduleNotice(`已添加 ${dateWithWeekday(substituteDate)} ${substituteStartTime}-${substituteEndTime} 的代班补课记录。`);
+    setSubstituteExternalClassName("");
+    setSubstituteOriginalTeacherName("");
+    setSubstitutePresentStudentCount("");
+    setSubstituteStudentNamesText("");
+    setSubstituteNote("");
   }
 
   function toggleSyncLesson(lessonId: string) {
@@ -1547,6 +1652,13 @@ export function ScheduleView({
   }
 
   function recalculateLessonFee(lesson: Lesson): Lesson {
+    if (isSubstituteClassLesson(lesson)) {
+      return {
+        ...lesson,
+        type: "class",
+        feeSnapshot: buildSubstituteClassFeeSnapshot(vault, lesson)
+      };
+    }
     const course = getCourse(vault, lesson.courseGroupId);
     if (!course) return lesson;
     const normalizedLesson: Lesson = {
@@ -2784,6 +2896,46 @@ export function ScheduleView({
           weeklyPatternCreatableCount={weeklyPatternCreatableCount}
           weeklyPatternInvalidSlotCount={weeklyPatternInvalidSlotCount}
           weeklyPatternSlots={weeklyPatternSlots}
+        />
+      )}
+
+      {schedulePanel === "substitute" && (
+        <SubstituteClassLessonPanel
+          amountsVisible={amountsVisible}
+          campusOptions={campusOptions}
+          subjectOptions={studentStatsSubjects}
+          date={substituteDate}
+          startTime={substituteStartTime}
+          endTime={substituteEndTime}
+          billingHours={substituteBillingHours}
+          campusId={substituteCampusId}
+          subject={substituteSubject}
+          externalClassName={substituteExternalClassName}
+          originalTeacherName={substituteOriginalTeacherName}
+          salaryGradeStage={substituteSalaryGradeStage}
+          presentStudentCount={substitutePresentStudentCount}
+          studentNamesText={substituteStudentNamesText}
+          note={substituteNote}
+          status={substituteStatus}
+          isTimeValid={isSubstituteTimeValid}
+          estimatedAmount={substitutePreviewSnapshot.amount}
+          estimatedHours={substitutePreviewSnapshot.hours ?? 0}
+          estimatedPerStudentFee={substitutePreviewSnapshot.perPresentStudentFee ?? 0}
+          salaryGradeLabel={substitutePreviewSnapshot.salaryGradeLabel ?? "未设置"}
+          onAdd={addSubstituteClassRecord}
+          setDate={setSubstituteDate}
+          setStartTime={setSubstituteStartTime}
+          setEndTime={setSubstituteEndTime}
+          setBillingHours={setSubstituteBillingHours}
+          setCampusId={setSubstituteCampusId}
+          setSubject={setSubstituteSubject}
+          setExternalClassName={setSubstituteExternalClassName}
+          setOriginalTeacherName={setSubstituteOriginalTeacherName}
+          setSalaryGradeStage={setSubstituteSalaryGradeStage}
+          setPresentStudentCount={setSubstitutePresentStudentCount}
+          setStudentNamesText={setSubstituteStudentNamesText}
+          setNote={setSubstituteNote}
+          setStatus={setSubstituteStatus}
         />
       )}
 

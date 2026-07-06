@@ -17,17 +17,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput } from "@/components/ui/time-text-input";
 import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
 import { ScheduleLessonAttendancePanel } from "@/frontend/components/ScheduleLessonAttendancePanel";
-import type { AttendanceStatus, Campus, CourseGroup, Lesson, Student, TeacherVault } from "@/shared/types";
+import type { AttendanceStatus, Campus, CourseGroup, Lesson, SalaryGradeStage, Student, TeacherVault } from "@/shared/types";
 import {
   attendedStudentNamesForLesson,
   courseName,
   courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
+  lessonDisplayName,
+  lessonDisplaySubject,
   lessonStatusLabels,
   lessonTimeRangeLabel,
   studentNames
 } from "@/frontend/lib/helpers";
+import { isSubstituteClassLesson, salaryGradeStageLabels, salaryGradeStageOrder } from "@/frontend/lib/calculations";
 import type { LessonReturnTarget } from "@/frontend/lib/scheduleViewTypes";
 
 type LessonContentField = "taught" | "homework";
@@ -211,14 +214,27 @@ export function ScheduleLessonDetailPanel({
   vault,
   getDefaultTemporaryFeeForEntry
 }: ScheduleLessonDetailPanelProps) {
+  const isSubstituteClass = isSubstituteClassLesson(selected);
+  const substituteInfo = selected.substituteClass;
+
+  function updateSubstituteInfo(patch: Partial<NonNullable<Lesson["substituteClass"]>>) {
+    onUpdateSelected({
+      substituteClass: {
+        presentStudentCount: substituteInfo?.presentStudentCount ?? 0,
+        ...substituteInfo,
+        ...patch
+      }
+    }, true);
+  }
+
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
       <Card className="overflow-hidden">
         <CardHeader className="flex flex-col gap-3 border-b border-[#e8eef6] bg-white sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <CardTitle>课程详情</CardTitle>
+            <CardTitle>{isSubstituteClass ? "代班补课详情" : "课程详情"}</CardTitle>
             <CardDescription className="space-y-1 leading-5">
-              <span className="block">{courseSubject(vault, selected.courseGroupId)} · {courseTypeLabel(vault, selected.type)}</span>
+              <span className="block">{lessonDisplaySubject(vault, selected)} · {courseTypeLabel(vault, selected.type)}</span>
               <span className="block">{dateWithWeekday(selected.date)} · {selected.startTime}-{selected.endTime}</span>
               <span className="block">实际时长 {selectedActualHours.toFixed(2)}h · {selected.feeSnapshot.manualHours ? "手动计费课时" : "计费课时"} {selectedBillingHours.toFixed(1)}h</span>
             </CardDescription>
@@ -271,15 +287,53 @@ export function ScheduleLessonDetailPanel({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">课程</label>
-              <Select value={selected.courseGroupId} onChange={(event) => onSelectedCourseChange(event.target.value)}>
-                {courseGroupOptions.map((course) => (
-                  <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
-                ))}
-              </Select>
+          {isSubstituteClass && (
+            <div className="rounded-[14px] border border-[#bfdbfe] bg-[#eff6ff] p-4">
+              <div className="mb-3 text-sm font-extrabold text-[#1557c2]">代班补课信息</div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#475569]">外部班级</label>
+                  <Input value={substituteInfo?.externalClassName ?? ""} onChange={(event) => updateSubstituteInfo({ externalClassName: event.target.value.trim() || undefined })} className="bg-white" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#475569]">原老师</label>
+                  <Input value={substituteInfo?.originalTeacherName ?? ""} onChange={(event) => updateSubstituteInfo({ originalTeacherName: event.target.value.trim() || undefined })} className="bg-white" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#475569]">科目</label>
+                  <Input value={substituteInfo?.subject ?? ""} onChange={(event) => updateSubstituteInfo({ subject: event.target.value.trim() || undefined })} className="bg-white" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#475569]">年级阶段</label>
+                  <Select value={substituteInfo?.salaryGradeStage ?? "junior_3"} onChange={(event) => updateSubstituteInfo({ salaryGradeStage: event.target.value as SalaryGradeStage })} className="bg-white">
+                    {salaryGradeStageOrder.map((stage) => (
+                      <option key={stage} value={stage}>{salaryGradeStageLabels[stage]}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-xs font-bold text-[#475569]">到课人数</label>
+                  <Input type="number" min={0} step={1} value={substituteInfo?.presentStudentCount ?? 0} onChange={(event) => updateSubstituteInfo({ presentStudentCount: Math.max(Math.floor(Number(event.target.value)), 0) })} className="bg-white" />
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-xs font-bold text-[#475569]">学生备注</label>
+                  <Textarea value={substituteInfo?.studentNamesText ?? ""} onChange={(event) => updateSubstituteInfo({ studentNamesText: event.target.value.trim() || undefined })} className="min-h-[72px] bg-white" />
+                </div>
+              </div>
             </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {!isSubstituteClass && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">课程</label>
+                <Select value={selected.courseGroupId} onChange={(event) => onSelectedCourseChange(event.target.value)}>
+                  {courseGroupOptions.map((course) => (
+                    <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
+                  ))}
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">校区</label>
               <Select value={selected.campusId ?? ""} onChange={(event) => onUpdateSelected({ campusId: event.target.value || undefined })}>
@@ -351,7 +405,7 @@ export function ScheduleLessonDetailPanel({
               )}
               <div className="flex flex-col gap-2 rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-xs font-semibold leading-5 text-[#64748b]">
-                  实到 {selectedCalculatedPresentCount} 人 · 重算 {formatPrivateMoney(selectedCalculatedAmount, amountsVisible)}
+                  {isSubstituteClass ? "到课" : "实到"} {selectedCalculatedPresentCount} 人 · 重算 {formatPrivateMoney(selectedCalculatedAmount, amountsVisible)}
                 </div>
                 <Button type="button" variant="outline" size="sm" className="h-8 w-fit bg-white text-xs" onClick={onRecalculateSelectedFee}>
                   <Calculator size={14} /> 按实到重算
@@ -374,6 +428,7 @@ export function ScheduleLessonDetailPanel({
             </div>
           )}
 
+          {!isSubstituteClass && (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <button
               type="button"
@@ -412,7 +467,9 @@ export function ScheduleLessonDetailPanel({
               )}
             </button>
           </div>
+          )}
 
+          {!isSubstituteClass && (
           <ScheduleLessonAttendancePanel
             amountsVisible={amountsVisible}
             attendancePanelOpen={attendancePanelOpen}
@@ -462,6 +519,7 @@ export function ScheduleLessonDetailPanel({
             trialStudentCount={trialStudentCount}
             vault={vault}
           />
+          )}
 
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
@@ -477,21 +535,23 @@ export function ScheduleLessonDetailPanel({
             <Textarea value={selected.content.homework} onChange={(event) => onContentChange("homework", event.target.value)} placeholder="例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。" />
           </div>
 
-          <LessonChecklistLinker
-            vault={vault}
-            lesson={selected}
-            previousLesson={selectedPreviousLesson}
-            content={selected.content}
-            subjectHint={courseSubject(vault, selected.courseGroupId)}
-            onChange={onChecklistContentChange}
-            onOpenChecklist={onOpenProgressChecklist ? () => onOpenProgressChecklist(selected) : undefined}
-            onSyncChecklist={onSyncChecklistCompletions}
-            syncMessage={checklistSyncMessage}
-            syncSummary={checklistSyncSummary}
-            perStudentStatus={checklistPerStudentStatus}
-            syncResult={checklistSyncResult}
-            lastSyncSource={checklistLastSyncSource}
-          />
+          {!isSubstituteClass && (
+            <LessonChecklistLinker
+              vault={vault}
+              lesson={selected}
+              previousLesson={selectedPreviousLesson}
+              content={selected.content}
+              subjectHint={lessonDisplaySubject(vault, selected)}
+              onChange={onChecklistContentChange}
+              onOpenChecklist={onOpenProgressChecklist ? () => onOpenProgressChecklist(selected) : undefined}
+              onSyncChecklist={onSyncChecklistCompletions}
+              syncMessage={checklistSyncMessage}
+              syncSummary={checklistSyncSummary}
+              perStudentStatus={checklistPerStudentStatus}
+              syncResult={checklistSyncResult}
+              lastSyncSource={checklistLastSyncSource}
+            />
+          )}
         </CardContent>
       </Card>
     </motion.div>
