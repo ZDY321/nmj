@@ -48,10 +48,13 @@ export type ImportPreviewLesson = ImportedScheduleLesson & {
   systemLessonLabel?: string;
   systemLessonStatus?: Lesson["status"];
   systemLessonNote?: string;
+  systemActualPresentCount?: number;
   systemPresentCount?: number;
   systemExpectedCount?: number;
   systemPresentStudentNames?: string;
   systemExpectedStudentNames?: string;
+  systemMakeupCompletedCount?: number;
+  systemMakeupCompletedStudentNames?: string;
   issues: string[];
 };
 
@@ -270,10 +273,13 @@ export function buildImportPreview(
       systemLessonLabel: systemLesson ? systemLessonLabel(vault, systemLesson) : undefined,
       systemLessonStatus: systemLesson?.status,
       systemLessonNote: systemLesson?.note,
+      systemActualPresentCount: systemAttendance?.actualPresentCount,
       systemPresentCount: systemAttendance?.presentCount,
       systemExpectedCount: systemAttendance?.expectedCount,
       systemPresentStudentNames: systemAttendance?.presentStudentNames,
       systemExpectedStudentNames: systemAttendance?.expectedStudentNames,
+      systemMakeupCompletedCount: systemAttendance?.makeupCompletedCount,
+      systemMakeupCompletedStudentNames: systemAttendance?.makeupCompletedStudentNames,
       issues
     };
   });
@@ -536,8 +542,8 @@ function matchCourse(vault: TeacherVault, lesson: ImportedScheduleLesson, campus
   const candidates = vault.courseGroups.flatMap((course) => {
     const systemLessonScore = systemLessonScopeScoreForCourse(vault, course.id, lesson, campusId);
     if (course.status !== "active" && systemLessonScore === 0) return [];
-    if (campusId && course.defaultCampusId && course.defaultCampusId !== campusId) return [];
-    if (lesson.courseTypeHint !== "unknown" && course.type !== lesson.courseTypeHint) return [];
+    if (campusId && course.defaultCampusId && course.defaultCampusId !== campusId && systemLessonScore === 0) return [];
+    if (lesson.courseTypeHint !== "unknown" && course.type !== lesson.courseTypeHint && !courseHasImportMonthLessonType(vault, course.id, lesson.courseTypeHint, lesson.date.slice(0, 7))) return [];
     if (subject && normalizeText(course.subject) !== subject) return [];
     return [{ course, systemLessonScore }];
   })
@@ -548,12 +554,39 @@ function matchCourse(vault: TeacherVault, lesson: ImportedScheduleLesson, campus
     )
     .map((candidate) => candidate.course);
   if (lesson.courseTypeHint === "one_on_one" && studentName) {
-    const byStudent = candidates.find((course) =>
-      course.studentIds.some((studentId) => normalizeText(vault.students.find((student) => student.id === studentId)?.name ?? "") === studentName)
-    );
+    const byStudent = candidates.find((course) => courseHasStudentNameForImport(vault, course, lesson, studentName, campusId));
     if (byStudent) return byStudent;
   }
   return candidates.find((course) => normalizedTitle.includes(normalizeText(course.name)) || normalizeText(course.name).includes(normalizedTitle));
+}
+
+function courseHasImportMonthLessonType(vault: TeacherVault, courseId: string, type: CourseType, month: string): boolean {
+  return vault.lessons.some((lesson) =>
+    lesson.courseGroupId === courseId &&
+    lesson.type === type &&
+    lesson.date.startsWith(month)
+  );
+}
+
+function courseHasStudentNameForImport(vault: TeacherVault, course: CourseGroup, lesson: ImportedScheduleLesson, studentName: string, campusId?: string): boolean {
+  return studentIdsForImportCourseMatch(vault, course, lesson, campusId).some((studentId) =>
+    normalizeText(vault.students.find((student) => student.id === studentId)?.name ?? "") === studentName
+  );
+}
+
+function studentIdsForImportCourseMatch(vault: TeacherVault, course: CourseGroup, lesson: ImportedScheduleLesson, campusId?: string): string[] {
+  const month = lesson.date.slice(0, 7);
+  const lessonStudentIds = vault.lessons
+    .filter((systemLesson) =>
+      systemLesson.courseGroupId === course.id &&
+      systemLesson.date.startsWith(month) &&
+      (!campusId || systemLessonCampusId(vault, systemLesson) === campusId)
+    )
+    .flatMap((systemLesson) => [
+      ...systemLesson.expectedStudentIds,
+      ...systemLesson.attendance.map((entry) => entry.studentId)
+    ]);
+  return Array.from(new Set([...course.studentIds, ...lessonStudentIds]));
 }
 
 function systemLessonScopeScoreForCourse(vault: TeacherVault, courseId: string, lesson: ImportedScheduleLesson, campusId?: string): number {
@@ -571,13 +604,13 @@ function systemLessonScopeScoreForCourse(vault: TeacherVault, courseId: string, 
 function findSameTimeCourseThatLooksLikeImportedLesson(vault: TeacherVault, lesson: ImportedScheduleLesson, campusId?: string, fallbackCourseId?: string): CourseGroup | undefined {
   const sameTimeLessons = activeSystemLessonsForDate(vault, lesson.date, campusId)
     .filter((item) => item.startTime === lesson.startTime && item.endTime === lesson.endTime);
-  const bestLesson = sameTimeLessons.find((item) => courseLooksLikeImportedLesson(vault, item.courseGroupId, lesson))
+  const bestLesson = sameTimeLessons.find((item) => systemLessonLooksLikeImportedLesson(vault, item, lesson))
     ?? sameTimeLessons.find((item) => item.courseGroupId === fallbackCourseId);
   return bestLesson ? vault.courseGroups.find((course) => course.id === bestLesson.courseGroupId) : undefined;
 }
 
-function courseLooksLikeImportedLesson(vault: TeacherVault, courseId: string, lesson: ImportedScheduleLesson): boolean {
-  const course = vault.courseGroups.find((item) => item.id === courseId);
+function systemLessonLooksLikeImportedLesson(vault: TeacherVault, systemLesson: Lesson, lesson: ImportedScheduleLesson): boolean {
+  const course = vault.courseGroups.find((item) => item.id === systemLesson.courseGroupId);
   if (!course) return false;
 
   const title = normalizeText(lesson.title);
@@ -585,8 +618,13 @@ function courseLooksLikeImportedLesson(vault: TeacherVault, courseId: string, le
   const lessonSubject = normalizeText(lesson.subjectHint);
   const courseSubject = normalizeText(course.subject);
   const subjectMatches = Boolean(lessonSubject && courseSubject && lessonSubject === courseSubject);
-  const typeMatches = lesson.courseTypeHint === "unknown" || lesson.courseTypeHint === course.type;
-  const studentMatches = course.studentIds.some((studentId) => {
+  const typeMatches = lesson.courseTypeHint === "unknown" || lesson.courseTypeHint === systemLesson.type || lesson.courseTypeHint === course.type;
+  const studentIds = Array.from(new Set([
+    ...course.studentIds,
+    ...systemLesson.expectedStudentIds,
+    ...systemLesson.attendance.map((entry) => entry.studentId)
+  ]));
+  const studentMatches = studentIds.some((studentId) => {
     const studentName = normalizeText(vault.students.find((student) => student.id === studentId)?.name ?? "");
     const studentHint = normalizeText(lesson.studentNameHint ?? "");
     return Boolean(
@@ -739,44 +777,72 @@ function preferredSystemLessonForImportedLesson(candidates: Lesson[], lesson: Pi
 }
 
 function systemLessonAttendanceSnapshot(vault: TeacherVault, lesson: Lesson): {
+  actualPresentCount: number;
   presentCount: number;
   expectedCount: number;
   presentStudentNames: string;
   expectedStudentNames: string;
+  makeupCompletedCount: number;
+  makeupCompletedStudentNames: string;
   status: Lesson["status"];
 } {
   const expectedStudentIds = Array.from(new Set(lesson.expectedStudentIds));
   if (lesson.status === "cancelled") {
     return {
+      actualPresentCount: 0,
       presentCount: 0,
       expectedCount: 0,
       presentStudentNames: "",
       expectedStudentNames: studentNamesForIds(vault, expectedStudentIds),
+      makeupCompletedCount: 0,
+      makeupCompletedStudentNames: "",
       status: lesson.status
     };
   }
-  const presentStudentIds = lesson.attendance
+  const actualPresentStudentIds = lesson.attendance
     .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
     .map((entry) => entry.studentId);
+  const makeupCompletedStudentIds = !lesson.linkedOriginalLessonId
+    ? lesson.attendance
+      .filter((entry) => entry.status === "makeup_completed")
+      .map((entry) => entry.studentId)
+    : [];
   const effectivePresentStudentIds = lesson.attendance.length > 0
-    ? Array.from(new Set(presentStudentIds))
+    ? Array.from(new Set([...actualPresentStudentIds, ...makeupCompletedStudentIds]))
     : Array.from(new Set(lesson.expectedStudentIds));
+  const uniqueActualPresentStudentIds = lesson.attendance.length > 0
+    ? Array.from(new Set(actualPresentStudentIds))
+    : Array.from(new Set(lesson.expectedStudentIds));
+  const uniqueMakeupCompletedStudentIds = Array.from(new Set(makeupCompletedStudentIds));
   return {
+    actualPresentCount: uniqueActualPresentStudentIds.length,
     presentCount: effectivePresentStudentIds.length,
     expectedCount: expectedStudentIds.length,
-    presentStudentNames: studentNamesForIds(vault, effectivePresentStudentIds),
+    presentStudentNames: studentNamesForEffectiveAttendance(vault, uniqueActualPresentStudentIds, uniqueMakeupCompletedStudentIds),
     expectedStudentNames: studentNamesForIds(vault, expectedStudentIds),
+    makeupCompletedCount: uniqueMakeupCompletedStudentIds.length,
+    makeupCompletedStudentNames: studentNamesForIds(vault, uniqueMakeupCompletedStudentIds),
     status: lesson.status
   };
 }
 
 function importAttendanceIssue(
   lesson: Pick<ImportedScheduleLesson, "presentCount" | "expectedCount">,
-  systemAttendance: { presentCount: number; expectedCount: number; status?: Lesson["status"] }
+  systemAttendance: { actualPresentCount?: number; presentCount: number; expectedCount: number; makeupCompletedCount?: number; status?: Lesson["status"] }
 ): string {
   if (systemAttendance.status === "cancelled" && lesson.presentCount === 0 && systemAttendance.presentCount === 0) return "";
   if (lesson.presentCount === systemAttendance.presentCount && lesson.expectedCount === systemAttendance.expectedCount) return "";
-  return `到课人数不一致：教务 ${lesson.presentCount}/${lesson.expectedCount}，云端 ${systemAttendance.presentCount}/${systemAttendance.expectedCount}`;
+  if (
+    (systemAttendance.makeupCompletedCount ?? 0) > 0 &&
+    lesson.presentCount === systemAttendance.actualPresentCount &&
+    lesson.expectedCount === systemAttendance.expectedCount
+  ) {
+    return "";
+  }
+  const makeupText = (systemAttendance.makeupCompletedCount ?? 0) > 0
+    ? `（当天实到 ${systemAttendance.actualPresentCount}，已补课 ${systemAttendance.makeupCompletedCount}）`
+    : "";
+  return `到课人数不一致：教务 ${lesson.presentCount}/${lesson.expectedCount}，云端有效 ${systemAttendance.presentCount}/${systemAttendance.expectedCount}${makeupText}`;
 }
 
 function importSystemCompletionIssue(lesson: Pick<ImportedScheduleLesson, "presentCount" | "note" | "rawText">, systemLesson: Lesson): string {
@@ -790,6 +856,19 @@ function studentNamesForIds(vault: TeacherVault, studentIds: string[]): string {
     .map((studentId) => vault.students.find((student) => student.id === studentId)?.name ?? "")
     .filter(Boolean)
     .join("、");
+}
+
+function studentNamesForEffectiveAttendance(vault: TeacherVault, actualPresentStudentIds: string[], makeupCompletedStudentIds: string[]): string {
+  const makeupSet = new Set(makeupCompletedStudentIds);
+  const actualNames = actualPresentStudentIds
+    .filter((studentId) => !makeupSet.has(studentId))
+    .map((studentId) => vault.students.find((student) => student.id === studentId)?.name ?? "")
+    .filter(Boolean);
+  const makeupNames = makeupCompletedStudentIds
+    .map((studentId) => vault.students.find((student) => student.id === studentId)?.name ?? "")
+    .filter(Boolean)
+    .map((name) => `${name}（已补课）`);
+  return [...actualNames, ...makeupNames].join("、");
 }
 
 function systemLessonLabel(vault: TeacherVault, lesson: Lesson): string {

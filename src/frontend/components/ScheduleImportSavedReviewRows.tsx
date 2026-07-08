@@ -141,7 +141,7 @@ function SavedReviewRowCard({
           </div>
         </div>
         <div className="shrink-0 rounded-[10px] border border-[#e8eef6] bg-white/80 px-3 py-2 text-xs font-bold text-[#64748b]">
-          教务 {formatSavedReviewCount(row.presentCount)}/{formatSavedReviewCount(row.expectedCount)} · 云端 {formatSavedReviewCount(systemAttendance.presentCount)}/{formatSavedReviewCount(systemAttendance.expectedCount)}
+          教务 {formatSavedReviewCount(row.presentCount)}/{formatSavedReviewCount(row.expectedCount)} · 云端有效 {formatSavedReviewCount(systemAttendance.presentCount)}/{formatSavedReviewCount(systemAttendance.expectedCount)}
         </div>
       </div>
 
@@ -191,8 +191,11 @@ function SavedReviewRowCard({
               </Badge>
             )}
             <Badge variant={row.status === "attendance_mismatch" ? "amber" : "secondary"} className="text-[10px]">
-              实到/应到 {formatSavedReviewCount(systemAttendance.presentCount)}/{formatSavedReviewCount(systemAttendance.expectedCount)}
+              有效实到/应到 {formatSavedReviewCount(systemAttendance.presentCount)}/{formatSavedReviewCount(systemAttendance.expectedCount)}
             </Badge>
+            {(systemAttendance.makeupCompletedCount ?? 0) > 0 && (
+              <Badge variant="yellow" className="text-[10px]">含已补课 {formatSavedReviewCount(systemAttendance.makeupCompletedCount)} 人</Badge>
+            )}
           </div>
           {systemAttendance.note && (
             <div className="mt-2 rounded-[9px] border border-[#fed7aa] bg-[#fff7ed] px-2 py-1 text-xs font-semibold leading-5 text-[#9a3412]">
@@ -205,8 +208,13 @@ function SavedReviewRowCard({
             </div>
           )}
           <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
-            实到：{systemAttendance.presentStudentNames || "未记录实到学生"}
+            有效实到：{systemAttendance.presentStudentNames || "未记录有效到课学生"}
           </div>
+          {(systemAttendance.makeupCompletedCount ?? 0) > 0 && (
+            <div className="mt-1 text-xs font-semibold leading-5 text-[#854d0e]">
+              其中已补课：{systemAttendance.makeupCompletedStudentNames || `${systemAttendance.makeupCompletedCount} 人`}；当天实到 {formatSavedReviewCount(systemAttendance.actualPresentCount)} 人
+            </div>
+          )}
           <div className="mt-1 text-xs font-semibold leading-5 text-[#94a3b8]">
             应到：{systemAttendance.expectedStudentNames || "未设置学生"}
           </div>

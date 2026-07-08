@@ -53,6 +53,7 @@ import {
   materializeStudentTrialStatusOnLessons,
   moveLessonsToTrash,
   normalizeCourseLessonSyncScope,
+  recalculateLinkedMakeupLessonFeeSnapshots,
   recalculateLessonFeeSnapshot,
   repairCourseStudentLinksFromLessons,
   syncFutureLessonsWithStudentTrialStatus,
@@ -497,24 +498,44 @@ export function App() {
     updateVault((draft) => {
       draft.lessons.push(lessonToAdd);
       draft.lessons = draft.lessons.map((item) => (item.id === lessonToUpdate.id ? lessonToUpdate : item));
+      const originalLessonId = lessonToAdd.linkedOriginalLessonId ?? (!lessonToUpdate.linkedOriginalLessonId ? lessonToUpdate.id : undefined);
+      if (originalLessonId) {
+        recalculateLinkedMakeupLessonFeeSnapshots(draft, originalLessonId);
+      }
     });
   }
 
   function updateLesson(lesson: Lesson) {
     updateVault((draft) => {
+      const previousLesson = draft.lessons.find((item) => item.id === lesson.id);
+      const affectedOriginalLessonIds = new Set<string>();
+      if (previousLesson?.linkedOriginalLessonId) affectedOriginalLessonIds.add(previousLesson.linkedOriginalLessonId);
+      if (lesson.linkedOriginalLessonId) affectedOriginalLessonIds.add(lesson.linkedOriginalLessonId);
+      if (!lesson.linkedOriginalLessonId) affectedOriginalLessonIds.add(lesson.id);
       cleanupResolvedMakeupLessons(draft, lesson);
       const nextLesson = syncOriginalLessonFromMakeupCompletion(draft, lesson);
       draft.lessons = draft.lessons.map((item) => (item.id === nextLesson.id ? nextLesson : item));
+      affectedOriginalLessonIds.forEach((originalLessonId) => {
+        recalculateLinkedMakeupLessonFeeSnapshots(draft, originalLessonId);
+      });
     });
   }
 
   function updateLessons(lessons: Lesson[]) {
     if (lessons.length === 0) return;
     updateVault((draft) => {
+      const affectedOriginalLessonIds = new Set<string>();
       lessons.forEach((lesson) => {
+        const previousLesson = draft.lessons.find((item) => item.id === lesson.id);
+        if (previousLesson?.linkedOriginalLessonId) affectedOriginalLessonIds.add(previousLesson.linkedOriginalLessonId);
+        if (lesson.linkedOriginalLessonId) affectedOriginalLessonIds.add(lesson.linkedOriginalLessonId);
+        if (!lesson.linkedOriginalLessonId) affectedOriginalLessonIds.add(lesson.id);
         cleanupResolvedMakeupLessons(draft, lesson);
         const nextLesson = syncOriginalLessonFromMakeupCompletion(draft, lesson);
         draft.lessons = draft.lessons.map((item) => (item.id === nextLesson.id ? nextLesson : item));
+      });
+      affectedOriginalLessonIds.forEach((originalLessonId) => {
+        recalculateLinkedMakeupLessonFeeSnapshots(draft, originalLessonId);
       });
     });
   }
@@ -2115,4 +2136,3 @@ function greetingFor(date: Date): string {
   if (hour >= 14 && hour < 18) return "下午好";
   return "晚上好";
 }
-

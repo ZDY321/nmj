@@ -533,10 +533,13 @@ export type ScheduleImportSavedRow = {
   systemLessonLabel?: string;
   systemLessonStatus?: LessonStatus;
   systemLessonNote?: string;
+  systemActualPresentCount?: number;
   systemPresentCount?: number;
   systemExpectedCount?: number;
   systemPresentStudentNames?: string;
   systemExpectedStudentNames?: string;
+  systemMakeupCompletedCount?: number;
+  systemMakeupCompletedStudentNames?: string;
   issues: string[];
   resolutionStatus?: ScheduleImportResolutionStatus;
   resolutionNote?: string;

@@ -265,6 +265,46 @@ describe("schedule import parsing and matching", () => {
     expect(summary.byCampus).toContainEqual({ key: campus.name, count: 3, selected: 1 });
   });
 
+  it("keeps original class rows matched when missing students completed makeup lessons", () => {
+    const classLesson = makeLesson({
+      id: "lesson_class_with_makeup",
+      courseGroupId: classCourse.id,
+      type: "class",
+      expectedStudentIds: ["student_ming", "student_hong", "student_li"],
+      attendance: [
+        { studentId: "student_ming", status: "attended" },
+        { studentId: "student_hong", status: "makeup_completed" },
+        { studentId: "student_li", status: "attended" }
+      ],
+      feeSnapshot: { amount: 80, hours: 2 }
+    });
+    const vault = makeVault({ lessons: [classLesson] });
+    const imported = makeImportedLesson({
+      id: "import_class_with_makeup",
+      title: classCourse.name,
+      courseTypeHint: "class" as CourseType,
+      studentNameHint: undefined,
+      presentCount: 2,
+      expectedCount: 3,
+      rawText: "数学提高班 教师：王老师 实到/应到：2/3",
+      warnings: ["未全员到课"]
+    });
+
+    const rows = buildImportPreview(vault, [imported], {});
+
+    expect(rows[0]).toMatchObject({
+      status: "matched",
+      systemLessonId: classLesson.id,
+      systemActualPresentCount: 2,
+      systemPresentCount: 3,
+      systemExpectedCount: 3,
+      systemMakeupCompletedCount: 1,
+      systemMakeupCompletedStudentNames: "小红"
+    });
+    expect(rows[0].systemPresentStudentNames).toContain("小红（已补课）");
+    expect(rows[0].issues).toEqual([]);
+  });
+
   it("maps legacy Haizhou file names to Haining campus", () => {
     const hainingCampus = { id: "campus_haining", name: "海宁校区" };
     const hainingCourse: CourseGroup = {
@@ -326,6 +366,44 @@ describe("schedule import parsing and matching", () => {
       status: "time_mismatch",
       matchedCourseId: archivedCourse.id,
       systemLessonId: archivedLesson.id
+    });
+  });
+
+  it("matches historical lessons after the archived student was removed from the current course roster", () => {
+    const archivedCourse: CourseGroup = {
+      ...oneOnOneCourse,
+      id: "course_archived_empty",
+      name: "初三专项",
+      studentIds: [],
+      status: "paused"
+    };
+    const archivedLesson = makeLesson({
+      id: "lesson_archived_empty",
+      courseGroupId: archivedCourse.id,
+      type: "one_on_one",
+      expectedStudentIds: ["student_ming"],
+      attendance: [{ studentId: "student_ming", status: "attended" }]
+    });
+    const vault = makeVault({
+      students: students.map((student) =>
+        student.id === "student_ming" ? { ...student, status: "paused" as const } : student
+      ),
+      courseGroups: [archivedCourse],
+      lessons: [archivedLesson]
+    });
+    const imported = makeImportedLesson({
+      id: "import_archived_empty",
+      title: "小明_数学一对一",
+      studentNameHint: "小明"
+    });
+
+    const rows = buildImportPreview(vault, [imported], {});
+
+    expect(rows[0]).toMatchObject({
+      status: "matched",
+      matchedCourseId: archivedCourse.id,
+      systemLessonId: archivedLesson.id,
+      systemExpectedStudentNames: "小明"
     });
   });
 });

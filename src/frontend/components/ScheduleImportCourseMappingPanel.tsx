@@ -572,6 +572,7 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
         course.name,
         course.subject,
         studentNames(vault, course.studentIds),
+        historicalStudentNamesForCourse(vault, course),
         courseTypeLabel(vault, course.type),
         campusName(vault, course.defaultCampusId),
         course.note ?? "",
@@ -583,7 +584,8 @@ function filterMappingCourses(vault: TeacherVault, courses: CourseGroup[], query
 }
 
 function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): string {
-  const students = studentNames(vault, course.studentIds) || "未关联学生";
+  const currentStudents = studentNames(vault, course.studentIds);
+  const students = currentStudents || historicalStudentNamesForCourse(vault, course, "历史学生") || "未关联学生";
   const statusLabel = mappingCourseStatusLabel(vault, course);
   return `${courseName(vault, course.id)} · ${course.subject} · ${students}${statusLabel ? ` · ${statusLabel}` : ""}`;
 }
@@ -591,11 +593,25 @@ function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): str
 function mappingCourseStatusLabel(vault: TeacherVault, course: CourseGroup): string {
   if (course.status === "paused") return "课程已暂停";
   if (courseHasActiveStudent(vault, course)) return "";
-  if (course.studentIds.length === 0) return "未关联学生";
+  if (course.studentIds.length === 0) return historicalStudentNamesForCourse(vault, course) ? "仅保留历史课节学生" : "未关联学生";
   const linkedStudents = course.studentIds
     .map((studentId) => vault.students.find((student) => student.id === studentId))
     .filter(Boolean);
   return linkedStudents.some((student) => student?.status === "transition") ? "学生过渡期" : "学生已归档";
+}
+
+function historicalStudentNamesForCourse(vault: TeacherVault, course: CourseGroup, prefix = ""): string {
+  const currentStudentIds = new Set(course.studentIds);
+  const historicalStudentIds = Array.from(new Set(vault.lessons
+    .filter((lesson) => lesson.courseGroupId === course.id)
+    .flatMap((lesson) => [
+      ...lesson.expectedStudentIds,
+      ...lesson.attendance.map((entry) => entry.studentId)
+    ])))
+    .filter((studentId) => !currentStudentIds.has(studentId));
+  const names = studentNames(vault, historicalStudentIds);
+  if (!names) return "";
+  return prefix ? `${prefix}：${names}` : names;
 }
 
 function courseTypeLabelSafe(vault: TeacherVault, type: CourseType | "unknown"): string {

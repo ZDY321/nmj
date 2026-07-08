@@ -255,6 +255,110 @@ describe("salary calculations", () => {
     expect(snapshot.amount).toBe(90);
   });
 
+  it("prices own class makeup lessons as the original class headcount delta", () => {
+    const originalStudentIds = students.slice(0, 6).map((student) => student.id);
+    const originalLesson = makeLesson({
+      id: "lesson_original_class",
+      courseGroupId: classCourse.id,
+      type: classCourse.type,
+      expectedStudentIds: originalStudentIds,
+      attendance: [
+        ...originalStudentIds.slice(0, 5).map((studentId) => attended(studentId)),
+        { studentId: "student_6", status: "makeup_pending" }
+      ]
+    });
+    const vault = makeVault({
+      lessons: [{ ...originalLesson, feeSnapshot: buildFeeSnapshot(makeVault(), classCourse, originalLesson) }]
+    });
+    const makeupLesson = makeLesson({
+      id: "lesson_class_makeup",
+      courseGroupId: classCourse.id,
+      type: classCourse.type,
+      status: "scheduled",
+      linkedOriginalLessonId: originalLesson.id,
+      makeupOriginalDate: originalLesson.date,
+      makeupScheduledDate: "2026-06-08",
+      expectedStudentIds: ["student_6"],
+      attendance: [attended("student_6")]
+    });
+
+    const snapshot = buildFeeSnapshot(vault, classCourse, makeupLesson);
+
+    expect(snapshot.presentStudentCount).toBe(1);
+    expect(snapshot.unitAmount).toBe(12);
+    expect(snapshot.amount).toBe(12);
+  });
+
+  it("does not add class makeup income while missed students are still inside the class base count", () => {
+    const originalStudentIds = students.slice(0, 5).map((student) => student.id);
+    const originalLesson = makeLesson({
+      id: "lesson_original_base_count",
+      courseGroupId: classCourse.id,
+      type: classCourse.type,
+      expectedStudentIds: originalStudentIds,
+      attendance: [
+        ...originalStudentIds.slice(0, 3).map((studentId) => attended(studentId)),
+        { studentId: "student_4", status: "makeup_pending" },
+        { studentId: "student_5", status: "makeup_pending" }
+      ]
+    });
+    const vault = makeVault({ lessons: [originalLesson] });
+    const makeupLesson = makeLesson({
+      id: "lesson_class_makeup_inside_base",
+      courseGroupId: classCourse.id,
+      type: classCourse.type,
+      status: "scheduled",
+      linkedOriginalLessonId: originalLesson.id,
+      expectedStudentIds: ["student_4", "student_5"],
+      attendance: [attended("student_4"), attended("student_5")]
+    });
+
+    const snapshot = buildFeeSnapshot(vault, classCourse, makeupLesson);
+
+    expect(snapshot.presentStudentCount).toBe(2);
+    expect(snapshot.unitAmount).toBe(0);
+    expect(snapshot.amount).toBe(0);
+  });
+
+  it("allocates split class makeup income by scheduled makeup order", () => {
+    const originalStudentIds = students.slice(0, 6).map((student) => student.id);
+    const originalLesson = makeLesson({
+      id: "lesson_original_split_makeup",
+      courseGroupId: classCourse.id,
+      type: classCourse.type,
+      expectedStudentIds: originalStudentIds,
+      attendance: [
+        ...originalStudentIds.slice(0, 4).map((studentId) => attended(studentId)),
+        { studentId: "student_5", status: "makeup_pending" },
+        { studentId: "student_6", status: "makeup_pending" }
+      ]
+    });
+    const firstMakeup = makeLesson({
+      id: "lesson_split_makeup_1",
+      date: "2026-06-08",
+      courseGroupId: classCourse.id,
+      type: classCourse.type,
+      status: "scheduled",
+      linkedOriginalLessonId: originalLesson.id,
+      expectedStudentIds: ["student_5"],
+      attendance: [attended("student_5")]
+    });
+    const secondMakeup = makeLesson({
+      id: "lesson_split_makeup_2",
+      date: "2026-06-09",
+      courseGroupId: classCourse.id,
+      type: classCourse.type,
+      status: "scheduled",
+      linkedOriginalLessonId: originalLesson.id,
+      expectedStudentIds: ["student_6"],
+      attendance: [attended("student_6")]
+    });
+    const vault = makeVault({ lessons: [originalLesson, firstMakeup, secondMakeup] });
+
+    expect(buildFeeSnapshot(vault, classCourse, firstMakeup).amount).toBe(0);
+    expect(buildFeeSnapshot(vault, classCourse, secondMakeup).amount).toBe(12);
+  });
+
   it("ignores split-merge payroll exclusions when the merge target lesson was deleted", () => {
     const baseVault = makeVault();
     const sourceLesson = lessonWithSnapshot(baseVault, oneOnOneCourse, {

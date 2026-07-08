@@ -756,6 +756,12 @@ export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: Fee
     ? Math.max(lesson.feeSnapshot.hours ?? 0, 0)
     : billingCourse ? billableHoursForCourseLesson(billingCourse, lesson, vault) : billableHoursForLesson(billingLesson, rule);
   const durationMultiplier = billableHours / lessonFeeUnitHours;
+  const studentMakeupAllocation = vault && billingCourse
+    ? studentMakeupOriginalClassFeeAllocation(vault, billingCourse, lesson, billableHours)
+    : undefined;
+  if (studentMakeupAllocation) {
+    return studentMakeupAllocation.amount;
+  }
   const extraFee = extraFeeTotal(lesson, rule, vault);
   if (billingLesson.type === "trial") {
     return Math.round(fixedFeeForRule(rule) + extraFee);
@@ -828,6 +834,95 @@ export function getCourse(vault: TeacherVault, courseId: string): CourseGroup | 
   return vault.courseGroups.find((course) => course.id === courseId);
 }
 
+type StudentMakeupFeeAllocation = {
+  amount: number;
+  unitAmount: number;
+  headcountBaseStudentCount: number;
+};
+
+function lessonStudentIdsForMakeupAllocation(lesson: Pick<Lesson, "expectedStudentIds" | "attendance" | "linkedOriginalLessonId">): string[] {
+  const presentAttendanceIds = lesson.attendance
+    .filter((entry) => (entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed")) && !entry.trial)
+    .map((entry) => entry.studentId);
+  if (presentAttendanceIds.length > 0 || lesson.attendance.length > 0) {
+    return Array.from(new Set(presentAttendanceIds));
+  }
+  return Array.from(new Set(lesson.expectedStudentIds));
+}
+
+function compareMakeupAllocationLessons(a: Lesson, b: Lesson): number {
+  return (
+    `${a.date} ${a.startTime} ${a.endTime} ${a.id}`.localeCompare(`${b.date} ${b.startTime} ${b.endTime} ${b.id}`)
+  );
+}
+
+function linkedMakeupLessonsForAllocation(vault: TeacherVault, originalLessonId: string, currentLesson: Lesson): Lesson[] {
+  const lessonsById = new Map(
+    vault.lessons
+      .filter((lesson) => lesson.linkedOriginalLessonId === originalLessonId && lesson.status !== "cancelled")
+      .map((lesson) => [lesson.id, lesson])
+  );
+  if (currentLesson.status !== "cancelled") {
+    lessonsById.set(currentLesson.id, currentLesson);
+  }
+  return Array.from(lessonsById.values()).sort(compareMakeupAllocationLessons);
+}
+
+function studentMakeupOriginalClassFeeAllocation(
+  vault: TeacherVault,
+  course: CourseGroup,
+  lesson: Lesson,
+  hours: number
+): StudentMakeupFeeAllocation | undefined {
+  if (!lesson.linkedOriginalLessonId || isSubstituteClassLesson(lesson)) return undefined;
+  const original = vault.lessons.find((item) => item.id === lesson.linkedOriginalLessonId);
+  if (!original || original.linkedOriginalLessonId) return undefined;
+  const originalCourse = getCourse(vault, original.courseGroupId) ?? course;
+  const originalRule = originalCourse.feeRule;
+  const stage = salaryGradeStageForLesson(vault, originalCourse, original);
+  const durationMultiplier = hours / lessonFeeUnitHours;
+  const extraFee = extraFeeTotal({ ...lesson, feeSnapshot: { ...lesson.feeSnapshot, hours } }, originalRule, vault);
+
+  let headcountBaseStudentCount = 0;
+  let unitAmountForCount: ((studentCount: number) => number) | undefined;
+
+  if (originalRule.mode === "salary_grade") {
+    const gradeRule = resolveSalaryGradeRule(vault, originalRule);
+    if (!gradeRule) return undefined;
+    headcountBaseStudentCount = classHeadcountBaseStudentCountForRule(originalCourse.type, feeRuleForCourseType(vault, originalCourse.type));
+    unitAmountForCount = (studentCount) =>
+      salaryGradeAmountForCount(gradeRule, originalCourse.type, studentCount, stage, headcountBaseStudentCount);
+  } else if (originalRule.mode === "class_headcount") {
+    headcountBaseStudentCount = classHeadcountBaseStudentCountForRule(originalCourse.type, originalRule);
+    unitAmountForCount = (studentCount) =>
+      calculateClassHeadcountFee(originalRule, studentCount, originalCourse.type, stage);
+  }
+
+  if (!unitAmountForCount || headcountBaseStudentCount <= 1) return undefined;
+
+  let runningStudentCount = presentCount(original);
+  const linkedMakeupLessons = linkedMakeupLessonsForAllocation(vault, original.id, lesson);
+
+  for (const makeupLesson of linkedMakeupLessons) {
+    const makeupStudentCount = lessonStudentIdsForMakeupAllocation(makeupLesson).length;
+    const beforeStudentCount = runningStudentCount;
+    const afterStudentCount = beforeStudentCount + makeupStudentCount;
+    const unitBefore = unitAmountForCount(beforeStudentCount);
+    const unitAfter = unitAmountForCount(afterStudentCount);
+    const unitAmount = Math.max(unitAfter - unitBefore, 0);
+    if (makeupLesson.id === lesson.id) {
+      return {
+        amount: Math.round(unitAmount * durationMultiplier + extraFee),
+        unitAmount,
+        headcountBaseStudentCount
+      };
+    }
+    runningStudentCount = afterStudentCount;
+  }
+
+  return undefined;
+}
+
 export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesson: Lesson): FeeSnapshot {
   const presentStudentCount = presentCount(lesson);
   const trialStudentCount = namedTrialStudentCount(lesson) + (lesson.trialStudentCount ?? 0);
@@ -845,6 +940,7 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
     manualHours: manualHours ? true : undefined,
     manualAdjustment: extraFeeTotal(lessonForCalculation, course.feeRule, vault)
   };
+  const studentMakeupAllocation = studentMakeupOriginalClassFeeAllocation(vault, course, lessonForCalculation, hours);
 
   if (course.feeRule.mode === "salary_grade") {
     const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
@@ -862,12 +958,12 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
       salaryGradeLabel: gradeRule ? salaryGradeLabel(gradeRule) : undefined,
       salaryGradeStage: salaryStage,
       salaryGradeStageLabel: salaryStage ? salaryGradeStageLabels[salaryStage] : undefined,
-      headcountBaseStudentCount: salaryHeadcountBaseStudentCount,
+      headcountBaseStudentCount: studentMakeupAllocation?.headcountBaseStudentCount ?? salaryHeadcountBaseStudentCount,
       headcountIncrementFee: salaryStageRate?.headcountIncrementFee,
       lessonUnitHours: lessonFeeUnitHours,
       durationMultiplier,
-      unitAmount,
-      amount: calculateFeeWithVault(vault, course.feeRule, lessonForCalculation, course)
+      unitAmount: studentMakeupAllocation?.unitAmount ?? unitAmount,
+      amount: studentMakeupAllocation?.amount ?? calculateFeeWithVault(vault, course.feeRule, lessonForCalculation, course)
     };
   }
 
@@ -900,8 +996,8 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
     headcountIncrementFee: classHeadcountStageRate?.headcountIncrementFee,
     lessonUnitHours: course.feeRule.mode === "class_headcount" ? lessonFeeUnitHours : undefined,
     durationMultiplier: course.feeRule.mode === "class_headcount" ? durationMultiplier : undefined,
-    unitAmount,
-    amount: calculateFeeWithVault(vault, course.feeRule, lessonForCalculation, course)
+    unitAmount: studentMakeupAllocation?.unitAmount ?? unitAmount,
+    amount: studentMakeupAllocation?.amount ?? calculateFeeWithVault(vault, course.feeRule, lessonForCalculation, course)
   };
 }
 

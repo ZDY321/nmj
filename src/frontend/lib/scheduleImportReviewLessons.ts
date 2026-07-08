@@ -123,42 +123,88 @@ export function savedRowSystemLessonLabel(vault: TeacherVault, row: Pick<Schedul
 
 export function savedRowSystemAttendance(
   vault: TeacherVault,
-  row: Pick<ScheduleImportSavedRow, "systemLessonId" | "systemLessonStatus" | "systemLessonNote" | "systemPresentCount" | "systemExpectedCount" | "systemPresentStudentNames" | "systemExpectedStudentNames">
+  row: Pick<ScheduleImportSavedRow, "systemLessonId" | "systemLessonStatus" | "systemLessonNote" | "systemActualPresentCount" | "systemPresentCount" | "systemExpectedCount" | "systemPresentStudentNames" | "systemExpectedStudentNames" | "systemMakeupCompletedCount" | "systemMakeupCompletedStudentNames">
 ): {
   status: Lesson["status"] | undefined;
   note: string | undefined;
+  actualPresentCount: number | undefined;
   presentCount: number | undefined;
   expectedCount: number | undefined;
   presentStudentNames: string;
   expectedStudentNames: string;
+  makeupCompletedCount: number | undefined;
+  makeupCompletedStudentNames: string;
 } {
   const lesson = savedRowSystemLesson(vault, row);
   if (!lesson) {
     return {
       status: row.systemLessonStatus,
       note: row.systemLessonNote,
+      actualPresentCount: row.systemActualPresentCount,
       presentCount: row.systemPresentCount,
       expectedCount: row.systemExpectedCount,
       presentStudentNames: row.systemPresentStudentNames ?? "",
-      expectedStudentNames: row.systemExpectedStudentNames ?? ""
+      expectedStudentNames: row.systemExpectedStudentNames ?? "",
+      makeupCompletedCount: row.systemMakeupCompletedCount,
+      makeupCompletedStudentNames: row.systemMakeupCompletedStudentNames ?? ""
     };
   }
-  const presentStudentIds = lesson.status === "cancelled"
-    ? []
-    : lesson.attendance.length > 0
-    ? lesson.attendance
-      .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
-      .map((entry) => entry.studentId)
-    : lesson.expectedStudentIds;
-  const uniquePresentStudentIds = Array.from(new Set(presentStudentIds));
+  const attendance = savedRowLiveSystemAttendanceSnapshot(vault, lesson);
   const uniqueExpectedStudentIds = Array.from(new Set(lesson.expectedStudentIds));
   return {
     status: lesson.status,
     note: lesson.note,
-    presentCount: uniquePresentStudentIds.length,
+    actualPresentCount: attendance.actualPresentCount,
+    presentCount: attendance.presentCount,
     expectedCount: lesson.status === "cancelled" ? 0 : uniqueExpectedStudentIds.length,
-    presentStudentNames: studentNames(vault, uniquePresentStudentIds),
-    expectedStudentNames: studentNames(vault, uniqueExpectedStudentIds)
+    presentStudentNames: attendance.presentStudentNames,
+    expectedStudentNames: studentNames(vault, uniqueExpectedStudentIds),
+    makeupCompletedCount: attendance.makeupCompletedCount,
+    makeupCompletedStudentNames: attendance.makeupCompletedStudentNames
+  };
+}
+
+function savedRowLiveSystemAttendanceSnapshot(vault: TeacherVault, lesson: Lesson): {
+  actualPresentCount: number;
+  presentCount: number;
+  presentStudentNames: string;
+  makeupCompletedCount: number;
+  makeupCompletedStudentNames: string;
+} {
+  if (lesson.status === "cancelled") {
+    return {
+      actualPresentCount: 0,
+      presentCount: 0,
+      presentStudentNames: "",
+      makeupCompletedCount: 0,
+      makeupCompletedStudentNames: ""
+    };
+  }
+  const actualPresentStudentIds = lesson.attendance.length > 0
+    ? lesson.attendance
+      .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
+      .map((entry) => entry.studentId)
+    : lesson.expectedStudentIds;
+  const makeupCompletedStudentIds = !lesson.linkedOriginalLessonId
+    ? lesson.attendance
+      .filter((entry) => entry.status === "makeup_completed")
+      .map((entry) => entry.studentId)
+    : [];
+  const uniqueActualPresentStudentIds = Array.from(new Set(actualPresentStudentIds));
+  const uniqueMakeupCompletedStudentIds = Array.from(new Set(makeupCompletedStudentIds));
+  const makeupSet = new Set(uniqueMakeupCompletedStudentIds);
+  const actualNames = studentNames(vault, uniqueActualPresentStudentIds.filter((studentId) => !makeupSet.has(studentId)));
+  const makeupNames = studentNames(vault, uniqueMakeupCompletedStudentIds)
+    .split("、")
+    .filter(Boolean)
+    .map((name) => `${name}（已补课）`)
+    .join("、");
+  return {
+    actualPresentCount: uniqueActualPresentStudentIds.length,
+    presentCount: Array.from(new Set([...uniqueActualPresentStudentIds, ...uniqueMakeupCompletedStudentIds])).length,
+    presentStudentNames: [actualNames, makeupNames].filter(Boolean).join("、"),
+    makeupCompletedCount: uniqueMakeupCompletedStudentIds.length,
+    makeupCompletedStudentNames: studentNames(vault, uniqueMakeupCompletedStudentIds)
   };
 }
 

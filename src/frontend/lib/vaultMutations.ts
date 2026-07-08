@@ -59,6 +59,16 @@ export function moveLessonsToTrash(vault: TeacherVault, lessons: Lesson[], sourc
     }));
   vault.deletedLessons = [...(vault.deletedLessons ?? []), ...deletedItems];
   vault.lessons = vault.lessons.filter((lesson) => !lessonIds.has(lesson.id));
+  const affectedOriginalLessonIds = new Set<string>();
+  lessons.forEach((lesson) => {
+    if (lesson.linkedOriginalLessonId) {
+      syncOriginalLessonAfterMakeupRemoval(vault, lesson);
+      affectedOriginalLessonIds.add(lesson.linkedOriginalLessonId);
+    }
+  });
+  affectedOriginalLessonIds.forEach((originalLessonId) => {
+    recalculateLinkedMakeupLessonFeeSnapshots(vault, originalLessonId);
+  });
 }
 
 export function courseUpdateAffectsLessonDefaults(previousCourse: CourseGroup, nextCourse: CourseGroup): boolean {
@@ -247,6 +257,19 @@ export function syncOriginalLessonFromMakeupCompletion(vault: TeacherVault, upda
   return recalculatedMakeup;
 }
 
+export function recalculateLinkedMakeupLessonFeeSnapshots(vault: TeacherVault, originalLessonId: string): number {
+  let changedCount = 0;
+  vault.lessons = vault.lessons.map((lesson) => {
+    if (lesson.linkedOriginalLessonId !== originalLessonId) return lesson;
+    const nextLesson = recalculateLessonFeeSnapshot(vault, lesson);
+    if (nextLesson.feeSnapshot.amount !== lesson.feeSnapshot.amount) {
+      changedCount += 1;
+    }
+    return nextLesson;
+  });
+  return changedCount;
+}
+
 function shouldSyncLessonWithCourseDefaults(lesson: Lesson, scope: CourseLessonSyncScope): boolean {
   if (scope === "none") return false;
   if (scope === "all") return true;
@@ -296,5 +319,57 @@ function removeResolvedMakeupNames(note: string | undefined, vault: TeacherVault
     const studentName = vault.students.find((student) => student.id === studentId)?.name;
     return studentName ? current.replaceAll(studentName, "").replace(/、{2,}/g, "、").replace(/^、|、(?= 补 )/g, "").trim() : current;
   }, note);
+}
+
+function syncOriginalLessonAfterMakeupRemoval(vault: TeacherVault, removedMakeupLesson: Lesson) {
+  const originalLessonId = removedMakeupLesson.linkedOriginalLessonId;
+  if (!originalLessonId) return;
+  const original = vault.lessons.find((lesson) => lesson.id === originalLessonId);
+  if (!original) return;
+
+  const removedStudentIds = new Set(lessonStudentIds(removedMakeupLesson));
+  if (removedStudentIds.size === 0) return;
+  const stillScheduledStudentIds = new Set(
+    vault.lessons
+      .filter((lesson) => lesson.linkedOriginalLessonId === originalLessonId && lesson.status !== "cancelled")
+      .flatMap((lesson) => lessonStudentIds(lesson))
+  );
+
+  let changed = false;
+  const nextAttendance = original.attendance.map((entry) => {
+    if (!removedStudentIds.has(entry.studentId) || stillScheduledStudentIds.has(entry.studentId)) {
+      return entry;
+    }
+    const nextStatus = entry.status === "makeup_completed" ? "makeup_pending" : entry.status;
+    const nextNote = removeAutomaticMakeupNote(entry.note);
+    if (nextStatus === entry.status && nextNote === entry.note) return entry;
+    changed = true;
+    return {
+      ...entry,
+      status: nextStatus,
+      note: nextNote
+    };
+  });
+
+  const nextOriginal: Lesson = {
+    ...original,
+    status: original.status === "makeup_completed" ? "makeup_pending" : original.status,
+    attendance: nextAttendance
+  };
+  if (nextOriginal.status !== original.status) {
+    changed = true;
+  }
+  if (!changed) return;
+
+  const recalculatedOriginal = recalculateLessonFeeSnapshot(vault, nextOriginal);
+  vault.lessons = vault.lessons.map((lesson) => (lesson.id === original.id ? recalculatedOriginal : lesson));
+}
+
+function removeAutomaticMakeupNote(note: string | undefined): string | undefined {
+  const trimmed = note?.trim();
+  if (!trimmed) return undefined;
+  if (/^已安排 \d{4}-\d{2}-\d{2} 补课$/.test(trimmed)) return undefined;
+  if (/^\d{4}-\d{2}-\d{2} 已补课完成$/.test(trimmed)) return undefined;
+  return note;
 }
 

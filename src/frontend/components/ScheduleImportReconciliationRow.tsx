@@ -143,6 +143,7 @@ export function ScheduleImportReconciliationRow({
               <div className="mt-1 truncate text-xs font-semibold leading-5 text-[#64748b]">
                 教务：{row.title} · 云端：{systemLesson ? localCourseName(vault, systemLesson.courseGroupId) : "未找到课节"}
                 {row.presentCount !== undefined && row.expectedCount !== undefined ? ` · 教务实到/应到 ${row.presentCount}/${row.expectedCount}` : ""}
+                {row.systemPresentCount !== undefined && row.systemExpectedCount !== undefined && (row.systemMakeupCompletedCount ?? 0) > 0 ? ` · 云端有效 ${row.systemPresentCount}/${row.systemExpectedCount}（含已补课 ${row.systemMakeupCompletedCount}）` : ""}
                 {row.note ? ` · 教务备注：${row.note}` : ""}
                 {systemLesson?.note ? ` · 云端备注：${systemLesson.note}` : ""}
                 {systemAttendanceNoteText ? ` · ${systemAttendanceNoteText}` : ""}

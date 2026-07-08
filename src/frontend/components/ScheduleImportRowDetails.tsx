@@ -92,7 +92,10 @@ export function ScheduleImportRowDetails({
                 云端状态：{lessonStatusLabels[systemLesson.status]}
               </Badge>
               {row.systemPresentCount !== undefined && row.systemExpectedCount !== undefined && (
-                <Badge variant={row.status === "attendance_mismatch" ? "amber" : "secondary"} className="text-[10px]">云端实到/应到 {row.systemPresentCount}/{row.systemExpectedCount}</Badge>
+                <Badge variant={row.status === "attendance_mismatch" ? "amber" : "secondary"} className="text-[10px]">云端有效实到/应到 {row.systemPresentCount}/{row.systemExpectedCount}</Badge>
+              )}
+              {(row.systemMakeupCompletedCount ?? 0) > 0 && (
+                <Badge variant="yellow" className="text-[10px]">含已补课 {row.systemMakeupCompletedCount} 人</Badge>
               )}
               <Badge variant="secondary" className="text-[10px]">课程档案 {systemLesson.expectedStudentIds.length} 人</Badge>
             </div>
@@ -107,8 +110,13 @@ export function ScheduleImportRowDetails({
               </div>
             )}
             <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
-              实到：{row.systemPresentStudentNames || "未记录实到学生"}
+              有效实到：{row.systemPresentStudentNames || "未记录有效到课学生"}
             </div>
+            {(row.systemMakeupCompletedCount ?? 0) > 0 && (
+              <div className="mt-1 text-xs font-semibold leading-5 text-[#854d0e]">
+                其中已补课：{row.systemMakeupCompletedStudentNames || `${row.systemMakeupCompletedCount} 人`}；当天实到 {row.systemActualPresentCount ?? 0} 人
+              </div>
+            )}
             <div className="mt-1 text-xs font-semibold leading-5 text-[#94a3b8]">
               应到：{row.systemExpectedStudentNames || studentNames(vault, systemLesson.expectedStudentIds) || "未设置学生"}
             </div>

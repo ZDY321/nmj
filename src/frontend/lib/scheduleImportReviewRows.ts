@@ -30,14 +30,7 @@ export function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPrev
     .map((lesson): ImportPreviewLesson => {
       const course = vault.courseGroups.find((item) => item.id === lesson.courseGroupId);
       const campusId = lessonCampusId(vault, lesson);
-      const systemPresentStudentIds = lesson.status === "cancelled"
-        ? []
-        : lesson.attendance.length > 0
-        ? lesson.attendance
-          .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
-          .map((entry) => entry.studentId)
-        : lesson.expectedStudentIds;
-      const systemPresentCount = Array.from(new Set(systemPresentStudentIds)).length;
+      const systemAttendance = localOnlySystemAttendanceSnapshot(vault, lesson);
       const systemExpectedCount = lesson.status === "cancelled" ? 0 : Array.from(new Set(lesson.expectedStudentIds)).length;
       return {
         id: `local-only-${lesson.id}`,
@@ -51,7 +44,7 @@ export function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPrev
         subjectHint: course?.subject ?? "",
         courseTypeHint: lesson.type,
         studentNameHint: studentNames(vault, lesson.expectedStudentIds),
-        presentCount: systemPresentCount,
+        presentCount: systemAttendance.presentCount,
         expectedCount: systemExpectedCount,
         rawText: "",
         warnings: [],
@@ -61,13 +54,61 @@ export function buildLocalOnlyRows(vault: TeacherVault, importedRows: ImportPrev
         systemLessonLabel: `${lesson.date} ${lesson.startTime}-${lesson.endTime} ${course?.name ?? "未知课程"}`,
         systemLessonStatus: lesson.status,
         systemLessonNote: lesson.note,
-        systemPresentCount,
+        systemActualPresentCount: systemAttendance.actualPresentCount,
+        systemPresentCount: systemAttendance.presentCount,
         systemExpectedCount,
-        systemPresentStudentNames: studentNames(vault, Array.from(new Set(systemPresentStudentIds))),
+        systemPresentStudentNames: systemAttendance.presentStudentNames,
         systemExpectedStudentNames: studentNames(vault, Array.from(new Set(lesson.expectedStudentIds))),
+        systemMakeupCompletedCount: systemAttendance.makeupCompletedCount,
+        systemMakeupCompletedStudentNames: systemAttendance.makeupCompletedStudentNames,
         issues: ["教务 Excel 没有对应云端课节"]
       };
     });
+}
+
+function localOnlySystemAttendanceSnapshot(vault: TeacherVault, lesson: Lesson): {
+  actualPresentCount: number;
+  presentCount: number;
+  presentStudentNames: string;
+  makeupCompletedCount: number;
+  makeupCompletedStudentNames: string;
+} {
+  if (lesson.status === "cancelled") {
+    return {
+      actualPresentCount: 0,
+      presentCount: 0,
+      presentStudentNames: "",
+      makeupCompletedCount: 0,
+      makeupCompletedStudentNames: ""
+    };
+  }
+  const actualPresentStudentIds = lesson.attendance.length > 0
+    ? lesson.attendance
+      .filter((entry) => entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed"))
+      .map((entry) => entry.studentId)
+    : lesson.expectedStudentIds;
+  const makeupCompletedStudentIds = !lesson.linkedOriginalLessonId
+    ? lesson.attendance
+      .filter((entry) => entry.status === "makeup_completed")
+      .map((entry) => entry.studentId)
+    : [];
+  const uniqueActualPresentStudentIds = Array.from(new Set(actualPresentStudentIds));
+  const uniqueMakeupCompletedStudentIds = Array.from(new Set(makeupCompletedStudentIds));
+  const makeupSet = new Set(uniqueMakeupCompletedStudentIds);
+  const effectivePresentStudentIds = Array.from(new Set([...uniqueActualPresentStudentIds, ...uniqueMakeupCompletedStudentIds]));
+  const actualNames = studentNames(vault, uniqueActualPresentStudentIds.filter((studentId) => !makeupSet.has(studentId)));
+  const makeupNames = studentNames(vault, uniqueMakeupCompletedStudentIds)
+    .split("、")
+    .filter(Boolean)
+    .map((name) => `${name}（已补课）`)
+    .join("、");
+  return {
+    actualPresentCount: uniqueActualPresentStudentIds.length,
+    presentCount: effectivePresentStudentIds.length,
+    presentStudentNames: [actualNames, makeupNames].filter(Boolean).join("、"),
+    makeupCompletedCount: uniqueMakeupCompletedStudentIds.length,
+    makeupCompletedStudentNames: studentNames(vault, uniqueMakeupCompletedStudentIds)
+  };
 }
 
 export function summarizeFiles(lessons: ImportedScheduleLesson[]): ScheduleImportFileSummary[] {

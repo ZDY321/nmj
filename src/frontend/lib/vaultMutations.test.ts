@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   courseUpdateAffectsLessonDefaults,
+  moveLessonsToTrash,
   normalizeCourseLessonSyncScope,
   repairCourseStudentLinksFromLessons
 } from "@/frontend/lib/vaultMutations";
@@ -63,6 +64,67 @@ describe("vault mutation helpers", () => {
     expect(repairCourseStudentLinksFromLessons(vault, "student_1")).toBe(0);
     expect(vault.courseGroups[0].studentIds).toEqual(["student_archived"]);
     expect(vault.courseGroups[0].status).toBe("paused");
+  });
+
+  it("clears original lesson auto makeup notes when a scheduled makeup lesson is deleted", () => {
+    const vault = createEmptyVault("tester");
+    vault.students = [
+      { id: "student_1", name: "小明", status: "active" },
+      { id: "student_2", name: "小红", status: "active" }
+    ];
+    vault.courseGroups = [baseCourse];
+    const original = makeLesson("lesson_original", "course_1", ["student_1", "student_2"]);
+    original.status = "completed";
+    original.attendance = [
+      { studentId: "student_1", status: "attended" },
+      { studentId: "student_2", status: "makeup_pending", note: "已安排 2026-06-10 补课" }
+    ];
+    const makeup = {
+      ...makeLesson("lesson_makeup", "course_1", ["student_2"]),
+      date: "2026-06-10",
+      status: "scheduled" as const,
+      linkedOriginalLessonId: original.id,
+      makeupOriginalDate: original.date,
+      makeupScheduledDate: "2026-06-10",
+      note: "小红 补 2026-06-01 的课程"
+    };
+    vault.lessons = [original, makeup];
+
+    moveLessonsToTrash(vault, [makeup], "manual", "手动删除课节");
+
+    const nextOriginal = vault.lessons.find((lesson) => lesson.id === original.id);
+    expect(vault.lessons.some((lesson) => lesson.id === makeup.id)).toBe(false);
+    expect(vault.deletedLessons).toHaveLength(1);
+    expect(nextOriginal?.attendance.find((entry) => entry.studentId === "student_2")).toMatchObject({
+      status: "makeup_pending"
+    });
+    expect(nextOriginal?.attendance.find((entry) => entry.studentId === "student_2")?.note).toBeUndefined();
+  });
+
+  it("reopens original lesson makeup status when a completed makeup lesson is deleted", () => {
+    const vault = createEmptyVault("tester");
+    vault.students = [{ id: "student_1", name: "小明", status: "active" }];
+    vault.courseGroups = [baseCourse];
+    const original = makeLesson("lesson_original_done", "course_1", ["student_1"]);
+    original.status = "makeup_completed";
+    original.attendance = [{ studentId: "student_1", status: "makeup_completed", note: "2026-06-10 已补课完成" }];
+    const makeup = {
+      ...makeLesson("lesson_makeup_done", "course_1", ["student_1"]),
+      date: "2026-06-10",
+      status: "makeup_completed" as const,
+      linkedOriginalLessonId: original.id,
+      makeupOriginalDate: original.date,
+      makeupScheduledDate: "2026-06-10",
+      attendance: [{ studentId: "student_1", status: "makeup_completed" as const }]
+    };
+    vault.lessons = [original, makeup];
+
+    moveLessonsToTrash(vault, [makeup], "manual", "手动删除课节");
+
+    const nextOriginal = vault.lessons.find((lesson) => lesson.id === original.id);
+    expect(nextOriginal?.status).toBe("makeup_pending");
+    expect(nextOriginal?.attendance[0]).toMatchObject({ status: "makeup_pending" });
+    expect(nextOriginal?.attendance[0].note).toBeUndefined();
   });
 });
 function makeLesson(id: string, courseGroupId: string, studentIds: string[]): Lesson {
