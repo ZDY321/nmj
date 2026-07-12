@@ -2291,33 +2291,15 @@ export function ScheduleView({
     applyChange();
   }
 
-  function updateSelectedStartTime(nextStart: string) {
+  function updateSelectedTime(nextStart: string, nextEnd: string) {
     if (!selected) return;
-    if (!validateTimeRange(nextStart, selected.endTime)) return;
-    const conflict = findTimeConflict(selected.date, nextStart, selected.endTime, selected.id);
-    const applyChange = () => updateSelected({ startTime: nextStart }, true);
+    if (!validateTimeRange(nextStart, nextEnd)) return;
+    const conflict = findTimeConflict(selected.date, nextStart, nextEnd, selected.id);
+    const applyChange = () => updateSelected({ startTime: nextStart, endTime: nextEnd }, true);
     if (conflict) {
       confirm({
         title: "这个时间段已有课程",
-        description: `${dateWithWeekday(selected.date)} ${nextStart}-${selected.endTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
-        confirmLabel: "仍然调整",
-        tone: "danger",
-        onConfirm: applyChange
-      });
-      return;
-    }
-    applyChange();
-  }
-
-  function updateSelectedEndTime(nextEnd: string) {
-    if (!selected) return;
-    if (!validateTimeRange(selected.startTime, nextEnd)) return;
-    const conflict = findTimeConflict(selected.date, selected.startTime, nextEnd, selected.id);
-    const applyChange = () => updateSelected({ endTime: nextEnd }, true);
-    if (conflict) {
-      confirm({
-        title: "这个时间段已有课程",
-        description: `${dateWithWeekday(selected.date)} ${selected.startTime}-${nextEnd} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
+        description: `${dateWithWeekday(selected.date)} ${nextStart}-${nextEnd} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
         confirmLabel: "仍然调整",
         tone: "danger",
         onConfirm: applyChange
@@ -3355,8 +3337,7 @@ export function ScheduleView({
             onSelectDetailMakeupStudentIds={setDetailMakeupStudentIds}
             onSelectedCourseChange={updateSelectedCourse}
             onSelectedDateChange={updateSelectedDate}
-            onSelectedEndTimeChange={updateSelectedEndTime}
-            onSelectedStartTimeChange={updateSelectedStartTime}
+            onSelectedTimeChange={updateSelectedTime}
             onSelectedStatusChange={updateSelectedStatus}
             onRecalculateSelectedFee={recalculateSelectedFee}
             onResetBillingHoursToSuggested={resetSelectedBillingHoursToSuggested}

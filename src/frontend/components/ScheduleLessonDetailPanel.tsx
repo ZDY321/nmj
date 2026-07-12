@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -7,6 +8,8 @@ import {
   CornerUpLeft,
   Link2,
   NotebookPen,
+  RotateCcw,
+  Save,
   Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +34,7 @@ import {
   studentNames
 } from "@/frontend/lib/helpers";
 import { isSubstituteClassLesson, salaryGradeStageLabels, salaryGradeStageOrder } from "@/frontend/lib/calculations";
+import { isOrderedTimeRange } from "@/frontend/lib/scheduleViewHelpers";
 import type { LessonReturnTarget } from "@/frontend/lib/scheduleViewTypes";
 
 type LessonContentField = "taught" | "homework";
@@ -82,8 +86,7 @@ type ScheduleLessonDetailPanelProps = {
   onSelectDetailMakeupStudentIds: (studentIds: string[]) => void;
   onSelectedCourseChange: (courseId: string) => void;
   onSelectedDateChange: (date: string) => void;
-  onSelectedEndTimeChange: (time: string) => void;
-  onSelectedStartTimeChange: (time: string) => void;
+  onSelectedTimeChange: (startTime: string, endTime: string) => void;
   onSelectedStatusChange: (status: Lesson["status"]) => void;
   onRecalculateSelectedFee: () => void;
   onResetBillingHoursToSuggested: () => void;
@@ -166,8 +169,7 @@ export function ScheduleLessonDetailPanel({
   onSelectDetailMakeupStudentIds,
   onSelectedCourseChange,
   onSelectedDateChange,
-  onSelectedEndTimeChange,
-  onSelectedStartTimeChange,
+  onSelectedTimeChange,
   onSelectedStatusChange,
   onRecalculateSelectedFee,
   onResetBillingHoursToSuggested,
@@ -216,6 +218,20 @@ export function ScheduleLessonDetailPanel({
 }: ScheduleLessonDetailPanelProps) {
   const isSubstituteClass = isSubstituteClassLesson(selected);
   const substituteInfo = selected.substituteClass;
+  const [startTimeDraft, setStartTimeDraft] = useState(selected.startTime);
+  const [endTimeDraft, setEndTimeDraft] = useState(selected.endTime);
+  const timeDraftChanged = startTimeDraft !== selected.startTime || endTimeDraft !== selected.endTime;
+  const isTimeDraftValid = isOrderedTimeRange(startTimeDraft, endTimeDraft);
+
+  useEffect(() => {
+    setStartTimeDraft(selected.startTime);
+    setEndTimeDraft(selected.endTime);
+  }, [selected.id, selected.startTime, selected.endTime]);
+
+  function resetTimeDraft() {
+    setStartTimeDraft(selected.startTime);
+    setEndTimeDraft(selected.endTime);
+  }
 
   function updateSubstituteInfo(patch: Partial<NonNullable<Lesson["substituteClass"]>>) {
     onUpdateSelected({
@@ -354,12 +370,40 @@ export function ScheduleLessonDetailPanel({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <label className="text-sm font-medium">开始</label>
-                <TimeTextInput value={selected.startTime} onValueChange={onSelectedStartTimeChange} />
+                <TimeTextInput
+                  value={startTimeDraft}
+                  onValueChange={setStartTimeDraft}
+                  className={timeDraftChanged && !isTimeDraftValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">结束</label>
-                <TimeTextInput value={selected.endTime} onValueChange={onSelectedEndTimeChange} />
+                <TimeTextInput
+                  value={endTimeDraft}
+                  onValueChange={setEndTimeDraft}
+                  className={timeDraftChanged && !isTimeDraftValid ? "border-[#fca5a5] bg-[#fff1f2]" : undefined}
+                />
               </div>
+              {timeDraftChanged && (
+                <div className="col-span-2 flex flex-wrap items-center justify-between gap-2">
+                  {!isTimeDraftValid ? (
+                    <div className="text-xs font-bold text-[#b91c1c]">结束时间必须晚于开始时间。</div>
+                  ) : <span />}
+                  <div className="ml-auto flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={resetTimeDraft}>
+                      <RotateCcw size={14} /> 撤销
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!isTimeDraftValid}
+                      onClick={() => onSelectedTimeChange(startTimeDraft, endTimeDraft)}
+                    >
+                      <Save size={14} /> 保存时间
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium">状态</label>
