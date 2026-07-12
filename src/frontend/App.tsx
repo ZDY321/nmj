@@ -56,6 +56,7 @@ import {
   recalculateLinkedMakeupLessonFeeSnapshots,
   recalculateLessonFeeSnapshot,
   repairCourseStudentLinksFromLessons,
+  restoreLessonsFromTrash,
   syncFutureLessonsWithStudentTrialStatus,
   syncLessonsWithCourseDefaults,
   syncOriginalLessonFromMakeupCompletion
@@ -132,6 +133,7 @@ type ScheduleCalendarFocus = {
 };
 
 const syncCheckIntervalSeconds = 90;
+const saveDebounceMs = 500;
 
 export function App() {
   const [username, setUsername] = useState("");
@@ -170,7 +172,10 @@ export function App() {
   const [aiScheduleSession, setAiScheduleSession] = useState<AiScheduleSession | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
   const cloudVersionRef = useRef("");
+  const vaultRef = useRef<TeacherVault | null>(null);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingPersistVaultRef = useRef<TeacherVault | null>(null);
+  const persistTimerRef = useRef<number | null>(null);
   const pendingSaveCountRef = useRef(0);
   const cloudCheckSeqRef = useRef(0);
   const skipCloudCheckUntilRef = useRef(0);
@@ -269,6 +274,12 @@ export function App() {
   }
 
   function resetUnlockedWorkspaceState() {
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    pendingPersistVaultRef.current = null;
+    vaultRef.current = null;
     setUsername("");
     setPassword("");
     setToken("");
@@ -293,11 +304,13 @@ export function App() {
 
   function signOut() {
     const currentToken = token;
-    clearStoredSession();
-    if (currentToken) {
-      void logoutCloud(currentToken);
-    }
-    resetUnlockedWorkspaceState();
+    void flushPendingPersist().finally(() => {
+      clearStoredSession();
+      if (currentToken) {
+        void logoutCloud(currentToken);
+      }
+      resetUnlockedWorkspaceState();
+    });
   }
 
   function clearCurrentLocalCache() {
@@ -316,6 +329,8 @@ export function App() {
 
   async function persist(nextVault: TeacherVault, options: { force?: boolean } = {}) {
     if (!username || !password) return;
+    if (pendingPersistVaultRef.current === nextVault) pendingPersistVaultRef.current = null;
+    vaultRef.current = nextVault;
     setVault(nextVault);
     if (token && !options.force && !cloudVersionRef.current) {
       rememberUnlockedSession({ vault: nextVault });
@@ -356,7 +371,7 @@ export function App() {
         pendingSaveCountRef.current = Math.max(pendingSaveCountRef.current - 1, 0);
         if (savedSuccessfully) {
           skipCloudCheckUntilRef.current = Date.now() + 2500;
-          if (pendingSaveCountRef.current === 0) {
+          if (pendingSaveCountRef.current === 0 && !pendingPersistVaultRef.current) {
             setRemoteCloudVersion("");
             setSyncState("idle");
             setSyncMessage("");
@@ -376,19 +391,48 @@ export function App() {
     await saveJob;
   }
 
+  function schedulePersist(nextVault: TeacherVault) {
+    vaultRef.current = nextVault;
+    pendingPersistVaultRef.current = nextVault;
+    setVault(nextVault);
+    rememberUnlockedSession({ vault: nextVault });
+    setSaveState("saving");
+    if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null;
+      const pendingVault = pendingPersistVaultRef.current;
+      if (pendingVault) void persist(pendingVault);
+    }, saveDebounceMs);
+  }
+
+  function flushPendingPersist(): Promise<void> {
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    const pendingVault = pendingPersistVaultRef.current;
+    if (!pendingVault) return Promise.resolve();
+    pendingPersistVaultRef.current = null;
+    return persist(pendingVault);
+  }
+
   function updateVault(updater: (draft: TeacherVault) => void) {
-    if (!vault) return;
-    const next = cloneVault(vault);
+    const currentVault = vaultRef.current ?? vault;
+    if (!currentVault) return;
+    const next = cloneVault(currentVault);
     updater(next);
-    void persist(next);
+    schedulePersist(next);
   }
 
   async function syncLatestCloudVault() {
     if (!username || !password || !token) return;
     if (saveState === "saving" || pendingSaveCountRef.current > 0) {
-      setSyncState("error");
-      setSyncMessage("正在保存当前修改，请保存完成后再同步云端数据。");
-      return;
+      await flushPendingPersist();
+      if (pendingSaveCountRef.current > 0) {
+        setSyncState("error");
+        setSyncMessage("正在保存当前修改，请保存完成后再同步云端数据。");
+        return;
+      }
     }
     cloudCheckSeqRef.current += 1;
     setSyncState("syncing");
@@ -448,8 +492,14 @@ export function App() {
   }
 
   function forceOverwriteCloud() {
-    if (!vault) return;
-    void persist(vault, { force: true });
+    const currentVault = vaultRef.current ?? vault;
+    if (!currentVault) return;
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    pendingPersistVaultRef.current = null;
+    void persist(currentVault, { force: true });
   }
 
   function confirmForceOverwriteCloud() {
@@ -552,14 +602,7 @@ export function App() {
   function restoreDeletedLessons(deletedLessonIds: string[]) {
     if (deletedLessonIds.length === 0) return;
     updateVault((draft) => {
-      const idSet = new Set(deletedLessonIds);
-      const activeLessonIds = new Set(draft.lessons.map((lesson) => lesson.id));
-      const deletedLessons = draft.deletedLessons ?? [];
-      const restorables = deletedLessons
-        .filter((item) => idSet.has(item.id) && !activeLessonIds.has(item.lesson.id))
-        .map((item) => item.lesson);
-      draft.lessons.push(...restorables);
-      draft.deletedLessons = deletedLessons.filter((item) => !idSet.has(item.id));
+      restoreLessonsFromTrash(draft, deletedLessonIds);
     });
   }
 
@@ -567,7 +610,16 @@ export function App() {
     if (deletedLessonIds.length === 0) return;
     updateVault((draft) => {
       const idSet = new Set(deletedLessonIds);
-      draft.deletedLessons = (draft.deletedLessons ?? []).filter((item) => !idSet.has(item.id));
+      const deletedLessons = draft.deletedLessons ?? [];
+      const deletingOriginalLessonIds = new Set(
+        deletedLessons
+          .filter((item) => idSet.has(item.id) && !item.lesson.linkedOriginalLessonId)
+          .map((item) => item.lesson.id)
+      );
+      draft.deletedLessons = deletedLessons.filter((item) =>
+        !idSet.has(item.id) &&
+        !(item.lesson.linkedOriginalLessonId && deletingOriginalLessonIds.has(item.lesson.linkedOriginalLessonId))
+      );
     });
   }
 
@@ -1050,8 +1102,14 @@ export function App() {
   }
 
   function deleteProgressChecklistCompletion(completionId: string) {
+    deleteProgressChecklistCompletions([completionId]);
+  }
+
+  function deleteProgressChecklistCompletions(completionIds: string[]) {
+    if (completionIds.length === 0) return;
     updateVault((draft) => {
-      draft.progressChecklistCompletions = (draft.progressChecklistCompletions ?? []).filter((completion) => completion.id !== completionId);
+      const completionIdSet = new Set(completionIds);
+      draft.progressChecklistCompletions = (draft.progressChecklistCompletions ?? []).filter((completion) => !completionIdSet.has(completion.id));
     });
   }
 
@@ -1194,6 +1252,18 @@ export function App() {
   useEffect(() => {
     cloudVersionRef.current = cloudVersion;
   }, [cloudVersion]);
+
+  useEffect(() => {
+    vaultRef.current = vault;
+  }, [vault]);
+
+  useEffect(() => {
+    const flushWhenHidden = () => {
+      if (document.hidden) void flushPendingPersist();
+    };
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => document.removeEventListener("visibilitychange", flushWhenHidden);
+  }, [username, password]);
 
   useEffect(() => {
     if (!vault || vault.scheduleRules.length === 0 || !username || !password) return;
@@ -1936,6 +2006,7 @@ export function App() {
                     onSaveChecklistCompletion={saveProgressChecklistCompletion}
                     onSaveChecklistCompletions={saveProgressChecklistCompletions}
                     onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
+                    onDeleteChecklistCompletions={deleteProgressChecklistCompletions}
                     onSaveExternalPromptTemplate={saveExternalPromptTemplate}
                     onOpenLessonInRecords={openProgressLessonInScheduleRecords}
                   />

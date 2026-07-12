@@ -751,11 +751,14 @@ export function ScheduleView({
   });
   const selectedTrashIdSet = new Set(selectedTrashIds);
   const selectedVisibleTrashIds = trashLessons.filter((item) => selectedTrashIdSet.has(item.id)).map((item) => item.id);
+  const selectedVisibleTrashLessonIds = new Set(
+    trashLessons.filter((item) => selectedTrashIdSet.has(item.id)).map((item) => item.lesson.id)
+  );
   const allVisibleTrashSelected = trashLessons.length > 0 && trashLessons.every((item) => selectedTrashIdSet.has(item.id));
   const activeLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
   const selectedTrashRestoreCount = selectedVisibleTrashIds.filter((id) => {
     const item = trashLessons.find((deletedLesson) => deletedLesson.id === id);
-    return item ? canRestoreDeletedLesson(vault, activeLessonIds, item) : false;
+    return item ? canRestoreDeletedLesson(vault, activeLessonIds, item, selectedVisibleTrashLessonIds) : false;
   }).length;
   const selected = vault.lessons.find((lesson) => lesson.id === selectedId) ?? lessons[0];
   const selectedCourse = selected ? getCourse(vault, selected.courseGroupId) : undefined;
@@ -2310,9 +2313,10 @@ export function ScheduleView({
   }
 
   function askDeleteLesson(lesson: Lesson) {
+    const linkedMakeupCount = vault.lessons.filter((item) => item.linkedOriginalLessonId === lesson.id).length;
     confirm({
       title: "移入回收站？",
-      description: `${dateWithWeekday(lesson.date)} ${lesson.startTime}-${lesson.endTime} · ${courseName(vault, lesson.courseGroupId)}。移入后可在回收站恢复。`,
+      description: `${dateWithWeekday(lesson.date)} ${lesson.startTime}-${lesson.endTime} · ${courseName(vault, lesson.courseGroupId)}。${linkedMakeupCount > 0 ? `这节原课关联的 ${linkedMakeupCount} 节补课会一并移入回收站。` : ""}移入后可在回收站恢复。`,
       confirmLabel: "移入回收站",
       tone: "danger",
       onConfirm: () => onDeleteLesson(lesson.id)
@@ -2337,9 +2341,12 @@ export function ScheduleView({
   }
 
   function restoreTrashItems(ids: string[]) {
+    const restoringLessonIds = new Set(
+      deletedLessons.filter((item) => ids.includes(item.id)).map((item) => item.lesson.id)
+    );
     const restorables = ids.filter((id) => {
       const item = deletedLessons.find((deletedLesson) => deletedLesson.id === id);
-      return item && canRestoreDeletedLesson(vault, activeLessonIds, item);
+      return item && canRestoreDeletedLesson(vault, activeLessonIds, item, restoringLessonIds);
     });
     if (restorables.length === 0) {
       showScheduleError("选中的课节当前无法恢复，可能已有同 ID 课节或课程档案已不存在。");

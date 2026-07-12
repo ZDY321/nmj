@@ -5,6 +5,14 @@ import { timesOverlap } from "@/frontend/lib/time";
 
 type XlsxModule = typeof import("xlsx");
 
+export const scheduleImportLimits = {
+  maxFiles: 12,
+  maxFileBytes: 10 * 1024 * 1024,
+  maxSheets: 30,
+  maxRowsPerSheet: 20_000,
+  maxCells: 300_000
+} as const;
+
 function loadXlsx(): Promise<XlsxModule> {
   return import("xlsx");
 }
@@ -185,16 +193,30 @@ export function parseScheduleCell(
 }
 
 export async function parseScheduleWorkbookFile(file: File): Promise<ImportedScheduleLesson[]> {
+  if (file.size > scheduleImportLimits.maxFileBytes) {
+    throw new Error(`Excel 文件过大，单个文件不能超过 ${Math.round(scheduleImportLimits.maxFileBytes / 1024 / 1024)} MB。`);
+  }
   const XLSX = await loadXlsx();
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: "array" });
+  if (workbook.SheetNames.length > scheduleImportLimits.maxSheets) {
+    throw new Error(`Excel 工作表过多，最多支持 ${scheduleImportLimits.maxSheets} 个工作表。`);
+  }
   const campusName = parseCampusFromFileName(file.name) ?? "";
   const year = parseExportYearFromFileName(file.name) ?? new Date().getFullYear();
   const lessons: ImportedScheduleLesson[] = [];
+  let cellCount = 0;
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: "" });
+    if (rows.length > scheduleImportLimits.maxRowsPerSheet) {
+      throw new Error(`Excel 工作表“${sheetName}”行数过多，最多支持 ${scheduleImportLimits.maxRowsPerSheet} 行。`);
+    }
+    cellCount += rows.reduce((total, row) => total + row.length, 0);
+    if (cellCount > scheduleImportLimits.maxCells) {
+      throw new Error(`Excel 单元格过多，最多支持 ${scheduleImportLimits.maxCells} 个单元格。`);
+    }
     for (const row of rows) {
       for (const cell of row) {
         lessons.push(...parseScheduleCell(cell, { fileName: file.name, campusName, year }));
@@ -207,8 +229,20 @@ export async function parseScheduleWorkbookFile(file: File): Promise<ImportedSch
 
 export async function parseScheduleWorkbookFiles(files: FileList | File[]): Promise<ImportedScheduleLesson[]> {
   const fileArray = Array.from(files);
+  validateScheduleImportFiles(fileArray);
   const batches = await Promise.all(fileArray.map(parseScheduleWorkbookFile));
   return batches.flat().sort((a, b) => `${a.date} ${a.startTime} ${a.campusName}`.localeCompare(`${b.date} ${b.startTime} ${b.campusName}`));
+}
+
+export function validateScheduleImportFiles(files: Array<Pick<File, "size">>): void {
+  const fileArray = Array.from(files);
+  if (fileArray.length > scheduleImportLimits.maxFiles) {
+    throw new Error(`一次最多导入 ${scheduleImportLimits.maxFiles} 个 Excel 文件。`);
+  }
+  const totalBytes = fileArray.reduce((total, file) => total + file.size, 0);
+  if (totalBytes > scheduleImportLimits.maxFileBytes * scheduleImportLimits.maxFiles) {
+    throw new Error(`本次导入文件总大小不能超过 ${Math.round(scheduleImportLimits.maxFileBytes * scheduleImportLimits.maxFiles / 1024 / 1024)} MB。`);
+  }
 }
 
 export function buildImportPreview(

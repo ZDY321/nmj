@@ -4,7 +4,9 @@ import {
   parseCampusFromFileName,
   parseExportYearFromFileName,
   parseScheduleCell,
+  scheduleImportLimits,
   summarizeImportPreview,
+  validateScheduleImportFiles,
   type ImportedScheduleLesson,
   type ImportPreviewLesson
 } from "@/frontend/lib/scheduleImport";
@@ -405,6 +407,18 @@ describe("schedule import parsing and matching", () => {
       systemLessonId: archivedLesson.id,
       systemExpectedStudentNames: "小明"
     });
+  });
+});
+
+describe("schedule import file limits", () => {
+  it("rejects too many files before parsing", () => {
+    const files = Array.from({ length: scheduleImportLimits.maxFiles + 1 }, () => ({ size: 1 }));
+    expect(() => validateScheduleImportFiles(files)).toThrow(`一次最多导入 ${scheduleImportLimits.maxFiles} 个 Excel 文件`);
+  });
+
+  it("rejects an oversized import batch before parsing", () => {
+    const files = Array.from({ length: scheduleImportLimits.maxFiles }, () => ({ size: scheduleImportLimits.maxFileBytes + 1 }));
+    expect(() => validateScheduleImportFiles(files)).toThrow("本次导入文件总大小不能超过");
   });
 });
 

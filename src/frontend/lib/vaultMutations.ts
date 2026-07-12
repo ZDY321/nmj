@@ -45,22 +45,29 @@ export function cloneFeeRule(rule: FeeRule): FeeRule {
 
 export function moveLessonsToTrash(vault: TeacherVault, lessons: Lesson[], source: DeletedLessonSource, reason?: string) {
   if (lessons.length === 0) return;
-  const lessonIds = new Set(lessons.map((lesson) => lesson.id));
+  const requestedLessonIds = new Set(lessons.map((lesson) => lesson.id));
+  const linkedMakeupLessons = vault.lessons.filter((lesson) =>
+    Boolean(lesson.linkedOriginalLessonId && requestedLessonIds.has(lesson.linkedOriginalLessonId))
+  );
+  const lessonsToTrash = Array.from(new Map(
+    [...lessons, ...linkedMakeupLessons].map((lesson) => [lesson.id, lesson])
+  ).values());
+  const lessonIds = new Set(lessonsToTrash.map((lesson) => lesson.id));
   const trashedLessonIds = new Set((vault.deletedLessons ?? []).map((item) => item.lesson.id));
   const deletedAt = new Date().toISOString();
-  const deletedItems = lessons
+  const deletedItems = lessonsToTrash
     .filter((lesson) => !trashedLessonIds.has(lesson.id))
     .map((lesson) => ({
       id: makeId("deleted_lesson"),
       lesson,
       deletedAt,
       source,
-      reason
+      reason: requestedLessonIds.has(lesson.id) ? reason : "随原课一并删除的关联补课"
     }));
   vault.deletedLessons = [...(vault.deletedLessons ?? []), ...deletedItems];
   vault.lessons = vault.lessons.filter((lesson) => !lessonIds.has(lesson.id));
   const affectedOriginalLessonIds = new Set<string>();
-  lessons.forEach((lesson) => {
+  lessonsToTrash.forEach((lesson) => {
     if (lesson.linkedOriginalLessonId) {
       syncOriginalLessonAfterMakeupRemoval(vault, lesson);
       affectedOriginalLessonIds.add(lesson.linkedOriginalLessonId);
@@ -69,6 +76,38 @@ export function moveLessonsToTrash(vault: TeacherVault, lessons: Lesson[], sourc
   affectedOriginalLessonIds.forEach((originalLessonId) => {
     recalculateLinkedMakeupLessonFeeSnapshots(vault, originalLessonId);
   });
+}
+
+export function restoreLessonsFromTrash(vault: TeacherVault, deletedLessonIds: string[]): Lesson[] {
+  if (deletedLessonIds.length === 0) return [];
+  const idSet = new Set(deletedLessonIds);
+  const activeLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
+  const deletedLessons = vault.deletedLessons ?? [];
+  const restorables = deletedLessons
+    .filter((item) => idSet.has(item.id) && !activeLessonIds.has(item.lesson.id))
+    .map((item) => item.lesson);
+  if (restorables.length === 0) return [];
+
+  const restoredIds = new Set(restorables.map((lesson) => lesson.id));
+  vault.lessons.push(...restorables);
+  vault.deletedLessons = deletedLessons.filter((item) => !restoredIds.has(item.lesson.id));
+
+  const restoredOriginalIds = new Set(restorables.filter((lesson) => !lesson.linkedOriginalLessonId).map((lesson) => lesson.id));
+  const relatedMakeups = vault.lessons.filter((lesson) =>
+    Boolean(lesson.linkedOriginalLessonId && restoredOriginalIds.has(lesson.linkedOriginalLessonId))
+  );
+  const restoredMakeups = restorables.filter((lesson) => Boolean(lesson.linkedOriginalLessonId));
+  [...relatedMakeups, ...restoredMakeups].forEach((makeupLesson) => {
+    syncOriginalLessonFromMakeupCompletion(vault, makeupLesson);
+  });
+
+  const affectedOriginalIds = new Set(
+    [...relatedMakeups, ...restoredMakeups]
+      .map((lesson) => lesson.linkedOriginalLessonId)
+      .filter((id): id is string => Boolean(id))
+  );
+  affectedOriginalIds.forEach((originalLessonId) => recalculateLinkedMakeupLessonFeeSnapshots(vault, originalLessonId));
+  return restorables;
 }
 
 export function courseUpdateAffectsLessonDefaults(previousCourse: CourseGroup, nextCourse: CourseGroup): boolean {

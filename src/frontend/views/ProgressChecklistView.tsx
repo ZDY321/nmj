@@ -94,6 +94,7 @@ export function ProgressChecklistView({
   onSaveChecklistCompletion,
   onSaveChecklistCompletions,
   onDeleteChecklistCompletion,
+  onDeleteChecklistCompletions,
   onOpenLessonInRecords,
   onSaveExternalPromptTemplate
 }: {
@@ -106,6 +107,7 @@ export function ProgressChecklistView({
   onSaveChecklistCompletion: (completion: ProgressChecklistCompletion) => void;
   onSaveChecklistCompletions: (completions: ProgressChecklistCompletion[]) => void;
   onDeleteChecklistCompletion: (completionId: string) => void;
+  onDeleteChecklistCompletions: (completionIds: string[]) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
   onSaveExternalPromptTemplate?: (template: string) => void;
 }) {
@@ -477,7 +479,7 @@ export function ProgressChecklistView({
 
   function clearSelectedCompletion() {
     if (selectedCompletions.length === 0) return;
-    selectedCompletions.forEach((completion) => onDeleteChecklistCompletion(completion.id));
+    onDeleteChecklistCompletions(selectedCompletions.map((completion) => completion.id));
   }
 
   function syncLessonLinkedCompletions(source: ChecklistSyncSource) {

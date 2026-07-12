@@ -315,8 +315,16 @@ export function deletedLessonSearchText(vault: TeacherVault, item: DeletedLesson
   ].join(" ").toLowerCase();
 }
 
-export function canRestoreDeletedLesson(vault: TeacherVault, activeLessonIds: Set<string>, item: DeletedLesson): boolean {
-  return !activeLessonIds.has(item.lesson.id) && (isSubstituteClassLesson(item.lesson) || Boolean(getCourse(vault, item.lesson.courseGroupId)));
+export function canRestoreDeletedLesson(
+  vault: TeacherVault,
+  activeLessonIds: Set<string>,
+  item: DeletedLesson,
+  restoringLessonIds: ReadonlySet<string> = new Set()
+): boolean {
+  const originalAvailable = !item.lesson.linkedOriginalLessonId ||
+    activeLessonIds.has(item.lesson.linkedOriginalLessonId) ||
+    restoringLessonIds.has(item.lesson.linkedOriginalLessonId);
+  return originalAvailable && !activeLessonIds.has(item.lesson.id) && (isSubstituteClassLesson(item.lesson) || Boolean(getCourse(vault, item.lesson.courseGroupId)));
 }
 
 export function deletedLessonSourceLabel(source: DeletedLesson["source"]): string {
