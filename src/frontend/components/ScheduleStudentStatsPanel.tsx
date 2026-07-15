@@ -52,7 +52,8 @@ type ScheduleStudentStatsPanelProps = {
   setMakeupFilter: (value: StudentStatsMakeupFilter) => void;
   studentLessonCount: number;
   subjectOptions: string[];
-  totalFee: number;
+  scheduledFeeTotal: number;
+  completedFeeTotal: number;
   values: {
     campusFilter: string;
     courseFilter: string;
@@ -73,6 +74,7 @@ export function ScheduleStudentStatsPanel({
   amountsVisible,
   campusOptions,
   completedCount,
+  completedFeeTotal,
   courseGroupOptions,
   expandedGroupIds,
   groupedLessonRows,
@@ -94,7 +96,7 @@ export function ScheduleStudentStatsPanel({
   setMakeupFilter,
   studentLessonCount,
   subjectOptions,
-  totalFee,
+  scheduledFeeTotal,
   values,
   vault
 }: ScheduleStudentStatsPanelProps) {
@@ -219,13 +221,14 @@ export function ScheduleStudentStatsPanel({
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {[
               { label: "实际课节", value: `${lessonCount} 节` },
               { label: "学生课次", value: `${studentLessonCount} 人次` },
               { label: "涉及学生", value: `${involvedStudentCount} 人` },
               { label: "已完成", value: `${completedCount} 节` },
-              { label: "课时费合计", value: formatPrivateMoney(totalFee, amountsVisible) }
+              { label: "已排课课时费合计", value: formatPrivateMoney(scheduledFeeTotal, amountsVisible) },
+              { label: "已完成课时费合计", value: formatPrivateMoney(completedFeeTotal, amountsVisible) }
             ].map((item) => (
               <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
                 <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>

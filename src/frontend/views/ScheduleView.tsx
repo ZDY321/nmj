@@ -739,6 +739,10 @@ export function ScheduleView({
   );
   const studentStatsInvolvedStudentCount = studentStatsRows.length + studentStatsExternalStudentCount;
   const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
+  const studentStatsCompletedFeeTotal = studentStatsLessons.reduce(
+    (sum, lesson) => sum + (isCompletedLessonStatus(lesson.status) ? lesson.feeSnapshot.amount : 0),
+    0
+  );
   const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const deletedLessons = sortDeletedLessons(vault.deletedLessons ?? []);
   const normalizedTrashSearch = trashSearch.trim().toLowerCase();
@@ -3221,7 +3225,8 @@ export function ScheduleView({
           setMakeupFilter={setStudentStatsMakeupFilter}
           studentLessonCount={studentStatsStudentLessonCount}
           subjectOptions={studentStatsSubjects}
-          totalFee={studentStatsTotalFee}
+          completedFeeTotal={studentStatsCompletedFeeTotal}
+          scheduledFeeTotal={studentStatsTotalFee}
           values={{
             campusFilter: studentStatsCampusFilter,
             courseFilter: studentStatsCourseFilter,
