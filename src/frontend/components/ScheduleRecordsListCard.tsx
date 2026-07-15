@@ -189,20 +189,23 @@ export function ScheduleRecordsListCard({
         </div>
 
         {effectiveLessonScope === "day" && (
-          <div className="rounded-[14px] border border-[#bfdbfe] bg-[#eaf2ff] p-3">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-sm font-extrabold text-[#1557c2]">
+          <details className="rounded-[14px] border border-[#bfdbfe] bg-[#eaf2ff] p-3">
+            <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-2 text-sm font-extrabold text-[#1557c2]">
                 <MessageSquare size={15} /> 当日备注
-              </div>
-              <Badge variant="secondary" className="text-[10px]">{dateWithWeekday(effectiveLessonDay)}</Badge>
-            </div>
+              </span>
+              <span className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-[10px]">{dateWithWeekday(effectiveLessonDay)}</Badge>
+                <span className="text-[11px] font-bold text-[#64748b]">展开编辑</span>
+              </span>
+            </summary>
             <Textarea
               value={dayNote}
               onChange={(event) => onDayNoteChange(effectiveLessonDay, event.target.value)}
               placeholder="例如：老师请假停课，全部课程顺延。"
-              className="min-h-[78px] bg-white"
+              className="mt-3 min-h-[78px] bg-white"
             />
-          </div>
+          </details>
         )}
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto]">
