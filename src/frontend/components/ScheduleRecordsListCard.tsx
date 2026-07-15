@@ -1,10 +1,11 @@
 import { motion } from "framer-motion";
-import { Clock, GraduationCap, RefreshCw, RotateCcw, Search } from "lucide-react";
+import { Clock, GraduationCap, MessageSquare, RefreshCw, RotateCcw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type { Campus, CourseType, Lesson, TeacherVault } from "@/shared/types";
 import {
   campusName,
@@ -27,6 +28,7 @@ type ScheduleRecordsListCardProps = {
   campusOptions: Campus[];
   courseTypeFilter: CourseTypeFilter;
   dateWithWeekday: (date: string) => string;
+  dayNote: string;
   effectiveLessonDay: string;
   effectiveLessonScope: LessonScope;
   lessonDay: string;
@@ -38,6 +40,7 @@ type ScheduleRecordsListCardProps = {
   lessons: Lesson[];
   onOpenLesson: (lesson: Lesson) => void;
   onRefreshSelectedDateLessons: () => void;
+  onDayNoteChange: (date: string, note: string) => void;
   refreshSelectedDateLessonCount: number;
   selectedLessonId?: string;
   selectedCalendarDate: string;
@@ -64,6 +67,7 @@ export function ScheduleRecordsListCard({
   campusOptions,
   courseTypeFilter,
   dateWithWeekday,
+  dayNote,
   effectiveLessonDay,
   effectiveLessonScope,
   lessonDay,
@@ -75,6 +79,7 @@ export function ScheduleRecordsListCard({
   lessons,
   onOpenLesson,
   onRefreshSelectedDateLessons,
+  onDayNoteChange,
   refreshSelectedDateLessonCount,
   selectedLessonId,
   selectedCalendarDate,
@@ -182,6 +187,23 @@ export function ScheduleRecordsListCard({
             </Select>
           </div>
         </div>
+
+        {effectiveLessonScope === "day" && (
+          <div className="rounded-[14px] border border-[#f8d7b1] bg-[#fffaf2] p-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+                <MessageSquare size={15} /> 当日备注
+              </div>
+              <Badge variant="secondary" className="text-[10px]">{dateWithWeekday(effectiveLessonDay)}</Badge>
+            </div>
+            <Textarea
+              value={dayNote}
+              onChange={(event) => onDayNoteChange(effectiveLessonDay, event.target.value)}
+              placeholder="例如：老师请假停课，全部课程顺延。"
+              className="min-h-[78px] bg-white"
+            />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto]">
           <label className="relative block">

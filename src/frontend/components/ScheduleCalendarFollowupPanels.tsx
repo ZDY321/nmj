@@ -1,4 +1,4 @@
-import { Clock, CornerUpLeft, RotateCcw, Trash2 } from "lucide-react";
+import { Clock, CornerUpLeft, MessageSquare, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,7 @@ type ScheduleCalendarFollowupPanelsProps = {
   amountsVisible: boolean;
   completedCount: number;
   dateWithWeekday: (date: string) => string;
+  dayNote: string;
   makeupEntries: CalendarMakeupEntry[];
   makeupMarkerForLesson: (lesson: Lesson) => string | null;
   makeupOriginalDateFilter: string;
@@ -64,6 +65,7 @@ export function ScheduleCalendarFollowupPanels({
   amountsVisible,
   completedCount,
   dateWithWeekday,
+  dayNote,
   makeupEntries,
   makeupMarkerForLesson,
   makeupOriginalDateFilter,
@@ -114,6 +116,14 @@ export function ScheduleCalendarFollowupPanels({
               </div>
             ))}
           </div>
+          {dayNote && (
+            <div className="rounded-[12px] border border-[#f8d7b1] bg-[#fffaf2] px-3 py-2">
+              <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#9a3412]">
+                <MessageSquare size={14} /> 当日备注
+              </div>
+              <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#7c2d12]">{dayNote}</div>
+            </div>
+          )}
           <div className="space-y-2">
             {selectedCalendarLessons.map((lesson) => {
               const makeupMarker = makeupMarkerForLesson(lesson);

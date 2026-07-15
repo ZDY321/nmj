@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Search, Table2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, MessageSquare, RefreshCw, Search, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -177,6 +177,7 @@ export function CalendarView({
   const weekLessons = filteredVisibleLessons.filter((l) => weekDates.includes(l.date)).sort(sortLessons);
   const monthLessons = filteredVisibleLessons.filter((l) => l.date.startsWith(month));
   const selectedTotal = selectedLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
+  const selectedDayNote = dayNoteForDate(selectedDate);
   const weekTotal = weekLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const monthTotal = monthLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
 
@@ -221,6 +222,10 @@ export function CalendarView({
       weekMakeupFilter,
       ...overrides
     };
+  }
+
+  function dayNoteForDate(date: string): string {
+    return vault.calendarDayNotes?.find((item) => item.date === date)?.note ?? "";
   }
 
   function shiftSelectedWeek(days: number) {
@@ -523,6 +528,7 @@ export function CalendarView({
                 {days.map((date) => {
                   const dayLessons = filteredVisibleLessons.filter((l) => l.date === date).sort(sortLessons);
                   const amount = dayLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
+                  const dayNote = dayNoteForDate(date);
                   const hasPending = dayLessons.some((l) => l.status === "scheduled");
                   const hasDone = dayLessons.some((l) => l.status === "completed" || l.status === "makeup_completed");
                   const hasCancelled = dayLessons.some((l) => l.status === "cancelled");
@@ -571,8 +577,14 @@ export function CalendarView({
                         {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
                         {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
                         {makeupBadgeLabel && <Badge variant="yellow" className="text-[10px] px-1.5 py-0">{makeupBadgeLabel}</Badge>}
+                        {dayNote && <Badge variant="sky" className="text-[10px] px-1.5 py-0">备注</Badge>}
                         {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                       </div>
+                      {dayNote && (
+                        <span className="mt-0.5 hidden w-full truncate text-[10px] font-semibold text-[#9a3412] sm:block">
+                          备注：{dayNote}
+                        </span>
+                      )}
                       {dayLessons.slice(0, 2).map((l) => (
                         <span key={l.id} className="mt-0.5 hidden w-full truncate text-[10px] text-(--color-muted-foreground) sm:block">
                           {l.startTime} {courseTypeLabel(vault, l.type)} · {lessonDisplayName(vault, l)} · {lessonDisplaySubject(vault, l)}
@@ -610,6 +622,7 @@ export function CalendarView({
                       {weekDates.map((date, index) => {
                         const dayLessons = weekLessons.filter((lesson) => lesson.date === date);
                         const dayTotal = dayLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
+                        const dayNote = dayNoteForDate(date);
                         const dayMakeupMarkers = dayLessons.map((lesson) => makeupMarkerForLesson(lesson)).filter(isPresentMakeupMarker);
                         const dayHasPendingMakeup = dayMakeupMarkers.some(isPendingMakeupMarker);
                         const isSelected = date === selectedDate;
@@ -633,6 +646,11 @@ export function CalendarView({
                             <span className="mt-0.5 block text-xs font-bold text-[#64748b]">
                               {weekdayLabels[index]} · {dayLessons.length} 节
                             </span>
+                            {dayNote && (
+                              <span className="mt-1 block truncate text-[11px] font-bold text-[#9a3412]">
+                                备注：{dayNote}
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -758,6 +776,15 @@ export function CalendarView({
                 <strong className="block text-xl font-extrabold mt-1">{monthLessons.length}</strong>
               </div>
             </div>
+
+            {selectedDayNote && (
+              <div className="rounded-[12px] border border-[#f8d7b1] bg-[#fffaf2] px-3 py-2">
+                <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#9a3412]">
+                  <MessageSquare size={14} /> 当日备注
+                </div>
+                <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#7c2d12]">{selectedDayNote}</div>
+              </div>
+            )}
 
             <div className="space-y-2">
               {selectedLessons.length === 0 && (

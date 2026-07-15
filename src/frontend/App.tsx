@@ -63,6 +63,7 @@ import {
 } from "@/frontend/lib/vaultMutations";
 import { timesOverlap } from "@/frontend/lib/time";
 import type {
+  CalendarDayNote,
   Campus,
   AiScheduleSession,
   CourseGroup,
@@ -587,6 +588,28 @@ export function App() {
       affectedOriginalLessonIds.forEach((originalLessonId) => {
         recalculateLinkedMakeupLessonFeeSnapshots(draft, originalLessonId);
       });
+    });
+  }
+
+  function updateCalendarDayNote(date: string, note: string) {
+    const normalizedDate = date.trim();
+    if (!normalizedDate) return;
+    const normalizedNote = note.replace(/\r\n/g, "\n");
+    updateVault((draft) => {
+      const existingNotes = draft.calendarDayNotes ?? [];
+      if (!normalizedNote.trim()) {
+        draft.calendarDayNotes = existingNotes.filter((item) => item.date !== normalizedDate);
+        return;
+      }
+      const updatedAt = new Date().toISOString();
+      const nextEntry: CalendarDayNote = {
+        date: normalizedDate,
+        note: normalizedNote,
+        updatedAt
+      };
+      draft.calendarDayNotes = existingNotes.some((item) => item.date === normalizedDate)
+        ? existingNotes.map((item) => (item.date === normalizedDate ? nextEntry : item))
+        : [...existingNotes, nextEntry].sort((left, right) => left.date.localeCompare(right.date));
     });
   }
 
@@ -1974,6 +1997,7 @@ export function App() {
                     onAddLessonAndUpdateLesson={addLessonAndUpdateLesson}
                     onUpdateLesson={updateLesson}
                     onUpdateLessons={updateLessons}
+                    onUpdateCalendarDayNote={updateCalendarDayNote}
                     onDeleteLesson={deleteLesson}
                     onRestoreDeletedLessons={restoreDeletedLessons}
                     onPermanentlyDeleteDeletedLessons={permanentlyDeleteDeletedLessons}

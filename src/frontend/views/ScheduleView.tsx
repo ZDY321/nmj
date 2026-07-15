@@ -282,6 +282,7 @@ export function ScheduleView({
   onAddLessonAndUpdateLesson,
   onUpdateLesson,
   onUpdateLessons,
+  onUpdateCalendarDayNote,
   onDeleteLesson,
   onRestoreDeletedLessons,
   onPermanentlyDeleteDeletedLessons,
@@ -306,6 +307,7 @@ export function ScheduleView({
   onAddLessonAndUpdateLesson: (lessonToAdd: Lesson, lessonToUpdate: Lesson) => void;
   onUpdateLesson: (lesson: Lesson) => void;
   onUpdateLessons: (lessons: Lesson[]) => void;
+  onUpdateCalendarDayNote: (date: string, note: string) => void;
   onDeleteLesson: (lessonId: string) => void;
   onRestoreDeletedLessons: (deletedLessonIds: string[]) => void;
   onPermanentlyDeleteDeletedLessons: (deletedLessonIds: string[]) => void;
@@ -675,6 +677,10 @@ export function ScheduleView({
     const course = getCourse(vault, lesson.courseGroupId);
     return Boolean(course && course.status === "active" && courseHasActiveStudent(vault, course));
   });
+  function calendarDayNoteForDate(date: string): string {
+    return vault.calendarDayNotes?.find((item) => item.date === date)?.note ?? "";
+  }
+
   const calendarLessonFilters = {
     campusFilter: calendarViewCampusFilter,
     gradeFilter: calendarViewGradeFilter,
@@ -692,7 +698,9 @@ export function ScheduleView({
   const selectedCalendarPendingCount = selectedCalendarLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
   const selectedCalendarCancelledCount = selectedCalendarLessons.filter((lesson) => lesson.status === "cancelled").length;
   const selectedCalendarAmount = selectedCalendarLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
+  const selectedCalendarDayNote = calendarDayNoteForDate(selectedCalendarDate);
   const calendarDetailLessons = calendarDetailDate ? calendarLessonsForDate(calendarDetailDate) : [];
+  const calendarDetailDayNote = calendarDetailDate ? calendarDayNoteForDate(calendarDetailDate) : "";
   const calendarDetailAmount = calendarDetailLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const calendarDetailCompletedCount = calendarDetailLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const calendarDetailPendingCount = calendarDetailLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
@@ -2720,6 +2728,7 @@ export function ScheduleView({
         completedCount={calendarDetailCompletedCount}
         date={calendarDetailDate}
         dateWithWeekday={dateWithWeekday}
+        dayNote={calendarDetailDayNote}
         lessons={calendarDetailLessons}
         makeupMarkerForLesson={makeupMarkerForLesson}
         onClose={() => setCalendarDetailDate(null)}
@@ -3001,6 +3010,7 @@ export function ScheduleView({
             calendarCourseGroupId,
             calendarLessonsForDate,
             calendarMode,
+            dayNoteForDate: calendarDayNoteForDate,
             calendarMonth,
             makeupMarkerForLesson,
             onDateClick: (calendarDate) => {
@@ -3094,6 +3104,7 @@ export function ScheduleView({
           amountsVisible={amountsVisible}
           completedCount={selectedCalendarCompletedCount}
           dateWithWeekday={dateWithWeekday}
+          dayNote={selectedCalendarDayNote}
           makeupEntries={makeupEntries}
           makeupMarkerForLesson={makeupMarkerForLesson}
           makeupOriginalDateFilter={makeupOriginalDateFilter}
@@ -3135,6 +3146,7 @@ export function ScheduleView({
               amountsVisible={amountsVisible}
               completedCount={selectedCalendarCompletedCount}
               dateWithWeekday={dateWithWeekday}
+              dayNote={selectedCalendarDayNote}
               makeupEntries={makeupEntries}
               makeupMarkerForLesson={makeupMarkerForLesson}
               makeupOriginalDateFilter={makeupOriginalDateFilter}
@@ -3281,6 +3293,7 @@ export function ScheduleView({
           campusOptions={campusOptions}
           courseTypeFilter={courseTypeFilter}
           dateWithWeekday={dateWithWeekday}
+          dayNote={effectiveLessonScope === "day" ? calendarDayNoteForDate(effectiveLessonDay) : ""}
           effectiveLessonDay={effectiveLessonDay}
           effectiveLessonScope={effectiveLessonScope}
           lessonDay={lessonDay}
@@ -3292,6 +3305,7 @@ export function ScheduleView({
           lessons={lessons}
           onOpenLesson={openLessonInRecords}
           onRefreshSelectedDateLessons={refreshSelectedCalendarDateLessons}
+          onDayNoteChange={onUpdateCalendarDayNote}
           refreshSelectedDateLessonCount={selectedCalendarRefreshableLessons.length}
           selectedLessonId={selected?.id}
           selectedCalendarDate={selectedCalendarDate}

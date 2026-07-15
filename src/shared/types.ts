@@ -328,6 +328,12 @@ export type Lesson = {
   sourceScheduleRuleId?: string;
 };
 
+export type CalendarDayNote = {
+  date: string;
+  note: string;
+  updatedAt: string;
+};
+
 export type DeletedLessonSource = "manual" | "ai" | "sync_overwrite";
 
 export type DeletedLesson = {
@@ -589,6 +595,7 @@ export type TeacherVault = {
   courseGroups: CourseGroup[];
   scheduleRules: ScheduleRule[];
   lessons: Lesson[];
+  calendarDayNotes?: CalendarDayNote[];
   deletedLessons?: DeletedLesson[];
   salaryAdjustments: SalaryAdjustment[];
   todoItems?: TodoItem[];

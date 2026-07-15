@@ -37,6 +37,7 @@ export function createEmptyVault(displayName = ""): TeacherVault {
     courseGroups: [],
     scheduleRules: [],
     lessons: [],
+    calendarDayNotes: [],
     deletedLessons: [],
     salaryAdjustments: [],
     todoItems: [],

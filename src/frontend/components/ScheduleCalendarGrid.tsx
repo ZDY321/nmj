@@ -13,6 +13,7 @@ export type ScheduleCalendarGridProps = {
   calendarCourseGroupId: string;
   calendarLessonsForDate: (date: string) => Lesson[];
   calendarMode: "schedule" | "view";
+  dayNoteForDate: (date: string) => string;
   calendarMonth: string;
   makeupMarkerForLesson: (lesson: Lesson) => string | null;
   onDateClick: (date: string) => void;
@@ -43,6 +44,7 @@ export function ScheduleCalendarGrid({
   calendarCourseGroupId,
   calendarLessonsForDate,
   calendarMode,
+  dayNoteForDate,
   calendarMonth,
   makeupMarkerForLesson,
   onDateClick,
@@ -59,6 +61,7 @@ export function ScheduleCalendarGrid({
       {calendarDates(calendarMonth, weekStartPreference).map((calendarDate) => {
         const dayLessons = calendarLessonsForDate(calendarDate);
         const amount = dayLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
+        const dayNote = dayNoteForDate(calendarDate);
         const isCurrentMonth = calendarDate.startsWith(calendarMonth);
         const hasCancelled = dayLessons.some((lesson) => lesson.status === "cancelled");
         const hasCompleted = dayLessons.some((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
@@ -106,8 +109,14 @@ export function ScheduleCalendarGrid({
               {hasCancelled && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">取消</Badge>}
               {hasPending && <Badge variant="amber" className="text-[10px] px-1.5 py-0">待确认</Badge>}
               {makeupBadgeLabel && <Badge variant="yellow" className="text-[10px] px-1.5 py-0">{makeupBadgeLabel}</Badge>}
+              {dayNote && <Badge variant="sky" className="px-1.5 py-0 text-[10px]">备注</Badge>}
               {amount > 0 && <Badge variant="default" className="px-1.5 py-0 text-[10px]">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
             </div>
+            {dayNote && (
+              <span className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-[#9a3412] sm:block">
+                备注：{dayNote}
+              </span>
+            )}
             {dayLessons.slice(0, 4).map((lesson) => {
               const makeupMarker = makeupMarkerForLesson(lesson);
               return (
