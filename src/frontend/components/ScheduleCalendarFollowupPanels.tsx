@@ -117,12 +117,15 @@ export function ScheduleCalendarFollowupPanels({
             ))}
           </div>
           {dayNote && (
-            <div className="rounded-[12px] border border-[#f8d7b1] bg-[#fffaf2] px-3 py-2">
-              <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#9a3412]">
-                <MessageSquare size={14} /> 当日备注
-              </div>
-              <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#7c2d12]">{dayNote}</div>
-            </div>
+            <details className="rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-extrabold text-[#1557c2] [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2">
+                  <MessageSquare size={14} /> 当日备注
+                </span>
+                <span className="text-[11px] font-bold text-[#64748b]">展开查看</span>
+              </summary>
+              <div className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-[#1e3a8a]">{dayNote}</div>
+            </details>
           )}
           <div className="space-y-2">
             {selectedCalendarLessons.map((lesson) => {

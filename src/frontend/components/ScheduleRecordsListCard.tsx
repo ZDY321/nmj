@@ -189,9 +189,9 @@ export function ScheduleRecordsListCard({
         </div>
 
         {effectiveLessonScope === "day" && (
-          <div className="rounded-[14px] border border-[#f8d7b1] bg-[#fffaf2] p-3">
+          <div className="rounded-[14px] border border-[#bfdbfe] bg-[#eaf2ff] p-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+              <div className="flex items-center gap-2 text-sm font-extrabold text-[#1557c2]">
                 <MessageSquare size={15} /> 当日备注
               </div>
               <Badge variant="secondary" className="text-[10px]">{dateWithWeekday(effectiveLessonDay)}</Badge>

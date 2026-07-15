@@ -113,7 +113,7 @@ export function ScheduleCalendarGrid({
               {amount > 0 && <Badge variant="default" className="px-1.5 py-0 text-[10px]">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
             </div>
             {dayNote && (
-              <span className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-[#9a3412] sm:block">
+              <span className="mt-0.5 hidden w-full truncate text-[11px] font-semibold text-[#1557c2] sm:block">
                 备注：{dayNote}
               </span>
             )}

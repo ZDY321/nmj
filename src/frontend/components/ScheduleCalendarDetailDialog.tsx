@@ -95,11 +95,11 @@ export function ScheduleCalendarDetailDialog({
               </div>
 
               {dayNote && (
-                <div className="mb-4 rounded-[12px] border border-[#f8d7b1] bg-[#fffaf2] px-3 py-2">
-                  <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#9a3412]">
+                <div className="mb-4 rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2">
+                  <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
                     <MessageSquare size={14} /> 当日备注
                   </div>
-                  <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#7c2d12]">{dayNote}</div>
+                  <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#1e3a8a]">{dayNote}</div>
                 </div>
               )}
 

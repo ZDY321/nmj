@@ -581,7 +581,7 @@ export function CalendarView({
                         {amount > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{formatPrivateMoney(amount, amountsVisible)}</Badge>}
                       </div>
                       {dayNote && (
-                        <span className="mt-0.5 hidden w-full truncate text-[10px] font-semibold text-[#9a3412] sm:block">
+                        <span className="mt-0.5 hidden w-full truncate text-[10px] font-semibold text-[#1557c2] sm:block">
                           备注：{dayNote}
                         </span>
                       )}
@@ -647,7 +647,7 @@ export function CalendarView({
                               {weekdayLabels[index]} · {dayLessons.length} 节
                             </span>
                             {dayNote && (
-                              <span className="mt-1 block truncate text-[11px] font-bold text-[#9a3412]">
+                              <span className="mt-1 block truncate text-[11px] font-bold text-[#1557c2]">
                                 备注：{dayNote}
                               </span>
                             )}
@@ -778,11 +778,11 @@ export function CalendarView({
             </div>
 
             {selectedDayNote && (
-              <div className="rounded-[12px] border border-[#f8d7b1] bg-[#fffaf2] px-3 py-2">
-                <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#9a3412]">
+              <div className="rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2">
+                <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
                   <MessageSquare size={14} /> 当日备注
                 </div>
-                <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#7c2d12]">{selectedDayNote}</div>
+                <div className="whitespace-pre-wrap text-sm font-semibold leading-6 text-[#1e3a8a]">{selectedDayNote}</div>
               </div>
             )}
 
