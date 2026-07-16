@@ -17,7 +17,8 @@ import { Input } from "@/components/ui/input";
 import type { Lesson, MemoItem, TeacherVault, TodoItem } from "@/shared/types";
 import { MemoView } from "@/frontend/views/MemoView";
 import { TodoView } from "@/frontend/views/TodoView";
-import { formatAppDateLabel, getCourse } from "@/frontend/lib/calculations";
+import { formatAppDateLabel, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { groupOpenTodos } from "@/frontend/lib/todos";
 import {
   attendanceLabels,
   attendedStudentNamesForLesson,
@@ -75,12 +76,16 @@ export function TodayView({
       tone: campusColorClass(index)
     }))
     .filter((item) => item.count > 0);
-  const todos = [...(vault.todoItems ?? [])].sort((a, b) => {
-    if (a.status !== b.status) return a.status === "open" ? -1 : 1;
-    return `${a.dueDate ?? "9999-99-99"} ${a.createdAt}`.localeCompare(`${b.dueDate ?? "9999-99-99"} ${b.createdAt}`);
-  });
-  const openTodoCount = todos.filter((todo) => todo.status === "open").length;
-  const dueSelectedDateTodoCount = todos.filter((todo) => todo.status === "open" && todo.dueDate === selectedDate).length;
+  const today = todayIso();
+  const todoGroups = groupOpenTodos(vault.todoItems ?? [], today);
+  const openTodos = [...todoGroups.overdue, ...todoGroups.upcoming, ...todoGroups.undated];
+  const openTodoCount = openTodos.length;
+  const dueSelectedDateTodoCount = openTodos.filter((todo) => todo.dueDate === selectedDate).length;
+  const previewLimit = 5;
+  const reservedUpcomingCount = Math.min(3, todoGroups.upcoming.length);
+  const overduePreview = todoGroups.overdue.slice(0, previewLimit - reservedUpcomingCount);
+  const upcomingPreview = todoGroups.upcoming.slice(0, previewLimit - overduePreview.length);
+  const hiddenDatedTodoCount = todoGroups.overdue.length + todoGroups.upcoming.length - overduePreview.length - upcomingPreview.length;
   const memoCount = vault.memoItems?.length ?? 0;
   const selectedDateLabel = formatAppDateLabel(selectedDate, {
     month: "long",
@@ -192,6 +197,7 @@ export function TodayView({
                 {dueSelectedDateTodoCount > 0
                   ? `${selectedDateLabel} 有 ${dueSelectedDateTodoCount} 条待办到期。`
                   : `${selectedDateLabel} 没有到期待办。`}
+                下方最多预览 5 条已逾期或未来事项。
               </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -204,6 +210,68 @@ export function TodayView({
             </div>
           </div>
         </CardHeader>
+        <CardContent className="space-y-4 px-5 pb-5 pt-0">
+          {overduePreview.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-extrabold text-[#b91c1c]">
+                <span>已逾期 · 最早日期优先</span>
+                <span>{todoGroups.overdue.length} 条</span>
+              </div>
+              {overduePreview.map((todo) => (
+                <label key={todo.id} className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => onUpdateTodo({ ...todo, status: "done" })}
+                    className="mt-1 h-4 w-4 accent-[#ff8617]"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-extrabold text-[#061226]">{todo.title}</span>
+                    <span className="mt-0.5 block text-xs font-semibold text-[#b91c1c]">截止：{todo.dueDate}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {upcomingPreview.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-extrabold text-[#1557c2]">
+                <span>今天及未来 · 最近日期优先</span>
+                <span>{todoGroups.upcoming.length} 条</span>
+              </div>
+              {upcomingPreview.map((todo) => (
+                <label key={todo.id} className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => onUpdateTodo({ ...todo, status: "done" })}
+                    className="mt-1 h-4 w-4 accent-[#ff8617]"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-extrabold text-[#061226]">{todo.title}</span>
+                    <span className="mt-0.5 block text-xs font-semibold text-[#1557c2]">
+                      {todo.dueDate === today ? "今天截止" : `截止：${todo.dueDate}`}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {overduePreview.length === 0 && upcomingPreview.length === 0 && (
+            <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
+              暂无已设置截止日期的未完成待办。
+            </div>
+          )}
+
+          {(hiddenDatedTodoCount > 0 || todoGroups.undated.length > 0) && (
+            <div className="text-xs font-semibold text-[#64748b]">
+              {hiddenDatedTodoCount > 0 ? `另有 ${hiddenDatedTodoCount} 条日期待办未展开。` : ""}
+              {todoGroups.undated.length > 0 ? ` 还有 ${todoGroups.undated.length} 条未设置日期的待办。` : ""}
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       <Card className="overflow-hidden">

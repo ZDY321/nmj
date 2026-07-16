@@ -20,9 +20,10 @@ import { Select } from "@/components/ui/select";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
+import { groupOpenTodos, sortCompletedTodos } from "@/frontend/lib/todos";
 import type { TeacherVault, TodoItem } from "@/shared/types";
 
-type TodoStatusFilter = "open" | "all" | "done";
+type TodoStatusFilter = "open" | "overdue" | "upcoming" | "undated" | "all" | "done";
 
 export function TodoView({
   vault,
@@ -46,23 +47,56 @@ export function TodoView({
   const [editingTodoDueDate, setEditingTodoDueDate] = useState("");
   const { confirm, dialog } = useConfirmDialog();
   const today = todayIso();
-  const todos = sortedTodos(vault.todoItems ?? []);
-  const openTodos = todos.filter((todo) => todo.status === "open");
-  const doneTodos = todos.filter((todo) => todo.status === "done");
+  const todoGroups = groupOpenTodos(vault.todoItems ?? [], today);
+  const openTodos = [...todoGroups.overdue, ...todoGroups.upcoming, ...todoGroups.undated];
+  const doneTodos = sortCompletedTodos(vault.todoItems ?? []);
   const dueTodayCount = openTodos.filter((todo) => todo.dueDate === today).length;
-  const overdueCount = openTodos.filter((todo) => todo.dueDate && todo.dueDate < today).length;
+  const overdueCount = todoGroups.overdue.length;
   const normalizedSearch = search.trim().toLowerCase();
-  const visibleTodos = todos.filter((todo) => {
-    const matchesStatus =
-      statusFilter === "all" ||
-      todo.status === statusFilter;
-    const matchesSearch =
+  const matchesSearch = (todo: TodoItem) =>
       !normalizedSearch ||
       todo.title.toLowerCase().includes(normalizedSearch) ||
       (todo.note ?? "").toLowerCase().includes(normalizedSearch) ||
       (todo.dueDate ?? "").includes(normalizedSearch);
-    return matchesStatus && matchesSearch;
-  });
+  const allSections = [
+    {
+      key: "overdue" as const,
+      title: "已逾期",
+      description: "按最早逾期日期优先",
+      badgeVariant: "destructive" as const,
+      todos: todoGroups.overdue
+    },
+    {
+      key: "upcoming" as const,
+      title: "今天及未来",
+      description: "按最近截止日期优先",
+      badgeVariant: "sky" as const,
+      todos: todoGroups.upcoming
+    },
+    {
+      key: "undated" as const,
+      title: "未设置日期",
+      description: "按最近创建时间优先",
+      badgeVariant: "secondary" as const,
+      todos: todoGroups.undated
+    },
+    {
+      key: "done" as const,
+      title: "已完成",
+      description: "已完成事项单独保留，便于回看",
+      badgeVariant: "sage" as const,
+      todos: doneTodos
+    }
+  ];
+  const visibleSections = allSections
+    .filter((section) => {
+      if (statusFilter === "all") return true;
+      if (statusFilter === "open") return section.key !== "done";
+      return section.key === statusFilter;
+    })
+    .map((section) => ({ ...section, todos: section.todos.filter(matchesSearch) }))
+    .filter((section) => section.todos.length > 0);
+  const visibleTodoCount = visibleSections.reduce((sum, section) => sum + section.todos.length, 0);
 
   function addTodo() {
     const title = todoTitle.trim();
@@ -175,91 +209,107 @@ export function TodoView({
               <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索待办内容或截止日期" />
             </div>
             <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TodoStatusFilter)}>
-              <option value="open">未完成</option>
+              <option value="open">未完成（分组）</option>
+              <option value="overdue">仅看已逾期</option>
+              <option value="upcoming">仅看今天及未来</option>
+              <option value="undated">仅看未设日期</option>
               <option value="all">全部状态</option>
               <option value="done">已完成</option>
             </Select>
           </div>
 
           <div className="space-y-3">
-            {visibleTodos.map((todo, index) => {
-              const isEditingTodo = editingTodoId === todo.id;
-              const isOverdue = todo.status === "open" && Boolean(todo.dueDate) && todo.dueDate! < today;
-              const isDueToday = todo.status === "open" && todo.dueDate === today;
-              return (
-                <motion.div
-                  key={todo.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.02 }}
-                  className={`flex flex-col gap-3 rounded-[14px] border p-3 sm:flex-row sm:items-center sm:justify-between ${
-                    todo.status === "done"
-                      ? "border-[#dbe4ef] bg-[#f8fbff] opacity-75"
-                      : isOverdue
-                        ? "border-[#fecaca] bg-[#fff1f2]"
-                        : "border-[#fed7aa] bg-[#fff7ed]"
-                  }`}
-                >
-                  {isEditingTodo ? (
-                    <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_180px]">
-                      <Input
-                        value={editingTodoTitle}
-                        onChange={(event) => setEditingTodoTitle(event.target.value)}
-                        placeholder="待办内容"
-                        className="bg-white"
-                      />
-                      <Input
-                        type="date"
-                        value={editingTodoDueDate}
-                        onChange={(event) => setEditingTodoDueDate(event.target.value)}
-                        className="bg-white"
-                      />
-                    </div>
-                  ) : (
-                    <label className="flex min-w-0 flex-1 items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={todo.status === "done"}
-                        onChange={(event) => onUpdateTodo({ ...todo, status: event.target.checked ? "done" : "open" })}
-                        className="mt-1 h-4 w-4 accent-[#ff8617]"
-                      />
-                      <span className="min-w-0">
-                        <span className={`block text-sm font-extrabold ${todo.status === "done" ? "text-[#64748b] line-through" : "text-[#061226]"}`}>
-                          {todo.title}
-                        </span>
-                        <span className="mt-1 flex flex-wrap gap-2 text-xs font-semibold text-[#64748b]">
-                          <span>{todo.dueDate ? `截止：${todo.dueDate}` : "未设置截止日期"}</span>
-                          {isDueToday && <Badge variant="sky" className="text-[10px]">今日截止</Badge>}
-                          {isOverdue && <Badge variant="destructive" className="text-[10px]">已逾期</Badge>}
-                        </span>
-                      </span>
-                    </label>
-                  )}
-                  <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
-                    {isEditingTodo ? (
-                      <>
-                        <Button type="button" size="sm" onClick={() => saveTodo(todo)} disabled={!editingTodoTitle.trim()}>
-                          <Save size={14} /> 保存
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={cancelEditTodo}>
-                          <X size={14} /> 取消
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button type="button" size="sm" variant="outline" onClick={() => startEditTodo(todo)}>
-                          <Pencil size={14} /> 编辑
-                        </Button>
-                        <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)}>
-                          <Trash2 size={14} /> 删除
-                        </Button>
-                      </>
-                    )}
+            {visibleSections.map((section, sectionIndex) => (
+              <section key={section.key} className="space-y-3">
+                <div className="flex flex-col gap-2 rounded-[12px] bg-[#f8fbff] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-extrabold text-[#061226]">{section.title}</div>
+                    <div className="mt-0.5 text-xs font-semibold text-[#64748b]">{section.description}</div>
                   </div>
-                </motion.div>
-              );
-            })}
-            {visibleTodos.length === 0 && (
+                  <Badge variant={section.badgeVariant} className="w-fit">{section.todos.length} 条</Badge>
+                </div>
+                {section.todos.map((todo, index) => {
+                  const isEditingTodo = editingTodoId === todo.id;
+                  const isOverdue = todo.status === "open" && Boolean(todo.dueDate) && todo.dueDate! < today;
+                  const isDueToday = todo.status === "open" && todo.dueDate === today;
+                  return (
+                    <motion.div
+                      key={todo.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: sectionIndex * 0.03 + index * 0.02 }}
+                      className={`flex flex-col gap-3 rounded-[14px] border p-3 sm:flex-row sm:items-center sm:justify-between ${
+                        todo.status === "done"
+                          ? "border-[#dbe4ef] bg-[#f8fbff] opacity-75"
+                          : isOverdue
+                            ? "border-[#fecaca] bg-[#fff1f2]"
+                            : isDueToday
+                              ? "border-[#bfdbfe] bg-[#eff6ff]"
+                              : "border-[#fed7aa] bg-[#fff7ed]"
+                      }`}
+                    >
+                      {isEditingTodo ? (
+                        <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_180px]">
+                          <Input
+                            value={editingTodoTitle}
+                            onChange={(event) => setEditingTodoTitle(event.target.value)}
+                            placeholder="待办内容"
+                            className="bg-white"
+                          />
+                          <Input
+                            type="date"
+                            value={editingTodoDueDate}
+                            onChange={(event) => setEditingTodoDueDate(event.target.value)}
+                            className="bg-white"
+                          />
+                        </div>
+                      ) : (
+                        <label className="flex min-w-0 flex-1 items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={todo.status === "done"}
+                            onChange={(event) => onUpdateTodo({ ...todo, status: event.target.checked ? "done" : "open" })}
+                            className="mt-1 h-4 w-4 accent-[#ff8617]"
+                          />
+                          <span className="min-w-0">
+                            <span className={`block text-sm font-extrabold ${todo.status === "done" ? "text-[#64748b] line-through" : "text-[#061226]"}`}>
+                              {todo.title}
+                            </span>
+                            <span className="mt-1 flex flex-wrap gap-2 text-xs font-semibold text-[#64748b]">
+                              <span>{todo.dueDate ? `截止：${todo.dueDate}` : "未设置截止日期"}</span>
+                              {isDueToday && <Badge variant="sky" className="text-[10px]">今日截止</Badge>}
+                              {isOverdue && <Badge variant="destructive" className="text-[10px]">已逾期</Badge>}
+                            </span>
+                          </span>
+                        </label>
+                      )}
+                      <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+                        {isEditingTodo ? (
+                          <>
+                            <Button type="button" size="sm" onClick={() => saveTodo(todo)} disabled={!editingTodoTitle.trim()}>
+                              <Save size={14} /> 保存
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={cancelEditTodo}>
+                              <X size={14} /> 取消
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button type="button" size="sm" variant="outline" onClick={() => startEditTodo(todo)}>
+                              <Pencil size={14} /> 编辑
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)}>
+                              <Trash2 size={14} /> 删除
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </section>
+            ))}
+            {visibleTodoCount === 0 && (
               <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
                 当前筛选下没有待办事项
               </div>
@@ -269,11 +319,4 @@ export function TodoView({
       </Card>
     </div>
   );
-}
-
-function sortedTodos(todos: TodoItem[]): TodoItem[] {
-  return [...todos].sort((a, b) => {
-    if (a.status !== b.status) return a.status === "open" ? -1 : 1;
-    return `${a.dueDate ?? "9999-99-99"} ${a.createdAt}`.localeCompare(`${b.dueDate ?? "9999-99-99"} ${b.createdAt}`);
-  });
 }
