@@ -378,10 +378,12 @@ export type TodoItem = {
   id: string;
   title: string;
   dueDate?: string;
-  status: "open" | "done";
+  status: "open" | "done" | "archived";
   priority?: "normal" | "high";
   note?: string;
   createdAt: string;
+  archivedAt?: string;
+  archivedMemoId?: string;
 };
 
 export type MemoItem = {

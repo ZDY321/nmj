@@ -1035,6 +1035,20 @@ export function App() {
     });
   }
 
+  function mergeTodosIntoMemo(todoIds: string[], memo: MemoItem) {
+    if (todoIds.length === 0) return;
+    const todoIdSet = new Set(todoIds);
+    const archivedAt = new Date().toISOString();
+    updateVault((draft) => {
+      draft.memoItems = [memo, ...(draft.memoItems ?? []).filter((item) => item.id !== memo.id)];
+      draft.todoItems = (draft.todoItems ?? []).map((todo) =>
+        todoIdSet.has(todo.id) && todo.status === "open"
+          ? { ...todo, status: "archived", archivedAt, archivedMemoId: memo.id }
+          : todo
+      );
+    });
+  }
+
   function saveMemo(memo: MemoItem) {
     updateVault((draft) => {
       const memos = draft.memoItems ?? [];
@@ -1973,6 +1987,7 @@ export function App() {
                     onAddTodo={addTodo}
                     onUpdateTodo={updateTodo}
                     onDeleteTodo={deleteTodo}
+                    onMergeTodosToMemo={mergeTodosIntoMemo}
                     onSaveMemo={saveMemo}
                     onDeleteMemo={deleteMemo}
                     onOpenLessonInRecords={openTodayLessonInScheduleRecords}

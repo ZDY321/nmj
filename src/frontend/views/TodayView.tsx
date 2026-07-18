@@ -49,6 +49,7 @@ export function TodayView({
   onAddTodo,
   onUpdateTodo,
   onDeleteTodo,
+  onMergeTodosToMemo,
   onSaveMemo,
   onDeleteMemo,
   onOpenLessonInRecords
@@ -60,6 +61,7 @@ export function TodayView({
   onAddTodo: (todo: TodoItem) => void;
   onUpdateTodo: (todo: TodoItem) => void;
   onDeleteTodo: (todoId: string) => void;
+  onMergeTodosToMemo: (todoIds: string[], memo: MemoItem) => void;
   onSaveMemo: (memo: MemoItem) => void;
   onDeleteMemo: (memoId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
@@ -154,6 +156,7 @@ export function TodayView({
           onAddTodo={onAddTodo}
           onUpdateTodo={onUpdateTodo}
           onDeleteTodo={onDeleteTodo}
+          onMergeTodosToMemo={onMergeTodosToMemo}
         />
       ) : subPage === "memos" ? (
         <MemoView

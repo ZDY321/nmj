@@ -31,6 +31,12 @@ export function sortCompletedTodos(todos: TodoItem[]): TodoItem[] {
     });
 }
 
+export function sortArchivedTodos(todos: TodoItem[]): TodoItem[] {
+  return todos
+    .filter((todo) => todo.status === "archived")
+    .sort((a, b) => (b.archivedAt ?? b.createdAt).localeCompare(a.archivedAt ?? a.createdAt));
+}
+
 function compareDatedTodos(a: TodoItem, b: TodoItem): number {
   return a.dueDate!.localeCompare(b.dueDate!) || a.createdAt.localeCompare(b.createdAt);
 }

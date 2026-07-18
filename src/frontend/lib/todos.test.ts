@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TodoItem } from "@/shared/types";
-import { groupOpenTodos } from "@/frontend/lib/todos";
+import { groupOpenTodos, sortArchivedTodos } from "@/frontend/lib/todos";
 
 function todo(id: string, dueDate?: string, createdAt = "2026-07-01T00:00:00.000Z"): TodoItem {
   return {
@@ -28,5 +28,28 @@ describe("todo date grouping", () => {
     expect(groups.overdue.map((item) => item.id)).toEqual(["oldest-overdue", "recent-overdue"]);
     expect(groups.upcoming.map((item) => item.id)).toEqual(["today", "tomorrow", "later"]);
     expect(groups.undated.map((item) => item.id)).toEqual(["newer-undated", "older-undated"]);
+  });
+
+  it("keeps archived todos out of open groups and sorts archived items by archived time", () => {
+    const archivedOlder: TodoItem = {
+      ...todo("archived-older", "2026-06-01"),
+      status: "archived",
+      archivedAt: "2026-07-10T00:00:00.000Z",
+      archivedMemoId: "memo_older"
+    };
+    const archivedNewer: TodoItem = {
+      ...todo("archived-newer", "2026-06-02"),
+      status: "archived",
+      archivedAt: "2026-07-12T00:00:00.000Z",
+      archivedMemoId: "memo_newer"
+    };
+
+    const groups = groupOpenTodos([todo("open", "2026-07-15"), archivedOlder, archivedNewer], "2026-07-16");
+
+    expect(groups.overdue.map((item) => item.id)).toEqual(["open"]);
+    expect(sortArchivedTodos([archivedOlder, archivedNewer]).map((item) => item.id)).toEqual([
+      "archived-newer",
+      "archived-older"
+    ]);
   });
 });
