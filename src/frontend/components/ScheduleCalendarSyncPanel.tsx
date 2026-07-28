@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronUp, Copy } from "lucide-react";
+import { CalendarDays, CalendarRange, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,144 +116,160 @@ export function ScheduleCalendarSyncPanel({
             className="overflow-hidden"
           >
             <div className="space-y-3 pt-1">
-              <div className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
-                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="text-sm font-extrabold text-[#061226]">同步某一天课程</div>
-                    <div className="mt-1 text-xs font-semibold text-[#64748b]">从来源日期勾选课节，复制到目标日期。</div>
+              <section className="overflow-hidden rounded-[12px] border-2 border-[#fdba74] bg-white shadow-[0_10px_24px_rgba(194,65,12,0.08)]">
+                <div className="flex flex-col gap-2 border-b border-[#fed7aa] bg-[#fff7ed] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-[#ff8617] text-white shadow-[0_6px_14px_rgba(255,134,23,0.22)]">
+                      <CalendarDays size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-extrabold text-[#c2410c]">单日同步</div>
+                      <div className="mt-0.5 text-sm font-extrabold text-[#061226]">同步某一天课程</div>
+                      <div className="mt-1 text-xs font-semibold text-[#7c2d12]">从来源日期勾选课节，复制到目标日期。</div>
+                    </div>
                   </div>
                   <Badge variant="secondary" className="w-fit">{selectedSyncLessons.length} / {syncSourceLessons.length} 节</Badge>
                 </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">来源日期</label>
-                    <Input type="date" value={syncSourceDate} onChange={(event) => setSyncSourceDate(event.target.value)} className="h-10 bg-white" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">目标日期</label>
-                    <Input type="date" value={syncTargetDate} onChange={(event) => setSyncTargetDate(event.target.value)} className="h-10 bg-white" />
-                  </div>
-                  <Button type="button" className="self-end" onClick={onCopySelectedLessonsToDate} disabled={selectedSyncLessons.length === 0 || syncSourceDate === syncTargetDate}>
-                    <Copy size={15} /> 同步单日
-                  </Button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={onUsePreviousWeekSameDay}>
-                    上周同日
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={onSelectAllSyncLessons} disabled={selectableSyncLessons.length === 0}>
-                    全选
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={onClearSyncLessons} disabled={selectedSyncLessons.length === 0}>
-                    清空
-                  </Button>
-                </div>
-                <div className="mt-3 max-h-[190px] space-y-2 overflow-y-auto pr-1">
-                  {syncSourceLessons.map((lesson) => {
-                    const course = getCourse(vault, lesson.courseGroupId);
-                    const disabled = course?.status !== "active";
-                    const conflicted = Boolean(
-                      syncTargetDate &&
-                      vault.lessons.some(
-                        (existingLesson) =>
-                          existingLesson.date === syncTargetDate &&
-                          existingLesson.courseGroupId === lesson.courseGroupId &&
-                          existingLesson.status !== "cancelled" &&
-                          timesOverlap(existingLesson.startTime, existingLesson.endTime, lesson.startTime, lesson.endTime)
-                      )
-                    );
-                    return (
-                      <label
-                        key={lesson.id}
-                        className={`flex items-start gap-3 rounded-[12px] border px-3 py-2 text-sm ${
-                          disabled
-                            ? "border-[#e2e8f0] bg-white text-[#94a3b8]"
-                            : conflicted
-                              ? "border-[#facc15] bg-[#fefce8] text-[#854d0e]"
-                              : "border-[#dbe4ef] bg-white text-[#25324a]"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedSyncLessonIds.includes(lesson.id)}
-                          onChange={() => onToggleSyncLesson(lesson.id)}
-                          disabled={disabled}
-                          className="mt-1 h-4 w-4 accent-[#ff8617]"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-extrabold">{lessonTimeRangeLabel(lesson)} · {courseName(vault, lesson.courseGroupId)}</span>
-                          <span className="mt-1 block text-xs font-semibold">
-                            {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)} · {lessonStatusLabels[lesson.status]}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期会覆盖" : ""}
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {syncSourceLessons.length === 0 && (
-                    <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-5 text-center text-sm font-semibold text-[#64748b]">
-                      来源日期没有可同步课节
+                <div className="p-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">来源日期</label>
+                      <Input type="date" value={syncSourceDate} onChange={(event) => setSyncSourceDate(event.target.value)} className="h-10 bg-white" />
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">目标日期</label>
+                      <Input type="date" value={syncTargetDate} onChange={(event) => setSyncTargetDate(event.target.value)} className="h-10 bg-white" />
+                    </div>
+                    <Button type="button" className="self-end" onClick={onCopySelectedLessonsToDate} disabled={selectedSyncLessons.length === 0 || syncSourceDate === syncTargetDate}>
+                      <Copy size={15} /> 同步单日
+                    </Button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={onUsePreviousWeekSameDay}>
+                      上周同日
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={onSelectAllSyncLessons} disabled={selectableSyncLessons.length === 0}>
+                      全选
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={onClearSyncLessons} disabled={selectedSyncLessons.length === 0}>
+                      清空
+                    </Button>
+                  </div>
+                  <div className="mt-3 max-h-[190px] space-y-2 overflow-y-auto pr-1">
+                    {syncSourceLessons.map((lesson) => {
+                      const course = getCourse(vault, lesson.courseGroupId);
+                      const disabled = course?.status !== "active";
+                      const conflicted = Boolean(
+                        syncTargetDate &&
+                        vault.lessons.some(
+                          (existingLesson) =>
+                            existingLesson.date === syncTargetDate &&
+                            existingLesson.courseGroupId === lesson.courseGroupId &&
+                            existingLesson.status !== "cancelled" &&
+                            timesOverlap(existingLesson.startTime, existingLesson.endTime, lesson.startTime, lesson.endTime)
+                        )
+                      );
+                      return (
+                        <label
+                          key={lesson.id}
+                          className={`flex items-start gap-3 rounded-[12px] border px-3 py-2 text-sm ${
+                            disabled
+                              ? "border-[#e2e8f0] bg-white text-[#94a3b8]"
+                              : conflicted
+                                ? "border-[#facc15] bg-[#fefce8] text-[#854d0e]"
+                                : "border-[#dbe4ef] bg-white text-[#25324a]"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedSyncLessonIds.includes(lesson.id)}
+                            onChange={() => onToggleSyncLesson(lesson.id)}
+                            disabled={disabled}
+                            className="mt-1 h-4 w-4 accent-[#ff8617]"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-extrabold">{lessonTimeRangeLabel(lesson)} · {courseName(vault, lesson.courseGroupId)}</span>
+                            <span className="mt-1 block text-xs font-semibold">
+                              {courseSubject(vault, lesson.courseGroupId)} · {courseTypeLabel(vault, lesson.type)} · {campusName(vault, lesson.campusId)} · {lessonStatusLabels[lesson.status]}{disabled ? " · 课程已暂停" : conflicted ? " · 目标日期会覆盖" : ""}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {syncSourceLessons.length === 0 && (
+                      <div className="rounded-[12px] border border-dashed border-[#fdba74] bg-[#fffaf5] p-5 text-center text-sm font-semibold text-[#9a3412]">
+                        来源日期没有可同步课节
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </section>
 
-              <div className="rounded-[12px] border border-[#cfe0f5] bg-[#f8fbff] p-3">
-                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="text-sm font-extrabold text-[#061226]">同步日期段</div>
-                    <div className="mt-1 text-xs font-semibold text-[#64748b]">来源日期段用于复制排课；同步后按目标课节时间线自动衔接上一节内容和作业。</div>
+              <section className="overflow-hidden rounded-[12px] border-2 border-[#93c5fd] bg-white shadow-[0_10px_24px_rgba(21,87,194,0.08)]">
+                <div className="flex flex-col gap-2 border-b border-[#bfdbfe] bg-[#eff6ff] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-[#1557c2] text-white shadow-[0_6px_14px_rgba(21,87,194,0.2)]">
+                      <CalendarRange size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-extrabold text-[#1557c2]">日期段同步</div>
+                      <div className="mt-0.5 text-sm font-extrabold text-[#061226]">同步某段时间课程</div>
+                      <div className="mt-1 text-xs font-semibold text-[#1e3a8a]">来源日期段与目标日期段按天一一对应同步。</div>
+                    </div>
                   </div>
                   <Badge variant="sky" className="w-fit">{syncRangeActiveLessons.length} / {syncRangeSourceLessons.length} 节</Badge>
                 </div>
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] xl:items-end">
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">来源开始</label>
-                      <Input type="date" value={syncRangeSourceStart} onChange={(event) => setSyncRangeSourceStart(event.target.value)} className={!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                <div className="p-4">
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] xl:items-end">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">来源开始</label>
+                        <Input type="date" value={syncRangeSourceStart} onChange={(event) => setSyncRangeSourceStart(event.target.value)} className={!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                      </div>
+                      <div className="pb-2 text-center text-lg font-extrabold text-[#1557c2]">~</div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">来源结束</label>
+                        <Input type="date" value={syncRangeSourceEnd} min={syncRangeSourceStart} onChange={(event) => setSyncRangeSourceEnd(event.target.value)} className={!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                      </div>
                     </div>
-                    <div className="pb-2 text-center text-lg font-extrabold text-[#1557c2]">~</div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">来源结束</label>
-                      <Input type="date" value={syncRangeSourceEnd} min={syncRangeSourceStart} onChange={(event) => setSyncRangeSourceEnd(event.target.value)} className={!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                    <div className="hidden pb-2 text-center text-xl font-extrabold text-[#ff8617] xl:block">-&gt;</div>
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">目标开始</label>
+                        <Input type="date" value={syncRangeTargetStart} onChange={(event) => setSyncRangeTargetStart(event.target.value)} className={!isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                      </div>
+                      <div className="pb-2 text-center text-lg font-extrabold text-[#1557c2]">~</div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">目标结束</label>
+                        <Input type="date" value={syncRangeTargetEnd} min={syncRangeTargetStart} onChange={(event) => setSyncRangeTargetEnd(event.target.value)} className={!isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
+                      </div>
                     </div>
+                    <Button
+                      type="button"
+                      className="self-end"
+                      onClick={onCopyLessonRangeToDateRange}
+                      disabled={
+                        syncRangeSourceLessons.length === 0 ||
+                        syncRangeSourceDates.length === 0 ||
+                        syncRangeSourceDates.length !== syncRangeTargetDates.length
+                      }
+                    >
+                      <Copy size={15} /> 同步日期段
+                    </Button>
                   </div>
-                  <div className="hidden pb-2 text-center text-xl font-extrabold text-[#ff8617] xl:block">-&gt;</div>
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">目标开始</label>
-                      <Input type="date" value={syncRangeTargetStart} onChange={(event) => setSyncRangeTargetStart(event.target.value)} className={!isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
-                    </div>
-                    <div className="pb-2 text-center text-lg font-extrabold text-[#1557c2]">~</div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">目标结束</label>
-                      <Input type="date" value={syncRangeTargetEnd} min={syncRangeTargetStart} onChange={(event) => setSyncRangeTargetEnd(event.target.value)} className={!isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd) ? "h-10 border-[#fca5a5] bg-[#fff1f2]" : "h-10 bg-white"} />
-                    </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={onFillSyncRangeFromSelectedWeek}>
+                      上周整周到本周
+                    </Button>
+                    <Badge variant={syncRangeSourceDates.length === syncRangeTargetDates.length ? "secondary" : "yellow"} className="w-fit">
+                      {`${syncRangeSourceDates.length} 天 -> ${syncRangeTargetDates.length} 天`}
+                    </Badge>
+                    {syncRangeSourceLessons.length > syncRangeActiveLessons.length && (
+                      <Badge variant="yellow" className="w-fit">{syncRangeSourceLessons.length - syncRangeActiveLessons.length} 节课程已暂停</Badge>
+                    )}
                   </div>
-                  <Button
-                    type="button"
-                    className="self-end"
-                    onClick={onCopyLessonRangeToDateRange}
-                    disabled={
-                      syncRangeSourceLessons.length === 0 ||
-                      syncRangeSourceDates.length === 0 ||
-                      syncRangeSourceDates.length !== syncRangeTargetDates.length
-                    }
-                  >
-                    <Copy size={15} /> 同步日期段
-                  </Button>
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={onFillSyncRangeFromSelectedWeek}>
-                    上周整周到本周
-                  </Button>
-                  <Badge variant={syncRangeSourceDates.length === syncRangeTargetDates.length ? "secondary" : "yellow"} className="w-fit">
-                    {`${syncRangeSourceDates.length} 天 -> ${syncRangeTargetDates.length} 天`}
-                  </Badge>
-                  {syncRangeSourceLessons.length > syncRangeActiveLessons.length && (
-                    <Badge variant="yellow" className="w-fit">{syncRangeSourceLessons.length - syncRangeActiveLessons.length} 节课程已暂停</Badge>
-                  )}
-                </div>
-              </div>
+              </section>
             </div>
           </motion.div>
         )}

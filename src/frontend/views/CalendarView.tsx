@@ -474,7 +474,7 @@ export function CalendarView({
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
-            <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-2 2xl:grid-cols-4">
+            <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium">校区</label>
                 <Select value={weekCampusFilter} onChange={(event) => setWeekCampusFilter(event.target.value)} className="h-10 bg-white">
@@ -511,7 +511,7 @@ export function CalendarView({
                   <option value="substitute_class">代班补课</option>
                 </Select>
               </div>
-              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-3 sm:col-span-2 2xl:col-span-4">
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-3 sm:col-span-2 lg:col-span-4">
                 <div className="min-w-0 space-y-2">
                   <label className="text-sm font-medium">搜索筛选</label>
                   <label className="relative block min-w-0">
