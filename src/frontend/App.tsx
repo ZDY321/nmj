@@ -1503,6 +1503,14 @@ export function App() {
     if (onboardingVisible) {
       dismissOnboarding();
     }
+    if (nextView === "schedule") {
+      setScheduleCalendarFocus({
+        date: todayIso(),
+        targetPanel: "calendar",
+        calendarMode: "view",
+        nonce: Date.now()
+      });
+    }
     setView(nextView);
   }
 

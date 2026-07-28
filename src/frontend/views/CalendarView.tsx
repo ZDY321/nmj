@@ -176,10 +176,14 @@ export function CalendarView({
   const weekDates = weekDatesFor(selectedDate, weekStartPreference);
   const weekLessons = filteredVisibleLessons.filter((l) => weekDates.includes(l.date)).sort(sortLessons);
   const monthLessons = filteredVisibleLessons.filter((l) => l.date.startsWith(month));
+  const effectiveWeekLessons = weekLessons.filter((lesson) => lesson.status !== "cancelled");
+  const effectiveMonthLessons = monthLessons.filter((lesson) => lesson.status !== "cancelled");
+  const weekCancelledCount = weekLessons.length - effectiveWeekLessons.length;
+  const monthCancelledCount = monthLessons.length - effectiveMonthLessons.length;
   const selectedTotal = selectedLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
   const selectedDayNote = dayNoteForDate(selectedDate);
-  const weekTotal = weekLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
-  const monthTotal = monthLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
+  const weekTotal = effectiveWeekLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
+  const monthTotal = effectiveMonthLessons.reduce((s, l) => s + l.feeSnapshot.amount, 0);
 
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
   const weekRangeLabel = `${weekDates[0].slice(5)} - ${weekDates[6].slice(5)}`;
@@ -349,10 +353,24 @@ export function CalendarView({
   return (
     <div className="space-y-6">
       {dialog}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="选中日期" value={`${selectedLessons.length} 节`} hint={formatPrivateMoney(selectedTotal, amountsVisible)} variant={1} index={0} showSparkline={false} />
-        <MetricCard label="本周课程" value={`${weekLessons.length} 节`} hint={formatPrivateMoney(weekTotal, amountsVisible)} variant={2} index={1} showSparkline={false} />
-        <MetricCard label="本月课程" value={`${monthLessons.length} 节`} hint={formatPrivateMoney(monthTotal, amountsVisible)} variant={3} index={2} showSparkline={false} />
+        <MetricCard
+          label="本周有效 / 总排课"
+          value={`${effectiveWeekLessons.length} / ${weekLessons.length} 节`}
+          hint={`已取消 ${weekCancelledCount} 节 · ${formatPrivateMoney(weekTotal, amountsVisible)}`}
+          variant={2}
+          index={1}
+          showSparkline={false}
+        />
+        <MetricCard
+          label="本月有效 / 总排课"
+          value={`${effectiveMonthLessons.length} / ${monthLessons.length} 节`}
+          hint={`已取消 ${monthCancelledCount} 节 · ${formatPrivateMoney(monthTotal, amountsVisible)}`}
+          variant={3}
+          index={2}
+          showSparkline={false}
+        />
         <MetricCard
           label="待处理"
           value={`${monthLessons.filter((l) => l.status === "makeup_pending" || l.status === "scheduled").length}`}
@@ -456,8 +474,8 @@ export function CalendarView({
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
-            <div className="mb-4 grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-[minmax(120px,0.7fr)_minmax(120px,0.7fr)_minmax(120px,0.7fr)_minmax(138px,0.8fr)_minmax(220px,1.4fr)_auto] xl:items-end">
-              <div className="space-y-2">
+            <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-2 2xl:grid-cols-4">
+              <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium">校区</label>
                 <Select value={weekCampusFilter} onChange={(event) => setWeekCampusFilter(event.target.value)} className="h-10 bg-white">
                   <option value="all">全部校区</option>
@@ -466,7 +484,7 @@ export function CalendarView({
                   ))}
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium">年级</label>
                 <Select value={weekGradeFilter} onChange={(event) => setWeekGradeFilter(event.target.value)} className="h-10 bg-white">
                   <option value="all">全部年级</option>
@@ -475,7 +493,7 @@ export function CalendarView({
                   ))}
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium">科目</label>
                 <Select value={weekSubjectFilter} onChange={(event) => setWeekSubjectFilter(event.target.value)} className="h-10 bg-white">
                   <option value="all">全部科目</option>
@@ -484,7 +502,7 @@ export function CalendarView({
                   ))}
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium">补课筛选</label>
                 <Select value={weekMakeupFilter} onChange={(event) => setWeekMakeupFilter(event.target.value as MakeupLessonFilter)} className="h-10 bg-white">
                   <option value="all">全部课程</option>
@@ -493,32 +511,34 @@ export function CalendarView({
                   <option value="substitute_class">代班补课</option>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">搜索筛选</label>
-                <label className="relative block">
-                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                  <Input
-                    value={weekStudentFilter}
-                    onChange={(event) => setWeekStudentFilter(event.target.value)}
-                    placeholder="搜索学生、课程、校区或备注"
-                    className="h-10 bg-white pl-9"
-                  />
-                </label>
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-3 sm:col-span-2 2xl:col-span-4">
+                <div className="min-w-0 space-y-2">
+                  <label className="text-sm font-medium">搜索筛选</label>
+                  <label className="relative block min-w-0">
+                    <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                    <Input
+                      value={weekStudentFilter}
+                      onChange={(event) => setWeekStudentFilter(event.target.value)}
+                      placeholder="搜索学生、课程、校区或备注"
+                      className="h-10 min-w-0 bg-white pl-9"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWeekCampusFilter("all");
+                    setWeekGradeFilter("all");
+                    setWeekSubjectFilter("all");
+                    setWeekMakeupFilter("all");
+                    setWeekStudentFilter("");
+                  }}
+                  disabled={weekCampusFilter === "all" && weekGradeFilter === "all" && weekSubjectFilter === "all" && weekMakeupFilter === "all" && !weekStudentFilter}
+                  className="h-10 shrink-0 rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a] transition-colors hover:bg-[#eef4fb] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  清除
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setWeekCampusFilter("all");
-                  setWeekGradeFilter("all");
-                  setWeekSubjectFilter("all");
-                  setWeekMakeupFilter("all");
-                  setWeekStudentFilter("");
-                }}
-                disabled={weekCampusFilter === "all" && weekGradeFilter === "all" && weekSubjectFilter === "all" && weekMakeupFilter === "all" && !weekStudentFilter}
-                className="h-10 rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a] transition-colors hover:bg-[#eef4fb] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                清除
-              </button>
             </div>
             {overviewPage === "month" ? (
               <div className="grid grid-cols-7 gap-1 sm:gap-2">

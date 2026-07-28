@@ -1286,8 +1286,7 @@ export function ScheduleView({
     setCalendarEndTime(singleEndTime);
     setSelectedCalendarDate(singleDate);
     setCalendarMonth(singleDate.slice(0, 7));
-    setCalendarMode("schedule");
-    switchSchedulePanel("calendar");
+    switchSchedulePanel("calendar", { calendarMode: "schedule" });
   }
 
   function addLessonFromCourse(
@@ -2018,12 +2017,15 @@ export function ScheduleView({
     );
   }
 
-  function switchSchedulePanel(nextPanel: SchedulePanel) {
+  function switchSchedulePanel(nextPanel: SchedulePanel, options: { calendarMode?: "schedule" | "view" } = {}) {
     if (nextPanel === "substitute") {
       setMakeupManagementTab("substitute");
       setSchedulePanel("makeup");
     } else {
       setSchedulePanel(nextPanel);
+    }
+    if (nextPanel === "calendar") {
+      setCalendarMode(options.calendarMode ?? "view");
     }
     if (nextPanel !== "records") {
       setLessonReturnTarget(null);
