@@ -189,14 +189,17 @@ export function ScheduleRecordsListCard({
         </div>
 
         {effectiveLessonScope === "day" && (
-          <details className="rounded-[14px] border border-[#bfdbfe] bg-[#eaf2ff] p-3">
+          <details className="group rounded-[14px] border border-[#bfdbfe] bg-[#eaf2ff] p-3">
             <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
               <span className="flex items-center gap-2 text-sm font-extrabold text-[#1557c2]">
                 <MessageSquare size={15} /> 当日备注
               </span>
               <span className="flex items-center gap-2">
                 <Badge variant="secondary" className="text-[10px]">{dateWithWeekday(effectiveLessonDay)}</Badge>
-                <span className="text-[11px] font-bold text-[#64748b]">展开编辑</span>
+                <span className="text-[11px] font-bold text-[#64748b]">
+                  <span className="group-open:hidden">展开编辑</span>
+                  <span className="hidden group-open:inline">折叠编辑</span>
+                </span>
               </span>
             </summary>
             <Textarea

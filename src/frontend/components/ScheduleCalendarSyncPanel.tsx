@@ -246,7 +246,8 @@ export function ScheduleCalendarSyncPanel({
                     </div>
                     <Button
                       type="button"
-                      className="self-end"
+                      variant="outline"
+                      className="self-end border-[#1557c2] bg-[#1557c2] text-white shadow-[0_12px_22px_rgba(21,87,194,0.18)] hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white"
                       onClick={onCopyLessonRangeToDateRange}
                       disabled={
                         syncRangeSourceLessons.length === 0 ||
