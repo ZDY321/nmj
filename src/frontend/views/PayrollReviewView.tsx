@@ -272,7 +272,6 @@ export function PayrollReviewView({
         cards={[
           { label: "当前筛选课节", value: `${filteredLessons.length} 节`, hint: `计薪完成 ${campusHours.toFixed(1)} 小时 · 未完成 ${campusUnfinishedHours.toFixed(1)} 小时`, icon: CalendarDays },
           { label: "课时费小计", value: formatPrivateMoney(campusLessonFee, amountsVisible), hint: "仅统计已完成/补课完成", icon: Banknote },
-          { label: "课时费总计", value: formatPrivateMoney(lessonFeeTotal, amountsVisible), hint: "本月全部已完成课时费", icon: Banknote },
           {
             label: "义务课时扣费",
             value: `-${formatPrivateMoney(campusDeduction, amountsVisible)}`,
@@ -284,8 +283,9 @@ export function PayrollReviewView({
             icon: SlidersHorizontal,
             danger: true
           },
-          { label: "本月预估收入", value: formatPrivateMoney(estimatedIncome, amountsVisible), hint: "含待上课课节预估", icon: BookOpen },
-          { label: "当前校区扣后", value: formatPrivateMoney(campusNet, amountsVisible), hint: campusFilter === "all" ? "全部校区扣后课时费" : campusName(vault, campusFilter), icon: FileCheck2 }
+          { label: "当前校区扣后", value: formatPrivateMoney(campusNet, amountsVisible), hint: campusFilter === "all" ? "全部校区扣后课时费" : campusName(vault, campusFilter), icon: FileCheck2 },
+          { label: "课时费总计", value: formatPrivateMoney(lessonFeeTotal, amountsVisible), hint: "本月全部已完成课时费", icon: Banknote },
+          { label: "本月预估收入", value: formatPrivateMoney(estimatedIncome, amountsVisible), hint: "含待上课课节预估", icon: BookOpen }
         ]}
       />
 
