@@ -392,20 +392,20 @@ export function CalendarView({
 
       <div className={overviewPage === "month" ? "grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_0.75fr]" : "grid grid-cols-1 gap-6"}>
         <Card className="overflow-hidden">
-          <CardHeader className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div>
+          <CardHeader className="gap-4 space-y-0">
+            <div className="min-w-0">
               <div className="flex items-center gap-2 text-[#ff8617] text-xs font-bold uppercase tracking-widest mb-1">
                 <CalendarDays size={14} /> 日历总览
               </div>
               <CardTitle>{overviewPage === "month" ? month : weekRangeLabel}</CardTitle>
-              <CardDescription>
+              <CardDescription className="sm:whitespace-nowrap">
                 {overviewPage === "month"
                   ? "当前月历保留为第一页，可按日期查看每日明细。"
                   : "周课表按日期和时间展开课程，方便一次看清这一周的上课情况。"}
               </CardDescription>
             </div>
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="grid shrink-0 grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1">
                 <button
                   type="button"
                   onClick={() => setOverviewPage("month")}
@@ -428,7 +428,7 @@ export function CalendarView({
               <Select
                 value={String(weekStartPreference)}
                 onChange={(event) => onWeekStartChange(Number(event.target.value) as WeekStart)}
-                className="h-10 w-[132px]"
+                className="h-10 w-[132px] shrink-0"
                 aria-label="选择一周开始日期"
               >
                 <option value="0">周日开始</option>
@@ -437,40 +437,46 @@ export function CalendarView({
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 bg-white"
+                className="h-10 shrink-0 bg-white"
                 onClick={refreshSelectedDateLessons}
                 disabled={selectedDateRefreshableLessons.length === 0}
                 title="按当前课程档案刷新选中日期的全部课节，包含已完成历史课节"
               >
                 <RefreshCw size={15} /> 刷新当天课节
               </Button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (overviewPage === "month") {
-                    setMonth((m) => monthShift(m, -1));
-                  } else {
-                    shiftSelectedWeek(-7);
-                  }
-                }}
-                className="p-2 rounded-[10px] hover:bg-[#f3f7fb] transition-colors"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <span className="font-bold min-w-[80px] text-center">{overviewPage === "month" ? month : weekRangeLabel}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (overviewPage === "month") {
-                    setMonth((m) => monthShift(m, 1));
-                  } else {
-                    shiftSelectedWeek(7);
-                  }
-                }}
-                className="p-2 rounded-[10px] hover:bg-[#f3f7fb] transition-colors"
-              >
-                <ChevronRight size={18} />
-              </button>
+              <div className="inline-flex h-10 shrink-0 items-center rounded-[12px] border border-[#dbe4ef] bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (overviewPage === "month") {
+                      setMonth((m) => monthShift(m, -1));
+                    } else {
+                      shiftSelectedWeek(-7);
+                    }
+                  }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] transition-colors hover:bg-[#f3f7fb]"
+                  aria-label={overviewPage === "month" ? "上一个月" : "上一周"}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <span className="min-w-[96px] whitespace-nowrap px-2 text-center text-sm font-bold">
+                  {overviewPage === "month" ? month : weekRangeLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (overviewPage === "month") {
+                      setMonth((m) => monthShift(m, 1));
+                    } else {
+                      shiftSelectedWeek(7);
+                    }
+                  }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] transition-colors hover:bg-[#f3f7fb]"
+                  aria-label={overviewPage === "month" ? "下一个月" : "下一周"}
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
