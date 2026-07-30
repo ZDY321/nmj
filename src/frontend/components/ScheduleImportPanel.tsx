@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { ScheduleImportCalendarPanel } from "@/frontend/components/ScheduleImportCalendarPanel";
 import { ScheduleImportHeaderPanel } from "@/frontend/components/ScheduleImportHeaderPanel";
 import { ScheduleImportReconciliationRow } from "@/frontend/components/ScheduleImportReconciliationRow";
-import { ScheduleImportSavedReviewRows } from "@/frontend/components/ScheduleImportSavedReviewRows";
 import { ScheduleImportSavedReviewsPanel } from "@/frontend/components/ScheduleImportSavedReviewsPanel";
 import { ScheduleImportStatusControls } from "@/frontend/components/ScheduleImportStatusControls";
 import type {
@@ -42,8 +41,6 @@ import {
   buildUpdatedResolutions,
   countResolutionsForRows,
   effectiveRowStatus,
-  formatSavedReviewAmount,
-  formatSavedReviewNumber,
   importPreviewLessonBillableHours,
   isReviewedResolution,
   linkedSystemLessonIdsFromRows,
@@ -72,7 +69,6 @@ import {
 
 export function ScheduleImportPanel({
   vault,
-  amountsVisible = false,
   onOpenLesson,
   onSuggestSchedule,
   onSaveScheduleImport,
@@ -81,7 +77,6 @@ export function ScheduleImportPanel({
   storageScope
 }: {
   vault: TeacherVault;
-  amountsVisible?: boolean;
   onOpenLesson?: (lesson: Lesson) => void;
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
   onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
@@ -110,8 +105,8 @@ export function ScheduleImportPanel({
   const [campusFilter, setCampusFilter] = useState(savedWorkspace.campusFilter || "all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(savedWorkspace.statusFilter);
   const [search, setSearch] = useState(savedWorkspace.search);
-  const [selectedReviewId, setSelectedReviewId] = useState(persistedScheduleImport?.reviews[0]?.id ?? "");
-  const [savedReviewsExpanded, setSavedReviewsExpanded] = useState(false);
+  const [openedReviewId, setOpenedReviewId] = useState("");
+  const calendarPanelRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog } = useConfirmDialog();
 
   const campusOptions = useMemo(
@@ -224,12 +219,10 @@ export function ScheduleImportPanel({
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference);
   const needsAttention = attentionRows.length;
   const savedReviews = persistedScheduleImport?.reviews ?? [];
-  const selectedReview = savedReviews.find((review) => review.id === selectedReviewId) ?? savedReviews[0];
   const savedReviewLiveCounts = useMemo(
     () => new Map(savedReviews.map((review) => [review.id, liveSavedReviewEffectiveCounts(vault, review)])),
     [savedReviews, vault]
   );
-  const selectedReviewCounts = selectedReview ? savedReviewLiveCounts.get(selectedReview.id) ?? savedReviewEffectiveCounts(selectedReview) : undefined;
   const reviewNeedsAttentionForDisplay = (review: ScheduleImportReviewRecord): number =>
     needsAttentionFromSavedReviewCounts(savedReviewLiveCounts.get(review.id) ?? savedReviewEffectiveCounts(review));
 
@@ -243,12 +236,6 @@ export function ScheduleImportPanel({
     });
     setResolutions((current) => ({ ...cloudResolutions, ...current }));
   }, [persistedScheduleImport?.updatedAt, vault.scheduleImport?.updatedAt]);
-
-  useEffect(() => {
-    if (!selectedReviewId && savedReviews[0]) {
-      setSelectedReviewId(savedReviews[0].id);
-    }
-  }, [savedReviews, selectedReviewId]);
 
   useEffect(() => {
     if (monthOptions.length === 0) return;
@@ -281,6 +268,7 @@ export function ScheduleImportPanel({
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
+    setOpenedReviewId("");
     setLoading(true);
     setMessage("正在解析教务 Excel...");
     try {
@@ -323,10 +311,12 @@ export function ScheduleImportPanel({
   }
 
   function updateFileCampus(fileName: string, campusId: string) {
+    setOpenedReviewId("");
     setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
   }
 
   function removeImportedFile(fileName: string) {
+    setOpenedReviewId("");
     const removedResolutionKeys = new Set(rows.filter((row) => row.fileName === fileName).map((row) => resolutionKey(row)));
     setRawLessons((current) => current.filter((lesson) => lesson.fileName !== fileName));
     setFileCampusOverrides((current) => {
@@ -339,6 +329,7 @@ export function ScheduleImportPanel({
   }
 
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) {
+    setOpenedReviewId("");
     const key = resolutionKey(row);
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
     const nextSplitMergeExcludedLessonIds = combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, nextResolutions);
@@ -382,7 +373,7 @@ export function ScheduleImportPanel({
       splitMergeExcludedLessonIds
     });
     onSaveScheduleImport?.(nextScheduleImport);
-    setSelectedReviewId(nextScheduleImport.reviews[0]?.id ?? "");
+    setOpenedReviewId(nextScheduleImport.reviews[0]?.id ?? "");
     setMessage(
       savedMappingOk && savedWorkspaceOk && onSaveScheduleImport
         ? "课程映射和本次对账结果已保存到云端加密档案，换浏览器登录后也会复用。"
@@ -431,8 +422,14 @@ export function ScheduleImportPanel({
       splitMergeExcludedLessonIds: previous.splitMergeExcludedLessonIds ?? [],
       updatedAt: new Date().toISOString()
     });
-    setSelectedReviewId((current) => current === reviewId ? nextReviews[0]?.id ?? "" : current);
+    setOpenedReviewId((current) => current === reviewId ? "" : current);
     setMessage("已删除这条保存的对账结果，课程映射和差异标注仍保留。");
+  }
+
+  function focusCalendarPanel() {
+    window.requestAnimationFrame(() => {
+      calendarPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function loadSavedReviewIntoWorkspace(review: ScheduleImportReviewRecord) {
@@ -458,8 +455,7 @@ export function ScheduleImportPanel({
     setCampusFilter("all");
     setStatusFilter("all");
     setSearch("");
-    setSelectedReviewId(review.id);
-    setSavedReviewsExpanded(false);
+    setOpenedReviewId(review.id);
 
     writeSavedMapping(storageScope, nextMapping);
     writeSavedWorkspace(storageScope, {
@@ -474,10 +470,41 @@ export function ScheduleImportPanel({
       search: "",
       savedAt: new Date().toISOString()
     });
-    setMessage(`已将「${savedReviewTitle(review)}」导入到下方核对列表，可以继续处理差异标注。`);
+    setMessage(`正在下方日历中查看「${savedReviewTitle(review)}」，已切换到 ${nextSelectedMonth}。`);
+    focusCalendarPanel();
+  }
+
+  function openSavedReviewInCalendar(review: ScheduleImportReviewRecord) {
+    if (openedReviewId === review.id) {
+      const nextMonth = review.month || todayIso().slice(0, 7);
+      setSelectedMonth(nextMonth);
+      setSelectedDate(review.selectedDate || `${nextMonth}-01`);
+      setCampusFilter("all");
+      setStatusFilter("all");
+      setSearch("");
+      setMessage(`正在下方日历中查看「${savedReviewTitle(review)}」。`);
+      focusCalendarPanel();
+      return;
+    }
+
+    if (rawLessons.length === 0) {
+      loadSavedReviewIntoWorkspace(review);
+      return;
+    }
+
+    confirm({
+      title: "打开保存对账并替换当前日历？",
+      description: `下方日历当前有 ${rawLessons.length} 节教务对账数据。打开「${savedReviewTitle(review)}」会替换当前对账现场，并自动切换到 ${review.month}；已保存的历史记录不会删除。`,
+      confirmLabel: "替换并打开",
+      secondaryLabel: "保存当前后打开",
+      cancelLabel: "取消",
+      onSecondary: () => requestSaveMapping(() => loadSavedReviewIntoWorkspace(review)),
+      onConfirm: () => loadSavedReviewIntoWorkspace(review)
+    });
   }
 
   function clearImport() {
+    setOpenedReviewId("");
     setRawLessons([]);
     setFileCampusOverrides({});
     setResolutions({});
@@ -520,38 +547,11 @@ export function ScheduleImportPanel({
         />
 
         <ScheduleImportSavedReviewsPanel
-          vault={vault}
-          amountsVisible={amountsVisible}
           reviews={savedReviews}
-          selectedReview={selectedReview}
-          expanded={savedReviewsExpanded}
-          selectedReviewMatchedCount={selectedReviewCounts?.matched}
+          openedReviewId={openedReviewId}
           reviewTitle={savedReviewTitle}
           reviewNeedsAttention={reviewNeedsAttentionForDisplay}
-          formatReviewNumber={formatSavedReviewNumber}
-          formatReviewAmount={formatSavedReviewAmount}
-          onToggleExpanded={() => setSavedReviewsExpanded((current) => !current)}
-          onSelectReview={(reviewId) => {
-            setSelectedReviewId(reviewId);
-            setSavedReviewsExpanded(true);
-          }}
-          onLoadReview={(review) => {
-            confirm({
-              title: "导入保存对账到核对列表？",
-              description: "会用这条保存对账恢复下方可编辑核对列表、课程映射和处理标注；当前下方导入现场会被替换，但已保存对账记录不会删除。当前现场还需要保留时，请选择“保存后导入”。",
-              confirmLabel: "直接导入",
-              secondaryLabel: "保存后导入",
-              cancelLabel: "取消",
-              onSecondary: () => {
-                if (rows.length > 0) {
-                  requestSaveMapping(() => loadSavedReviewIntoWorkspace(review));
-                  return;
-                }
-                loadSavedReviewIntoWorkspace(review);
-              },
-              onConfirm: () => loadSavedReviewIntoWorkspace(review)
-            });
-          }}
+          onOpenReview={openSavedReviewInCalendar}
           onDeleteReview={(review) => {
             confirm({
               title: "删除保存的对账结果？",
@@ -562,12 +562,6 @@ export function ScheduleImportPanel({
               onConfirm: () => deleteSavedReview(review.id)
             });
           }}
-          renderRows={(review, currentVault) => (
-            <ScheduleImportSavedReviewRows
-              review={review}
-              vault={currentVault}
-            />
-          )}
         />
 
         <ScheduleImportStatusControls
@@ -602,43 +596,45 @@ export function ScheduleImportPanel({
           onSearchChange={setSearch}
         />
 
-        <ScheduleImportCalendarPanel
-          vault={vault}
-          days={days}
-          weekdayLabels={weekdayLabels}
-          displayMonth={displayMonth}
-          selectedDate={selectedDate}
-          filteredRows={filteredRows}
-          selectedDateRows={selectedDateRows}
-          resolutions={resolutions}
-          linkedSystemLessonIds={linkedSystemLessonIds}
-          onDateSelect={setSelectedDate}
-          effectiveRowStatus={effectiveRowStatus}
-          resolutionKey={resolutionKey}
-          isReviewedResolution={isReviewedResolution}
-          statusPillClass={statusPillClass}
-          rowAttentionLabel={splitMergeReviewLabel}
-          renderRow={(row) => (
-            <ScheduleImportReconciliationRow
-              key={row.id}
-              row={row}
-              vault={vault}
-              resolution={resolutions[resolutionKey(row)]}
-              linkedSystemLessonIds={linkedSystemLessonIds}
-              linkedBySources={row.systemLessonId ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId) : []}
-              staleLinkedByPreviousResolution={Boolean(row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId))}
-              invalidLinkedSystemLessonIds={(() => {
-                const linkedIds = resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? [];
-                const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
-                if (hasCurrentDirectMatch) return [];
-                return linkedIds.some((lessonId) => existingSystemLessonIds.has(lessonId)) ? [] : linkedIds.filter((lessonId) => !existingSystemLessonIds.has(lessonId));
-              })()}
-              onResolutionChange={(patch) => updateResolution(row, patch)}
-              onOpenLesson={onOpenLesson}
-              onSuggestSchedule={onSuggestSchedule}
-            />
-          )}
-        />
+        <div ref={calendarPanelRef} className="scroll-mt-4">
+          <ScheduleImportCalendarPanel
+            vault={vault}
+            days={days}
+            weekdayLabels={weekdayLabels}
+            displayMonth={displayMonth}
+            selectedDate={selectedDate}
+            filteredRows={filteredRows}
+            selectedDateRows={selectedDateRows}
+            resolutions={resolutions}
+            linkedSystemLessonIds={linkedSystemLessonIds}
+            onDateSelect={setSelectedDate}
+            effectiveRowStatus={effectiveRowStatus}
+            resolutionKey={resolutionKey}
+            isReviewedResolution={isReviewedResolution}
+            statusPillClass={statusPillClass}
+            rowAttentionLabel={splitMergeReviewLabel}
+            renderRow={(row) => (
+              <ScheduleImportReconciliationRow
+                key={row.id}
+                row={row}
+                vault={vault}
+                resolution={resolutions[resolutionKey(row)]}
+                linkedSystemLessonIds={linkedSystemLessonIds}
+                linkedBySources={row.systemLessonId ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId) : []}
+                staleLinkedByPreviousResolution={Boolean(row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId))}
+                invalidLinkedSystemLessonIds={(() => {
+                  const linkedIds = resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? [];
+                  const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
+                  if (hasCurrentDirectMatch) return [];
+                  return linkedIds.some((lessonId) => existingSystemLessonIds.has(lessonId)) ? [] : linkedIds.filter((lessonId) => !existingSystemLessonIds.has(lessonId));
+                })()}
+                onResolutionChange={(patch) => updateResolution(row, patch)}
+                onOpenLesson={onOpenLesson}
+                onSuggestSchedule={onSuggestSchedule}
+              />
+            )}
+          />
+        </div>
       </CardContent>
       {dialog}
     </Card>

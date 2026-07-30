@@ -1,42 +1,21 @@
-import type { ReactNode } from "react";
-import { ChevronDown, Upload, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import type { ScheduleImportReviewRecord, TeacherVault } from "@/shared/types";
+import { CalendarDays, Trash2 } from "lucide-react";
+import type { ScheduleImportReviewRecord } from "@/shared/types";
 import { savedScheduleImportReviewLimit } from "@/frontend/lib/scheduleImportReview";
 
 export function ScheduleImportSavedReviewsPanel({
-  vault,
-  amountsVisible,
   reviews,
-  selectedReview,
-  expanded,
-  selectedReviewMatchedCount,
+  openedReviewId,
   reviewTitle,
   reviewNeedsAttention,
-  formatReviewNumber,
-  formatReviewAmount,
-  onToggleExpanded,
-  onSelectReview,
-  onLoadReview,
-  onDeleteReview,
-  renderRows
+  onOpenReview,
+  onDeleteReview
 }: {
-  vault: TeacherVault;
-  amountsVisible: boolean;
   reviews: ScheduleImportReviewRecord[];
-  selectedReview?: ScheduleImportReviewRecord;
-  expanded: boolean;
-  selectedReviewMatchedCount?: number;
+  openedReviewId: string;
   reviewTitle: (review: ScheduleImportReviewRecord) => string;
   reviewNeedsAttention: (review: ScheduleImportReviewRecord) => number;
-  formatReviewNumber: (value: number | undefined) => string;
-  formatReviewAmount: (value: number | undefined, visible: boolean) => string;
-  onToggleExpanded: () => void;
-  onSelectReview: (reviewId: string) => void;
-  onLoadReview: (review: ScheduleImportReviewRecord) => void;
+  onOpenReview: (review: ScheduleImportReviewRecord) => void;
   onDeleteReview: (review: ScheduleImportReviewRecord) => void;
-  renderRows: (review: ScheduleImportReviewRecord, vault: TeacherVault) => ReactNode;
 }) {
   if (reviews.length === 0) return null;
 
@@ -44,27 +23,24 @@ export function ScheduleImportSavedReviewsPanel({
     <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <button
-            type="button"
-            onClick={onToggleExpanded}
-            className="inline-flex items-center gap-2 text-sm font-extrabold text-[#061226]"
-          >
-            <ChevronDown size={16} className={`text-[#64748b] transition-transform ${expanded ? "rotate-180" : ""}`} />
+          <div className="inline-flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+            <CalendarDays size={16} className="text-[#1557c2]" />
             已保存对账
-          </button>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">最多保留最近 {savedScheduleImportReviewLimit} 次，当前 {reviews.length} 次；保存结果可展开查看、导入继续核对或删除。</div>
+          </div>
+          <div className="mt-1 text-xs font-semibold text-[#64748b]">最多保留最近 {savedScheduleImportReviewLimit} 次，当前 {reviews.length} 次。</div>
         </div>
         <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
           {reviews.slice(0, 8).map((review) => (
             <div
               key={review.id}
               className={`flex shrink-0 items-stretch overflow-hidden rounded-[10px] border text-left text-xs font-bold transition-colors ${
-                selectedReview?.id === review.id ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e8eef6] bg-[#f8fbff] text-[#25324a]"
+                openedReviewId === review.id ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e8eef6] bg-[#f8fbff] text-[#25324a]"
               }`}
             >
               <button
                 type="button"
-                onClick={() => onSelectReview(review.id)}
+                aria-label={`在下方日历中打开${reviewTitle(review)}`}
+                onClick={() => onOpenReview(review)}
                 className="px-3 py-2 text-left hover:bg-white/70"
               >
                 <span className="block">{reviewTitle(review)}</span>
@@ -83,25 +59,6 @@ export function ScheduleImportSavedReviewsPanel({
           ))}
         </div>
       </div>
-      {expanded && selectedReview && (
-        <div className="mt-3 rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="sky">{selectedReview.month}</Badge>
-              <Badge variant="secondary">{selectedReview.rawLessonCount} 节教务</Badge>
-              <Badge variant="secondary">云端 {formatReviewNumber(selectedReview.summary.systemLessonCount)} 节</Badge>
-              <Badge variant="sage">已完成 {formatReviewNumber(selectedReview.summary.systemCompletedLessonCount)} 节</Badge>
-              <Badge variant="secondary">课时费 {formatReviewAmount(selectedReview.summary.systemCompletedAmount, amountsVisible)}</Badge>
-              <Badge variant="sage">已对应 {selectedReviewMatchedCount ?? selectedReview.summary.matched}</Badge>
-              <Badge variant={reviewNeedsAttention(selectedReview) > 0 ? "amber" : "secondary"}>待核对 {reviewNeedsAttention(selectedReview)}</Badge>
-            </div>
-            <Button type="button" size="sm" variant="outline" className="h-8 w-fit shrink-0 bg-white text-xs" onClick={() => onLoadReview(selectedReview)}>
-              <Upload size={14} /> 导入到核对列表
-            </Button>
-          </div>
-          {renderRows(selectedReview, vault)}
-        </div>
-      )}
     </div>
   );
 }

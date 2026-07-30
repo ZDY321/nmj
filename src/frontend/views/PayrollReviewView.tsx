@@ -240,7 +240,6 @@ export function PayrollReviewView({
         ) : (
           <ScheduleImportPanel
             vault={vault}
-            amountsVisible={amountsVisible}
             storageScope={storageScope}
             scheduleImportState={scheduleImportArchive}
             onSaveScheduleImport={saveScheduleImportState}
@@ -312,6 +311,7 @@ export function PayrollReviewView({
         campusSummaries={campusSummaries}
         breakdown={breakdown}
         lessonFeeTotal={lessonFeeTotal}
+        campusCompletedFeeBeforeDeduction={campusLessonFee}
         lessonCampusAmounts={lessonCampusAmounts}
         typeCountCards={typeCountCards}
         onCampusSelect={setCampusFilter}

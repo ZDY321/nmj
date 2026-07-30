@@ -28,12 +28,12 @@ type StudentStatsGroupedLessonRows = ReturnType<typeof buildStudentStatsGroupedL
 type StudentStatsStatusFilter = "all" | Lesson["status"];
 
 const studentStatsStatusTextClasses: Record<Lesson["status"], string> = {
-  completed: "text-[#287a4d]",
-  scheduled: "text-[#a15c24]",
-  cancelled: "text-[#b34a4a]",
-  makeup_pending: "text-[#8b6b1f]",
-  makeup_completed: "text-[#26766f]",
-  draft: "text-[#64748b]"
+  completed: "text-[#15803d]",
+  scheduled: "text-[#c2410c]",
+  cancelled: "text-[#dc2626]",
+  makeup_pending: "text-[#a16207]",
+  makeup_completed: "text-[#0f766e]",
+  draft: "text-[#475569]"
 };
 
 type ScheduleStudentStatsPanelProps = {
@@ -263,8 +263,8 @@ export function ScheduleStudentStatsPanel({
               <div className="text-xs font-bold text-[#64748b]">课节状态</div>
               <div className={`mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 ${visibleStatusItems.length > 3 ? "xl:grid-cols-6" : "xl:grid-cols-3"}`}>
                 {visibleStatusItems.map((status) => (
-                  <div key={status} className="rounded-[8px] border border-[#e1e4e8] bg-[#f5f6f8] p-3">
-                    <div className={`text-xs font-semibold ${studentStatsStatusTextClasses[status]}`}>{lessonStatusLabels[status]}</div>
+                  <div key={status} className="rounded-[8px] border border-[#dbe1e8] bg-[#f8fafc] p-3">
+                    <div className={`text-xs font-bold ${studentStatsStatusTextClasses[status]}`}>{lessonStatusLabels[status]}</div>
                     <div className={`mt-1 text-base font-extrabold ${studentStatsStatusTextClasses[status]}`}>{statusCounts[status]} 节</div>
                   </div>
                 ))}

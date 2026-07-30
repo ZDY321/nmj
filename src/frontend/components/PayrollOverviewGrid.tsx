@@ -53,6 +53,7 @@ export function PayrollOverviewGrid({
   campusSummaries,
   breakdown,
   lessonFeeTotal,
+  campusCompletedFeeBeforeDeduction,
   lessonCampusAmounts,
   typeCountCards,
   onCampusSelect
@@ -70,10 +71,13 @@ export function PayrollOverviewGrid({
   campusSummaries: PayrollCampusSummary[];
   breakdown: SalaryBreakdown;
   lessonFeeTotal: number;
+  campusCompletedFeeBeforeDeduction: number;
   lessonCampusAmounts: PayrollOverviewCampusAmounts;
   typeCountCards: PayrollTypeCountCard[];
   onCampusSelect: (campusId: string) => void;
 }) {
+  const lessonFeeTotalAfterDeduction = lessonFeeTotal - breakdown.obligationDeduction;
+
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <Card className="overflow-hidden">
@@ -140,14 +144,14 @@ export function PayrollOverviewGrid({
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <BookOpen size={14} /> 本月总和
           </div>
-          <CardTitle>工资总览</CardTitle>
+          <CardTitle>工资总览（仅统计已完成课时费）</CardTitle>
           <CardDescription>按基本工资、课时费、补贴扣款和义务课时扣费合并，课程明细金额单独核对。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: "基本工资", value: breakdown.baseSalary },
-              { label: "课时费总计", value: lessonFeeTotal },
+              { label: "扣费前课时费总计", value: lessonFeeTotal },
               { label: "一对一", value: breakdown.oneOnOne, details: lessonCampusAmounts.oneOnOne },
               { label: "班课", value: breakdown.classLessons, details: lessonCampusAmounts.classLessons },
               { label: "补课", value: breakdown.makeup, details: lessonCampusAmounts.makeup },
@@ -189,9 +193,17 @@ export function PayrollOverviewGrid({
               );
             })}
           </div>
-          <div className="rounded-[16px] border border-[#bfdbfe] bg-[#eaf2ff] p-5">
-            <div className="text-sm font-bold text-[#1557c2]">本月收入总和</div>
-            <div className="mt-2 text-3xl font-extrabold text-[#061226]">{formatPrivateMoney(breakdown.total, amountsVisible)}</div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-[8px] border border-[#dbe6da] bg-[#f2f6f1] p-5">
+              <div className="text-sm font-bold text-[#57715d]">扣费后课时费总计</div>
+              <div className={`mt-2 text-3xl font-extrabold ${lessonFeeTotalAfterDeduction < 0 ? "text-[#b91c1c]" : "text-[#23412b]"}`}>
+                {formatPrivateMoney(lessonFeeTotalAfterDeduction, amountsVisible)}
+              </div>
+            </div>
+            <div className="rounded-[8px] border border-[#bfdbfe] bg-[#eaf2ff] p-5">
+              <div className="text-sm font-bold text-[#1557c2]">本月收入总和</div>
+              <div className="mt-2 text-3xl font-extrabold text-[#061226]">{formatPrivateMoney(breakdown.total, amountsVisible)}</div>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {typeCountCards.map((type) => (
@@ -200,6 +212,14 @@ export function PayrollOverviewGrid({
                 <div className="mt-1 text-xl font-extrabold text-[#061226]">{type.count}</div>
               </div>
             ))}
+            <div className="rounded-[12px] border border-[#dbe6da] bg-[#f2f6f1] p-3 text-center">
+              <div className="text-xs font-semibold leading-5 text-[#57715d]">
+                {campusFilter === "all" ? "全部校区已完成扣前总课时费" : "该校区已完成扣前总课时费"}
+              </div>
+              <div className="mt-1 break-words text-xl font-extrabold text-[#23412b]">
+                {formatPrivateMoney(campusCompletedFeeBeforeDeduction, amountsVisible)}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
