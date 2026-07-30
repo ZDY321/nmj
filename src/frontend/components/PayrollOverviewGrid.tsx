@@ -195,7 +195,7 @@ export function PayrollOverviewGrid({
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="rounded-[8px] border border-[#86efac] bg-[#f0fdf4] p-5">
-              <div className="text-sm font-extrabold text-[#15803d]">扣费后课时费总计</div>
+              <div className="whitespace-nowrap text-[9px] font-extrabold text-[#15803d] sm:text-xs">各校区扣费后课时费总计</div>
               <div className={`mt-2 text-3xl font-extrabold ${lessonFeeTotalAfterDeduction < 0 ? "text-[#b91c1c]" : "text-[#166534]"}`}>
                 {formatPrivateMoney(lessonFeeTotalAfterDeduction, amountsVisible)}
               </div>
@@ -206,11 +206,11 @@ export function PayrollOverviewGrid({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-[12px] border border-[#86efac] bg-[#f0fdf4] p-3 text-center">
-              <div className="whitespace-nowrap text-[10px] font-extrabold leading-4 text-[#15803d] sm:text-[11px]" title="已完成的扣前总课时费">
+            <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] p-3 text-center">
+              <div className="whitespace-nowrap text-[10px] font-extrabold leading-4 text-[#c2410c] sm:text-[11px]" title="已完成的扣前总课时费">
                 已完成的扣前总课时费
               </div>
-              <div className="mt-1 break-words text-xl font-extrabold text-[#166534]">
+              <div className="mt-1 break-words text-xl font-extrabold text-[#9a3412]">
                 {formatPrivateMoney(campusCompletedFeeBeforeDeduction, amountsVisible)}
               </div>
             </div>
