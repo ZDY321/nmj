@@ -3,6 +3,7 @@ export {
   isResolutionFilter,
   resolutionExcludesImportStats,
   resolutionMarksRowResolved,
+  resolutionNeedsAttention,
   resolutionStatusFromFilter,
   resolutionStatusLabel,
   resolutionStatuses,
@@ -39,6 +40,9 @@ export {
   linkedSystemLessonSourcesFromRows,
   quickResolutionActionsForRow,
   resolutionKey,
+  mergeSavedReviewResolutions,
+  resolutionsWithoutMonths,
+  type ScheduleImportIncrementalMerge,
   type LinkedSystemLessonSource
 } from "@/frontend/lib/scheduleImportReviewMatching";
 export {
@@ -50,6 +54,7 @@ export {
   savedReviewEffectiveCounts,
   savedReviewNeedsAttention,
   savedReviewTitle,
+  latestScheduleImportReviewsByMonth,
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
   splitMergePayrollExcludedLessonIds,

@@ -144,7 +144,7 @@ export function PayrollOverviewGrid({
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <BookOpen size={14} /> 本月总和
           </div>
-          <CardTitle>工资总览（仅统计已完成课时费）</CardTitle>
+          <CardTitle>工资总览（仅统计已完成的课时费）</CardTitle>
           <CardDescription>按基本工资、课时费、补贴扣款和义务课时扣费合并，课程明细金额单独核对。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -194,9 +194,9 @@ export function PayrollOverviewGrid({
             })}
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="rounded-[8px] border border-[#dbe6da] bg-[#f2f6f1] p-5">
-              <div className="text-sm font-bold text-[#57715d]">扣费后课时费总计</div>
-              <div className={`mt-2 text-3xl font-extrabold ${lessonFeeTotalAfterDeduction < 0 ? "text-[#b91c1c]" : "text-[#23412b]"}`}>
+            <div className="rounded-[8px] border border-[#86efac] bg-[#f0fdf4] p-5">
+              <div className="text-sm font-extrabold text-[#15803d]">扣费后课时费总计</div>
+              <div className={`mt-2 text-3xl font-extrabold ${lessonFeeTotalAfterDeduction < 0 ? "text-[#b91c1c]" : "text-[#166534]"}`}>
                 {formatPrivateMoney(lessonFeeTotalAfterDeduction, amountsVisible)}
               </div>
             </div>
@@ -206,20 +206,20 @@ export function PayrollOverviewGrid({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {typeCountCards.map((type) => (
-              <div key={type.value} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 text-center">
-                <div className="text-xs font-semibold text-[#64748b]">{type.label}</div>
-                <div className="mt-1 text-xl font-extrabold text-[#061226]">{type.count}</div>
+            <div className="rounded-[12px] border border-[#86efac] bg-[#f0fdf4] p-3 text-center">
+              <div className="whitespace-nowrap text-[10px] font-extrabold leading-4 text-[#15803d] sm:text-[11px]" title="已完成的扣前总课时费">
+                已完成的扣前总课时费
               </div>
-            ))}
-            <div className="rounded-[12px] border border-[#dbe6da] bg-[#f2f6f1] p-3 text-center">
-              <div className="text-xs font-semibold leading-5 text-[#57715d]">
-                {campusFilter === "all" ? "全部校区已完成扣前总课时费" : "该校区已完成扣前总课时费"}
-              </div>
-              <div className="mt-1 break-words text-xl font-extrabold text-[#23412b]">
+              <div className="mt-1 break-words text-xl font-extrabold text-[#166534]">
                 {formatPrivateMoney(campusCompletedFeeBeforeDeduction, amountsVisible)}
               </div>
             </div>
+            {typeCountCards.map((type) => (
+              <div key={type.value} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 text-center">
+                <div className="whitespace-nowrap text-xs font-bold text-[#475569]">{type.label}课节数</div>
+                <div className="mt-1 text-xl font-extrabold text-[#061226]">{type.count}</div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

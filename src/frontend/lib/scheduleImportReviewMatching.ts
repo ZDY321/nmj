@@ -2,10 +2,11 @@ import type {
   ScheduleImportSavedRow,
   ScheduleImportResolution,
   ScheduleImportResolutionMap,
-  ScheduleImportResolutionStatus
+  ScheduleImportResolutionStatus,
+  ScheduleImportReviewRecord
 } from "@/shared/types";
 import type { ImportMatchStatus, ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
-import { resolutionMarksRowResolved, resolutionStatuses } from "@/frontend/lib/scheduleImportReviewStatus";
+import { resolutionMarksRowResolved, resolutionStatusLabel, resolutionStatuses, statusLabel } from "@/frontend/lib/scheduleImportReviewStatus";
 
 export type LinkedSystemLessonSource = {
   lessonId: string;
@@ -166,4 +167,168 @@ export function resolutionKey(row: ImportPreviewLesson): string {
     row.matchedCourseId ?? "",
     row.title
   ].join("|");
+}
+
+export type ScheduleImportIncrementalMerge = {
+  resolutions: ScheduleImportResolutionMap;
+  unchangedCount: number;
+  inheritedCount: number;
+  changedCount: number;
+  newCount: number;
+  removedCount: number;
+};
+
+export function resolutionsWithoutMonths(
+  resolutions: ScheduleImportResolutionMap,
+  months: Iterable<string>
+): ScheduleImportResolutionMap {
+  const monthSet = new Set(months);
+  if (monthSet.size === 0) return { ...resolutions };
+  return Object.fromEntries(Object.entries(resolutions).filter(([key]) => {
+    const keyDate = key.split("|").find((part) => /^\d{4}-\d{2}-\d{2}$/.test(part));
+    return !keyDate || !monthSet.has(keyDate.slice(0, 7));
+  }));
+}
+
+export function mergeSavedReviewResolutions(
+  review: ScheduleImportReviewRecord,
+  currentRows: ImportPreviewLesson[],
+  baseResolutions: ScheduleImportResolutionMap
+): ScheduleImportIncrementalMerge {
+  const savedRows = review.rows.filter((row) => row.date.startsWith(review.month));
+  const usedSavedRows = new Set<number>();
+  const resolutions = { ...baseResolutions };
+  let unchangedCount = 0;
+  let inheritedCount = 0;
+  let changedCount = 0;
+  let newCount = 0;
+
+  currentRows.forEach((row) => {
+    const savedIndex = findSavedRowIndex(row, savedRows, usedSavedRows);
+    if (savedIndex < 0) {
+      newCount += 1;
+      return;
+    }
+    usedSavedRows.add(savedIndex);
+    const savedRow = savedRows[savedIndex];
+    const previousResolution = savedResolutionForRow(review, savedRow);
+    if (rowComparisonFingerprint(row) === rowComparisonFingerprint(savedRow)) {
+      unchangedCount += 1;
+      if (previousResolution) {
+        resolutions[resolutionKey(row)] = { ...previousResolution };
+        inheritedCount += 1;
+      }
+      return;
+    }
+
+    changedCount += 1;
+    const previousLabel = previousResolution
+      ? resolutionStatusLabel(previousResolution.status)
+      : statusLabel(savedRow.status as ImportMatchStatus);
+    const noteParts = [
+      "新导入的数据与上次保存结果不同，请重新核对。",
+      `上次处理：${previousLabel}。`,
+      previousResolution?.note?.trim() ? `上次备注：${previousResolution.note.trim()}` : "",
+      previousResolution?.linkedSystemLessonIds?.length ? `上次关联 ${previousResolution.linkedSystemLessonIds.length} 节云端课。` : ""
+    ].filter(Boolean);
+    resolutions[resolutionKey(row)] = {
+      status: "recheck_required",
+      note: noteParts.join(" "),
+      updatedAt: new Date().toISOString()
+    };
+  });
+
+  return {
+    resolutions,
+    unchangedCount,
+    inheritedCount,
+    changedCount,
+    newCount,
+    removedCount: Math.max(savedRows.length - usedSavedRows.size, 0)
+  };
+}
+
+function findSavedRowIndex(
+  row: ImportPreviewLesson,
+  savedRows: ScheduleImportSavedRow[],
+  usedSavedRows: ReadonlySet<number>
+): number {
+  const availableIndexes = savedRows
+    .map((_, index) => index)
+    .filter((index) => !usedSavedRows.has(index));
+  if (row.systemLessonId) {
+    const sameSystemLesson = availableIndexes.filter((index) => savedRows[index].systemLessonId === row.systemLessonId);
+    const exactSystemMatch = sameSystemLesson.find((index) => rowComparisonFingerprint(savedRows[index]) === rowComparisonFingerprint(row));
+    if (exactSystemMatch !== undefined) return exactSystemMatch;
+    if (sameSystemLesson.length === 1) return sameSystemLesson[0];
+    const sameIdentity = sameSystemLesson.find((index) => rowIdentityKey(savedRows[index]) === rowIdentityKey(row));
+    if (sameIdentity !== undefined) return sameIdentity;
+  }
+  return availableIndexes.find((index) => rowIdentityKey(savedRows[index]) === rowIdentityKey(row)) ?? -1;
+}
+
+function rowIdentityKey(row: ImportPreviewLesson | ScheduleImportSavedRow): string {
+  const campus = row.campusId ? `id:${row.campusId}` : `name:${normalizeComparisonText(row.campusName)}`;
+  const course = row.matchedCourseId || row.mappedCourseId
+    ? `id:${row.matchedCourseId ?? row.mappedCourseId}`
+    : `name:${normalizeComparisonText(row.title)}`;
+  return [campus, row.date, row.startTime, row.endTime, course].join("|");
+}
+
+function rowComparisonFingerprint(row: ImportPreviewLesson | ScheduleImportSavedRow): string {
+  return JSON.stringify([
+    row.campusId ?? normalizeComparisonText(row.campusName),
+    row.date,
+    row.startTime,
+    row.endTime,
+    normalizeComparisonText(row.title),
+    normalizeComparisonText(row.subjectHint),
+    row.courseTypeHint,
+    normalizeComparisonText(row.studentNameHint ?? ""),
+    normalizeComparisonText(row.teacher ?? ""),
+    normalizeComparisonText(row.assistant ?? ""),
+    normalizeComparisonText(row.room ?? ""),
+    row.presentCount ?? null,
+    row.expectedCount ?? null,
+    normalizeComparisonText(row.note ?? ""),
+    row.matchedCourseId ?? row.mappedCourseId ?? "",
+    row.systemLessonId ?? "",
+    row.systemLessonStatus ?? "",
+    normalizeComparisonText(row.systemLessonNote ?? ""),
+    row.systemActualPresentCount ?? null,
+    row.systemPresentCount ?? null,
+    row.systemExpectedCount ?? null,
+    normalizeComparisonText(row.systemPresentStudentNames ?? ""),
+    normalizeComparisonText(row.systemExpectedStudentNames ?? ""),
+    row.systemMakeupCompletedCount ?? null,
+    normalizeComparisonText(row.systemMakeupCompletedStudentNames ?? "")
+  ]);
+}
+
+function normalizeComparisonText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function savedResolutionForRow(
+  review: ScheduleImportReviewRecord,
+  row: ScheduleImportSavedRow
+): ScheduleImportResolution | undefined {
+  const key = [
+    row.systemLessonId || row.id,
+    row.fileName,
+    row.date,
+    row.startTime,
+    row.endTime,
+    row.matchedCourseId ?? "",
+    row.title
+  ].join("|");
+  const saved = review.resolutions?.[key];
+  if (saved) return saved;
+  if (!row.resolutionStatus && !row.resolutionNote?.trim() && !row.linkedSystemLessonIds?.length) return undefined;
+  return {
+    status: row.resolutionStatus ?? "unreviewed",
+    note: row.resolutionNote,
+    linkedSystemLessonIds: row.linkedSystemLessonIds,
+    updatedAt: row.resolutionUpdatedAt ?? review.savedAt
+  };
 }

@@ -81,7 +81,7 @@ export function ScheduleImportReconciliationRow({
   const displayStatus = hasSplitMergeLinkProblem ? row.status : baseDisplayStatus;
   const reviewed = baseReviewed && !hasSplitMergeLinkProblem;
   const isMatched = displayStatus === "matched";
-  const canCollapseDetails = isMatched || reviewed;
+  const canCollapseDetails = (isMatched || reviewed) && resolutionStatus !== "recheck_required";
   const resolvedAsMatched = isMatched && row.status !== "matched" && !excludedFromImportStats;
   const [detailsExpanded, setDetailsExpanded] = useState(() => !canCollapseDetails);
   const canLinkSplitMerge =

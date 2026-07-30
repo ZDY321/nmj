@@ -19,7 +19,7 @@ import {
 } from "@/frontend/lib/scheduleImportReviewRecords";
 import { summarizeScheduleImportImportedLessons } from "@/frontend/lib/scheduleImportReviewLessons";
 import { buildDefaultCampusOverrides, buildLocalOnlyRows } from "@/frontend/lib/scheduleImportReviewRows";
-import { resolutionKey } from "@/frontend/lib/scheduleImportReviewMatching";
+import { mergeSavedReviewResolutions, resolutionKey } from "@/frontend/lib/scheduleImportReviewMatching";
 import type {
   CourseGroup,
   CourseType,
@@ -141,12 +141,12 @@ function makePreviewRow(patch: Pick<ImportPreviewLesson, "id"> & Partial<ImportP
   };
 }
 
-function makeSavedReview(id: string, savedAt: string): ScheduleImportReviewRecord {
+function makeSavedReview(id: string, savedAt: string, month = "2026-06"): ScheduleImportReviewRecord {
   return {
     id,
     savedAt,
-    month: "2026-06",
-    selectedDate: "2026-06-05",
+    month,
+    selectedDate: `${month}-05`,
     rawLessonCount: 0,
     fileNames: [],
     mapping: {},
@@ -424,9 +424,13 @@ describe("schedule import file limits", () => {
 
 describe("schedule import review records", () => {
   it("reports how many saved reviews will be removed by the next save", () => {
-    expect(savedScheduleImportReviewOverflowCount(savedScheduleImportReviewLimit - 1)).toBe(0);
-    expect(savedScheduleImportReviewOverflowCount(savedScheduleImportReviewLimit)).toBe(1);
-    expect(savedScheduleImportReviewOverflowCount(savedScheduleImportReviewLimit + 2)).toBe(3);
+    const reviews = Array.from({ length: savedScheduleImportReviewLimit }, (_, index) => {
+      const month = `2026-${String(index + 1).padStart(2, "0")}`;
+      return makeSavedReview(`review_${index}`, `${month}-05T00:00:00.000Z`, month);
+    });
+    expect(savedScheduleImportReviewOverflowCount(reviews.slice(0, savedScheduleImportReviewLimit - 1), "2026-07")).toBe(0);
+    expect(savedScheduleImportReviewOverflowCount(reviews, "2026-07")).toBe(1);
+    expect(savedScheduleImportReviewOverflowCount(reviews, "2026-06")).toBe(0);
   });
 
   it("limits saved reviews, trims raw text, and treats split-merge rows as resolved", () => {
@@ -442,9 +446,10 @@ describe("schedule import review records", () => {
         endTime: "11:00",
         feeSnapshot: { amount: 80, hours: 1 }
       });
-      const previousReviews = Array.from({ length: savedScheduleImportReviewLimit + 2 }, (_, index) =>
-        makeSavedReview(`previous_${index}`, `2026-06-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`)
-      );
+      const previousReviews = Array.from({ length: savedScheduleImportReviewLimit + 2 }, (_, index) => {
+        const month = `2026-${String(index + 1).padStart(2, "0")}`;
+        return makeSavedReview(`previous_${index}`, `${month}-05T00:00:00.000Z`, month);
+      });
       const vault = makeVault({
         lessons: [mainLesson, linkedLesson],
         scheduleImport: {
@@ -498,6 +503,7 @@ describe("schedule import review records", () => {
       expect(nextState.reviews).toHaveLength(savedScheduleImportReviewLimit);
       expect(nextState.reviews[0]?.id).toBe("schedule-import-2026-06-22T04:00:00.000Z");
       expect(nextState.reviews.map((review) => review.id)).not.toContain("previous_5");
+      expect(new Set(nextState.reviews.map((review) => review.month)).size).toBe(nextState.reviews.length);
       expect(nextState.splitMergeExcludedLessonIds).toEqual([mainLesson.id]);
       expect(systemStats).toEqual({
         count: 1,
@@ -531,11 +537,111 @@ describe("schedule import review records", () => {
         courseMismatch: 0,
         systemMissing: 0,
         importMissing: 0,
-        needsMapping: 0
+        needsMapping: 0,
+        recheckRequired: 0
       });
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("inherits an unchanged lesson across renamed files and flags changed data for review", () => {
+    const previousRow = makePreviewRow({
+      id: "old_file_row",
+      fileName: "校宝课表导出2026-07-20.xls",
+      date: "2026-07-05"
+    });
+    const previousResolution = {
+      status: "accepted" as const,
+      note: "人工确认无误。",
+      updatedAt: "2026-07-20T08:00:00.000Z"
+    };
+    const review = makeSavedReview("july_review", "2026-07-20T09:00:00.000Z", "2026-07");
+    review.rows = [{
+      ...previousRow,
+      resolutionStatus: previousResolution.status,
+      resolutionNote: previousResolution.note,
+      resolutionUpdatedAt: previousResolution.updatedAt
+    }];
+    review.resolutions = { [resolutionKey(previousRow)]: previousResolution };
+
+    const renamedButUnchanged = makePreviewRow({
+      ...previousRow,
+      id: "new_file_row",
+      fileName: "校宝课表导出2026-07-30.xls"
+    });
+    const unchangedMerge = mergeSavedReviewResolutions(review, [renamedButUnchanged], {});
+    expect(unchangedMerge).toMatchObject({
+      unchangedCount: 1,
+      inheritedCount: 1,
+      changedCount: 0,
+      newCount: 0,
+      removedCount: 0
+    });
+    expect(unchangedMerge.resolutions[resolutionKey(renamedButUnchanged)]).toMatchObject({
+      status: "accepted",
+      note: "人工确认无误。"
+    });
+
+    const changedAttendance = { ...renamedButUnchanged, presentCount: 0, status: "attendance_mismatch" as const };
+    const changedMerge = mergeSavedReviewResolutions(review, [changedAttendance], {});
+    expect(changedMerge).toMatchObject({ changedCount: 1, unchangedCount: 0 });
+    expect(changedMerge.resolutions[resolutionKey(changedAttendance)]).toMatchObject({
+      status: "recheck_required"
+    });
+    expect(changedMerge.resolutions[resolutionKey(changedAttendance)]?.note).toContain("上次处理：确认无误");
+    const changedResolution = changedMerge.resolutions[resolutionKey(changedAttendance)];
+    const changedReview: ScheduleImportReviewRecord = {
+      ...review,
+      rows: [{
+        ...changedAttendance,
+        resolutionStatus: changedResolution?.status,
+        resolutionNote: changedResolution?.note,
+        resolutionUpdatedAt: changedResolution?.updatedAt
+      }],
+      resolutions: changedMerge.resolutions
+    };
+    expect(savedReviewEffectiveCounts(changedReview)).toMatchObject({
+      matched: 0,
+      attendanceMismatch: 0,
+      recheckRequired: 1
+    });
+  });
+
+  it("stores only the selected month and replaces the previous record for that month", () => {
+    const juneRow = makePreviewRow({ id: "june_row", date: "2026-06-05" });
+    const julyRow = makePreviewRow({ id: "july_row", date: "2026-07-05", systemLessonId: "lesson_july" });
+    const resolutions = {
+      [resolutionKey(juneRow)]: { status: "accepted" as const, updatedAt: "2026-06-20T00:00:00.000Z" },
+      [resolutionKey(julyRow)]: { status: "accepted" as const, updatedAt: "2026-07-20T00:00:00.000Z" }
+    };
+    const vault = makeVault({
+      scheduleImport: {
+        mappings: {},
+        resolutions,
+        reviews: [
+          makeSavedReview("old_june", "2026-06-10T00:00:00.000Z", "2026-06"),
+          makeSavedReview("old_july", "2026-07-10T00:00:00.000Z", "2026-07")
+        ],
+        updatedAt: "2026-07-10T00:00:00.000Z"
+      }
+    });
+
+    const nextState = buildNextScheduleImportState(vault, {
+      rawLessons: [juneRow, julyRow],
+      mapping: {},
+      resolutions,
+      fileCampusOverrides: {},
+      selectedMonth: "2026-06",
+      selectedDate: "2026-06-05",
+      rows: [juneRow, julyRow],
+      summary: summarizeImportPreview([juneRow, julyRow])
+    });
+
+    expect(nextState.reviews.map((review) => review.month)).toEqual(["2026-06", "2026-07"]);
+    expect(nextState.reviews[0]?.rawLessonCount).toBe(1);
+    expect(nextState.reviews[0]?.rows.map((row) => row.id)).toEqual(["june_row"]);
+    expect(Object.keys(nextState.reviews[0]?.resolutions ?? {})).toEqual([resolutionKey(juneRow)]);
   });
 
   it("excludes not-due imported rows and uses system billing hours after confirmation", () => {

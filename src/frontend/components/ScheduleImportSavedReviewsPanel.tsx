@@ -27,7 +27,7 @@ export function ScheduleImportSavedReviewsPanel({
             <CalendarDays size={16} className="text-[#1557c2]" />
             已保存对账
           </div>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">最多保留最近 {savedScheduleImportReviewLimit} 次，当前 {reviews.length} 次。</div>
+          <div className="mt-1 text-xs font-semibold text-[#64748b]">每月一份，最多保留最近 {savedScheduleImportReviewLimit} 个月，当前 {reviews.length} 个月。</div>
         </div>
         <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
           {reviews.slice(0, 8).map((review) => (

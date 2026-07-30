@@ -482,6 +482,7 @@ export type ScheduleImportMapping = Record<string, string>;
 
 export type ScheduleImportResolutionStatus =
   | "unreviewed"
+  | "recheck_required"
   | "not_due"
   | "excel_error"
   | "cloud_error"
@@ -509,6 +510,7 @@ export type ScheduleImportSavedSummary = {
   systemMissing: number;
   importMissing: number;
   needsMapping: number;
+  recheckRequired?: number;
   systemLessonCount?: number;
   systemCompletedLessonCount?: number;
   systemCompletedAmount?: number;

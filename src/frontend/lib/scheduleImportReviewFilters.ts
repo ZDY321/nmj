@@ -6,6 +6,7 @@ import { courseName as localCourseName } from "@/frontend/lib/helpers";
 import {
   isResolutionFilter,
   resolutionExcludesImportStats,
+  resolutionNeedsAttention,
   resolutionStatusFromFilter,
   resolutionStatusLabel,
   type StatusFilter
@@ -26,7 +27,7 @@ export function matchesImportRowFilters(
   const resolution = filters.resolutions[resolutionKey(row)];
   if (filters.statusFilter === "needs_attention") {
     const effectiveStatus = effectiveRowStatus(row, resolution, filters.linkedSystemLessonIds);
-    if (effectiveStatus === "matched" && resolution?.status !== "missing_lesson_fee") return false;
+    if (effectiveStatus === "matched" && !resolutionNeedsAttention(resolution?.status)) return false;
   } else if (filters.statusFilter === "system_unfinished") {
     if (!row.systemLessonId || rowSystemLessonCompleted(row, filters.vault)) return false;
   } else if (isResolutionFilter(filters.statusFilter)) {
@@ -67,7 +68,7 @@ export function matchesSavedReviewRowFilters(
 ): boolean {
   if (filters.statusFilter === "needs_attention") {
     const effectiveStatus = effectiveSavedRowStatus(row, filters.linkedSystemLessonIds);
-    if (effectiveStatus === "matched" && row.resolutionStatus !== "missing_lesson_fee") return false;
+    if (effectiveStatus === "matched" && !resolutionNeedsAttention(row.resolutionStatus)) return false;
   } else if (filters.statusFilter === "system_unfinished") {
     if (!row.systemLessonId || savedRowSystemLessonCompleted(row, filters.vault)) return false;
   } else if (isResolutionFilter(filters.statusFilter)) {

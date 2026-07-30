@@ -43,20 +43,24 @@ import {
   effectiveRowStatus,
   importPreviewLessonBillableHours,
   isReviewedResolution,
+  latestScheduleImportReviewsByMonth,
   linkedSystemLessonIdsFromRows,
   linkedSystemLessonIdsFromResolutions,
   linkedSystemLessonSourcesFromRows,
   matchesImportRowFilters,
+  mergeSavedReviewResolutions,
   readSavedMapping,
   readSavedWorkspace,
   resolutionExcludesImportStats,
   resolutionKey,
   resolutionMarksRowResolved,
+  resolutionNeedsAttention,
   resolutionStatusLabel,
   savedReviewEffectiveCounts,
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
   savedReviewTitle,
+  resolutionsWithoutMonths,
   statusPillClass,
   splitMergePayrollExcludedLessonIds,
   summarizeFiles,
@@ -175,7 +179,7 @@ export function ScheduleImportPanel({
   const attentionRows = useMemo(
     () => rows.filter((row) =>
       effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" ||
-      resolutions[resolutionKey(row)]?.status === "missing_lesson_fee"
+      resolutionNeedsAttention(resolutions[resolutionKey(row)]?.status)
     ),
     [linkedSystemLessonIds, resolutions, rows]
   );
@@ -218,7 +222,10 @@ export function ScheduleImportPanel({
   const days = calendarDates(displayMonth, weekStartPreference);
   const weekdayLabels = orderedWeekdayLabels(weekStartPreference);
   const needsAttention = attentionRows.length;
-  const savedReviews = persistedScheduleImport?.reviews ?? [];
+  const savedReviews = useMemo(
+    () => latestScheduleImportReviewsByMonth(persistedScheduleImport?.reviews ?? []),
+    [persistedScheduleImport?.reviews]
+  );
   const savedReviewLiveCounts = useMemo(
     () => new Map(savedReviews.map((review) => [review.id, liveSavedReviewEffectiveCounts(vault, review)])),
     [savedReviews, vault]
@@ -273,26 +280,102 @@ export function ScheduleImportPanel({
     setMessage("正在解析教务 Excel...");
     try {
       const parsed = await parseScheduleWorkbookFiles(files);
-      const parsedFileNames = new Set(parsed.map((lesson) => lesson.fileName));
-      const nextRawLessons = [
-        ...rawLessons.filter((lesson) => !parsedFileNames.has(lesson.fileName)),
-        ...parsed
-      ].sort((a, b) => `${a.date} ${a.startTime} ${a.campusName}`.localeCompare(`${b.date} ${b.startTime} ${b.campusName}`));
-      const nextOverrides = buildDefaultCampusOverrides(vault, nextRawLessons, fileCampusOverrides);
-      setRawLessons(nextRawLessons);
-      setFileCampusOverrides(nextOverrides);
-      if (parsed[0]?.date) {
-        setSelectedMonth(parsed[0].date.slice(0, 7));
-        setSelectedDate(parsed[0].date);
+      const parsedMonths = new Set(parsed.map((lesson) => lesson.date.slice(0, 7)));
+      const matchingReviews = savedReviews.filter((review) => parsedMonths.has(review.month));
+      if (parsed.length > 0 && matchingReviews.length > 0) {
+        const monthLabel = matchingReviews.map((review) => review.month).join("、");
+        setMessage(`检测到 ${monthLabel} 已保存对账，请选择导入方式。`);
+        confirm({
+          title: "继续本月已保存的对账？",
+          description: `新 Excel 会替换 ${monthLabel} 当前课表。继续本月对账时，相同课节会继承原处理结果，发生变化的课节会标为待复核；作为全新对账则不会继承逐课处理结果。`,
+          confirmLabel: "继承并导入",
+          secondaryLabel: "作为全新对账",
+          cancelLabel: "取消",
+          onConfirm: () => applyParsedFiles(parsed, matchingReviews, "inherit"),
+          onSecondary: () => applyParsedFiles(parsed, matchingReviews, "fresh")
+        });
+        return;
       }
-      setMessage(parsed.length > 0 ? `已加入 ${parsedFileNames.size} 个文件、${parsed.length} 节教务 Excel 课节；当前共 ${nextRawLessons.length} 节。` : "没有从文件中解析到课节，请确认是否为校宝导出的 .xls/.xlsx。");
+      applyParsedFiles(parsed, [], "append");
     } catch (error) {
-      setRawLessons([]);
       setMessage(error instanceof Error ? error.message : "课表解析失败。");
     } finally {
       setLoading(false);
     }
   }
+
+  function applyParsedFiles(
+    parsed: ImportedScheduleLesson[],
+    matchingReviews: ScheduleImportReviewRecord[],
+    mode: "append" | "inherit" | "fresh"
+  ) {
+      const parsedFileNames = new Set(parsed.map((lesson) => lesson.fileName));
+      const parsedMonths = new Set(parsed.map((lesson) => lesson.date.slice(0, 7)));
+      const retainedRawLessons = mode === "append"
+        ? rawLessons.filter((lesson) => !parsedFileNames.has(lesson.fileName))
+        : rawLessons.filter((lesson) => !parsedMonths.has(lesson.date.slice(0, 7)));
+      const nextRawLessons = [...retainedRawLessons, ...parsed]
+        .sort((a, b) => `${a.date} ${a.startTime} ${a.campusName}`.localeCompare(`${b.date} ${b.startTime} ${b.campusName}`));
+      const inheritedMapping = mode === "inherit"
+        ? matchingReviews.reduce<ScheduleImportMapping>((result, review) => ({ ...result, ...review.mapping }), {})
+        : {};
+      const nextMapping = { ...inheritedMapping, ...mapping };
+      const inferredOverrides = mode === "inherit"
+        ? inheritSavedReviewCampusOverrides(parsed, matchingReviews, fileCampusOverrides)
+        : fileCampusOverrides;
+      const builtOverrides = buildDefaultCampusOverrides(vault, nextRawLessons, inferredOverrides);
+      const activeFileNames = new Set(nextRawLessons.map((lesson) => lesson.fileName));
+      const nextOverrides = Object.fromEntries(Object.entries(builtOverrides).filter(([fileName]) => activeFileNames.has(fileName)));
+
+      let nextResolutions = mode === "append"
+        ? { ...resolutions }
+        : resolutionsWithoutMonths(resolutions, parsedMonths);
+      let unchangedCount = 0;
+      let inheritedCount = 0;
+      let changedCount = 0;
+      let newCount = 0;
+      let removedCount = 0;
+      if (mode === "inherit") {
+        const nextImportedRows = buildImportPreview(vault, nextRawLessons, nextMapping, nextOverrides);
+        const nextRows = [...nextImportedRows, ...buildLocalOnlyRows(vault, nextImportedRows, nextRawLessons)];
+        matchingReviews.forEach((review) => {
+          const merge = mergeSavedReviewResolutions(
+            review,
+            nextRows.filter((row) => row.date.startsWith(review.month)),
+            nextResolutions
+          );
+          nextResolutions = merge.resolutions;
+          unchangedCount += merge.unchangedCount;
+          inheritedCount += merge.inheritedCount;
+          changedCount += merge.changedCount;
+          newCount += merge.newCount;
+          removedCount += merge.removedCount;
+        });
+      }
+
+      setRawLessons(nextRawLessons);
+      setMapping(nextMapping);
+      setResolutions(nextResolutions);
+      setFileCampusOverrides(nextOverrides);
+      setOpenedReviewId("");
+      setCampusFilter("all");
+      setStatusFilter("all");
+      setSearch("");
+      if (parsed[0]?.date) {
+        setSelectedMonth(parsed[0].date.slice(0, 7));
+        setSelectedDate(parsed[0].date);
+      }
+      if (parsed.length === 0) {
+        setMessage("没有从文件中解析到课节，请确认是否为校宝导出的 .xls/.xlsx。");
+      } else if (mode === "inherit") {
+        setMessage(`已继续本月对账：识别相同 ${unchangedCount} 节，继承处理 ${inheritedCount} 节；数据有变化 ${changedCount} 节待复核，新增 ${newCount} 节，上次有 ${removedCount} 节本次未出现。`);
+      } else if (mode === "fresh") {
+        setMessage(`已将 ${Array.from(parsedMonths).join("、")} 的 ${parsed.length} 节课作为全新对账导入，原逐课处理结果未继承；保存后会更新该月记录。`);
+      } else {
+        setMessage(`已加入 ${parsedFileNames.size} 个文件、${parsed.length} 节教务 Excel 课节；当前共 ${nextRawLessons.length} 节。`);
+      }
+      focusCalendarPanel();
+    }
 
   function applyStatusFilter(nextStatus: Exclude<StatusFilter, "all">) {
     const effectiveStatus: StatusFilter = statusFilter === nextStatus ? "all" : nextStatus;
@@ -376,7 +459,7 @@ export function ScheduleImportPanel({
     setOpenedReviewId(nextScheduleImport.reviews[0]?.id ?? "");
     setMessage(
       savedMappingOk && savedWorkspaceOk && onSaveScheduleImport
-        ? "课程映射和本次对账结果已保存到云端加密档案，换浏览器登录后也会复用。"
+        ? `${displayMonth} 对账结果已更新；课程映射和逐课处理已保存到云端加密档案。`
         : savedMappingOk && savedWorkspaceOk
           ? "课程映射和当前对账现场已保存到本机浏览器。"
           : "保存失败：浏览器本地存储空间可能不足，请减少导入文件后再试。"
@@ -385,9 +468,11 @@ export function ScheduleImportPanel({
   }
 
   function requestSaveMapping(afterSave?: () => void) {
-    const overflowCount = savedScheduleImportReviewOverflowCount(savedReviews.length);
+    const overflowCount = savedScheduleImportReviewOverflowCount(savedReviews, displayMonth);
     if (overflowCount > 0) {
-      const deletedReviews = savedReviews.slice(savedScheduleImportReviewLimit - 1);
+      const deletedReviews = savedReviews
+        .filter((review) => review.month !== displayMonth)
+        .slice(savedScheduleImportReviewLimit - 1);
       const oldestReview = deletedReviews[deletedReviews.length - 1] ?? savedReviews[savedReviews.length - 1];
       const deleteCountText = overflowCount === 1 ? "最早的一条保存记录" : `最早的 ${overflowCount} 条保存记录`;
       const oldestReviewText = oldestReview
@@ -397,7 +482,7 @@ export function ScheduleImportPanel({
         : "";
       confirm({
         title: "保存新的对账记录？",
-        description: `当前最多保留最近 ${savedScheduleImportReviewLimit} 次保存对账。继续保存会删除${deleteCountText}${oldestReviewText}。`,
+        description: `每月只保留一份对账结果，当前最多保留最近 ${savedScheduleImportReviewLimit} 个月。继续保存会删除${deleteCountText}${oldestReviewText}。`,
         confirmLabel: "继续保存",
         cancelLabel: "取消",
         onConfirm: () => performSaveMapping(afterSave)
@@ -411,10 +496,10 @@ export function ScheduleImportPanel({
     requestSaveMapping();
   }
 
-  function deleteSavedReview(reviewId: string) {
+  function deleteSavedReview(review: ScheduleImportReviewRecord) {
     const previous = persistedScheduleImport;
     if (!previous) return;
-    const nextReviews = previous.reviews.filter((review) => review.id !== reviewId);
+    const nextReviews = previous.reviews.filter((item) => item.month !== review.month);
     onSaveScheduleImport?.({
       mappings: { ...(previous.mappings ?? {}) },
       resolutions: { ...(previous.resolutions ?? {}) },
@@ -422,8 +507,8 @@ export function ScheduleImportPanel({
       splitMergeExcludedLessonIds: previous.splitMergeExcludedLessonIds ?? [],
       updatedAt: new Date().toISOString()
     });
-    setOpenedReviewId((current) => current === reviewId ? "" : current);
-    setMessage("已删除这条保存的对账结果，课程映射和差异标注仍保留。");
+    setOpenedReviewId((current) => current === review.id ? "" : current);
+    setMessage("已删除这个月保存的对账结果，课程映射和差异标注仍保留。");
   }
 
   function focusCalendarPanel() {
@@ -439,9 +524,13 @@ export function ScheduleImportPanel({
       return;
     }
     const nextMapping = { ...(review.mapping ?? {}) };
-    const nextResolutions = review.resolutions && Object.keys(review.resolutions).length > 0
+    const reviewResolutions = review.resolutions && Object.keys(review.resolutions).length > 0
       ? { ...review.resolutions }
       : resolutionsFromSavedReviewRows(review.rows);
+    const nextResolutions = {
+      ...resolutionsWithoutMonths(resolutions, [review.month]),
+      ...reviewResolutions
+    };
     const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
     const nextSelectedMonth = review.month || nextRawLessons[0]?.date.slice(0, 7) || todayIso().slice(0, 7);
     const nextSelectedDate = review.selectedDate || nextRawLessons[0]?.date || `${nextSelectedMonth}-01`;
@@ -555,11 +644,11 @@ export function ScheduleImportPanel({
           onDeleteReview={(review) => {
             confirm({
               title: "删除保存的对账结果？",
-              description: "删除后只移除这一次保存的对账快照；课程映射和差异标注会继续保留。",
+              description: "删除后会移除这个月保存的对账结果；课程映射和差异标注会继续保留。",
               confirmLabel: "删除",
               cancelLabel: "取消",
               tone: "danger",
-              onConfirm: () => deleteSavedReview(review.id)
+              onConfirm: () => deleteSavedReview(review)
             });
           }}
         />
@@ -747,6 +836,31 @@ function rawLessonsFromSavedReview(review: ScheduleImportReviewRecord): Imported
     });
 }
 
+function inheritSavedReviewCampusOverrides(
+  parsed: ImportedScheduleLesson[],
+  reviews: ScheduleImportReviewRecord[],
+  currentOverrides: ScheduleImportMapping
+): ScheduleImportMapping {
+  const next = { ...currentOverrides };
+  const lessonsByFile = new Map<string, ImportedScheduleLesson[]>();
+  parsed.forEach((lesson) => {
+    const lessons = lessonsByFile.get(lesson.fileName) ?? [];
+    lessons.push(lesson);
+    lessonsByFile.set(lesson.fileName, lessons);
+  });
+  lessonsByFile.forEach((lessons, fileName) => {
+    if (next[fileName]) return;
+    const months = new Set(lessons.map((lesson) => lesson.date.slice(0, 7)));
+    const campusIds = new Set(reviews
+      .filter((review) => months.has(review.month))
+      .flatMap((review) => review.rows)
+      .filter((row) => row.fileName !== "云端课表" && Boolean(row.campusId))
+      .map((row) => row.campusId as string));
+    if (campusIds.size === 1) next[fileName] = Array.from(campusIds)[0];
+  });
+  return next;
+}
+
 function liveSavedReviewEffectiveCounts(vault: TeacherVault, review: ScheduleImportReviewRecord): ReturnType<typeof savedReviewEffectiveCounts> {
   const rawLessons = rawLessonsFromSavedReview(review);
   if (rawLessons.length === 0) return savedReviewEffectiveCounts(review);
@@ -757,7 +871,10 @@ function liveSavedReviewEffectiveCounts(vault: TeacherVault, review: ScheduleImp
     : resolutionsFromSavedReviewRows(review.rows);
   const linkedSystemLessonIds = linkedSystemLessonIdsFromRows(rows, resolutions);
   const effectiveRows = rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds));
-  const statisticRows = effectiveRows.filter((row) => !resolutionExcludesImportStats(resolutions[resolutionKey(row)]?.status));
+  const statisticRows = effectiveRows.filter((row) => {
+    const resolutionStatus = resolutions[resolutionKey(row)]?.status;
+    return !resolutionExcludesImportStats(resolutionStatus) && resolutionStatus !== "recheck_required";
+  });
   const summary = summarizeImportPreview(statisticRows);
   return {
     matched: summary.matched,
@@ -766,12 +883,13 @@ function liveSavedReviewEffectiveCounts(vault: TeacherVault, review: ScheduleImp
     courseMismatch: summary.courseMismatch,
     systemMissing: summary.systemMissing,
     importMissing: summary.importMissing,
-    needsMapping: summary.needsMapping
+    needsMapping: summary.needsMapping,
+    recheckRequired: rows.filter((row) => resolutions[resolutionKey(row)]?.status === "recheck_required").length
   };
 }
 
 function needsAttentionFromSavedReviewCounts(counts: ReturnType<typeof savedReviewEffectiveCounts>): number {
-  return counts.attendanceMismatch + counts.timeMismatch + counts.courseMismatch + counts.systemMissing + counts.importMissing + counts.needsMapping;
+  return counts.attendanceMismatch + counts.timeMismatch + counts.courseMismatch + counts.systemMissing + counts.importMissing + counts.needsMapping + counts.recheckRequired;
 }
 
 function resolutionsFromSavedReviewRows(rows: ScheduleImportSavedRow[]): ScheduleImportResolutionMap {

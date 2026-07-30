@@ -24,8 +24,21 @@ import { resolutionExcludesImportStats } from "@/frontend/lib/scheduleImportRevi
 export const savedScheduleImportReviewLimit = 6;
 const savedScheduleImportRawTextLimit = 240;
 
-export function savedScheduleImportReviewOverflowCount(currentReviewCount: number): number {
-  return Math.max(currentReviewCount + 1 - savedScheduleImportReviewLimit, 0);
+export function savedScheduleImportReviewOverflowCount(currentReviews: ScheduleImportReviewRecord[], nextMonth: string): number {
+  const retainedMonthCount = latestScheduleImportReviewsByMonth(currentReviews)
+    .filter((review) => review.month !== nextMonth)
+    .length;
+  return Math.max(retainedMonthCount + 1 - savedScheduleImportReviewLimit, 0);
+}
+
+export function latestScheduleImportReviewsByMonth(reviews: ScheduleImportReviewRecord[]): ScheduleImportReviewRecord[] {
+  const latestByMonth = new Map<string, ScheduleImportReviewRecord>();
+  [...reviews]
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+    .forEach((review) => {
+      if (!latestByMonth.has(review.month)) latestByMonth.set(review.month, review);
+    });
+  return Array.from(latestByMonth.values()).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
 export function buildNextScheduleImportState(
@@ -50,7 +63,7 @@ export function buildNextScheduleImportState(
     resolutions: { ...context.resolutions },
     reviews: [
       review,
-      ...(previous?.reviews ?? []).filter((item) => item.id !== review.id)
+      ...latestScheduleImportReviewsByMonth(previous?.reviews ?? []).filter((item) => item.month !== review.month)
     ].slice(0, savedScheduleImportReviewLimit),
     splitMergeExcludedLessonIds: context.splitMergeExcludedLessonIds ?? previous?.splitMergeExcludedLessonIds ?? [],
     updatedAt: now
@@ -72,32 +85,48 @@ function buildReviewRecord(
   },
   savedAt: string
 ): ScheduleImportReviewRecord {
-  const fileNames = Array.from(new Set(context.rawLessons.map((lesson) => lesson.fileName))).sort(compareByName);
-  const systemLessonSummary = summarizeScheduleImportSystemLessons(vault, context.rows, context.resolutions, context.splitMergeExcludedLessonIds);
+  const monthRawLessons = context.rawLessons.filter((lesson) => lesson.date.startsWith(context.selectedMonth));
+  const monthRows = context.rows.filter((row) => row.date.startsWith(context.selectedMonth));
+  const fileNames = Array.from(new Set(monthRawLessons.map((lesson) => lesson.fileName))).sort(compareByName);
+  const monthStatisticRows = monthRows
+    .filter((row) => !resolutionExcludesImportStats(context.resolutions[resolutionKey(row)]?.status));
+  const monthSummary = summarizeImportPreview(monthStatisticRows);
+  const monthResolutions = Object.fromEntries(monthRows.flatMap((row) => {
+    const key = resolutionKey(row);
+    const resolution = context.resolutions[key];
+    return resolution ? [[key, resolution]] : [];
+  }));
+  const systemLessonSummary = summarizeScheduleImportSystemLessons(vault, monthRows, context.resolutions, context.splitMergeExcludedLessonIds);
   return {
     id: `schedule-import-${savedAt}`,
     savedAt,
     month: context.selectedMonth,
-    selectedDate: context.selectedDate,
-    rawLessonCount: context.rawLessons.length,
+    selectedDate: context.selectedDate.startsWith(context.selectedMonth)
+      ? context.selectedDate
+      : monthRawLessons[0]?.date ?? `${context.selectedMonth}-01`,
+    rawLessonCount: monthRawLessons.length,
     fileNames,
     mapping: context.mapping,
-    fileCampusOverrides: context.fileCampusOverrides,
-    resolutions: context.resolutions,
+    fileCampusOverrides: Object.fromEntries(fileNames.flatMap((fileName) => {
+      const campusId = context.fileCampusOverrides[fileName];
+      return campusId ? [[fileName, campusId]] : [];
+    })),
+    resolutions: monthResolutions,
     summary: {
-      total: context.summary.total,
-      matched: context.summary.matched,
-      attendanceMismatch: context.summary.attendanceMismatch,
-      timeMismatch: context.summary.timeMismatch,
-      courseMismatch: context.summary.courseMismatch,
-      systemMissing: context.summary.systemMissing,
-      importMissing: context.summary.importMissing,
-      needsMapping: context.summary.needsMapping,
+      total: monthSummary.total,
+      matched: monthSummary.matched,
+      attendanceMismatch: monthSummary.attendanceMismatch,
+      timeMismatch: monthSummary.timeMismatch,
+      courseMismatch: monthSummary.courseMismatch,
+      systemMissing: monthSummary.systemMissing,
+      importMissing: monthSummary.importMissing,
+      needsMapping: monthSummary.needsMapping,
+      recheckRequired: monthRows.filter((row) => context.resolutions[resolutionKey(row)]?.status === "recheck_required").length,
       systemLessonCount: systemLessonSummary.count,
       systemCompletedLessonCount: systemLessonSummary.completedCount,
       systemCompletedAmount: systemLessonSummary.completedAmount
     },
-    rows: context.rows.map((row) => {
+    rows: monthRows.map((row) => {
       const resolution = context.resolutions[resolutionKey(row)];
       return {
         id: row.id,
@@ -221,10 +250,10 @@ export function buildScheduleImportStateWithoutReview(
 
 export function savedReviewNeedsAttention(review: ScheduleImportReviewRecord): number {
   const counts = savedReviewEffectiveCounts(review);
-  return counts.attendanceMismatch + counts.timeMismatch + counts.courseMismatch + counts.systemMissing + counts.importMissing + counts.needsMapping;
+  return counts.attendanceMismatch + counts.timeMismatch + counts.courseMismatch + counts.systemMissing + counts.importMissing + counts.needsMapping + counts.recheckRequired;
 }
 
-export function savedReviewEffectiveCounts(review: ScheduleImportReviewRecord): Pick<ScheduleImportReviewRecord["summary"], "matched" | "attendanceMismatch" | "timeMismatch" | "courseMismatch" | "systemMissing" | "importMissing" | "needsMapping"> {
+export function savedReviewEffectiveCounts(review: ScheduleImportReviewRecord): Pick<ScheduleImportReviewRecord["summary"], "matched" | "attendanceMismatch" | "timeMismatch" | "courseMismatch" | "systemMissing" | "importMissing" | "needsMapping"> & { recheckRequired: number } {
   if (review.rows.length === 0) {
     return {
       matched: review.summary.matched,
@@ -233,13 +262,18 @@ export function savedReviewEffectiveCounts(review: ScheduleImportReviewRecord): 
       courseMismatch: review.summary.courseMismatch,
       systemMissing: review.summary.systemMissing,
       importMissing: review.summary.importMissing,
-      needsMapping: review.summary.needsMapping
+      needsMapping: review.summary.needsMapping,
+      recheckRequired: review.summary.recheckRequired ?? 0
     };
   }
   const linkedSystemLessonIds = linkedSystemLessonIdsFromSavedRows(review.rows);
   return review.rows.reduce(
     (counts, row) => {
       if (resolutionExcludesImportStats(row.resolutionStatus)) return counts;
+      if (row.resolutionStatus === "recheck_required") {
+        counts.recheckRequired += 1;
+        return counts;
+      }
       const status = effectiveSavedRowStatus(row, linkedSystemLessonIds);
       if (status === "matched") counts.matched += 1;
       if (status === "attendance_mismatch") counts.attendanceMismatch += 1;
@@ -257,7 +291,8 @@ export function savedReviewEffectiveCounts(review: ScheduleImportReviewRecord): 
       courseMismatch: 0,
       systemMissing: 0,
       importMissing: 0,
-      needsMapping: 0
+      needsMapping: 0,
+      recheckRequired: 0
     }
   );
 }
