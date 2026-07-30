@@ -12,6 +12,7 @@ import {
 } from "@/frontend/lib/scheduleImport";
 import {
   buildNextScheduleImportState,
+  openedScheduleImportReviewForMonths,
   savedReviewEffectiveCounts,
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
@@ -423,6 +424,16 @@ describe("schedule import file limits", () => {
 });
 
 describe("schedule import review records", () => {
+  it("only offers saved-review inheritance for the history record currently opened in the workspace", () => {
+    const juneReview = makeSavedReview("review_june", "2026-06-30T00:00:00.000Z", "2026-06");
+    const julyReview = makeSavedReview("review_july", "2026-07-31T00:00:00.000Z", "2026-07");
+    const reviews = [julyReview, juneReview];
+
+    expect(openedScheduleImportReviewForMonths(reviews, "", new Set(["2026-06"]))).toBeUndefined();
+    expect(openedScheduleImportReviewForMonths(reviews, julyReview.id, new Set(["2026-06"]))).toBeUndefined();
+    expect(openedScheduleImportReviewForMonths(reviews, juneReview.id, new Set(["2026-06"]))).toBe(juneReview);
+  });
+
   it("reports how many saved reviews will be removed by the next save", () => {
     const reviews = Array.from({ length: savedScheduleImportReviewLimit }, (_, index) => {
       const month = `2026-${String(index + 1).padStart(2, "0")}`;

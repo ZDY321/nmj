@@ -41,6 +41,16 @@ export function latestScheduleImportReviewsByMonth(reviews: ScheduleImportReview
   return Array.from(latestByMonth.values()).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
+export function openedScheduleImportReviewForMonths(
+  reviews: ScheduleImportReviewRecord[],
+  openedReviewId: string,
+  importedMonths: ReadonlySet<string>
+): ScheduleImportReviewRecord | undefined {
+  if (!openedReviewId) return undefined;
+  const openedReview = reviews.find((review) => review.id === openedReviewId);
+  return openedReview && importedMonths.has(openedReview.month) ? openedReview : undefined;
+}
+
 export function buildNextScheduleImportState(
   vault: TeacherVault,
   context: {

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { PayrollLessonDetailsCard } from "@/frontend/components/PayrollLessonDetailsCard";
 import { PayrollMetricSummaryCards } from "@/frontend/components/PayrollMetricSummaryCards";
 import { PayrollObligationDeductionCard } from "@/frontend/components/PayrollObligationDeductionCard";
@@ -188,17 +189,23 @@ export function PayrollReviewView({
             { key: "reconcile" as PayrollPanel, label: "教务课表对账" },
             { key: "mapping" as PayrollPanel, label: "课程名称映射" },
             { key: "guide" as PayrollPanel, label: "导出指引" }
-          ].map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setPayrollPanel(item.key)}
-              className={`min-w-[140px] flex-1 rounded-[12px] px-4 py-2 text-sm font-extrabold transition-colors ${
-                payrollPanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
-              }`}
-            >
-              {item.label}
-            </button>
+          ].map((item, index, items) => (
+            <Fragment key={item.key}>
+              <button
+                type="button"
+                onClick={() => setPayrollPanel(item.key)}
+                className={`min-w-[140px] flex-1 rounded-[12px] px-4 py-2 text-sm font-extrabold transition-colors ${
+                  payrollPanel === item.key ? "bg-[#1557c2] text-white" : "text-[#25324a] hover:bg-[#f8fbff]"
+                }`}
+              >
+                {item.label}
+              </button>
+              {index < items.length - 1 && (
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f8fbff] text-[#94a3b8] ring-1 ring-[#e8eef6]">
+                  <ChevronRight size={14} />
+                </div>
+              )}
+            </Fragment>
           ))}
         </div>
       </div>

@@ -49,6 +49,7 @@ import {
   linkedSystemLessonSourcesFromRows,
   matchesImportRowFilters,
   mergeSavedReviewResolutions,
+  openedScheduleImportReviewForMonths,
   readSavedMapping,
   readSavedWorkspace,
   resolutionExcludesImportStats,
@@ -275,19 +276,21 @@ export function ScheduleImportPanel({
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    setOpenedReviewId("");
     setLoading(true);
     setMessage("正在解析教务 Excel...");
     try {
       const parsed = await parseScheduleWorkbookFiles(files);
       const parsedMonths = new Set(parsed.map((lesson) => lesson.date.slice(0, 7)));
-      const matchingReviews = savedReviews.filter((review) => parsedMonths.has(review.month));
-      if (parsed.length > 0 && matchingReviews.length > 0) {
-        const monthLabel = matchingReviews.map((review) => review.month).join("、");
-        setMessage(`检测到 ${monthLabel} 已保存对账，请选择导入方式。`);
+      const openedMatchingReview = rawLessons.length > 0
+        ? openedScheduleImportReviewForMonths(savedReviews, openedReviewId, parsedMonths)
+        : undefined;
+      if (parsed.length > 0 && openedMatchingReview) {
+        const matchingReviews = [openedMatchingReview];
+        const monthLabel = openedMatchingReview.month;
+        setMessage(`检测到当前正在查看 ${monthLabel} 的已保存对账，请选择导入方式。`);
         confirm({
-          title: "继续本月已保存的对账？",
-          description: `新 Excel 会替换 ${monthLabel} 当前课表。继续本月对账时，相同课节会继承原处理结果，发生变化的课节会标为待复核；作为全新对账则不会继承逐课处理结果。`,
+          title: "更新正在查看的已保存对账？",
+          description: `当前正在查看「${savedReviewTitle(openedMatchingReview)}」。新 Excel 会替换下方 ${monthLabel} 的当前对账数据；继承导入会保留相同课节的原处理结果，并将发生变化的课节标为待复核。作为全新对账则不会继承逐课处理结果。`,
           confirmLabel: "继承并导入",
           secondaryLabel: "作为全新对账",
           cancelLabel: "取消",

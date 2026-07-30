@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Banknote,
@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { Lesson, SalaryAdjustment, TeacherVault } from "@/shared/types";
+import type { CourseGroup, Lesson, SalaryAdjustment, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceSummary,
@@ -35,6 +35,7 @@ import {
 import {
   attendanceLabels,
   campusName,
+  courseHasActiveStudent,
   courseTypeLabel,
   formatPrivateMoney,
   lessonAttendanceNoteText,
@@ -60,6 +61,7 @@ import {
   type LessonDetailSortDirection,
   type LessonDetailSortField
 } from "@/frontend/lib/lessonDetailSort";
+import { filterCoursesWithScopedLessons, filterSalaryDetailLessonsByDateScope } from "@/frontend/lib/salaryDetailScope";
 
 const monthNames = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 type YearTrendItem = ReturnType<typeof yearlyTrend>[number];
@@ -91,7 +93,6 @@ export function SalaryView({
   const [detailSortDirection, setDetailSortDirection] = useState<LessonDetailSortDirection>("desc");
   const { confirm, dialog } = useConfirmDialog();
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
-  const courseOptions = sortCoursesByName(vault.courseGroups);
   const year = selectedMonth.slice(0, 4);
   const breakdown = salaryBreakdown(vault, selectedMonth);
   const estimatedIncome = estimatedMonthlyIncome(vault, selectedMonth);
@@ -108,16 +109,26 @@ export function SalaryView({
     ...vault.salaryAdjustments.map((adjustment) => adjustment.month.slice(0, 4))
   ])).sort((a, b) => b.localeCompare(a));
   const monthLessons = vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth));
+  const detailDateScopeLessons = useMemo(
+    () => filterSalaryDetailLessonsByDateScope(
+      vault.lessons,
+      selectedMonth,
+      detailStartDateFilter,
+      detailEndDateFilter
+    ),
+    [detailEndDateFilter, detailStartDateFilter, selectedMonth, vault.lessons]
+  );
+  const courseOptions = useMemo(
+    () => sortCoursesByName(filterCoursesWithScopedLessons(vault.courseGroups, detailDateScopeLessons)),
+    [detailDateScopeLessons, vault.courseGroups]
+  );
   const payrollLessonCount = payrollCompletedLessonCount(vault, selectedMonth);
   const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault, selectedMonth);
   const splitMergeExcludedCount = monthLessons.filter((lesson) => isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)).length;
   const completedThisMonth = monthLessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
   const totalHours = monthLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
-  const recentLessons = [...monthLessons]
+  const recentLessons = [...detailDateScopeLessons]
     .filter((lesson) => {
-      const matchesDate =
-        (!detailStartDateFilter || lesson.date >= detailStartDateFilter) &&
-        (!detailEndDateFilter || lesson.date <= detailEndDateFilter);
       const matchesCourse = detailCourseFilter === "all" || lesson.courseGroupId === detailCourseFilter;
       const studentSearchTerms = detailStudentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const studentSearchText = [
@@ -129,7 +140,7 @@ export function SalaryView({
         studentSearchTerms.every((term) => studentSearchText.includes(term));
       const matchesCampus = detailCampusFilter === "all" || lessonCampusId(vault, lesson) === detailCampusFilter;
       const matchesStatus = detailStatusFilter === "all" || lesson.status === detailStatusFilter;
-      return matchesDate && matchesCourse && matchesStudent && matchesCampus && matchesStatus;
+      return matchesCourse && matchesStudent && matchesCampus && matchesStatus;
     })
     .sort(sortLessons);
   const sortedRecentLessons = useMemo(
@@ -147,6 +158,12 @@ export function SalaryView({
   );
   const selectedMonthAdjustments = vault.salaryAdjustments.filter((item) => item.month === selectedMonth);
   const obligation = obligationSummary(vault, selectedMonth);
+
+  useEffect(() => {
+    if (detailCourseFilter !== "all" && !courseOptions.some((course) => course.id === detailCourseFilter)) {
+      setDetailCourseFilter("all");
+    }
+  }, [courseOptions, detailCourseFilter]);
 
   function addAdjustment() {
     const title = adjustmentTitle.trim();
@@ -387,7 +404,7 @@ export function SalaryView({
           </div>
           <CardTitle>{selectedMonth} 教学数据与到课核对</CardTitle>
           <CardDescription>
-            点击上方年度趋势中的月份，可切换这里的核对月份；排课总节数来自日历课表，计薪课节来自工资统计和教务 Excel 对账后的结果。
+            点击上方年度趋势中的月份，可切换这里的核对月份；上方摘要按所选月份统计，其中排课总节数来自日历课表，计薪课节来自工资统计和教务 Excel 对账后的结果。下方明细填写开始或结束日期后可跨月查询。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -423,19 +440,34 @@ export function SalaryView({
           <div className="grid grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 md:grid-cols-2 xl:grid-cols-8">
             <div className="space-y-2">
               <label className="text-sm font-medium">开始日期</label>
-              <Input type="date" value={detailStartDateFilter} onChange={(event) => setDetailStartDateFilter(event.target.value)} />
+              <Input
+                type="date"
+                value={detailStartDateFilter}
+                max={detailEndDateFilter || undefined}
+                onChange={(event) => setDetailStartDateFilter(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">结束日期</label>
-              <Input type="date" value={detailEndDateFilter} onChange={(event) => setDetailEndDateFilter(event.target.value)} />
+              <Input
+                type="date"
+                value={detailEndDateFilter}
+                min={detailStartDateFilter || undefined}
+                onChange={(event) => setDetailEndDateFilter(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">课程筛选</label>
               <Select value={detailCourseFilter} onChange={(event) => setDetailCourseFilter(event.target.value)}>
                 <option value="all">全部课程</option>
-                {courseOptions.map((course) => (
-                  <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
-                ))}
+                {courseOptions.map((course) => {
+                  const statusLabel = salaryDetailCourseStatusLabel(vault, course);
+                  return (
+                    <option key={course.id} value={course.id}>
+                      {course.name} · {course.subject}{statusLabel ? ` · ${statusLabel}` : ""}
+                    </option>
+                  );
+                })}
               </Select>
             </div>
             <div className="space-y-2">
@@ -737,4 +769,14 @@ function isPendingLessonStatus(status: string): boolean {
 
 function isMissedAttendanceStatus(status: string): boolean {
   return status === "leave_requested" || status === "absent" || status === "cancelled" || status === "makeup_pending";
+}
+
+function salaryDetailCourseStatusLabel(vault: TeacherVault, course: CourseGroup): string {
+  if (course.status === "paused") return "已暂停";
+  if (courseHasActiveStudent(vault, course)) return "";
+  const linkedStudents = course.studentIds
+    .map((studentId) => vault.students.find((student) => student.id === studentId))
+    .filter(Boolean);
+  if (linkedStudents.some((student) => student?.status === "transition")) return "学生过渡期";
+  return linkedStudents.length > 0 ? "学生已归档" : "仅历史课节";
 }

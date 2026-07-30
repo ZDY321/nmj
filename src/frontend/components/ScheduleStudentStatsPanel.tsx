@@ -28,10 +28,10 @@ type StudentStatsGroupedLessonRows = ReturnType<typeof buildStudentStatsGroupedL
 type StudentStatsStatusFilter = "all" | Lesson["status"];
 
 const studentStatsStatusTextClasses: Record<Lesson["status"], string> = {
-  completed: "text-[#38a34a]",
+  completed: "text-[#44bd32]",
   scheduled: "text-[#ff8617]",
   cancelled: "text-[#b91c1c]",
-  makeup_pending: "text-[#fef9c3]",
+  makeup_pending: "text-[#9980fa]",
   makeup_completed: "text-[#0f766e]",
   draft: "text-[#1557c2]"
 };

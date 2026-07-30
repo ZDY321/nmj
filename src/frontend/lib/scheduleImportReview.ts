@@ -55,6 +55,7 @@ export {
   savedReviewNeedsAttention,
   savedReviewTitle,
   latestScheduleImportReviewsByMonth,
+  openedScheduleImportReviewForMonths,
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
   splitMergePayrollExcludedLessonIds,
