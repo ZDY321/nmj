@@ -13,6 +13,7 @@ import {
   courseTypeOptionsForVault,
   formatPrivateMoney,
   lessonStatusLabels,
+  lessonStatusSurfaceClass,
   lessonStatusVariant,
   lessonTimeRangeLabel
 } from "@/frontend/lib/helpers";
@@ -30,7 +31,6 @@ type StudentStatsStatusFilter = "all" | Lesson["status"];
 type ScheduleStudentStatsPanelProps = {
   amountsVisible: boolean;
   campusOptions: Campus[];
-  completedCount: number;
   courseGroupOptions: CourseGroup[];
   expandedGroupIds: string[];
   groupedLessonRows: StudentStatsGroupedLessonRows;
@@ -51,6 +51,7 @@ type ScheduleStudentStatsPanelProps = {
   setSubjectFilter: (value: string) => void;
   setMakeupFilter: (value: StudentStatsMakeupFilter) => void;
   studentLessonCount: number;
+  statusCounts: Record<Lesson["status"], number>;
   subjectOptions: string[];
   scheduledFeeTotal: number;
   completedFeeTotal: number;
@@ -73,7 +74,6 @@ type ScheduleStudentStatsPanelProps = {
 export function ScheduleStudentStatsPanel({
   amountsVisible,
   campusOptions,
-  completedCount,
   completedFeeTotal,
   courseGroupOptions,
   expandedGroupIds,
@@ -95,11 +95,24 @@ export function ScheduleStudentStatsPanel({
   setSubjectFilter,
   setMakeupFilter,
   studentLessonCount,
+  statusCounts,
   subjectOptions,
   scheduledFeeTotal,
   values,
   vault
 }: ScheduleStudentStatsPanelProps) {
+  const statusItems = [
+    "completed",
+    "scheduled",
+    "cancelled",
+    "makeup_pending",
+    "makeup_completed",
+    "draft"
+  ] satisfies Lesson["status"][];
+  const visibleStatusItems = values.statusFilter === "all"
+    ? statusItems
+    : statusItems.filter((status) => status === values.statusFilter);
+
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden">
@@ -221,20 +234,43 @@ export function ScheduleStudentStatsPanel({
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-            {[
-              { label: "实际课节", value: `${lessonCount} 节` },
-              { label: "学生课次", value: `${studentLessonCount} 人次` },
-              { label: "涉及学生", value: `${involvedStudentCount} 人` },
-              { label: "已完成", value: `${completedCount} 节` },
-              { label: "已排课课时费合计", value: formatPrivateMoney(scheduledFeeTotal, amountsVisible) },
-              { label: "已完成课时费合计", value: formatPrivateMoney(completedFeeTotal, amountsVisible) }
-            ].map((item) => (
-              <div key={item.label} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
-                <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
-                <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {[
+                { label: "课节总数", value: `${lessonCount} 节` },
+                { label: "学生课次", value: `${studentLessonCount} 人次` },
+                { label: "涉及学生", value: `${involvedStudentCount} 人` }
+              ].map((item) => (
+                <div key={item.label} className="rounded-[8px] border border-[#e8eef6] bg-[#f8fbff] p-3">
+                  <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
+                  <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <div className="text-xs font-bold text-[#64748b]">课节状态</div>
+              <div className={`mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 ${visibleStatusItems.length > 3 ? "xl:grid-cols-6" : "xl:grid-cols-3"}`}>
+                {visibleStatusItems.map((status) => (
+                  <div key={status} className={`rounded-[8px] border p-3 ${lessonStatusSurfaceClass(status)}`}>
+                    <div className="text-xs font-semibold opacity-75">{lessonStatusLabels[status]}</div>
+                    <div className="mt-1 text-base font-extrabold">{statusCounts[status]} 节</div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {[
+                { label: "已排课课时费合计", value: formatPrivateMoney(scheduledFeeTotal, amountsVisible) },
+                { label: "已完成课时费合计", value: formatPrivateMoney(completedFeeTotal, amountsVisible) }
+              ].map((item) => (
+                <div key={item.label} className="rounded-[8px] border border-[#e8eef6] bg-white p-3">
+                  <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
+                  <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>

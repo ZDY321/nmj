@@ -15,7 +15,7 @@ import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudent
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
 import { SubstituteClassLessonPanel } from "@/frontend/components/SubstituteClassLessonPanel";
 import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
-import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, ProgressChecklistCompletion, ProgressChecklistTemplate, SalaryGradeStage, StudentProgressRecord, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
+import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, LessonStatus, ProgressChecklistCompletion, ProgressChecklistTemplate, SalaryGradeStage, StudentProgressRecord, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
 import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, substituteClassPresentCount, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
@@ -746,12 +746,22 @@ export function ScheduleView({
     0
   );
   const studentStatsInvolvedStudentCount = studentStatsRows.length + studentStatsExternalStudentCount;
+  const studentStatsStatusCounts = studentStatsLessons.reduce<Record<LessonStatus, number>>((counts, lesson) => {
+    counts[lesson.status] += 1;
+    return counts;
+  }, {
+    draft: 0,
+    scheduled: 0,
+    completed: 0,
+    cancelled: 0,
+    makeup_pending: 0,
+    makeup_completed: 0
+  });
   const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
   const studentStatsCompletedFeeTotal = studentStatsLessons.reduce(
     (sum, lesson) => sum + (isCompletedLessonStatus(lesson.status) ? lesson.feeSnapshot.amount : 0),
     0
   );
-  const studentStatsCompletedCount = studentStatsLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
   const deletedLessons = sortDeletedLessons(vault.deletedLessons ?? []);
   const normalizedTrashSearch = trashSearch.trim().toLowerCase();
   const trashLessons = filterTrashLessons(vault, deletedLessons, {
@@ -3217,7 +3227,6 @@ export function ScheduleView({
         <ScheduleStudentStatsPanel
           amountsVisible={amountsVisible}
           campusOptions={campusOptions}
-          completedCount={studentStatsCompletedCount}
           courseGroupOptions={studentStatsCourseOptions}
           expandedGroupIds={expandedStudentStatsGroupIds}
           groupedLessonRows={studentStatsGroupedLessonRows}
@@ -3238,6 +3247,7 @@ export function ScheduleView({
           setSubjectFilter={setStudentStatsSubjectFilter}
           setMakeupFilter={setStudentStatsMakeupFilter}
           studentLessonCount={studentStatsStudentLessonCount}
+          statusCounts={studentStatsStatusCounts}
           subjectOptions={studentStatsSubjects}
           completedFeeTotal={studentStatsCompletedFeeTotal}
           scheduledFeeTotal={studentStatsTotalFee}
