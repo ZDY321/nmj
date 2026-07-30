@@ -13,7 +13,6 @@ import {
   courseTypeOptionsForVault,
   formatPrivateMoney,
   lessonStatusLabels,
-  lessonStatusSurfaceClass,
   lessonStatusVariant,
   lessonTimeRangeLabel
 } from "@/frontend/lib/helpers";
@@ -27,6 +26,15 @@ import type { CourseTypeFilter, StudentStatsMakeupFilter } from "@/frontend/lib/
 type StudentStatsRows = ReturnType<typeof buildStudentStatsRows>;
 type StudentStatsGroupedLessonRows = ReturnType<typeof buildStudentStatsGroupedLessonRows>;
 type StudentStatsStatusFilter = "all" | Lesson["status"];
+
+const studentStatsStatusTextClasses: Record<Lesson["status"], string> = {
+  completed: "text-[#287a4d]",
+  scheduled: "text-[#a15c24]",
+  cancelled: "text-[#b34a4a]",
+  makeup_pending: "text-[#8b6b1f]",
+  makeup_completed: "text-[#26766f]",
+  draft: "text-[#64748b]"
+};
 
 type ScheduleStudentStatsPanelProps = {
   amountsVisible: boolean;
@@ -235,41 +243,47 @@ export function ScheduleStudentStatsPanel({
             </div>
           </div>
           <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {[
-                { label: "课节总数", value: `${lessonCount} 节` },
-                { label: "学生课次", value: `${studentLessonCount} 人次` },
-                { label: "涉及学生", value: `${involvedStudentCount} 人` }
-              ].map((item) => (
-                <div key={item.label} className="rounded-[8px] border border-[#e8eef6] bg-[#f8fbff] p-3">
-                  <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
-                  <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
-                </div>
-              ))}
+            <div>
+              <div className="text-xs font-bold text-[#58708a]">统计概览</div>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {[
+                  { label: "课节总数", value: `${lessonCount} 节` },
+                  { label: "学生课次", value: `${studentLessonCount} 人次` },
+                  { label: "涉及学生", value: `${involvedStudentCount} 人` }
+                ].map((item) => (
+                  <div key={item.label} className="rounded-[8px] border border-[#d7e2ef] bg-[#edf4fb] p-3">
+                    <div className="text-xs font-semibold text-[#58708a]">{item.label}</div>
+                    <div className="mt-1 break-words text-base font-extrabold text-[#102a43]">{item.value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div>
               <div className="text-xs font-bold text-[#64748b]">课节状态</div>
               <div className={`mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 ${visibleStatusItems.length > 3 ? "xl:grid-cols-6" : "xl:grid-cols-3"}`}>
                 {visibleStatusItems.map((status) => (
-                  <div key={status} className={`rounded-[8px] border p-3 ${lessonStatusSurfaceClass(status)}`}>
-                    <div className="text-xs font-semibold opacity-75">{lessonStatusLabels[status]}</div>
-                    <div className="mt-1 text-base font-extrabold">{statusCounts[status]} 节</div>
+                  <div key={status} className="rounded-[8px] border border-[#e1e4e8] bg-[#f5f6f8] p-3">
+                    <div className={`text-xs font-semibold ${studentStatsStatusTextClasses[status]}`}>{lessonStatusLabels[status]}</div>
+                    <div className={`mt-1 text-base font-extrabold ${studentStatsStatusTextClasses[status]}`}>{statusCounts[status]} 节</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {[
-                { label: "已排课课时费合计", value: formatPrivateMoney(scheduledFeeTotal, amountsVisible) },
-                { label: "已完成课时费合计", value: formatPrivateMoney(completedFeeTotal, amountsVisible) }
-              ].map((item) => (
-                <div key={item.label} className="rounded-[8px] border border-[#e8eef6] bg-white p-3">
-                  <div className="text-xs font-semibold text-[#64748b]">{item.label}</div>
-                  <div className="mt-1 break-words text-base font-extrabold text-[#061226]">{item.value}</div>
-                </div>
-              ))}
+            <div>
+              <div className="text-xs font-bold text-[#57715d]">课时费汇总</div>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[
+                  { label: "已排课课时费合计", value: formatPrivateMoney(scheduledFeeTotal, amountsVisible) },
+                  { label: "已完成课时费合计", value: formatPrivateMoney(completedFeeTotal, amountsVisible) }
+                ].map((item) => (
+                  <div key={item.label} className="rounded-[8px] border border-[#dbe6da] bg-[#f2f6f1] p-3">
+                    <div className="text-xs font-semibold text-[#57715d]">{item.label}</div>
+                    <div className="mt-1 break-words text-base font-extrabold text-[#23412b]">{item.value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </CardContent>
