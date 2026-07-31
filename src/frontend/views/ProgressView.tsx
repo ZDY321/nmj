@@ -29,7 +29,6 @@ import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
 import {
   campusName,
   compareByName,
-  courseHasActiveStudent,
   courseSubject,
   courseTypeLabel,
   findStudent,
@@ -45,6 +44,7 @@ import {
   weekdayLabels,
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
+import { progressCourseMatchesStudentStatusScope, type ProgressStudentStatusScope } from "@/frontend/lib/progressStudentScope";
 import { ProgressChecklistView } from "@/frontend/views/ProgressChecklistView";
 import type {
   CourseGroup,
@@ -63,7 +63,6 @@ type HomeworkFilter = "all" | StudentHomeworkStatus;
 type ProgressFilter = "all" | StudentProgressStatus;
 type ProgressSortOption = "smart" | "today" | "course_name" | "campus" | "grade";
 type ProgressSectionView = "ledger" | "checklist";
-type StudentStatusScope = "active" | "archived" | "all";
 
 type ProgressDraft = {
   progressText: string;
@@ -185,7 +184,7 @@ export function ProgressView({
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [homeworkFilter, setHomeworkFilter] = useState<HomeworkFilter>("all");
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
-  const [studentStatusScope, setStudentStatusScope] = useState<StudentStatusScope>("active");
+  const [studentStatusScope, setStudentStatusScope] = useState<ProgressStudentStatusScope>("active");
   const [sortOption, setSortOption] = useState<ProgressSortOption>("smart");
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
@@ -214,7 +213,7 @@ export function ProgressView({
     [vault]
   );
 
-  const scopedRows = rows.filter((row) => rowMatchesStudentStatusScope(vault, row, studentStatusScope));
+  const scopedRows = rows.filter((row) => progressCourseMatchesStudentStatusScope(vault, row.course, row.students, studentStatusScope));
   const courseOptions = sortCoursesByName(uniqueCoursesFromRows(scopedRows));
   const courseOptionIds = courseOptions.map((course) => course.id).join("|");
 
@@ -487,7 +486,9 @@ export function ProgressView({
             <Select value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
               <option value="all">全部课程</option>
               {courseOptions.map((course) => (
-                <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
+                <option key={course.id} value={course.id}>
+                  {course.name} · {course.subject}{course.status === "paused" ? " · 结课" : ""}
+                </option>
               ))}
             </Select>
             <Select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
@@ -509,7 +510,7 @@ export function ProgressView({
                 <option key={subject} value={subject}>{subject}</option>
               ))}
             </Select>
-            <Select value={studentStatusScope} onChange={(event) => setStudentStatusScope(event.target.value as StudentStatusScope)}>
+            <Select value={studentStatusScope} onChange={(event) => setStudentStatusScope(event.target.value as ProgressStudentStatusScope)}>
               <option value="active">在读学生</option>
               <option value="all">全部学生</option>
               <option value="archived">已归档学生</option>
@@ -942,14 +943,6 @@ function uniqueCoursesFromRows(rows: ProgressRow[]): CourseGroup[] {
   const courses = new Map<string, CourseGroup>();
   rows.forEach((row) => courses.set(row.course.id, row.course));
   return Array.from(courses.values());
-}
-
-function rowMatchesStudentStatusScope(vault: TeacherVault, row: ProgressRow, scope: StudentStatusScope): boolean {
-  if (scope === "all") return true;
-  if (scope === "archived") {
-    return row.course.status === "paused" || row.students.some((student) => student.status === "paused");
-  }
-  return row.course.status === "active" && courseHasActiveStudent(vault, row.course);
 }
 
 function buildProgressRows(vault: TeacherVault): ProgressRow[] {

@@ -139,7 +139,7 @@ describe("course statistics status labels", () => {
     });
 
     expect(courseStatsStatusLabel(vault, makeCourse("active", ["student_active"]))).toBe("");
-    expect(courseStatsStatusLabel(vault, makeCourse("paused", ["student_active"], "paused"))).toBe("已暂停");
+    expect(courseStatsStatusLabel(vault, makeCourse("paused", ["student_active"], "paused"))).toBe("结课");
     expect(courseStatsStatusLabel(vault, makeCourse("transition", ["student_transition"]))).toBe("学生过渡期");
     expect(courseStatsStatusLabel(vault, makeCourse("archived", ["student_archived"]))).toBe("学生已归档");
     expect(courseStatsStatusLabel(vault, makeCourse("history", []))).toBe("仅历史课节");

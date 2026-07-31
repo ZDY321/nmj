@@ -522,7 +522,7 @@ export function courseHasActiveStudent(vault: TeacherVault, course: CourseGroup)
 }
 
 export function courseStatsStatusLabel(vault: TeacherVault, course: CourseGroup): string {
-  if (course.status === "paused") return "已暂停";
+  if (course.status === "paused") return "结课";
   if (courseHasActiveStudent(vault, course)) return "";
   const linkedStudents = course.studentIds
     .map((studentId) => vault.students.find((student) => student.id === studentId))
