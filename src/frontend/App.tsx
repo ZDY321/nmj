@@ -172,6 +172,7 @@ export function App() {
   const [calendarOverviewFocus, setCalendarOverviewFocus] = useState<(CalendarOverviewFocusState & { nonce: number }) | null>(null);
   const [payrollReviewFocus, setPayrollReviewFocus] = useState<{ panel: PayrollPanelFocus; nonce: number } | null>(null);
   const [lessonFeedbackFocus, setLessonFeedbackFocus] = useState<{ lessonId: string; nonce: number } | null>(null);
+  const [lessonFeedbackSyncNonce, setLessonFeedbackSyncNonce] = useState(0);
   const [aiScheduleSession, setAiScheduleSession] = useState<AiScheduleSession | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
   const cloudVersionRef = useRef("");
@@ -452,6 +453,7 @@ export function App() {
       setSyncMessage("");
       setSaveState("idle");
       setSyncCountdownSeconds(syncCheckIntervalSeconds);
+      setLessonFeedbackSyncNonce((current) => current + 1);
       rememberUnlockedSession({ vault: nextVault, cloudVersion: nextCloudVersion });
     } catch (error) {
       setSyncState("error");
@@ -1366,6 +1368,7 @@ export function App() {
     const timer = window.setInterval(() => {
       if (!document.hidden && syncState !== "outdated" && syncState !== "conflict") {
         void checkCloudVersion(true);
+        setLessonFeedbackSyncNonce((current) => current + 1);
       }
     }, syncCheckIntervalSeconds * 1000);
     return () => {
@@ -2075,7 +2078,7 @@ export function App() {
                   />
                 )}
                 {view === "feedback" && (
-                  <FeedbackView vault={vault} token={token} password={password} focusRequest={lessonFeedbackFocus} />
+                  <FeedbackView vault={vault} token={token} password={password} focusRequest={lessonFeedbackFocus} syncNonce={lessonFeedbackSyncNonce} />
                 )}
                 {view === "students" && (
                   <StudentsView

@@ -13,6 +13,7 @@ import {
   lessonFeedbackIndexDocType,
   lessonFeedbackIndexItem,
   lessonFeedbackRecordDocType,
+  upsertLessonFeedbackIndexItem,
   type LessonFeedbackIndexDocument,
   type LessonFeedbackIndexItem,
   type LessonFeedbackRecord
@@ -37,12 +38,14 @@ export function FeedbackView({
   vault,
   token,
   password,
-  focusRequest
+  focusRequest,
+  syncNonce = 0
 }: {
   vault: TeacherVault;
   token: string;
   password: string;
   focusRequest?: { lessonId: string; nonce: number } | null;
+  syncNonce?: number;
 }) {
   const courses = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
   const [selectedCourseId, setSelectedCourseId] = useState("");
@@ -65,9 +68,12 @@ export function FeedbackView({
   const recordVersionsRef = useRef(new Map<string, string>());
   const savedSignaturesRef = useRef(new Map<string, string>());
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  const syncingRef = useRef(false);
+  const saveStateRef = useRef<SaveState>(saveState);
 
   indexRef.current = indexDocument;
   activeRecordRef.current = activeRecord;
+  saveStateRef.current = saveState;
 
   const selectedCourse = courses.find((course) => course.id === selectedCourseId);
   const lessons = useMemo(
@@ -166,6 +172,25 @@ export function FeedbackView({
     return () => window.clearTimeout(timer);
   }, [activeRecord]);
 
+  useEffect(() => {
+    if (!indexLoaded || !syncNonce) return;
+    void syncFromCloud();
+  }, [syncNonce]);
+
+  useEffect(() => {
+    if (!indexLoaded) return;
+    const handleWake = () => {
+      if (document.hidden) return;
+      void syncFromCloud();
+    };
+    window.addEventListener("focus", handleWake);
+    document.addEventListener("visibilitychange", handleWake);
+    return () => {
+      window.removeEventListener("focus", handleWake);
+      document.removeEventListener("visibilitychange", handleWake);
+    };
+  }, [indexLoaded, password, token]);
+
   async function loadRecord(recordId: string, cancelled = false): Promise<boolean> {
     setSaveState("loading");
     setMessage("");
@@ -215,15 +240,36 @@ export function FeedbackView({
         recordVersionsRef.current.set(current.id, recordResult.updatedAt);
 
         const nextItem = lessonFeedbackIndexItem(current);
-        const nextIndex = upsertIndexItem(indexRef.current, nextItem);
-        const indexResult = await saveEncryptedDocument(
-          token,
-          password,
-          lessonFeedbackIndexDocType,
-          lessonFeedbackIndexDocKey,
-          nextIndex,
-          { expectedUpdatedAt: indexVersionRef.current, force }
-        );
+        let nextIndex = upsertIndexItem(indexRef.current, nextItem);
+        let indexResult;
+        try {
+          indexResult = await saveEncryptedDocument(
+            token,
+            password,
+            lessonFeedbackIndexDocType,
+            lessonFeedbackIndexDocKey,
+            nextIndex,
+            { expectedUpdatedAt: indexVersionRef.current, force }
+          );
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 409) throw error;
+          // 索引条目之间互不冲突：重新读取云端后合并本条，避免覆盖其他设备新增的反馈。
+          const remote = await loadEncryptedDocumentWithVersion<LessonFeedbackIndexDocument>(
+            token,
+            password,
+            lessonFeedbackIndexDocType,
+            lessonFeedbackIndexDocKey
+          );
+          nextIndex = upsertIndexItem(normalizeIndex(remote.value), nextItem);
+          indexResult = await saveEncryptedDocument(
+            token,
+            password,
+            lessonFeedbackIndexDocType,
+            lessonFeedbackIndexDocKey,
+            nextIndex,
+            { expectedUpdatedAt: remote.updatedAt, force }
+          );
+        }
         indexVersionRef.current = indexResult.updatedAt;
         indexRef.current = nextIndex;
         setIndexDocument(nextIndex);
@@ -271,6 +317,41 @@ export function FeedbackView({
     setActiveRecord(next);
     setSaveState("idle");
     setMessage(lesson ? "已带入本课次的学生、到课状态、课堂内容与作业。" : "已按当前课程名单创建反馈。" );
+  }
+
+  async function syncFromCloud(): Promise<void> {
+    if (!token || !password || syncingRef.current) return;
+    if (saveStateRef.current === "saving" || saveStateRef.current === "loading") return;
+    syncingRef.current = true;
+    try {
+      const { value, updatedAt } = await loadEncryptedDocumentWithVersion<LessonFeedbackIndexDocument>(
+        token,
+        password,
+        lessonFeedbackIndexDocType,
+        lessonFeedbackIndexDocKey
+      );
+      if (updatedAt && updatedAt === indexVersionRef.current) return;
+      const nextIndex = normalizeIndex(value);
+      indexVersionRef.current = updatedAt;
+      indexRef.current = nextIndex;
+      setIndexDocument(nextIndex);
+
+      const current = activeRecordRef.current;
+      if (!current) return;
+      if (savedSignaturesRef.current.get(current.id) !== recordSignature(current)) {
+        setMessage("云端反馈历史已更新。当前反馈有未保存的修改，已为你保留，可保存后再重新读取。");
+        return;
+      }
+      const remoteItem = nextIndex.items.find((item) => item.id === current.id);
+      if (!remoteItem) return;
+      if (remoteItem.updatedAt === current.updatedAt) return;
+      await loadRecord(current.id);
+      setMessage("已同步云端最新反馈。");
+    } catch {
+      // 静默同步失败不打断当前编辑，等待下一次同步或手动重新读取。
+    } finally {
+      syncingRef.current = false;
+    }
   }
 
   async function reloadFromCloud(): Promise<void> {
@@ -642,11 +723,7 @@ function normalizeIndex(value: LessonFeedbackIndexDocument | null): LessonFeedba
 }
 
 function upsertIndexItem(index: LessonFeedbackIndexDocument, item: LessonFeedbackIndexItem): LessonFeedbackIndexDocument {
-  return {
-    version: 1,
-    items: [item, ...index.items.filter((current) => current.id !== item.id)],
-    updatedAt: new Date().toISOString()
-  };
+  return upsertLessonFeedbackIndexItem(index, item);
 }
 
 function mergeIndexItems(index: LessonFeedbackIndexDocument, items: LessonFeedbackIndexItem[]): LessonFeedbackIndexDocument {

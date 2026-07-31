@@ -170,6 +170,18 @@ export function createLessonFeedbackRecord(
   };
 }
 
+export function upsertLessonFeedbackIndexItem(
+  index: LessonFeedbackIndexDocument,
+  item: LessonFeedbackIndexItem,
+  now = new Date().toISOString()
+): LessonFeedbackIndexDocument {
+  return {
+    version: 1,
+    items: [item, ...index.items.filter((current) => current.id !== item.id)],
+    updatedAt: now
+  };
+}
+
 export function lessonFeedbackIndexItem(record: LessonFeedbackRecord): LessonFeedbackIndexItem {
   return {
     id: record.id,
