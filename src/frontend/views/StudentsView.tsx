@@ -1352,13 +1352,13 @@ export function StudentsView({
       const selectedIdSet = new Set(selectedCourses.map((course) => course.id));
       onUpdateCourses(selectedCourses.map((course) => ({ ...course, status })));
       setSelectedCourseIds((current) => current.filter((id) => !selectedIdSet.has(id)));
-      setCourseArchiveMessage(`${status === "active" ? "启用" : "暂停"}完成：已处理 ${selectedCourses.length} 个课程档案。`);
+      setCourseArchiveMessage(`${status === "active" ? "启用" : "结课"}完成：已处理 ${selectedCourses.length} 个课程档案。`);
     };
     if (status === "paused") {
       confirm({
-        title: `暂停选中的 ${selectedCourses.length} 个课程？`,
-        description: "暂停课程后仍会保留历史课时；需要继续排课时可重新启用。",
-        confirmLabel: "暂停",
+        title: `将选中的 ${selectedCourses.length} 个课程设为结课？`,
+        description: "课程结课后仍会保留历史课时；需要继续排课时可重新启用。",
+        confirmLabel: "结课",
         tone: "danger",
         onConfirm: apply
       });
@@ -2045,4 +2045,3 @@ function matchesGradeFilter(grade: string | undefined, filter: string): boolean 
 function studentOptionLabel(student: Student): string {
   return `${student.name} · ${student.grade || "未设置年级"}`;
 }
-

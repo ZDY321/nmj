@@ -161,7 +161,7 @@ export function NewCourseFormPanel({
             </Select>
             <Select value={courseStatusInput} onChange={(event) => setCourseStatusInput(event.target.value as CourseGroup["status"])}>
               <option value="active">启用</option>
-              <option value="paused">暂停</option>
+              <option value="paused">结课</option>
             </Select>
           </div>
 

@@ -521,6 +521,16 @@ export function courseHasActiveStudent(vault: TeacherVault, course: CourseGroup)
   return activeStudentIdsForCourse(vault, course).length > 0;
 }
 
+export function courseStatsStatusLabel(vault: TeacherVault, course: CourseGroup): string {
+  if (course.status === "paused") return "已暂停";
+  if (courseHasActiveStudent(vault, course)) return "";
+  const linkedStudents = course.studentIds
+    .map((studentId) => vault.students.find((student) => student.id === studentId))
+    .filter(Boolean);
+  if (linkedStudents.some((student) => student?.status === "transition")) return "学生过渡期";
+  return linkedStudents.length > 0 ? "学生已归档" : "仅历史课节";
+}
+
 export function courseRequiresSameGradeStudents(vault: TeacherVault, type: CourseType, feeRule?: FeeRule): boolean {
   if (type === "one_on_one" || type === "trial") return false;
   if (type === "class" || type === "one_on_two") return true;

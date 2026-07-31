@@ -9,6 +9,7 @@ import { TimeTextInput } from "@/components/ui/time-text-input";
 import type { Campus, CourseGroup, Lesson, TeacherVault } from "@/shared/types";
 import {
   attendanceLabels,
+  courseStatsStatusLabel,
   courseTypeLabel,
   courseTypeOptionsForVault,
   formatPrivateMoney,
@@ -152,9 +153,14 @@ export function ScheduleStudentStatsPanel({
                 <label className="text-sm font-medium">课程</label>
                 <Select value={values.courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
                   <option value="all">全部课程</option>
-                  {courseGroupOptions.map((course) => (
-                    <option key={course.id} value={course.id}>{course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}</option>
-                  ))}
+                  {courseGroupOptions.map((course) => {
+                    const statusLabel = courseStatsStatusLabel(vault, course);
+                    return (
+                      <option key={course.id} value={course.id}>
+                        {course.name} · {course.subject} · {courseTypeLabel(vault, course.type)}{statusLabel ? ` · ${statusLabel}` : ""}
+                      </option>
+                    );
+                  })}
                 </Select>
               </div>
               <div className="space-y-2">

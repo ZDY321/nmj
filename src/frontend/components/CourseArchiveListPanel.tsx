@@ -107,7 +107,7 @@ export function CourseArchiveListPanel({
           <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 sm:justify-end">
             <Badge variant="secondary" className="w-fit">
               {visibleCourses.length} / {vault.courseGroups.length} 个
-              {courseStatusFilter !== "all" ? ` · ${courseStatusFilter === "active" ? "启用" : "暂停"}` : ""}
+              {courseStatusFilter !== "all" ? ` · ${courseStatusFilter === "active" ? "启用" : "结课"}` : ""}
             </Badge>
             <Button
               type="button"
@@ -144,7 +144,7 @@ export function CourseArchiveListPanel({
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <Select value={courseStatusFilter} onChange={(event) => setCourseStatusFilter(event.target.value as "active" | "paused" | "all")} className="h-10">
             <option value="active">启用课程</option>
-            <option value="paused">暂停课程</option>
+            <option value="paused">结课课程</option>
             <option value="all">全部课程</option>
           </Select>
           <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
@@ -186,7 +186,7 @@ export function CourseArchiveListPanel({
           </label>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" className="h-8 border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedCoursesStatus("active")}>启用</Button>
-            <Button type="button" size="sm" variant="destructive" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedCoursesStatus("paused")}>暂停</Button>
+            <Button type="button" size="sm" variant="destructive" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedCoursesStatus("paused")}>结课</Button>
           </div>
         </div>
         <div className="max-h-[520px] space-y-0 overflow-y-auto pr-0 sm:pr-2">
@@ -235,7 +235,7 @@ export function CourseArchiveListPanel({
                   </div>
                   <div className="flex w-full flex-wrap items-center gap-1 border-t border-[#eef2f7] pt-2 sm:w-auto sm:shrink-0 sm:justify-end sm:border-t-0 sm:pt-0">
                     <Badge variant={effectivelyPaused ? "secondary" : "sage"}>
-                      {effectivelyPaused ? "暂停" : "启用"}
+                      {effectivelyPaused ? "结课" : "启用"}
                     </Badge>
                     <span className="mr-1 max-w-[96px] truncate text-xs text-(--color-muted-foreground)" title={campusName(vault, course.defaultCampusId)}>
                       {campusName(vault, course.defaultCampusId)}
@@ -266,7 +266,7 @@ export function CourseArchiveListPanel({
                         event.stopPropagation();
                         confirm({
                           title: `删除课程「${course.name}」？`,
-                          description: "删除课程不会自动清理历史课时。已有引用时建议先暂停课程。",
+                          description: "删除课程不会自动清理历史课时。已有引用时建议先将课程设为结课。",
                           confirmLabel: "删除",
                           tone: "danger",
                           onConfirm: () => onDeleteCourse(course.id)

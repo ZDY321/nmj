@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyVault } from "@/frontend/lib/sampleData";
-import { courseRequiresSameGradeStudents, linkSyncedLessonsToPreviousLessons, previousLesson } from "@/frontend/lib/helpers";
+import { courseRequiresSameGradeStudents, courseStatsStatusLabel, linkSyncedLessonsToPreviousLessons, previousLesson } from "@/frontend/lib/helpers";
 import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
 
 const course: CourseGroup = {
@@ -120,5 +120,28 @@ describe("course student grade restrictions", () => {
       mode: "class_headcount",
       classFeeTiers: [{ id: "tier_1_plus", minStudents: 3, baseFee: 80, perStudentFee: 10 }]
     })).toBe(true);
+  });
+});
+
+describe("course statistics status labels", () => {
+  it("distinguishes paused, transition, archived, and history-only courses", () => {
+    const vault = createEmptyVault("tester");
+    vault.students = [
+      { id: "student_active", name: "Active", status: "active" },
+      { id: "student_transition", name: "Transition", status: "transition" },
+      { id: "student_archived", name: "Archived", status: "paused" }
+    ];
+    const makeCourse = (id: string, studentIds: string[], status: CourseGroup["status"] = "active"): CourseGroup => ({
+      ...course,
+      id,
+      studentIds,
+      status
+    });
+
+    expect(courseStatsStatusLabel(vault, makeCourse("active", ["student_active"]))).toBe("");
+    expect(courseStatsStatusLabel(vault, makeCourse("paused", ["student_active"], "paused"))).toBe("已暂停");
+    expect(courseStatsStatusLabel(vault, makeCourse("transition", ["student_transition"]))).toBe("学生过渡期");
+    expect(courseStatsStatusLabel(vault, makeCourse("archived", ["student_archived"]))).toBe("学生已归档");
+    expect(courseStatsStatusLabel(vault, makeCourse("history", []))).toBe("仅历史课节");
   });
 });

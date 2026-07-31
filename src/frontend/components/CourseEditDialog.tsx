@@ -152,7 +152,7 @@ export function CourseEditDialog({
                   className="md:col-span-2"
                 >
                   <option value="active">启用</option>
-                  <option value="paused">暂停</option>
+                  <option value="paused">结课</option>
                 </Select>
               </div>
 

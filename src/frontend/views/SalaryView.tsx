@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { CourseGroup, Lesson, SalaryAdjustment, TeacherVault } from "@/shared/types";
+import type { Lesson, SalaryAdjustment, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
 import {
   attendanceSummary,
@@ -35,7 +35,7 @@ import {
 import {
   attendanceLabels,
   campusName,
-  courseHasActiveStudent,
+  courseStatsStatusLabel,
   courseTypeLabel,
   formatPrivateMoney,
   lessonAttendanceNoteText,
@@ -461,7 +461,7 @@ export function SalaryView({
               <Select value={detailCourseFilter} onChange={(event) => setDetailCourseFilter(event.target.value)}>
                 <option value="all">全部课程</option>
                 {courseOptions.map((course) => {
-                  const statusLabel = salaryDetailCourseStatusLabel(vault, course);
+                  const statusLabel = courseStatsStatusLabel(vault, course);
                   return (
                     <option key={course.id} value={course.id}>
                       {course.name} · {course.subject}{statusLabel ? ` · ${statusLabel}` : ""}
@@ -769,14 +769,4 @@ function isPendingLessonStatus(status: string): boolean {
 
 function isMissedAttendanceStatus(status: string): boolean {
   return status === "leave_requested" || status === "absent" || status === "cancelled" || status === "makeup_pending";
-}
-
-function salaryDetailCourseStatusLabel(vault: TeacherVault, course: CourseGroup): string {
-  if (course.status === "paused") return "已暂停";
-  if (courseHasActiveStudent(vault, course)) return "";
-  const linkedStudents = course.studentIds
-    .map((studentId) => vault.students.find((student) => student.id === studentId))
-    .filter(Boolean);
-  if (linkedStudents.some((student) => student?.status === "transition")) return "学生过渡期";
-  return linkedStudents.length > 0 ? "学生已归档" : "仅历史课节";
 }

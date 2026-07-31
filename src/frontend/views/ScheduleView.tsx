@@ -85,6 +85,7 @@ import {
   timesOverlap
 } from "@/frontend/lib/scheduleViewHelpers";
 import { checklistCompletionAppliesToSource } from "@/frontend/lib/progressChecklist";
+import { filterCoursesWithScopedLessons } from "@/frontend/lib/salaryDetailScope";
 import type { CalendarFocus, CourseTypeFilter, ExternalLessonReturnTarget, InternalLessonReturnTarget, LessonReturnTarget, LessonScope, MakeupLessonFilter, SchedulePanel, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
 
 function dateWithWeekday(date: string): string {
@@ -340,11 +341,9 @@ export function ScheduleView({
   const weekStartPreference = weekStartsOn(vault);
   const initialWeekDates = weekDatesFor(initialFocusedDate, weekStartPreference);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
-  const studentStatsCourseOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
   const studentOptions = sortStudentsByName(vault.students);
   const courseSelectionOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
   const courseSelectionOptionIds = courseSelectionOptions.map((course) => course.id).join("|");
-  const studentStatsCourseOptionIds = studentStatsCourseOptions.map((course) => course.id).join("|");
   const firstCourseId = courseSelectionOptions[0]?.id ?? "";
   const [singleCourseGroupId, setSingleCourseGroupId] = useState(firstCourseId);
   const [singleCourseSearch, setSingleCourseSearch] = useState("");
@@ -409,6 +408,24 @@ export function ScheduleView({
   const [studentStatsStartTime, setStudentStatsStartTime] = useState("");
   const [studentStatsEndTime, setStudentStatsEndTime] = useState("");
   const [expandedStudentStatsGroupIds, setExpandedStudentStatsGroupIds] = useState<string[]>([]);
+  const studentStatsDateScopeLessons = useMemo(() => filterStudentStatsLessons(vault, {
+    campusFilter: "all",
+    courseFilter: "all",
+    courseTypeFilter: "all",
+    dateEnd: studentStatsDateEnd,
+    dateStart: studentStatsDateStart,
+    endTime: "",
+    normalizedNameFilter: "",
+    startTime: "",
+    statusFilter: "all",
+    subjectFilter: "all",
+    makeupFilter: "all"
+  }), [studentStatsDateEnd, studentStatsDateStart, vault]);
+  const studentStatsCourseOptions = useMemo(
+    () => sortCoursesByName(filterCoursesWithScopedLessons(vault.courseGroups, studentStatsDateScopeLessons)),
+    [studentStatsDateScopeLessons, vault.courseGroups]
+  );
+  const studentStatsCourseOptionIds = studentStatsCourseOptions.map((course) => course.id).join("|");
   const [lessonScope, setLessonScope] = useState<LessonScope>("month");
   const [lessonMonth, setLessonMonth] = useState(initialFocusedMonth);
   const [lessonDay, setLessonDay] = useState(initialFocusedDate);

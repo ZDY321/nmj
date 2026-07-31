@@ -694,7 +694,6 @@ export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentS
       const course = getCourse(vault, lesson.courseGroupId);
       const campusId = lesson.campusId ?? course?.defaultCampusId;
       const studentIds = lessonStudentIds(lesson);
-      const isVisibleCourse = course != null && course.status === "active" && courseHasActiveStudent(vault, course);
       const substituteSearchText = [
         lessonDisplayName(vault, lesson),
         lessonDisplaySubject(vault, lesson),
@@ -710,7 +709,7 @@ export function filterStudentStatsLessons(vault: TeacherVault, filters: StudentS
           studentIds.some((studentId) =>
             (findStudent(vault, studentId)?.name ?? "").toLowerCase().includes(filters.normalizedNameFilter)
           );
-      const matchesCourse = filters.courseFilter === "all" ? (isSubstitute || isVisibleCourse) : lesson.courseGroupId === filters.courseFilter;
+      const matchesCourse = filters.courseFilter === "all" || lesson.courseGroupId === filters.courseFilter;
       const matchesType = filters.courseTypeFilter === "all" || lesson.type === filters.courseTypeFilter;
       const subject = isSubstitute ? lessonDisplaySubject(vault, lesson) : course?.subject;
       const matchesSubject = filters.subjectFilter === "all" || subject === filters.subjectFilter;
