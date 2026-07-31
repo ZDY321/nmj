@@ -299,7 +299,8 @@ export function ScheduleView({
   onApplyAiDraft,
   onReturnToView,
   onSaveChecklistCompletions,
-  onOpenProgressChecklist
+  onOpenProgressChecklist,
+  onOpenLessonFeedback
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
@@ -333,6 +334,7 @@ export function ScheduleView({
   onReturnToView: (target: ExternalLessonReturnTarget) => void;
   onSaveChecklistCompletions: (completions: ProgressChecklistCompletion[]) => void;
   onOpenProgressChecklist?: (lesson: Lesson) => void;
+  onOpenLessonFeedback?: (lesson: Lesson) => void;
 }) {
   const initialFocusedDate = calendarFocus?.date ?? todayIso();
   const initialFocusedMonth = initialFocusedDate.slice(0, 7);
@@ -3383,6 +3385,7 @@ export function ScheduleView({
             onGoBackToPreviousLesson={goBackToPreviousLesson}
             onOpenLesson={openLessonInRecords}
             onOpenProgressChecklist={onOpenProgressChecklist}
+            onOpenLessonFeedback={onOpenLessonFeedback}
             checklistSyncMessage={checklistSyncMessage}
             checklistSyncSummary={selectedChecklistSyncSummary}
             checklistPerStudentStatus={selectedChecklistPerStudentStatus}

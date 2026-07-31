@@ -5,6 +5,7 @@ import {
   CalendarDays,
   BarChart3,
   FileCheck2,
+  MessageSquare,
   ShieldCheck,
   Users,
   WalletCards
@@ -32,12 +33,13 @@ import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFee
 import { durationHours, timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
-export type ViewKey = "today" | "calendar" | "schedule" | "progress" | "students" | "grades" | "payroll" | "salary" | "admin";
+export type ViewKey = "today" | "calendar" | "schedule" | "progress" | "feedback" | "students" | "grades" | "payroll" | "salary" | "admin";
 
 export const viewTitles: Record<ViewKey, string> = {
   today: "今日提醒",
   calendar: "日历总览",
   progress: "进度与作业",
+  feedback: "课后反馈",
   schedule: "排课与课时",
   students: "档案信息",
   grades: "成绩记录",
@@ -52,6 +54,7 @@ export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: s
   { key: "schedule", icon: CalendarDays, label: "排课与课时" },
   { key: "students", icon: Users, label: "档案信息" },
   { key: "progress", icon: BookOpen, label: "进度与作业" },
+  { key: "feedback", icon: MessageSquare, label: "课后反馈" },
   { key: "grades", icon: BarChart3, label: "成绩记录" },
   { key: "payroll", icon: FileCheck2, label: "工资核对" },
   { key: "salary", icon: WalletCards, label: "数据统计" }

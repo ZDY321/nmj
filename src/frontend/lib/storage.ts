@@ -350,7 +350,8 @@ export async function saveEncryptedDocument<T>(
   password: string,
   docType: string,
   docKey: string,
-  value: T
+  value: T,
+  options: { expectedUpdatedAt?: string; force?: boolean } = {}
 ): Promise<{ updatedAt: string }> {
   const encrypted = await encryptJson(value, password);
   const result = await apiRequest<{ ok: boolean; updatedAt: string }>(
@@ -359,11 +360,32 @@ export async function saveEncryptedDocument<T>(
       method: "PUT",
       token,
       body: JSON.stringify({
-        encryptedPayload: JSON.stringify(encrypted)
+        encryptedPayload: JSON.stringify(encrypted),
+        expectedUpdatedAt: options.expectedUpdatedAt,
+        force: options.force
       })
     }
   );
   return { updatedAt: result.updatedAt };
+}
+
+export async function deleteEncryptedDocument(
+  token: string,
+  docType: string,
+  docKey: string,
+  options: { expectedUpdatedAt?: string; force?: boolean } = {}
+): Promise<void> {
+  await apiRequest<{ ok: boolean }>(
+    `/api/encrypted-documents/${encodeURIComponent(docType)}/${encodeURIComponent(docKey)}`,
+    {
+      method: "DELETE",
+      token,
+      body: JSON.stringify({
+        expectedUpdatedAt: options.expectedUpdatedAt,
+        force: options.force
+      })
+    }
+  );
 }
 
 export async function logoutCloud(token: string): Promise<void> {

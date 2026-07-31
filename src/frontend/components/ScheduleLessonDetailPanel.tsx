@@ -8,6 +8,7 @@ import {
   CornerUpLeft,
   Link2,
   NotebookPen,
+  MessageSquare,
   RotateCcw,
   Save,
   Trash2
@@ -82,6 +83,7 @@ type ScheduleLessonDetailPanelProps = {
   onGoBackToPreviousLesson: () => void;
   onOpenLesson: (lesson: Lesson) => void;
   onOpenProgressChecklist?: (lesson: Lesson) => void;
+  onOpenLessonFeedback?: (lesson: Lesson) => void;
   onSyncChecklistCompletions?: (source: LessonChecklistSyncSource) => void;
   onSelectDetailMakeupStudentIds: (studentIds: string[]) => void;
   onSelectedCourseChange: (courseId: string) => void;
@@ -165,6 +167,7 @@ export function ScheduleLessonDetailPanel({
   onGoBackToPreviousLesson,
   onOpenLesson,
   onOpenProgressChecklist,
+  onOpenLessonFeedback,
   onSyncChecklistCompletions,
   onSelectDetailMakeupStudentIds,
   onSelectedCourseChange,
@@ -265,6 +268,17 @@ export function ScheduleLessonDetailPanel({
                 className="border-[#bfdbfe] bg-[#f8fbff] text-[#1557c2] hover:border-[#93c5fd] hover:bg-[#eff6ff] hover:text-[#0f4aa0]"
               >
                 <CornerUpLeft size={15} /> {lessonReturnTarget.label}
+              </Button>
+            )}
+            {!isSubstituteClass && onOpenLessonFeedback && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onOpenLessonFeedback(selected)}
+                className="border-[#fdba74] bg-[#fff7ed] text-[#9a3412] hover:border-[#fb923c] hover:bg-[#ffedd5]"
+              >
+                <MessageSquare size={15} /> 课后反馈
               </Button>
             )}
             <Button

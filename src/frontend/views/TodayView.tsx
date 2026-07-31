@@ -7,6 +7,7 @@ import {
   FileText,
   MapPin,
   NotebookPen,
+  MessageSquare,
   Users,
   XCircle
 } from "lucide-react";
@@ -52,7 +53,8 @@ export function TodayView({
   onMergeTodosToMemo,
   onSaveMemo,
   onDeleteMemo,
-  onOpenLessonInRecords
+  onOpenLessonInRecords,
+  onOpenLessonFeedback
 }: {
   vault: TeacherVault;
   selectedDate: string;
@@ -65,6 +67,7 @@ export function TodayView({
   onSaveMemo: (memo: MemoItem) => void;
   onDeleteMemo: (memoId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
+  onOpenLessonFeedback?: (lesson: Lesson) => void;
 }) {
   const [subPage, setSubPage] = useState<TodaySubPage>("lessons");
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
@@ -418,7 +421,15 @@ export function TodayView({
                     <div className="text-sm font-bold text-[#061226]">
                       本节预计金额：{formatPrivateMoney(lesson.feeSnapshot.amount, amountsVisible)}
                     </div>
-                    <div className="flex sm:shrink-0">
+                    <div className="flex flex-wrap gap-2 sm:shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenLessonFeedback?.(lesson)}
+                        className="border-[#fdba74] bg-[#fff7ed] text-[#9a3412] hover:border-[#fb923c] hover:bg-[#ffedd5]"
+                      >
+                        <MessageSquare size={15} /> 课后反馈
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

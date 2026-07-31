@@ -983,8 +983,57 @@ async function putEncryptedDocument(pathname: string, request: Request, env: Env
     return json({ error: "Missing encrypted document fields" }, 400);
   }
 
+  if (!body.force && body.expectedUpdatedAt != null) {
+    const current = await env.DB.prepare(
+      `SELECT updated_at
+       FROM encrypted_documents
+       WHERE user_id = ? AND doc_type = ? AND doc_key = ?`
+    )
+      .bind(context.user.id, docType, docKey)
+      .first<{ updated_at: string }>();
+    if ((current?.updated_at ?? "") !== body.expectedUpdatedAt) {
+      return json({ error: "Document version conflict", currentUpdatedAt: current?.updated_at ?? "" }, 409);
+    }
+  }
+
   const updatedAt = await upsertEncryptedPayload(env, context.user.id, docType, docKey, body.encryptedPayload);
   return json({ ok: true, updatedAt });
+}
+
+async function deleteEncryptedDocument(pathname: string, request: Request, env: Env): Promise<Response> {
+  const context = await requireAuth(request, env);
+  if (context instanceof Response) {
+    return context;
+  }
+
+  const [, , , docType, docKey] = pathname.split("/");
+  const body: Pick<EncryptedDocumentRequest, "expectedUpdatedAt" | "force"> = await readJson<
+    Pick<EncryptedDocumentRequest, "expectedUpdatedAt" | "force">
+  >(request).catch(() => ({}));
+  if (!docType || !docKey) {
+    return json({ error: "Missing document key" }, 400);
+  }
+
+  if (!body.force && body.expectedUpdatedAt != null) {
+    const current = await env.DB.prepare(
+      `SELECT updated_at
+       FROM encrypted_documents
+       WHERE user_id = ? AND doc_type = ? AND doc_key = ?`
+    )
+      .bind(context.user.id, docType, docKey)
+      .first<{ updated_at: string }>();
+    if ((current?.updated_at ?? "") !== body.expectedUpdatedAt) {
+      return json({ error: "Document version conflict", currentUpdatedAt: current?.updated_at ?? "" }, 409);
+    }
+  }
+
+  await env.DB.prepare(
+    `DELETE FROM encrypted_documents
+     WHERE user_id = ? AND doc_type = ? AND doc_key = ?`
+  )
+    .bind(context.user.id, docType, docKey)
+    .run();
+  return json({ ok: true });
 }
 
 async function submitFeedback(request: Request, env: Env): Promise<Response> {
@@ -2159,7 +2208,8 @@ const apiRouteHandlers = {
   getMyVaultMeta,
   putMyVault,
   getEncryptedDocument,
-  putEncryptedDocument
+  putEncryptedDocument,
+  deleteEncryptedDocument
 } satisfies ApiRouteHandlers<Env, AuthContext>;
 
 export default {

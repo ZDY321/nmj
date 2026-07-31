@@ -40,6 +40,7 @@ export type ApiRouteHandlers<Env, AuthContext> = AdminRouteHandlers<Env, AuthCon
   putMyVault: (request: Request, env: Env) => Promise<Response>;
   getEncryptedDocument: (pathname: string, request: Request, env: Env) => Promise<Response>;
   putEncryptedDocument: (pathname: string, request: Request, env: Env) => Promise<Response>;
+  deleteEncryptedDocument: (pathname: string, request: Request, env: Env) => Promise<Response>;
 };
 
 export async function handleAdminRoutes<Env, AuthContext extends { user: { id: string } }>(
@@ -257,6 +258,9 @@ export async function handleApiRoutes<Env, AuthContext extends { user: { id: str
     }
     if (request.method === "PUT") {
       return handlers.putEncryptedDocument(pathname, request, env);
+    }
+    if (request.method === "DELETE") {
+      return handlers.deleteEncryptedDocument(pathname, request, env);
     }
   }
 

@@ -79,6 +79,7 @@ function translateApiError(error: string): string {
     "Account already exists": "账号已存在。",
     "Invalid username": "用户名请使用英文字母、数字、下划线、短横线或点，3-32 位，首尾必须是英文字母或数字。",
     "Vault version conflict": "云端已有其他设备更新，请先同步云端数据后再保存。",
+    "Document version conflict": "这份加密文档已在其他页面或设备更新，请重新读取后再保存。",
     "Password confirmation required": "请先输入当前管理员密码。",
     "Password confirmation failed": "管理员密码确认失败。",
     "Target password confirmation failed": "被删除账号密码验证失败。",

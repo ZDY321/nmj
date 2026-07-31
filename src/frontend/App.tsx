@@ -92,6 +92,7 @@ import type {
 const AdminView = lazy(() => import("@/frontend/views/AdminView").then((module) => ({ default: module.AdminView })));
 const CalendarView = lazy(() => import("@/frontend/views/CalendarView").then((module) => ({ default: module.CalendarView })));
 const GradesView = lazy(() => import("@/frontend/views/GradesView").then((module) => ({ default: module.GradesView })));
+const FeedbackView = lazy(() => import("@/frontend/views/FeedbackView").then((module) => ({ default: module.FeedbackView })));
 const PayrollReviewView = lazy(() => import("@/frontend/views/PayrollReviewView").then((module) => ({ default: module.PayrollReviewView })));
 const ProgressView = lazy(() => import("@/frontend/views/ProgressView").then((module) => ({ default: module.ProgressView })));
 const ScheduleView = lazy(() => import("@/frontend/views/ScheduleView").then((module) => ({ default: module.ScheduleView })));
@@ -170,6 +171,7 @@ export function App() {
   const [progressChecklistFocus, setProgressChecklistFocus] = useState<ProgressChecklistFocus | null>(null);
   const [calendarOverviewFocus, setCalendarOverviewFocus] = useState<(CalendarOverviewFocusState & { nonce: number }) | null>(null);
   const [payrollReviewFocus, setPayrollReviewFocus] = useState<{ panel: PayrollPanelFocus; nonce: number } | null>(null);
+  const [lessonFeedbackFocus, setLessonFeedbackFocus] = useState<{ lessonId: string; nonce: number } | null>(null);
   const [aiScheduleSession, setAiScheduleSession] = useState<AiScheduleSession | null>(null);
   const [greetingTime, setGreetingTime] = useState(() => new Date());
   const cloudVersionRef = useRef("");
@@ -1511,6 +1513,9 @@ export function App() {
         nonce: Date.now()
       });
     }
+    if (nextView !== "feedback") {
+      setLessonFeedbackFocus(null);
+    }
     setView(nextView);
   }
 
@@ -1562,6 +1567,15 @@ export function App() {
       nonce: Date.now()
     });
     setView("progress");
+  }
+
+  function openLessonInFeedback(lesson: Lesson) {
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setMobileNavOpen(false);
+    setOnboardingVisible(false);
+    setLessonFeedbackFocus({ lessonId: lesson.id, nonce: Date.now() });
+    setView("feedback");
   }
 
   function openPayrollReviewLessonInScheduleRecords(lesson: Lesson) {
@@ -1999,6 +2013,7 @@ export function App() {
                     onSaveMemo={saveMemo}
                     onDeleteMemo={deleteMemo}
                     onOpenLessonInRecords={openTodayLessonInScheduleRecords}
+                    onOpenLessonFeedback={openLessonInFeedback}
                   />
                 )}
                 {view === "calendar" && (
@@ -2037,6 +2052,7 @@ export function App() {
                     onReturnToView={returnToViewFromSchedule}
                     onSaveChecklistCompletions={saveProgressChecklistCompletions}
                     onOpenProgressChecklist={openLessonInProgressChecklist}
+                    onOpenLessonFeedback={openLessonInFeedback}
                   />
                 )}
                 {view === "progress" && (
@@ -2057,6 +2073,9 @@ export function App() {
                     onSaveExternalPromptTemplate={saveExternalPromptTemplate}
                     onOpenLessonInRecords={openProgressLessonInScheduleRecords}
                   />
+                )}
+                {view === "feedback" && (
+                  <FeedbackView vault={vault} token={token} password={password} focusRequest={lessonFeedbackFocus} />
                 )}
                 {view === "students" && (
                   <StudentsView
