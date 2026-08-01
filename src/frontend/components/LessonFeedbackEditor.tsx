@@ -505,17 +505,8 @@ export function LessonFeedbackEditor({
       emit(next);
       return;
     }
-    if (activeTool === "select") {
-      // 选中模式下点到图形即选中它，右侧面板随之出现颜色/粗细/删除。
-      const hit = nearestStrokeId(record.annotations, point);
-      setSelectedStrokeId(hit);
-      if (hit) {
-        setSelectedTextBoxId("");
-        setFocusedCommentId("");
-        suppressDeselectRef.current = true;
-      }
-      return;
-    }
+    if (activeTool === "select") return;
+
     event.currentTarget.setPointerCapture?.(event.pointerId);
     setDraftStroke({
       id: makeId("feedback_stroke"),
@@ -707,10 +698,24 @@ export function LessonFeedbackEditor({
           <div
             className={cn("lesson-feedback-paper", isDrawingTool && "is-drawing")}
             style={{ width: feedbackPageWidth, height: pageHeight, transform: `scale(${zoom})` }}
-            onClick={() => {
+            onClick={(event) => {
               // 拖动手柄松手会补一个 click，直接清空会让右侧样式栏闪退。
               if (suppressDeselectRef.current) {
                 suppressDeselectRef.current = false;
+                return;
+              }
+              if (activeTool !== "select") return;
+              // 绘图层在选择模式下不拦截指针，因此空白处的点击会冒泡到这里；
+              // 命中图形就选中它，否则视为点空白、取消全部选中。
+              const paper = event.currentTarget.getBoundingClientRect();
+              const hit = nearestStrokeId(record.annotations, {
+                x: (event.clientX - paper.left) * feedbackPageWidth / paper.width,
+                y: (event.clientY - paper.top) * pageHeight / paper.height
+              });
+              setSelectedStrokeId(hit);
+              if (hit) {
+                setSelectedTextBoxId("");
+                setFocusedCommentId("");
                 return;
               }
               setSelectedTextBoxId("");
