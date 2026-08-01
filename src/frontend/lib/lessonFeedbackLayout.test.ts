@@ -168,4 +168,40 @@ describe("lesson feedback brace geometry", () => {
       expect(node.y).toBe(feedbackStudentRowCenter(layout, index));
     });
   });
+
+  // 两端各自独立：拖文本框那一端时，学生一侧的点必须原地不动，反之亦然。
+  it("moves only the tip when the box-side handle is dragged", () => {
+    const layout = feedbackSheetLayout(4);
+    const base = feedbackBraceGeometry(box, record, layout)!;
+    const moved = feedbackBraceGeometry({ ...box, braceTip: { dx: 18, dy: -25 } }, record, layout)!;
+
+    expect(moved.tip).toEqual({ x: base.tip.x + 18, y: base.tip.y - 25 });
+    expect(moved.nodes).toEqual(base.nodes);
+  });
+
+  it("moves only the finger dots when the student-side handle is dragged", () => {
+    const layout = feedbackSheetLayout(4);
+    const base = feedbackBraceGeometry(box, record, layout)!;
+    const moved = feedbackBraceGeometry({ ...box, braceNode: { dx: -20, dy: 12 } }, record, layout)!;
+
+    expect(moved.tip).toEqual(base.tip);
+    moved.nodes.forEach((node, index) => {
+      expect(node.x).toBe(base.nodes[index].x - 20);
+      expect(node.y).toBe(base.nodes[index].y + 12);
+    });
+  });
+
+  it("applies both offsets without either cancelling the other", () => {
+    const layout = feedbackSheetLayout(4);
+    const base = feedbackBraceGeometry(box, record, layout)!;
+    const moved = feedbackBraceGeometry(
+      { ...box, braceTip: { dx: 10, dy: 10 }, braceNode: { dx: -30, dy: 5 } },
+      record,
+      layout
+    )!;
+
+    expect(moved.tip).toEqual({ x: base.tip.x + 10, y: base.tip.y + 10 });
+    expect(moved.nodes[0].x).toBe(base.nodes[0].x - 30);
+    expect(moved.nodes[0].y).toBe(base.nodes[0].y + 5);
+  });
 });

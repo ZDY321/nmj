@@ -449,9 +449,11 @@
   display: flex;
   max-height: calc(100vh - 140px);
   flex-direction: column;
-  gap: 5px;
+  width: 132px;
+  flex-shrink: 0;
+  gap: 8px;
   overflow-y: auto;
-  padding: 10px 8px;
+  padding: 12px 10px;
   border-right: 1px solid #dbe4ef;
   background: #f8fbff;
 }
@@ -639,7 +641,11 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   inset: 0;
 }
 
-.lesson-feedback-connector-layer { z-index: 5; pointer-events: none; }
+.lesson-feedback-connector-layer { z-index: 14; pointer-events: none; }
+
+/* 只有括号两端的手柄可点，连线本身不拦截指针。 */
+.lesson-feedback-brace-handle { cursor: grab; pointer-events: auto; }
+.lesson-feedback-brace-handle:active { cursor: grabbing; }
 .lesson-feedback-ink-canvas { z-index: 16; touch-action: none; }
 .lesson-feedback-paper.is-drawing { cursor: crosshair; }
 
@@ -812,4 +818,74 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   border-radius: 5px;
   background: none;
   cursor: pointer;
+}
+
+/* 工具栏分区：与课薪系统其余面板一致的留白与标题层级。 */
+.lesson-feedback-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #e8eef6;
+}
+
+.lesson-feedback-section-title {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.lesson-feedback-palette {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.lesson-feedback-dot {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(15, 35, 66, 0.16);
+  cursor: pointer;
+}
+
+.lesson-feedback-dot:hover { transform: scale(1.08); }
+.lesson-feedback-dot.is-active { border-color: #ffffff; box-shadow: 0 0 0 2px #25324a; }
+
+.lesson-feedback-dot-custom {
+  background: conic-gradient(#d92d20, #b54708, #079455, #175cd3, #6941c6, #d92d20);
+}
+
+.lesson-feedback-dot-custom input {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.lesson-feedback-range { width: 100%; accent-color: #235f58; }
+
+.lesson-feedback-boxstyle-label {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* 拖拽新建文本框时的预览矩形。 */
+.lesson-feedback-draft-box {
+  position: absolute;
+  z-index: 15;
+  border: 1.5px dashed;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
 }

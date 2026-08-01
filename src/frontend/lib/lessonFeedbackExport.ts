@@ -222,13 +222,15 @@ function drawStudentTable(
     const rowY = studentStartY + index * layout.studentRowHeight;
     const markY = rowY + layout.studentRowHeight / 2;
     const entry = record.entries[student.id] as LessonFeedbackEntry | undefined;
+    // 姓名在编辑器里由可点选的按钮承担，骨架不画，避免与 DOM 文字重影。
+    if (!includeValues) return;
     drawCellText(context, student.name, c[0], rowY, c[1] - c[0], layout.studentRowHeight, {
       size: student.name.length > 5 ? 11 : 12.5,
       anchor: "middle",
       weight: 600,
       padding: 2
     });
-    if (!entry || !includeValues) return;
+    if (!entry) return;
     fillCenteredText(context, entry.attendance, (c[1] + c[2]) / 2, markY, 18, 700, feedbackMarkColor(entry.attendance));
     drawHomeworkMark(context, entry.homework, c[2], rowY, c[3] - c[2], layout.studentRowHeight);
     fillCenteredText(context, entry.listening, (c[3] + c[4]) / 2, markY, 16, 700, feedbackMarkColor(entry.listening));

@@ -57,6 +57,17 @@ type BoxInteraction = {
   originalRecord: LessonFeedbackRecord;
 };
 
+// 与旧项目一致的常用色，避免每次都要开色轮。
+const presetColors: Array<{ value: string; label: string }> = [
+  { value: "#235f58", label: "墨绿" },
+  { value: "#d92d20", label: "红色" },
+  { value: "#175cd3", label: "蓝色" },
+  { value: "#079455", label: "绿色" },
+  { value: "#b54708", label: "橙棕" },
+  { value: "#6941c6", label: "紫色" },
+  { value: "#111827", label: "近黑" }
+];
+
 const attendanceCycle = ["", "√", "○", "×"];
 const gradeCycle = ["", "A", "B", "C"];
 const tools: Array<{ value: EditorTool; label: string; icon: typeof MousePointer2 }> = [
@@ -87,6 +98,15 @@ export function LessonFeedbackEditor({
   const [selectedTextBoxId, setSelectedTextBoxId] = useState("");
   const [draftStroke, setDraftStroke] = useState<LessonFeedbackStroke | null>(null);
   const [boxInteraction, setBoxInteraction] = useState<BoxInteraction | null>(null);
+  const [draftBox, setDraftBox] = useState<{ startX: number; startY: number; x: number; y: number; width: number; height: number } | null>(null);
+  const [braceDrag, setBraceDrag] = useState<{
+    id: string;
+    end: "tip" | "node";
+    startClientX: number;
+    startClientY: number;
+    startOffset: { dx: number; dy: number };
+    originalRecord: LessonFeedbackRecord;
+  } | null>(null);
   const [exportMessage, setExportMessage] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sheetCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -111,7 +131,9 @@ export function LessonFeedbackEditor({
   useEffect(() => {
     const host = sheetCanvasRef.current;
     if (!host) return;
-    const ratio = window.devicePixelRatio || 1;
+    // backing store 按设备像素比放大、CSS 尺寸保持逻辑像素，文字才不会发虚。
+    // 高分屏上再多给一档采样，弥补 canvas 文字相对 DOM 文字偏软的观感。
+    const ratio = Math.max(2, Math.ceil(window.devicePixelRatio || 1));
     const painted = renderLessonFeedbackCanvas(record, { scale: ratio, includeValues: false });
     host.width = painted.width;
     host.height = painted.height;
@@ -169,6 +191,41 @@ export function LessonFeedbackEditor({
       window.removeEventListener("pointercancel", onPointerUp);
     };
   }, [boxInteraction]);
+
+  // 括号两端独立拖动：只改被拖那一端的偏移，另一端保持不动。
+  useEffect(() => {
+    if (!braceDrag) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const paper = document.querySelector<HTMLElement>(".lesson-feedback-paper");
+      const scale = feedbackPageWidth / Math.max(paper?.getBoundingClientRect().width ?? feedbackPageWidth, 1);
+      const deltaX = (event.clientX - braceDrag.startClientX) * scale;
+      const deltaY = (event.clientY - braceDrag.startClientY) * scale;
+      const next = cloneRecord(latestRecordRef.current);
+      const box = next.textBoxes.find((item) => item.id === braceDrag.id);
+      if (!box) return;
+      const offset = {
+        dx: braceDrag.startOffset.dx + deltaX,
+        dy: braceDrag.startOffset.dy + deltaY
+      };
+      if (braceDrag.end === "tip") box.braceTip = offset;
+      else box.braceNode = offset;
+      emit(next, false);
+    };
+    const onPointerUp = () => {
+      undoStackRef.current.push(braceDrag.originalRecord);
+      trimHistory(undoStackRef.current);
+      redoStackRef.current = [];
+      setBraceDrag(null);
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+    window.addEventListener("pointercancel", onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [braceDrag]);
 
   const rowCenters = useMemo(() => new Map(record.students.map((student, index) => [
     student.id,
@@ -281,20 +338,23 @@ export function LessonFeedbackEditor({
     setSelectedStudentIds([]);
   }
 
-  function addTextBox(point: LessonFeedbackPoint): void {
+  // 拖拽建框：按下拉出矩形，松手按该尺寸创建；只点一下则用默认尺寸。
+  function createTextBoxAt(x: number, y: number, width: number, height: number): void {
     const next = cloneRecord(record);
     const box: LessonFeedbackTextBox = {
       id: makeId("feedback_box"),
-      x: clamp(point.x, 30, feedbackPageWidth - 230),
-      y: clamp(point.y, 32, pageHeight - 120),
-      width: 210,
-      height: 86,
+      x: clamp(x, 24, feedbackPageWidth - width - 24),
+      y: clamp(y, 24, Math.max(24, pageHeight - height - 24)),
+      width,
+      height,
       text: "",
-      color: "#25324a",
+      color: "#111827",
       fontSize: 13,
       fontWeight: 600,
       borderColor: activeColor,
       backgroundColor: "transparent",
+      borderStyle: "dashed",
+      borderWidth: 1.5,
       studentIds: [],
       showBand: false
     };
@@ -304,12 +364,29 @@ export function LessonFeedbackEditor({
     setActiveTool("select");
   }
 
+  function addTextBox(point: LessonFeedbackPoint): void {
+    createTextBoxAt(point.x, point.y, 210, 86);
+  }
+
   function patchTextBox(boxId: string, patch: Partial<LessonFeedbackTextBox>, history = false): void {
     const next = cloneRecord(record);
     const box = next.textBoxes.find((item) => item.id === boxId);
     if (!box) return;
     Object.assign(box, patch);
     emit(next, history);
+  }
+
+  function beginBraceDrag(event: ReactPointerEvent<SVGCircleElement>, box: LessonFeedbackTextBox, end: "tip" | "node"): void {
+    event.stopPropagation();
+    event.preventDefault();
+    setBraceDrag({
+      id: box.id,
+      end,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startOffset: (end === "tip" ? box.braceTip : box.braceNode) ?? { dx: 0, dy: 0 },
+      originalRecord: cloneRecord(record)
+    });
   }
 
   function deleteTextBox(boxId: string): void {
@@ -354,7 +431,8 @@ export function LessonFeedbackEditor({
   function handleCanvasPointerDown(event: ReactPointerEvent<HTMLCanvasElement>): void {
     const point = pointerPoint(event);
     if (activeTool === "text") {
-      addTextBox(point);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      setDraftBox({ startX: point.x, startY: point.y, x: point.x, y: point.y, width: 0, height: 0 });
       return;
     }
     if (activeTool === "eraser") {
@@ -377,6 +455,17 @@ export function LessonFeedbackEditor({
   }
 
   function handleCanvasPointerMove(event: ReactPointerEvent<HTMLCanvasElement>): void {
+    if (draftBox) {
+      const point = pointerPoint(event);
+      setDraftBox((current) => current && {
+        ...current,
+        x: Math.min(current.startX, point.x),
+        y: Math.min(current.startY, point.y),
+        width: Math.abs(point.x - current.startX),
+        height: Math.abs(point.y - current.startY)
+      });
+      return;
+    }
     if (!draftStroke) return;
     const point = pointerPoint(event);
     setDraftStroke((current) => {
@@ -391,6 +480,14 @@ export function LessonFeedbackEditor({
   }
 
   function finishCanvasStroke(event: ReactPointerEvent<HTMLCanvasElement>): void {
+    if (draftBox) {
+      const { x, y, width, height } = draftBox;
+      setDraftBox(null);
+      // 拖出的矩形太小时按误触处理，退回默认尺寸。
+      if (width < 24 || height < 20) createTextBoxAt(x, y, 210, 86);
+      else createTextBoxAt(x, y, Math.max(80, width), Math.max(40, height));
+      return;
+    }
     if (!draftStroke) return;
     if (draftStroke.points.length === 1) {
       const point = pointerPoint(event);
@@ -487,13 +584,29 @@ export function LessonFeedbackEditor({
             );
           })}
           <div className="lesson-feedback-tool-divider" />
-          <label className="lesson-feedback-color" title="批注颜色">
-            <input type="color" value={activeColor} onChange={(event) => setActiveColor(event.target.value)} />
-          </label>
-          <label className="lesson-feedback-width" title="线条粗细">
-            <span>{penWidth}px</span>
-            <input type="range" min="1" max="10" value={penWidth} onChange={(event) => setPenWidth(Number(event.target.value))} />
-          </label>
+          <div className="lesson-feedback-section">
+            <span className="lesson-feedback-section-title">颜色</span>
+            <div className="lesson-feedback-palette" role="group" aria-label="常用颜色">
+              {presetColors.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  className={cn("lesson-feedback-dot", activeColor.toLowerCase() === preset.value && "is-active")}
+                  style={{ background: preset.value }}
+                  onClick={() => setActiveColor(preset.value)}
+                  title={preset.label}
+                  aria-label={preset.label}
+                />
+              ))}
+              <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义颜色">
+                <input type="color" value={activeColor} onChange={(event) => setActiveColor(event.target.value)} />
+              </label>
+            </div>
+          </div>
+          <div className="lesson-feedback-section">
+            <span className="lesson-feedback-section-title">粗细 {penWidth}px</span>
+            <input className="lesson-feedback-range" type="range" min="1" max="10" value={penWidth} onChange={(event) => setPenWidth(Number(event.target.value))} />
+          </div>
 
           {selectedBox && (
             <>
@@ -540,14 +653,39 @@ export function LessonFeedbackEditor({
                   <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize + 1, 9, 22) })}>A+</button>
                 </div>
 
-                <div className="lesson-feedback-boxstyle-row">
-                  <label className="lesson-feedback-swatch" title="文字颜色">
+                <span className="lesson-feedback-boxstyle-label">文字颜色</span>
+                <div className="lesson-feedback-palette">
+                  {presetColors.map((preset) => (
+                    <button
+                      key={`text-${preset.value}`}
+                      type="button"
+                      className={cn("lesson-feedback-dot", selectedBox.color.toLowerCase() === preset.value && "is-active")}
+                      style={{ background: preset.value }}
+                      onClick={() => patchTextBox(selectedBox.id, { color: preset.value })}
+                      title={preset.label}
+                      aria-label={`文字 ${preset.label}`}
+                    />
+                  ))}
+                  <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义文字颜色">
                     <input type="color" value={selectedBox.color} onChange={(event) => patchTextBox(selectedBox.id, { color: event.target.value })} />
-                    <span>文字</span>
                   </label>
-                  <label className="lesson-feedback-swatch" title="边框与连线颜色">
+                </div>
+
+                <span className="lesson-feedback-boxstyle-label">边框与连线</span>
+                <div className="lesson-feedback-palette">
+                  {presetColors.map((preset) => (
+                    <button
+                      key={`border-${preset.value}`}
+                      type="button"
+                      className={cn("lesson-feedback-dot", selectedBox.borderColor.toLowerCase() === preset.value && "is-active")}
+                      style={{ background: preset.value }}
+                      onClick={() => patchTextBox(selectedBox.id, { borderColor: preset.value })}
+                      title={preset.label}
+                      aria-label={`边框 ${preset.label}`}
+                    />
+                  ))}
+                  <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义边框颜色">
                     <input type="color" value={selectedBox.borderColor} onChange={(event) => patchTextBox(selectedBox.id, { borderColor: event.target.value })} />
-                    <span>边框</span>
                   </label>
                 </div>
 
@@ -691,10 +829,39 @@ export function LessonFeedbackEditor({
                   <path key={`${box.id}-path-${node.id}`} d={feedbackBracePath(node, geo.tip)} fill="none" stroke={geo.color} strokeWidth={geo.width} strokeLinecap="round" />,
                   <circle key={`${box.id}-dot-${node.id}`} cx={node.x} cy={node.y} r={Math.max(2.4, geo.width + 0.6)} fill={geo.color} />
                 ]);
+                const handles = selectedTextBoxId === box.id && activeTool === "select" ? [
+                  <circle
+                    key={`${box.id}-tip-handle`}
+                    className="lesson-feedback-brace-handle"
+                    cx={geo.tip.x}
+                    cy={geo.tip.y}
+                    r={11}
+                    fill="#ffffff"
+                    fillOpacity="0.35"
+                    stroke={geo.color}
+                    strokeWidth={2}
+                    strokeDasharray="3 3"
+                    onPointerDown={(event) => beginBraceDrag(event, box, "tip")}
+                  />,
+                  <circle
+                    key={`${box.id}-node-handle`}
+                    className="lesson-feedback-brace-handle"
+                    cx={geo.nodes[0].x}
+                    cy={geo.nodes[0].y}
+                    r={11}
+                    fill="#ffffff"
+                    fillOpacity="0.35"
+                    stroke="#d92d20"
+                    strokeWidth={2}
+                    strokeDasharray="3 3"
+                    onPointerDown={(event) => beginBraceDrag(event, box, "node")}
+                  />
+                ] : [];
                 return [
                   ...bands,
                   ...branches,
-                  <circle key={`${box.id}-tip`} cx={geo.tip.x} cy={geo.tip.y} r={Math.max(2.6, geo.width + 1)} fill={geo.color} />
+                  <circle key={`${box.id}-tip`} cx={geo.tip.x} cy={geo.tip.y} r={Math.max(2.6, geo.width + 1)} fill={geo.color} />,
+                  ...handles
                 ];
               })}
             </svg>
@@ -734,6 +901,14 @@ export function LessonFeedbackEditor({
               </div>
             ))}
 
+            {draftBox && (
+              <div
+                className="lesson-feedback-draft-box"
+                style={{ left: draftBox.x, top: draftBox.y, width: draftBox.width, height: draftBox.height, borderColor: activeColor }}
+                aria-hidden="true"
+              />
+            )}
+
             <canvas
               ref={canvasRef}
               className="lesson-feedback-ink-canvas"
@@ -741,7 +916,7 @@ export function LessonFeedbackEditor({
               onPointerDown={handleCanvasPointerDown}
               onPointerMove={handleCanvasPointerMove}
               onPointerUp={finishCanvasStroke}
-              onPointerCancel={() => setDraftStroke(null)}
+              onPointerCancel={() => { setDraftStroke(null); setDraftBox(null); }}
             />
           </div>
         </div>

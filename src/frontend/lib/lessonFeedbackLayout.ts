@@ -279,12 +279,20 @@ export function feedbackBraceGeometry(
 ): FeedbackBraceGeometry | null {
   const ids = Array.isArray(box.studentIds) ? box.studentIds : [];
   if (!ids.length) return null;
-  const tip = { x: box.x, y: box.y + box.height / 2 };
-  const nodeX = tip.x - braceSpan;
+  // 两端各自带偏移：拖动汇聚点不动指点，反之亦然。
+  const tipOffset = box.braceTip ?? { dx: 0, dy: 0 };
+  const nodeOffset = box.braceNode ?? { dx: 0, dy: 0 };
+  const tip = {
+    x: box.x + tipOffset.dx,
+    y: box.y + box.height / 2 + tipOffset.dy
+  };
+  const nodeX = box.x - braceSpan + nodeOffset.dx;
   const nodes = ids
     .map((id) => {
       const index = record.students.findIndex((student) => student.id === id);
-      return index < 0 ? null : { id, x: nodeX, y: feedbackStudentRowCenter(layout, index) };
+      return index < 0
+        ? null
+        : { id, x: nodeX, y: feedbackStudentRowCenter(layout, index) + nodeOffset.dy };
     })
     .filter((node): node is FeedbackBracePoint & { id: string } => node !== null);
   if (!nodes.length) return null;
@@ -293,7 +301,7 @@ export function feedbackBraceGeometry(
     tip,
     nodes,
     color: box.borderColor || "#235f58",
-    width: Math.min(Math.max(Number(box.fontWeight) >= 700 ? 2 : 2, 1), 8)
+    width: Math.min(Math.max(Number(box.borderWidth) || 2, 1), 8)
   };
 }
 
