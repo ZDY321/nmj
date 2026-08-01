@@ -67,6 +67,15 @@ export type LessonFeedbackTextBox = {
   // - 文本框侧的汇聚点与文本框是一体的，恒定在框左缘中点，拖它等同于拖整个文本框。
   // - 学生侧每个触点各自独立，按 studentId 存偏移，移动其中一个不影响其他人与文本框。
   braceNodes?: Record<string, { dx: number; dy: number }>;
+  // 荧光标记：按字符下标记录起止（[start, end)），编辑文本时整体清空后重标，
+  // 因此不需要跟随插入/删除做偏移换算。
+  highlights?: LessonFeedbackHighlight[];
+};
+
+export type LessonFeedbackHighlight = {
+  start: number;
+  end: number;
+  color: string;
 };
 
 export type LessonFeedbackRecord = {

@@ -689,6 +689,9 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 .lesson-feedback-text-box.is-selected .lesson-feedback-box-handle { opacity: 1; }
 
 .lesson-feedback-text-box textarea {
+  position: relative;
+  /* 必须压在荧光层之上，否则底色会盖住文字。 */
+  z-index: 1;
   min-height: 0;
   flex: 1;
   resize: none;
@@ -1106,3 +1109,19 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 
 .lesson-feedback-wide-button:hover { border-color: #94a9c0; background: #f3f7fb; color: #061226; }
 .lesson-feedback-wide-button.is-active { border-color: #235f58; background: #235f58; color: #ffffff; }
+
+/* 荧光层：绝对定位在文本框内，压在 textarea 下方，只画底色不参与交互。 */
+.lesson-feedback-highlight-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.lesson-feedback-highlight-layer > span {
+  position: absolute;
+  border-radius: 2px;
+}
+
+.lesson-feedback-dot:disabled { cursor: not-allowed; opacity: 0.4; }

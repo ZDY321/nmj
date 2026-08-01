@@ -44,6 +44,7 @@ import {
   feedbackStudentRowCenter
 } from "@/frontend/lib/lessonFeedbackLayout";
 import { nearestStrokeId } from "@/frontend/lib/lessonFeedbackHitTest";
+import { feedbackHighlightColors, feedbackHighlightRects } from "@/frontend/lib/lessonFeedbackLayout";
 import "@/frontend/lessonFeedback.css";
 
 type EditorTool = "select" | "eraser" | "text" | LessonFeedbackStrokeTool;
@@ -124,6 +125,9 @@ export function LessonFeedbackEditor({
   const [zoom, setZoom] = useState(1);
   const [focusedCommentId, setFocusedCommentId] = useState("");
   const [selectedStrokeId, setSelectedStrokeId] = useState("");
+  const [textSelection, setTextSelection] = useState<{ boxId: string; start: number; end: number } | null>(null);
+  const textAreaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sheetCanvasRef = useRef<HTMLCanvasElement>(null);
   const suppressDeselectRef = useRef(false);
@@ -135,6 +139,8 @@ export function LessonFeedbackEditor({
   const layout = useMemo(() => feedbackSheetLayout(record.students.length), [record.students.length]);
   const selectedBox = record.textBoxes.find((box) => box.id === selectedTextBoxId);
   const selectedStroke = record.annotations.find((stroke) => stroke.id === selectedStrokeId);
+  // 荧光面板对准“正在选字的框”，没有选区时退回当前选中的文本框。
+  const activeHighlightTarget = record.textBoxes.find((box) => box.id === (textSelection?.boxId || selectedTextBoxId));
   const focusedStudent = record.students.find((student) => student.id === focusedCommentId);
   const focusedEntry = focusedStudent
     ? { id: focusedStudent.id, name: focusedStudent.name, entry: record.entries[focusedStudent.id] ?? blankEntry }
@@ -441,6 +447,40 @@ export function LessonFeedbackEditor({
       startBoxY: box.y,
       originalRecord: cloneRecord(record)
     });
+  }
+
+  // 用离屏 canvas 做文字测量：与导出同一套 measureText，屏幕与导出的高亮位置才一致。
+  function measureWith(font: string): (value: string) => number {
+    if (!measureCanvasRef.current) measureCanvasRef.current = document.createElement("canvas");
+    const context = measureCanvasRef.current.getContext("2d");
+    if (!context) return (value) => value.length * 12;
+    context.font = font;
+    return (value) => context.measureText(value).width;
+  }
+
+  function highlightRectsFor(box: LessonFeedbackTextBox) {
+    if (!box.highlights?.length) return [];
+    return feedbackHighlightRects(box.text, box.highlights, box, {
+      size: box.fontSize,
+      padding: 8,
+      valign: "top",
+      maxLines: Infinity,
+      ellipsis: false,
+      measure: measureWith(`${box.fontWeight} ${box.fontSize}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`)
+    });
+  }
+
+  function applyHighlight(color: string): void {
+    if (!textSelection) return;
+    const box = record.textBoxes.find((item) => item.id === textSelection.boxId);
+    if (!box) return;
+    const next = [...(box.highlights ?? []).filter((item) => item.end <= textSelection.start || item.start >= textSelection.end),
+      { start: textSelection.start, end: textSelection.end, color }];
+    patchTextBox(box.id, { highlights: next });
+  }
+
+  function clearHighlights(boxId: string): void {
+    patchTextBox(boxId, { highlights: [] });
   }
 
   function patchStroke(strokeId: string, patch: Partial<LessonFeedbackStroke>): void {
@@ -930,11 +970,33 @@ export function LessonFeedbackEditor({
                 <button type="button" className="lesson-feedback-box-handle" onPointerDown={(event) => beginBoxInteraction(event, box, "move")} title="拖动文本框">
                   <span>{box.studentIds.length > 0 ? `${box.studentIds.length} 人反馈` : "文本框"}</span>
                 </button>
+                {/* 荧光层垫在 textarea 下方：文字仍由 textarea 正常渲染，这里只画底色矩形。 */}
+                <div className="lesson-feedback-highlight-layer" aria-hidden="true">
+                  {highlightRectsFor(box).map((rect, index) => (
+                    <span
+                      key={`${box.id}-hl-${index}`}
+                      style={{ left: rect.x - box.x, top: rect.y - box.y, width: rect.width, height: rect.height, background: rect.color }}
+                    />
+                  ))}
+                </div>
                 <textarea
+                  ref={(node) => { textAreaRefs.current[box.id] = node; }}
                   value={box.text}
                   placeholder={box.studentIds.length > 0 ? "点击填写多人反馈" : "输入批注"}
                   style={{ color: box.color, fontSize: box.fontSize, fontWeight: box.fontWeight }}
-                  onChange={(event) => patchTextBox(box.id, { text: event.target.value })}
+                  onChange={(event) => {
+                    // 文本一改就丢掉旧标记：字符下标已经错位，与其猜测偏移不如重标。
+                    const cleared = (box.highlights?.length ?? 0) > 0 && event.target.value !== box.text;
+                    patchTextBox(box.id, cleared ? { text: event.target.value, highlights: [] } : { text: event.target.value });
+                  }}
+                  onSelect={(event) => {
+                    const target = event.currentTarget;
+                    setTextSelection(
+                      target.selectionStart === target.selectionEnd
+                        ? null
+                        : { boxId: box.id, start: target.selectionStart, end: target.selectionEnd }
+                    );
+                  }}
                 />
                 {selectedTextBoxId === box.id && (
                   <>
@@ -966,7 +1028,7 @@ export function LessonFeedbackEditor({
           </div>
         </div>
 
-        <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && !selectedStroke && "is-empty")} aria-label="样式设置">
+        <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && !selectedStroke && !activeHighlightTarget && "is-empty")} aria-label="样式设置">
           <div className="lesson-feedback-boxstyle-group">
             <span className="lesson-feedback-boxstyle-title">显示比例 {Math.round(zoom * 100)}%</span>
             <div className="lesson-feedback-segment" role="group" aria-label="显示比例">
@@ -975,6 +1037,35 @@ export function LessonFeedbackEditor({
               <button type="button" className="lesson-feedback-segment-item" onClick={() => setZoom((current) => clamp(Math.round((current + 0.1) * 10) / 10, 0.5, 2))}>＋</button>
             </div>
           </div>
+
+          {activeHighlightTarget && (
+            <div className="lesson-feedback-boxstyle-group">
+              <span className="lesson-feedback-boxstyle-title">荧光标记</span>
+              <span className="lesson-feedback-section-hint">
+                {textSelection ? "点色块给选中的文字加底色" : "先在文本框里选中几个字"}
+              </span>
+              <div className="lesson-feedback-palette">
+                {feedbackHighlightColors.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    className="lesson-feedback-dot"
+                    style={{ background: preset.value }}
+                    disabled={!textSelection}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => applyHighlight(preset.value)}
+                    title={preset.label}
+                    aria-label={preset.label}
+                  />
+                ))}
+              </div>
+              {(activeHighlightTarget.highlights?.length ?? 0) > 0 && (
+                <button type="button" className="lesson-feedback-wide-button" onClick={() => clearHighlights(activeHighlightTarget.id)}>
+                  清除本框荧光
+                </button>
+              )}
+            </div>
+          )}
 
           {selectedStroke ? (
             <div className="lesson-feedback-boxstyle" aria-label="图形样式">

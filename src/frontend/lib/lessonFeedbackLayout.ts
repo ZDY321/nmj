@@ -339,3 +339,56 @@ export function feedbackBracePath(node: FeedbackBracePoint, tip: FeedbackBracePo
   const midX = (node.x + tip.x) / 2;
   return `M ${node.x} ${node.y} Q ${midX} ${node.y} ${tip.x} ${tip.y}`;
 }
+
+export type FeedbackHighlightRect = { x: number; y: number; width: number; height: number; color: string };
+
+// 把「第 m 到第 n 个字符」换算成屏幕矩形。
+// 折行结果与正文渲染共用同一套 lines，所以高亮条与文字必然对齐；
+// 跨行的选区会拆成多个矩形，每行一条。
+export function feedbackHighlightRects(
+  text: string,
+  highlights: Array<{ start: number; end: number; color: string }>,
+  box: { x: number; y: number; width: number; height: number },
+  options: FeedbackWrappedTextOptions & { measure: (value: string) => number }
+): FeedbackHighlightRect[] {
+  if (!text || !highlights?.length) return [];
+  const placed = feedbackWrappedTextLayout(text, box.x, box.y, box.width, box.height, options);
+  if (!placed) return [];
+
+  const size = options.size || 12;
+  const rects: FeedbackHighlightRect[] = [];
+  // 逐行推进：记录每行在原文里的起止下标，再与高亮区间求交集。
+  let cursor = 0;
+  placed.lines.forEach((line, index) => {
+    // 折行时被吃掉的换行符要跳过，行首下标才能与原文对齐。
+    if (index > 0 && text.charCodeAt(cursor) === 10) cursor += 1;
+    const lineStart = cursor;
+    const lineEnd = lineStart + line.length;
+    cursor = lineEnd;
+
+    highlights.forEach((highlight) => {
+      const from = Math.max(highlight.start, lineStart);
+      const to = Math.min(highlight.end, lineEnd);
+      if (from >= to) return;
+      const before = line.slice(0, from - lineStart);
+      const inside = line.slice(from - lineStart, to - lineStart);
+      const top = placed.firstY + index * placed.lineHeight - size * 0.92;
+      rects.push({
+        x: placed.x + options.measure(before),
+        y: top,
+        width: options.measure(inside),
+        height: size * 1.28,
+        color: highlight.color
+      });
+    });
+  });
+  return rects;
+}
+
+// 常用荧光色：半透明，压在文字下方仍能看清字。
+export const feedbackHighlightColors: Array<{ value: string; label: string }> = [
+  { value: "rgba(250, 204, 21, 0.45)", label: "荧光黄" },
+  { value: "rgba(74, 222, 128, 0.42)", label: "荧光绿" },
+  { value: "rgba(244, 114, 182, 0.38)", label: "荧光粉" },
+  { value: "rgba(96, 165, 250, 0.38)", label: "荧光蓝" }
+];

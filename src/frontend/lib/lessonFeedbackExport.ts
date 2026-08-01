@@ -16,6 +16,7 @@ import {
   feedbackExportScale,
   feedbackFormatDate,
   feedbackGuideLine,
+  feedbackHighlightRects,
   feedbackInkColor,
   feedbackMarkColor,
   feedbackPageWidth,
@@ -371,6 +372,19 @@ function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedback
     context.rect(box.x, box.y, box.width, box.height);
     context.clip();
     context.font = `${box.fontWeight} ${box.fontSize}px ${feedbackBodyFontFamily}`;
+    // 荧光标记压在文字下方，先画底色再画字。
+    const textOptions = {
+      size: box.fontSize,
+      padding: 8,
+      valign: "top" as const,
+      maxLines: Infinity,
+      ellipsis: false,
+      measure: (value: string) => context.measureText(value).width
+    };
+    feedbackHighlightRects(box.text, box.highlights ?? [], box, textOptions).forEach((rect) => {
+      context.fillStyle = rect.color;
+      context.fillRect(rect.x, rect.y, rect.width, rect.height);
+    });
     drawCellText(context, box.text, box.x, box.y, box.width, box.height, {
       size: box.fontSize,
       weight: box.fontWeight,
