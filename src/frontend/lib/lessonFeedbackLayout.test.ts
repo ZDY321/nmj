@@ -150,8 +150,8 @@ describe("lesson feedback brace geometry", () => {
     const geo = feedbackBraceGeometry(box, record, layout)!;
 
     expect(geo.tip).toEqual({ x: 536, y: 368 });
-    // 学生侧触点落在“综合评价”列内侧，既不随文本框漂移，也不压住左边的评分文字。
-    const expectedX = layout.cols[6] + 10;
+    // 学生侧触点留在“课堂笔记”列内，自列心右移半个字：既不盖评分，也不贴文本框。
+    const expectedX = (layout.cols[5] + layout.cols[6]) / 2 + 6;
     expect(geo.nodes.map((node) => node.x)).toEqual([expectedX, expectedX]);
     expect(geo.nodes.map((node) => node.y)).toEqual([
       feedbackStudentRowCenter(layout, 1),
@@ -184,7 +184,12 @@ describe("lesson feedback brace geometry", () => {
     expect(second.nodes).toEqual(first.nodes);
     // 汇聚点贴住文本框左缘；触点则以表格列为基准，二者互不牵动。
     expect(first.tip.x).toBe(box.x);
-    first.nodes.forEach((node) => expect(node.x - layout.cols[6]).toBe(10));
+    const columnCentre = (layout.cols[5] + layout.cols[6]) / 2;
+    first.nodes.forEach((node) => {
+      expect(node.x - columnCentre).toBe(6);
+      // 必须仍在课堂笔记列内，不能溢到评语列。
+      expect(node.x).toBeLessThan(layout.cols[6]);
+    });
   });
 
   it("keeps finger dots aligned with the rows the export paints", () => {

@@ -287,8 +287,9 @@ export function feedbackFormatDate(dateText: string): string {
   return `${year}.${Number(month)}.${Number(day)}`;
 }
 
-// 括号连线：学生侧触点落在“综合评价”列内侧一点，避免压住左边各列的评分文字。
-const braceNodeInset = 10;
+// 括号连线：学生侧触点仍留在“课堂笔记”列内，但自列心右移半个字，
+// 既不盖住评分文字，也不会贴到右侧的文本框上。
+const braceNodeShift = 6;
 
 export type FeedbackBracePoint = { x: number; y: number };
 
@@ -311,7 +312,7 @@ export function feedbackBraceGeometry(
   const tip = { x: box.x, y: box.y + (box.braceTipDy ?? box.height / 2) };
   // 学生侧触点各自独立：基准 X 取自表格“综合评价”列的固定位置，不随文本框移动，
   // 每个学生再叠加自己的偏移，移动一个不牵动其他人，也不牵动汇聚点。
-  const baseX = layout.cols[6] + braceNodeInset;
+  const baseX = (layout.cols[5] + layout.cols[6]) / 2 + braceNodeShift;
   const nodeOffsets = box.braceNodes ?? {};
   const nodes = ids
     .map((id) => {

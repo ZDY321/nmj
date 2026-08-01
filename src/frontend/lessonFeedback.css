@@ -873,17 +873,18 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   width: 100%;
   aspect-ratio: 1;
   padding: 0;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(15, 35, 66, 0.16);
+  border: 1px solid rgba(15, 35, 66, 0.14);
+  border-radius: 8px;
   cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
 }
 
-.lesson-feedback-dot:hover { transform: scale(1.08); }
-.lesson-feedback-dot.is-active { border-color: #ffffff; box-shadow: 0 0 0 2px #25324a; }
+.lesson-feedback-dot:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(15, 35, 66, 0.16); }
+.lesson-feedback-dot.is-active { border-color: #25324a; box-shadow: 0 0 0 2px rgba(37, 50, 74, 0.22); }
 
 .lesson-feedback-dot-custom {
   background: conic-gradient(#d92d20, #b54708, #079455, #175cd3, #6941c6, #d92d20);
+  border-radius: 8px;
 }
 
 .lesson-feedback-dot-custom input {
@@ -897,10 +898,43 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 
 .lesson-feedback-range {
   width: 100%;
+  height: 20px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lesson-feedback-range::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  accent-color: #25324a;
-  cursor: pointer;
+  background: #e8eef6;
+}
+
+.lesson-feedback-range::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  appearance: none;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #25324a;
+  box-shadow: 0 1px 4px rgba(15, 35, 66, 0.28);
+}
+
+.lesson-feedback-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #e8eef6;
+}
+
+.lesson-feedback-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #25324a;
+  box-shadow: 0 1px 4px rgba(15, 35, 66, 0.28);
 }
 
 .lesson-feedback-boxstyle-label {
@@ -961,6 +995,9 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   font-weight: 600;
   line-height: 1.45;
 }
+
+/* 左栏色板与右栏保持同样的密度。 */
+.lesson-feedback-toolrail .lesson-feedback-palette { gap: 4px; }
 
 /* 课后作业格：可直接输入自定义文字，样式与其他评分格保持一致。 */
 .lesson-feedback-mark-input {
@@ -1193,4 +1230,27 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   font-weight: 700;
   white-space: nowrap;
   pointer-events: none;
+}
+
+.lesson-feedback-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.lesson-feedback-section-value {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #25324a;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.lesson-feedback-width-preview {
+  display: block;
+  width: 100%;
+  min-height: 1px;
+  border-radius: 999px;
 }

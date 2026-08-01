@@ -835,8 +835,13 @@ export function LessonFeedbackEditor({
             </div>
           </div>
           <div className="lesson-feedback-section">
-            <span className="lesson-feedback-section-title">画笔粗细 {penWidth}px</span>
+            <div className="lesson-feedback-section-head">
+              <span className="lesson-feedback-section-title">画笔粗细</span>
+              <span className="lesson-feedback-section-value">{penWidth}px</span>
+            </div>
             <input className="lesson-feedback-range" type="range" min="1" max="10" value={penWidth} onChange={(event) => setPenWidth(Number(event.target.value))} />
+            {/* 直接预览当前粗细，不用先画一笔才知道多粗。 */}
+            <span className="lesson-feedback-width-preview" style={{ height: penWidth, background: activeColor }} />
           </div>
 
         </aside>
