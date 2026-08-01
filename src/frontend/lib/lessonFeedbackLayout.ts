@@ -306,20 +306,23 @@ export function feedbackBraceGeometry(
 ): FeedbackBraceGeometry | null {
   const ids = Array.isArray(box.studentIds) ? box.studentIds : [];
   if (!ids.length) return null;
-  // 两端各自带偏移：拖动汇聚点不动指点，反之亦然。
-  const tipOffset = box.braceTip ?? { dx: 0, dy: 0 };
-  const nodeOffset = box.braceNode ?? { dx: 0, dy: 0 };
-  const tip = {
-    x: box.x + tipOffset.dx,
-    y: box.y + box.height / 2 + tipOffset.dy
-  };
-  const nodeX = box.x - braceSpan + nodeOffset.dx;
+  // 汇聚点锁在文本框左缘，只允许沿框高微调，因此拖动文本框时它必然跟随。
+  const tipDy = box.braceTip?.dy ?? box.height / 2;
+  const tip = { x: box.x, y: box.y + tipDy };
+  // 学生侧触点各自独立：基准 X 取自表格“综合评价”列的固定位置，不随文本框移动，
+  // 每个学生再叠加自己的偏移，移动一个不牵动其他人，也不牵动汇聚点。
+  const baseX = layout.cols[6] - braceSpan;
+  const nodeOffsets = box.braceNodes ?? {};
   const nodes = ids
     .map((id) => {
       const index = record.students.findIndex((student) => student.id === id);
-      return index < 0
-        ? null
-        : { id, x: nodeX, y: feedbackStudentRowCenter(layout, index) + nodeOffset.dy };
+      if (index < 0) return null;
+      const offset = nodeOffsets[id] ?? { dx: 0, dy: 0 };
+      return {
+        id,
+        x: baseX + offset.dx,
+        y: feedbackStudentRowCenter(layout, index) + offset.dy
+      };
     })
     .filter((node): node is FeedbackBracePoint & { id: string } => node !== null);
   if (!nodes.length) return null;

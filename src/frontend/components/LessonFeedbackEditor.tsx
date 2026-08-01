@@ -101,7 +101,8 @@ export function LessonFeedbackEditor({
   const [draftBox, setDraftBox] = useState<{ startX: number; startY: number; x: number; y: number; width: number; height: number } | null>(null);
   const [braceDrag, setBraceDrag] = useState<{
     id: string;
-    end: "tip" | "node";
+    // studentId 为空表示拖的是文本框侧的汇聚点。
+    studentId?: string;
     startClientX: number;
     startClientY: number;
     startOffset: { dx: number; dy: number };
@@ -203,12 +204,18 @@ export function LessonFeedbackEditor({
       const next = cloneRecord(latestRecordRef.current);
       const box = next.textBoxes.find((item) => item.id === braceDrag.id);
       if (!box) return;
-      const offset = {
-        dx: braceDrag.startOffset.dx + deltaX,
-        dy: braceDrag.startOffset.dy + deltaY
-      };
-      if (braceDrag.end === "tip") box.braceTip = offset;
-      else box.braceNode = offset;
+      if (braceDrag.studentId) {
+        // 学生侧：只改这一个学生的偏移，其余学生与汇聚点原地不动。
+        const offsets = { ...(box.braceNodes ?? {}) };
+        offsets[braceDrag.studentId] = {
+          dx: braceDrag.startOffset.dx + deltaX,
+          dy: braceDrag.startOffset.dy + deltaY
+        };
+        box.braceNodes = offsets;
+      } else {
+        // 文本框侧：锁在框上，只能沿框高滑动，不会脱离文本框。
+        box.braceTip = { dy: clamp(braceDrag.startOffset.dy + deltaY, 0, box.height) };
+      }
       emit(next, false);
     };
     const onPointerUp = () => {
@@ -376,15 +383,18 @@ export function LessonFeedbackEditor({
     emit(next, history);
   }
 
-  function beginBraceDrag(event: ReactPointerEvent<SVGCircleElement>, box: LessonFeedbackTextBox, end: "tip" | "node"): void {
+  function beginBraceDrag(event: ReactPointerEvent<SVGCircleElement>, box: LessonFeedbackTextBox, studentId?: string): void {
     event.stopPropagation();
     event.preventDefault();
+    const startOffset = studentId
+      ? box.braceNodes?.[studentId] ?? { dx: 0, dy: 0 }
+      : { dx: 0, dy: box.braceTip?.dy ?? box.height / 2 };
     setBraceDrag({
       id: box.id,
-      end,
+      studentId,
       startClientX: event.clientX,
       startClientY: event.clientY,
-      startOffset: (end === "tip" ? box.braceTip : box.braceNode) ?? { dx: 0, dy: 0 },
+      startOffset,
       originalRecord: cloneRecord(record)
     });
   }
@@ -664,7 +674,6 @@ export function LessonFeedbackEditor({
               const c = layout.cols;
               const marks = [
                 { field: "attendance" as const, left: c[1], right: c[2] },
-                { field: "homework" as const, left: c[2], right: c[3] },
                 { field: "listening" as const, left: c[3], right: c[4] },
                 { field: "participation" as const, left: c[4], right: c[5] },
                 { field: "notes" as const, left: c[5], right: c[6] }
@@ -695,6 +704,28 @@ export function LessonFeedbackEditor({
                       {entry?.[field] || ""}
                     </button>
                   ))}
+                  {/* 课后作业允许自定义文字（如“没带”“补交”），点右侧小按钮才在 A/B/C 间循环。 */}
+                  <input
+                    className={cn("lesson-feedback-mark-input", markClass(entry?.homework ?? ""))}
+                    style={cellStyle(c[2], rowY, c[3] - c[2], layout.studentRowHeight, {
+                      align: "center",
+                      size: (entry?.homework ?? "").length > 1 ? 12 : 17
+                    })}
+                    value={entry?.homework ?? ""}
+                    onChange={(event) => updateEntry(student.id, { homework: event.target.value })}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label={`${student.name} 课后作业`}
+                    title="可直接输入文字，或用右侧按钮切换 A/B/C"
+                  />
+                  <button
+                    type="button"
+                    className="lesson-feedback-cycle-button"
+                    style={{ top: rowY + 3, left: c[3] - 15 }}
+                    onClick={(event) => { event.stopPropagation(); cycleEntry(student.id, "homework"); }}
+                    title="切换 A / B / C"
+                  >
+                    A
+                  </button>
                   <textarea
                     className="lesson-feedback-field lesson-feedback-comment-cell"
                     style={cellStyle(c[6], rowY, c[7] - c[6], layout.studentRowHeight, { size: 11.5, padding: 5 })}
@@ -737,33 +768,36 @@ export function LessonFeedbackEditor({
                   <path key={`${box.id}-path-${node.id}`} d={feedbackBracePath(node, geo.tip)} fill="none" stroke={geo.color} strokeWidth={geo.width} strokeLinecap="round" />,
                   <circle key={`${box.id}-dot-${node.id}`} cx={node.x} cy={node.y} r={Math.max(2.4, geo.width + 0.6)} fill={geo.color} />
                 ]);
+                // 每个学生一个独立手柄，另加文本框侧的汇聚点手柄。
                 const handles = selectedTextBoxId === box.id && activeTool === "select" ? [
                   <circle
                     key={`${box.id}-tip-handle`}
                     className="lesson-feedback-brace-handle"
                     cx={geo.tip.x}
                     cy={geo.tip.y}
-                    r={11}
+                    r={10}
                     fill="#ffffff"
                     fillOpacity="0.35"
                     stroke={geo.color}
                     strokeWidth={2}
                     strokeDasharray="3 3"
-                    onPointerDown={(event) => beginBraceDrag(event, box, "tip")}
+                    onPointerDown={(event) => beginBraceDrag(event, box)}
                   />,
-                  <circle
-                    key={`${box.id}-node-handle`}
-                    className="lesson-feedback-brace-handle"
-                    cx={geo.nodes[0].x}
-                    cy={geo.nodes[0].y}
-                    r={11}
-                    fill="#ffffff"
-                    fillOpacity="0.35"
-                    stroke="#d92d20"
-                    strokeWidth={2}
-                    strokeDasharray="3 3"
-                    onPointerDown={(event) => beginBraceDrag(event, box, "node")}
-                  />
+                  ...geo.nodes.map((node) => (
+                    <circle
+                      key={`${box.id}-node-handle-${node.id}`}
+                      className="lesson-feedback-brace-handle"
+                      cx={node.x}
+                      cy={node.y}
+                      r={10}
+                      fill="#ffffff"
+                      fillOpacity="0.35"
+                      stroke="#d92d20"
+                      strokeWidth={2}
+                      strokeDasharray="3 3"
+                      onPointerDown={(event) => beginBraceDrag(event, box, node.id)}
+                    />
+                  ))
                 ] : [];
                 return [
                   ...bands,

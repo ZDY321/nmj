@@ -943,3 +943,47 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   font-weight: 600;
   line-height: 1.45;
 }
+
+/* 课后作业格：可直接输入自定义文字，样式与其他评分格保持一致。 */
+.lesson-feedback-mark-input {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  padding: 0 12px 0 2px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  outline: 0;
+  background: transparent;
+  color: var(--feedback-ink);
+  font-family: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+
+.lesson-feedback-mark-input:hover { border-color: rgba(35, 95, 88, 0.28); background: rgba(226, 243, 237, 0.42); }
+.lesson-feedback-mark-input:focus { border-color: #4d8f84; background: rgba(255, 255, 255, 0.94); }
+.lesson-feedback-mark-input.is-good { color: #14795d; }
+.lesson-feedback-mark-input.is-medium { color: #a85617; }
+.lesson-feedback-mark-input.is-poor { color: #bd3029; }
+
+.lesson-feedback-cycle-button {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  width: 13px;
+  height: 13px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #cbd5df;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #64748b;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 800;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.lesson-feedback-paper:hover .lesson-feedback-cycle-button { opacity: 1; }
+.lesson-feedback-cycle-button:hover { border-color: #235f58; color: #235f58; }

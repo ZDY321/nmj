@@ -145,12 +145,14 @@ describe("lesson feedback brace geometry", () => {
     ]
   };
 
-  it("fans finger dots 34px left of the tip and anchors the tip on the box edge", () => {
+  it("anchors the tip on the box and parks student dots beside the comment column", () => {
     const layout = feedbackSheetLayout(4);
     const geo = feedbackBraceGeometry(box, record, layout)!;
 
     expect(geo.tip).toEqual({ x: 536, y: 368 });
-    expect(geo.nodes.map((node) => node.x)).toEqual([502, 502]);
+    // 学生侧触点以表格“综合评价”列为基准，不随文本框位置漂移。
+    const expectedX = layout.cols[6] - 34;
+    expect(geo.nodes.map((node) => node.x)).toEqual([expectedX, expectedX]);
     expect(geo.nodes.map((node) => node.y)).toEqual([
       feedbackStudentRowCenter(layout, 1),
       feedbackStudentRowCenter(layout, 3)
@@ -180,9 +182,9 @@ describe("lesson feedback brace geometry", () => {
 
     expect(second.tip).toEqual(first.tip);
     expect(second.nodes).toEqual(first.nodes);
-    // 汇聚点贴住文本框左缘，指点落在其左侧固定跨距处。
+    // 汇聚点贴住文本框左缘；触点则以表格列为基准，二者互不牵动。
     expect(first.tip.x).toBe(box.x);
-    first.nodes.forEach((node) => expect(box.x - node.x).toBe(34));
+    first.nodes.forEach((node) => expect(layout.cols[6] - node.x).toBe(34));
   });
 
   it("keeps finger dots aligned with the rows the export paints", () => {
@@ -194,39 +196,50 @@ describe("lesson feedback brace geometry", () => {
     });
   });
 
-  // 两端各自独立：拖文本框那一端时，学生一侧的点必须原地不动，反之亦然。
-  it("moves only the tip when the box-side handle is dragged", () => {
+  // 学生侧每个触点独立：移动其中一个，其他学生与汇聚点都不能跟着动。
+  it("moves one student's dot without disturbing the others or the tip", () => {
     const layout = feedbackSheetLayout(4);
     const base = feedbackBraceGeometry(box, record, layout)!;
-    const moved = feedbackBraceGeometry({ ...box, braceTip: { dx: 18, dy: -25 } }, record, layout)!;
-
-    expect(moved.tip).toEqual({ x: base.tip.x + 18, y: base.tip.y - 25 });
-    expect(moved.nodes).toEqual(base.nodes);
-  });
-
-  it("moves only the finger dots when the student-side handle is dragged", () => {
-    const layout = feedbackSheetLayout(4);
-    const base = feedbackBraceGeometry(box, record, layout)!;
-    const moved = feedbackBraceGeometry({ ...box, braceNode: { dx: -20, dy: 12 } }, record, layout)!;
+    const moved = feedbackBraceGeometry({ ...box, braceNodes: { s2: { dx: -18, dy: 7 } } }, record, layout)!;
 
     expect(moved.tip).toEqual(base.tip);
-    moved.nodes.forEach((node, index) => {
-      expect(node.x).toBe(base.nodes[index].x - 20);
-      expect(node.y).toBe(base.nodes[index].y + 12);
-    });
+    expect(moved.nodes[0].x).toBe(base.nodes[0].x - 18);
+    expect(moved.nodes[0].y).toBe(base.nodes[0].y + 7);
+    // 第二个学生没被拖过，必须停在原处。
+    expect(moved.nodes[1]).toEqual(base.nodes[1]);
   });
 
-  it("applies both offsets without either cancelling the other", () => {
+  it("keeps every student's dot independent of the others", () => {
     const layout = feedbackSheetLayout(4);
     const base = feedbackBraceGeometry(box, record, layout)!;
     const moved = feedbackBraceGeometry(
-      { ...box, braceTip: { dx: 10, dy: 10 }, braceNode: { dx: -30, dy: 5 } },
+      { ...box, braceNodes: { s2: { dx: -10, dy: 0 }, s4: { dx: 6, dy: -4 } } },
       record,
       layout
     )!;
 
-    expect(moved.tip).toEqual({ x: base.tip.x + 10, y: base.tip.y + 10 });
-    expect(moved.nodes[0].x).toBe(base.nodes[0].x - 30);
-    expect(moved.nodes[0].y).toBe(base.nodes[0].y + 5);
+    expect(moved.nodes[0].x).toBe(base.nodes[0].x - 10);
+    expect(moved.nodes[1].x).toBe(base.nodes[1].x + 6);
+    expect(moved.nodes[1].y).toBe(base.nodes[1].y - 4);
+  });
+
+  // 汇聚点锁在文本框上：只能沿框高滑动，且拖动文本框时必须跟随。
+  it("anchors the tip to the box edge and only allows vertical nudging", () => {
+    const layout = feedbackSheetLayout(4);
+    const moved = feedbackBraceGeometry({ ...box, braceTip: { dy: 12 } }, record, layout)!;
+
+    expect(moved.tip).toEqual({ x: box.x, y: box.y + 12 });
+  });
+
+  it("carries the tip along when the box moves, leaving student dots put", () => {
+    const layout = feedbackSheetLayout(4);
+    const base = feedbackBraceGeometry(box, record, layout)!;
+    const shifted = feedbackBraceGeometry({ ...box, x: box.x + 60, y: box.y + 30 }, record, layout)!;
+
+    // 汇聚点跟着框走……
+    expect(shifted.tip.x).toBe(box.x + 60);
+    expect(shifted.tip.y).toBe(base.tip.y + 30);
+    // ……学生侧触点不受文本框位置影响。
+    expect(shifted.nodes).toEqual(base.nodes);
   });
 });

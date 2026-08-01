@@ -59,10 +59,11 @@ export type LessonFeedbackTextBox = {
   // 旧版反馈项目里可逐框调整的样式；未写入时按 dashed / 1.5 处理，兼容既有记录。
   borderStyle?: LessonFeedbackBorderStyle;
   borderWidth?: number;
-  // 括号两端可各自微调：braceTip 是文本框一侧的汇聚点，braceNode 是学生一侧的指点。
-  // 二者相互独立，拖动一端不会牵动另一端。
-  braceTip?: { dx: number; dy: number };
-  braceNode?: { dx: number; dy: number };
+  // 括号两端的语义不同：
+  // - 文本框侧的汇聚点锁死在框上（只存框内的相对位置），拖框时跟着走，不单独漂移。
+  // - 学生侧每个触点各自独立，按 studentId 存偏移，移动其中一个不影响其他人与汇聚点。
+  braceTip?: { dy: number };
+  braceNodes?: Record<string, { dx: number; dy: number }>;
 };
 
 export type LessonFeedbackRecord = {
