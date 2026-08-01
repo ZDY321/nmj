@@ -223,12 +223,36 @@ describe("lesson feedback brace geometry", () => {
     expect(moved.nodes[1].y).toBe(base.nodes[1].y - 4);
   });
 
-  // 汇聚点与文本框一体：恒在框左缘中点，没有独立偏移。
-  it("keeps the tip fixed to the middle of the box's left edge", () => {
+  // 汇聚点与文本框一体，纵向位置可由 braceTipDy 指定。
+  it("keeps the tip on the box's left edge, centred by default", () => {
     const layout = feedbackSheetLayout(4);
     const geo = feedbackBraceGeometry(box, record, layout)!;
 
     expect(geo.tip).toEqual({ x: box.x, y: box.y + box.height / 2 });
+  });
+
+  // 单人反馈时汇聚点与该学生同高，连线才是水平直线而不是斜线。
+  it("draws a level line for a single student when the tip aligns to that row", () => {
+    const layout = feedbackSheetLayout(4);
+    const rowCentre = feedbackStudentRowCenter(layout, 1);
+    const single = { ...box, studentIds: ["s2"], braceTipDy: rowCentre - box.y };
+    const geo = feedbackBraceGeometry(single, record, layout)!;
+
+    expect(geo.nodes).toHaveLength(1);
+    expect(geo.tip.y).toBe(rowCentre);
+    expect(geo.nodes[0].y).toBe(geo.tip.y);
+  });
+
+  it("centres the tip across the spanned rows for a group", () => {
+    const layout = feedbackSheetLayout(4);
+    // 选中第 2、4 行时，汇聚点应落在两行中点之间。
+    const midway = (feedbackStudentRowCenter(layout, 1) + feedbackStudentRowCenter(layout, 3)) / 2;
+    const group = { ...box, braceTipDy: midway - box.y };
+    const geo = feedbackBraceGeometry(group, record, layout)!;
+
+    expect(geo.tip.y).toBe(midway);
+    expect(geo.nodes[0].y).toBeLessThan(geo.tip.y);
+    expect(geo.nodes[1].y).toBeGreaterThan(geo.tip.y);
   });
 
   it("carries the tip along when the box moves, leaving student dots put", () => {

@@ -375,7 +375,9 @@ function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedback
     // 荧光标记压在文字下方，先画底色再画字。
     const textOptions = {
       size: box.fontSize,
-      padding: 8,
+      // 与旧项目一致的框内留白：左右 3、上下 2，同宽的框因此能多放一个字。
+      paddingX: 3,
+      paddingY: 2,
       valign: "top" as const,
       maxLines: Infinity,
       ellipsis: false,
@@ -389,7 +391,8 @@ function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedback
       size: box.fontSize,
       weight: box.fontWeight,
       fill: box.color,
-      padding: 8,
+      paddingX: 3,
+      paddingY: 2,
       valign: "top",
       maxLines: Infinity,
       ellipsis: false,

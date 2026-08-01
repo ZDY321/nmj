@@ -650,6 +650,8 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 .lesson-feedback-brace-handle:active { cursor: grabbing; }
 .lesson-feedback-ink-canvas { z-index: 16; touch-action: none; }
 .lesson-feedback-paper.is-drawing { cursor: crosshair; }
+/* 画笔/荧光笔/橡皮改用笔头预览，隐藏系统光标以免两个指示重叠。 */
+.lesson-feedback-paper.is-brush { cursor: none; }
 
 .lesson-feedback-text-box {
   position: absolute;
@@ -697,9 +699,9 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   resize: none;
   border: 0;
   outline: 0;
-  /* 与导出严格对齐：padding 8、lineHeight 1.45、同一字体族，
+  /* 与导出严格对齐：padding 2px 3px、lineHeight 1.45、同一字体族，
      并按字符换行——导出用 canvas 实测逐字折行，这里必须同规则才所见即所得。 */
-  padding: 8px;
+  padding: 2px 3px;
   background: transparent;
   font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   line-height: 1.45;
@@ -1125,3 +1127,43 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 }
 
 .lesson-feedback-dot:disabled { cursor: not-allowed; opacity: 0.4; }
+
+/* 选中图形的操作框：整体可拖动，右下角可缩放。 */
+.lesson-feedback-stroke-frame {
+  position: absolute;
+  z-index: 15;
+  border: 1px dashed #1557c2;
+  border-radius: 3px;
+  background: rgba(21, 87, 194, 0.05);
+  cursor: move;
+}
+
+.lesson-feedback-stroke-resize {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #1557c2;
+  border-radius: 3px;
+  background: #ffffff;
+  cursor: nwse-resize;
+}
+
+/* 笔头预览：圆环大小等于实际落笔粗细，一眼看出线条多粗。 */
+.lesson-feedback-brush-cursor {
+  position: absolute;
+  z-index: 17;
+  box-sizing: border-box;
+  border: 1.5px solid;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.lesson-feedback-brush-cursor.is-eraser {
+  border-color: #64748b;
+  border-style: dashed;
+  background: rgba(148, 163, 184, 0.22);
+}

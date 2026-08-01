@@ -306,8 +306,9 @@ export function feedbackBraceGeometry(
 ): FeedbackBraceGeometry | null {
   const ids = Array.isArray(box.studentIds) ? box.studentIds : [];
   if (!ids.length) return null;
-  // 汇聚点与文本框一体：恒定在框左缘中点，随框移动，不单独偏移。
-  const tip = { x: box.x, y: box.y + box.height / 2 };
+  // 汇聚点与文本框一体，随框移动；纵向位置默认取框高中点，
+  // 建框时会写入对齐所选行中点的偏移，单人反馈因此得到水平直线。
+  const tip = { x: box.x, y: box.y + (box.braceTipDy ?? box.height / 2) };
   // 学生侧触点各自独立：基准 X 取自表格“综合评价”列的固定位置，不随文本框移动，
   // 每个学生再叠加自己的偏移，移动一个不牵动其他人，也不牵动汇聚点。
   const baseX = layout.cols[6] - braceSpan;

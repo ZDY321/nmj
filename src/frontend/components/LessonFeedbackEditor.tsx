@@ -126,6 +126,15 @@ export function LessonFeedbackEditor({
   const [focusedCommentId, setFocusedCommentId] = useState("");
   const [selectedStrokeId, setSelectedStrokeId] = useState("");
   const [textSelection, setTextSelection] = useState<{ boxId: string; start: number; end: number } | null>(null);
+  const [brushCursor, setBrushCursor] = useState<LessonFeedbackPoint | null>(null);
+  const [strokeDrag, setStrokeDrag] = useState<{
+    id: string;
+    mode: "move" | "resize";
+    startClientX: number;
+    startClientY: number;
+    startPoints: LessonFeedbackPoint[];
+    originalRecord: LessonFeedbackRecord;
+  } | null>(null);
   const textAreaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -146,6 +155,9 @@ export function LessonFeedbackEditor({
     ? { id: focusedStudent.id, name: focusedStudent.name, entry: record.entries[focusedStudent.id] ?? blankEntry }
     : null;
   const isDrawingTool = activeTool !== "select";
+  // 画笔/荧光笔/橡皮显示真实笔头大小，其余工具仍用十字准星。
+  const showsBrushCursor = activeTool === "pen" || activeTool === "highlighter" || activeTool === "eraser";
+  const brushDiameter = activeTool === "highlighter" ? Math.max(penWidth * 5, 12) : activeTool === "eraser" ? 24 : penWidth;
 
   latestRecordRef.current = record;
 
@@ -183,25 +195,9 @@ export function LessonFeedbackEditor({
     context.clearRect(0, 0, feedbackPageWidth, pageHeight);
     record.annotations.forEach((stroke) => {
       drawFeedbackStroke(context, stroke);
-      if (stroke.id !== selectedStrokeId) return;
-      // 选中态：沿图形外包框画一圈虚线，位置一目了然。
-      const xs = stroke.points.map((item) => item.x);
-      const ys = stroke.points.map((item) => item.y);
-      const pad = Math.max(6, stroke.width);
-      context.save();
-      context.strokeStyle = "#1557c2";
-      context.lineWidth = 1;
-      context.setLineDash([4, 3]);
-      context.strokeRect(
-        Math.min(...xs) - pad,
-        Math.min(...ys) - pad,
-        Math.max(...xs) - Math.min(...xs) + pad * 2,
-        Math.max(...ys) - Math.min(...ys) + pad * 2
-      );
-      context.restore();
     });
     if (draftStroke) drawFeedbackStroke(context, draftStroke);
-  }, [draftStroke, pageHeight, record.annotations, selectedStrokeId]);
+  }, [draftStroke, pageHeight, record.annotations]);
 
   useEffect(() => {
     if (!boxInteraction) return;
@@ -238,6 +234,53 @@ export function LessonFeedbackEditor({
       window.removeEventListener("pointercancel", onPointerUp);
     };
   }, [boxInteraction]);
+
+  // 选中的图形可整体平移，或从右下角按比例缩放。
+  useEffect(() => {
+    if (!strokeDrag) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const paper = document.querySelector<HTMLElement>(".lesson-feedback-paper");
+      const scale = feedbackPageWidth / Math.max(paper?.getBoundingClientRect().width ?? feedbackPageWidth, 1);
+      const deltaX = (event.clientX - strokeDrag.startClientX) * scale;
+      const deltaY = (event.clientY - strokeDrag.startClientY) * scale;
+      const next = cloneRecord(latestRecordRef.current);
+      const stroke = next.annotations.find((item) => item.id === strokeDrag.id);
+      if (!stroke) return;
+      const xs = strokeDrag.startPoints.map((point) => point.x);
+      const ys = strokeDrag.startPoints.map((point) => point.y);
+      const minX = Math.min(...xs);
+      const minY = Math.min(...ys);
+      if (strokeDrag.mode === "move") {
+        stroke.points = strokeDrag.startPoints.map((point) => ({ x: point.x + deltaX, y: point.y + deltaY }));
+      } else {
+        const width = Math.max(...xs) - minX;
+        const height = Math.max(...ys) - minY;
+        // 以左上角为锚点缩放；下限避免图形被拖成零尺寸后无法再抓取。
+        const scaleX = width > 1 ? Math.max(0.1, (width + deltaX) / width) : 1;
+        const scaleY = height > 1 ? Math.max(0.1, (height + deltaY) / height) : 1;
+        stroke.points = strokeDrag.startPoints.map((point) => ({
+          x: minX + (point.x - minX) * scaleX,
+          y: minY + (point.y - minY) * scaleY
+        }));
+      }
+      emit(next, false);
+    };
+    const onPointerUp = () => {
+      undoStackRef.current.push(strokeDrag.originalRecord);
+      trimHistory(undoStackRef.current);
+      redoStackRef.current = [];
+      suppressDeselectRef.current = true;
+      setStrokeDrag(null);
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+    window.addEventListener("pointercancel", onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [strokeDrag]);
 
   // 括号两端独立拖动：只改被拖那一端的偏移，另一端保持不动。
   useEffect(() => {
@@ -370,13 +413,18 @@ export function LessonFeedbackEditor({
       .filter((index) => index >= 0);
     const firstRow = Math.min(...rows);
     const lastRow = Math.max(...rows);
+    const boxX = layout.cols[6] + 6;
+    const boxY = clamp(layout.studentStartY + firstRow * layout.studentRowHeight + 4, layout.studentStartY + 4, pageHeight - 130);
+    const boxHeight = Math.max(54, (lastRow - firstRow + 1) * layout.studentRowHeight - 8);
     const box: LessonFeedbackTextBox = {
       id: makeId("feedback_box"),
       // 落在“综合评价及建议”列内，括号自左侧汇聚过来。
-      x: layout.cols[6] + 6,
-      y: clamp(layout.studentStartY + firstRow * layout.studentRowHeight + 4, layout.studentStartY + 4, pageHeight - 130),
+      x: boxX,
+      y: boxY,
       width: layout.cols[7] - layout.cols[6] - 12,
-      height: Math.max(54, (lastRow - firstRow + 1) * layout.studentRowHeight - 8),
+      height: boxHeight,
+      // 汇聚点对齐所选行的中点：单人时与该行同高，连线是水平直线。
+      braceTipDy: layout.studentStartY + ((firstRow + lastRow + 1) / 2) * layout.studentRowHeight - boxY,
       text: `${title}\n`,
       color: "#111827",
       fontSize: 12,
@@ -462,7 +510,8 @@ export function LessonFeedbackEditor({
     if (!box.highlights?.length) return [];
     return feedbackHighlightRects(box.text, box.highlights, box, {
       size: box.fontSize,
-      padding: 8,
+      paddingX: 3,
+      paddingY: 2,
       valign: "top",
       maxLines: Infinity,
       ellipsis: false,
@@ -481,6 +530,19 @@ export function LessonFeedbackEditor({
 
   function clearHighlights(boxId: string): void {
     patchTextBox(boxId, { highlights: [] });
+  }
+
+  function beginStrokeDrag(event: ReactPointerEvent<HTMLElement>, stroke: LessonFeedbackStroke, mode: "move" | "resize"): void {
+    event.stopPropagation();
+    event.preventDefault();
+    setStrokeDrag({
+      id: stroke.id,
+      mode,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPoints: stroke.points.map((point) => ({ ...point })),
+      originalRecord: cloneRecord(record)
+    });
   }
 
   function patchStroke(strokeId: string, patch: Partial<LessonFeedbackStroke>): void {
@@ -558,6 +620,7 @@ export function LessonFeedbackEditor({
   }
 
   function handleCanvasPointerMove(event: ReactPointerEvent<HTMLCanvasElement>): void {
+    if (showsBrushCursor) setBrushCursor(pointerPoint(event));
     if (draftBox) {
       const point = pointerPoint(event);
       setDraftBox((current) => current && {
@@ -736,7 +799,7 @@ export function LessonFeedbackEditor({
         <div className="lesson-feedback-paper-viewport">
           <div className="lesson-feedback-paper-stage" style={{ width: feedbackPageWidth * zoom, height: pageHeight * zoom }}>
           <div
-            className={cn("lesson-feedback-paper", isDrawingTool && "is-drawing")}
+            className={cn("lesson-feedback-paper", isDrawingTool && "is-drawing", showsBrushCursor && "is-brush")}
             style={{ width: feedbackPageWidth, height: pageHeight, transform: `scale(${zoom})` }}
             onClick={(event) => {
               // 拖动手柄松手会补一个 click，直接清空会让右侧样式栏闪退。
@@ -1007,6 +1070,44 @@ export function LessonFeedbackEditor({
               </div>
             ))}
 
+            {showsBrushCursor && brushCursor && (
+              <span
+                className={cn("lesson-feedback-brush-cursor", activeTool === "eraser" && "is-eraser")}
+                style={{
+                  left: brushCursor.x,
+                  top: brushCursor.y,
+                  width: brushDiameter,
+                  height: brushDiameter,
+                  borderColor: activeTool === "eraser" ? undefined : activeColor
+                }}
+                aria-hidden="true"
+              />
+            )}
+
+            {selectedStroke && activeTool === "select" && (() => {
+              const xs = selectedStroke.points.map((point) => point.x);
+              const ys = selectedStroke.points.map((point) => point.y);
+              const pad = Math.max(8, selectedStroke.width);
+              const left = Math.min(...xs) - pad;
+              const top = Math.min(...ys) - pad;
+              const width = Math.max(...xs) - Math.min(...xs) + pad * 2;
+              const height = Math.max(...ys) - Math.min(...ys) + pad * 2;
+              return (
+                <div
+                  className="lesson-feedback-stroke-frame"
+                  style={{ left, top, width, height }}
+                  onPointerDown={(event) => beginStrokeDrag(event, selectedStroke, "move")}
+                  title="拖动可移动图形"
+                >
+                  <span
+                    className="lesson-feedback-stroke-resize"
+                    onPointerDown={(event) => beginStrokeDrag(event, selectedStroke, "resize")}
+                    title="拖动可缩放图形"
+                  />
+                </div>
+              );
+            })()}
+
             {draftBox && (
               <div
                 className="lesson-feedback-draft-box"
@@ -1023,6 +1124,7 @@ export function LessonFeedbackEditor({
               onPointerMove={handleCanvasPointerMove}
               onPointerUp={finishCanvasStroke}
               onPointerCancel={() => { setDraftStroke(null); setDraftBox(null); }}
+              onPointerLeave={() => setBrushCursor(null)}
             />
           </div>
           </div>
