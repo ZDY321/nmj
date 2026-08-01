@@ -223,12 +223,12 @@ describe("lesson feedback brace geometry", () => {
     expect(moved.nodes[1].y).toBe(base.nodes[1].y - 4);
   });
 
-  // 汇聚点锁在文本框上：只能沿框高滑动，且拖动文本框时必须跟随。
-  it("anchors the tip to the box edge and only allows vertical nudging", () => {
+  // 汇聚点与文本框一体：恒在框左缘中点，没有独立偏移。
+  it("keeps the tip fixed to the middle of the box's left edge", () => {
     const layout = feedbackSheetLayout(4);
-    const moved = feedbackBraceGeometry({ ...box, braceTip: { dy: 12 } }, record, layout)!;
+    const geo = feedbackBraceGeometry(box, record, layout)!;
 
-    expect(moved.tip).toEqual({ x: box.x, y: box.y + 12 });
+    expect(geo.tip).toEqual({ x: box.x, y: box.y + box.height / 2 });
   });
 
   it("carries the tip along when the box moves, leaving student dots put", () => {

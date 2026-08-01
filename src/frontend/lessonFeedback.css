@@ -438,18 +438,17 @@
 .lesson-feedback-workspace {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr) auto;
-  min-height: 720px;
+  /* 固定视口高度，让反馈表在中间自行滚动；否则整页滚动会把左右工具栏带出可视区。 */
+  height: calc(100vh - 132px);
+  min-height: 520px;
 }
 
 .lesson-feedback-toolrail {
-  position: sticky;
-  top: 0;
   z-index: 10;
-  align-self: start;
   display: flex;
-  max-height: calc(100vh - 140px);
   flex-direction: column;
   width: 132px;
+  height: 100%;
   flex-shrink: 0;
   gap: 8px;
   overflow-y: auto;
@@ -516,7 +515,9 @@
 
 .lesson-feedback-paper-viewport {
   min-width: 0;
+  height: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 20px;
   background:
     linear-gradient(#dfe8ef 1px, transparent 1px),
@@ -741,7 +742,9 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 
 @media (max-width: 900px) {
   .lesson-feedback-actionbar { align-items: flex-start; flex-direction: column; }
-  .lesson-feedback-workspace { grid-template-columns: 1fr; }
+  .lesson-feedback-workspace { height: auto; grid-template-columns: 1fr; }
+  .lesson-feedback-paper-viewport { height: auto; max-height: 70vh; }
+  .lesson-feedback-toolrail { height: auto; }
   .lesson-feedback-siderail { position: static; width: auto; max-height: none; border-left: 0; border-top: 1px solid #dbe4ef; }
   .lesson-feedback-siderail.is-empty { display: none; }
   .lesson-feedback-toolrail {
@@ -900,13 +903,10 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 
 /* 右侧上下文工具栏：仅在选中文本框时显示具体控件，避免左栏被挤到需要滚动。 */
 .lesson-feedback-siderail {
-  position: sticky;
-  top: 0;
   z-index: 10;
-  align-self: start;
   display: flex;
   width: 168px;
-  max-height: calc(100vh - 140px);
+  height: 100%;
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
@@ -987,3 +987,33 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 
 .lesson-feedback-paper:hover .lesson-feedback-cycle-button { opacity: 1; }
 .lesson-feedback-cycle-button:hover { border-color: #235f58; color: #235f58; }
+
+/* 缩放用的舞台：撑出缩放后的尺寸，滚动条才对得上。 */
+.lesson-feedback-paper-stage {
+  position: relative;
+  margin: 0 auto;
+}
+
+.lesson-feedback-paper-stage > .lesson-feedback-paper {
+  transform-origin: top left;
+}
+
+/* 右侧面板分组：外框设置与文字设置分开，避免把“加粗”误读成边框粗细。 */
+.lesson-feedback-boxstyle-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 8px;
+}
+
+.lesson-feedback-boxstyle-group + .lesson-feedback-boxstyle-group {
+  border-top: 1px solid #e8eef6;
+  padding-top: 8px;
+}
+
+.lesson-feedback-boxstyle-group .lesson-feedback-boxstyle-title {
+  color: #25324a;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: left;
+}

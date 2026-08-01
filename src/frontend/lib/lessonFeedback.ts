@@ -16,6 +16,10 @@ export type LessonFeedbackEntry = {
   participation: LessonFeedbackMark;
   notes: LessonFeedbackMark;
   comment: string;
+  // 评语可单独调整样式；未设置时沿用整表默认值。
+  commentColor?: string;
+  commentFontSize?: number;
+  commentFontWeight?: 400 | 600 | 700;
 };
 
 export type LessonFeedbackStudentSnapshot = {
@@ -60,9 +64,8 @@ export type LessonFeedbackTextBox = {
   borderStyle?: LessonFeedbackBorderStyle;
   borderWidth?: number;
   // 括号两端的语义不同：
-  // - 文本框侧的汇聚点锁死在框上（只存框内的相对位置），拖框时跟着走，不单独漂移。
-  // - 学生侧每个触点各自独立，按 studentId 存偏移，移动其中一个不影响其他人与汇聚点。
-  braceTip?: { dy: number };
+  // - 文本框侧的汇聚点与文本框是一体的，恒定在框左缘中点，拖它等同于拖整个文本框。
+  // - 学生侧每个触点各自独立，按 studentId 存偏移，移动其中一个不影响其他人与文本框。
   braceNodes?: Record<string, { dx: number; dy: number }>;
 };
 

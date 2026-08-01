@@ -236,7 +236,12 @@ function drawStudentTable(
     fillCenteredText(context, entry.listening, (c[3] + c[4]) / 2, markY, 16, 700, feedbackMarkColor(entry.listening));
     fillCenteredText(context, entry.participation, (c[4] + c[5]) / 2, markY, 16, 700, feedbackMarkColor(entry.participation));
     fillCenteredText(context, entry.notes, (c[5] + c[6]) / 2, markY, 16, 700, feedbackMarkColor(entry.notes));
-    drawCellText(context, entry.comment, c[6], rowY, c[7] - c[6], layout.studentRowHeight, { size: 11.5, padding: 5 });
+    drawCellText(context, entry.comment, c[6], rowY, c[7] - c[6], layout.studentRowHeight, {
+      size: entry.commentFontSize ?? 11.5,
+      weight: entry.commentFontWeight ?? 400,
+      fill: entry.commentColor ?? feedbackInkColor,
+      padding: 5
+    });
   });
 }
 
