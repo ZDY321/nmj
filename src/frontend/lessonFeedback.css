@@ -438,9 +438,10 @@
 .lesson-feedback-workspace {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr) auto;
-  /* 固定视口高度，让反馈表在中间自行滚动；否则整页滚动会把左右工具栏带出可视区。 */
-  height: calc(100vh - 132px);
-  min-height: 520px;
+  /* 固定视口高度，让反馈表在中间自行滚动；否则整页滚动会把左右工具栏带出可视区。
+     作为“进度与作业”的子页时，上方还有页头与子页切换条，用变量留出这段高度。 */
+  height: calc(100vh - var(--feedback-chrome, 132px));
+  min-height: 480px;
 }
 
 .lesson-feedback-toolrail {

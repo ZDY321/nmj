@@ -35,7 +35,7 @@ import type { CourseGroup, TeacherVault } from "@/shared/types";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error" | "conflict";
 
-export function FeedbackView({
+export function LessonFeedbackWorkspace({
   vault,
   token,
   password,
@@ -781,3 +781,5 @@ function recordSignature(record: LessonFeedbackRecord): string {
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
+
+export const FeedbackView = LessonFeedbackWorkspace;

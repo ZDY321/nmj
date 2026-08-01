@@ -16,6 +16,7 @@ import {
   UserCheck,
   X
 } from "lucide-react";
+import { LessonFeedbackWorkspace } from "@/frontend/views/FeedbackView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +63,7 @@ import type {
 type HomeworkFilter = "all" | StudentHomeworkStatus;
 type ProgressFilter = "all" | StudentProgressStatus;
 type ProgressSortOption = "smart" | "today" | "course_name" | "campus" | "grade";
-type ProgressSectionView = "ledger" | "checklist";
+type ProgressSectionView = "ledger" | "checklist" | "feedback";
 
 type ProgressDraft = {
   progressText: string;
@@ -147,8 +148,11 @@ const emptyDraft: ProgressDraft = {
 export function ProgressView({
   vault,
   token,
+  password,
   role,
   checklistFocus,
+  lessonFeedbackFocus,
+  lessonFeedbackSyncNonce,
   onSaveProgressRecord,
   onSaveProgressRecords,
   onDeleteProgressRecord,
@@ -163,8 +167,11 @@ export function ProgressView({
 }: {
   vault: TeacherVault;
   token?: string;
+  password?: string;
   role: UserRole;
   checklistFocus?: ProgressChecklistFocus | null;
+  lessonFeedbackFocus?: { lessonId: string; nonce: number } | null;
+  lessonFeedbackSyncNonce?: number;
   onSaveProgressRecord: (record: StudentProgressRecord) => void;
   onSaveProgressRecords: (records: StudentProgressRecord[]) => void;
   onDeleteProgressRecord: (recordId: string) => void;
@@ -196,6 +203,11 @@ export function ProgressView({
   const [draft, setDraft] = useState<ProgressDraft>(emptyDraft);
   const [sectionView, setSectionView] = useState<ProgressSectionView>("ledger");
   const { confirm, dialog } = useConfirmDialog();
+
+  // 从今日提醒/排课的“课后反馈”按钮跳进来时，直接落到反馈子页。
+  useEffect(() => {
+    if (lessonFeedbackFocus?.lessonId) setSectionView("feedback");
+  }, [lessonFeedbackFocus?.nonce]);
 
   useEffect(() => {
     if (checklistFocus) setSectionView("checklist");
@@ -283,7 +295,7 @@ export function ProgressView({
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-extrabold text-[#061226]">进度与作业</div>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">台账页保留不动，学习清单是新增子页面。</div>
+          <div className="mt-1 text-xs font-semibold text-[#64748b]">课程进度、学习清单与课后反馈都在这里。</div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -299,6 +311,13 @@ export function ProgressView({
             onClick={() => setSectionView("checklist")}
           >
             <CheckCheck size={15} /> 学习清单
+          </Button>
+          <Button
+            type="button"
+            variant={sectionView === "feedback" ? "default" : "outline"}
+            onClick={() => setSectionView("feedback")}
+          >
+            <NotebookPen size={15} /> 课后反馈
           </Button>
         </div>
       </CardContent>
@@ -409,6 +428,25 @@ export function ProgressView({
       nextPlan: "",
       homeworkStatus: selectedLesson.content.homework.trim() ? current.homeworkStatus === "unassigned" ? "assigned" : current.homeworkStatus : "unassigned"
     }));
+  }
+
+  if (sectionView === "feedback") {
+    return (
+      <div className="space-y-6">
+        {dialog}
+        {sectionSwitcher}
+        {/* 反馈编辑器是三栏固定高度布局，撑满外层容器宽度才不至于把工具栏挤窄。 */}
+        <div className="-mx-3 sm:-mx-6 lg:-mx-9" style={{ ["--feedback-chrome" as string]: "252px" }}>
+          <LessonFeedbackWorkspace
+            vault={vault}
+            token={token ?? ""}
+            password={password ?? ""}
+            focusRequest={lessonFeedbackFocus}
+            syncNonce={lessonFeedbackSyncNonce}
+          />
+        </div>
+      </div>
+    );
   }
 
   if (sectionView === "checklist") {

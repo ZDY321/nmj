@@ -92,7 +92,6 @@ import type {
 const AdminView = lazy(() => import("@/frontend/views/AdminView").then((module) => ({ default: module.AdminView })));
 const CalendarView = lazy(() => import("@/frontend/views/CalendarView").then((module) => ({ default: module.CalendarView })));
 const GradesView = lazy(() => import("@/frontend/views/GradesView").then((module) => ({ default: module.GradesView })));
-const FeedbackView = lazy(() => import("@/frontend/views/FeedbackView").then((module) => ({ default: module.FeedbackView })));
 const PayrollReviewView = lazy(() => import("@/frontend/views/PayrollReviewView").then((module) => ({ default: module.PayrollReviewView })));
 const ProgressView = lazy(() => import("@/frontend/views/ProgressView").then((module) => ({ default: module.ProgressView })));
 const ScheduleView = lazy(() => import("@/frontend/views/ScheduleView").then((module) => ({ default: module.ScheduleView })));
@@ -1516,7 +1515,7 @@ export function App() {
         nonce: Date.now()
       });
     }
-    if (nextView !== "feedback") {
+    if (nextView !== "progress") {
       setLessonFeedbackFocus(null);
     }
     setView(nextView);
@@ -1578,7 +1577,8 @@ export function App() {
     setMobileNavOpen(false);
     setOnboardingVisible(false);
     setLessonFeedbackFocus({ lessonId: lesson.id, nonce: Date.now() });
-    setView("feedback");
+    // 课后反馈已并入“进度与作业”，跳转落到该页的反馈子页。
+    setView("progress");
   }
 
   function openPayrollReviewLessonInScheduleRecords(lesson: Lesson) {
@@ -2062,8 +2062,11 @@ export function App() {
                   <ProgressView
                     vault={vault}
                     token={token}
+                    password={password}
                     role={role}
                     checklistFocus={progressChecklistFocus}
+                    lessonFeedbackFocus={lessonFeedbackFocus}
+                    lessonFeedbackSyncNonce={lessonFeedbackSyncNonce}
                     onSaveProgressRecord={saveStudentProgressRecord}
                     onSaveProgressRecords={saveStudentProgressRecords}
                     onDeleteProgressRecord={deleteStudentProgressRecord}
@@ -2076,9 +2079,6 @@ export function App() {
                     onSaveExternalPromptTemplate={saveExternalPromptTemplate}
                     onOpenLessonInRecords={openProgressLessonInScheduleRecords}
                   />
-                )}
-                {view === "feedback" && (
-                  <FeedbackView vault={vault} token={token} password={password} focusRequest={lessonFeedbackFocus} syncNonce={lessonFeedbackSyncNonce} />
                 )}
                 {view === "students" && (
                   <StudentsView
