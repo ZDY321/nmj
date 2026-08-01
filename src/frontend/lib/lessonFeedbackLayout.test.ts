@@ -82,6 +82,31 @@ describe("lesson feedback sheet layout", () => {
     expect(feedbackWrappedTextLayout("", 0, 0, 100, 30)).toBeNull();
   });
 
+  // 文本框改用真实测量折行，导出断行才能与网页 textarea 一致。
+  it("wraps by measured width when a measure function is supplied", () => {
+    // 每个字符固定 10px 宽，可用宽度 (100 - 8*2) = 84 → 每行 8 个字符。
+    const measure = (value: string) => value.length * 10;
+    const layout = feedbackWrappedTextLayout("abcdefghijklmnop", 0, 0, 100, 200, {
+      size: 12,
+      padding: 8,
+      maxLines: Infinity,
+      ellipsis: false,
+      measure
+    });
+    expect(layout!.lines).toEqual(["abcdefgh", "ijklmnop"]);
+  });
+
+  it("honours explicit newlines when measuring", () => {
+    const measure = (value: string) => value.length * 10;
+    const layout = feedbackWrappedTextLayout("ab\ncd", 0, 0, 100, 200, {
+      padding: 8,
+      maxLines: Infinity,
+      ellipsis: false,
+      measure
+    });
+    expect(layout!.lines).toEqual(["ab", "cd"]);
+  });
+
   it("formats dates the way the legacy sheet prints them", () => {
     expect(feedbackFormatDate("2026-07-30")).toBe("2026.7.30");
     expect(feedbackFormatDate("")).toBe("未填写日期");

@@ -585,8 +585,9 @@ export function LessonFeedbackEditor({
           })}
           <div className="lesson-feedback-tool-divider" />
           <div className="lesson-feedback-section">
-            <span className="lesson-feedback-section-title">颜色</span>
-            <div className="lesson-feedback-palette" role="group" aria-label="常用颜色">
+            <span className="lesson-feedback-section-title">画笔颜色</span>
+            <span className="lesson-feedback-section-hint">画笔 · 荧光笔 · 图形，以及新建文本框的边框色</span>
+            <div className="lesson-feedback-palette" role="group" aria-label="画笔与新建文本框的颜色">
               {presetColors.map((preset) => (
                 <button
                   key={preset.value}
@@ -604,103 +605,10 @@ export function LessonFeedbackEditor({
             </div>
           </div>
           <div className="lesson-feedback-section">
-            <span className="lesson-feedback-section-title">粗细 {penWidth}px</span>
+            <span className="lesson-feedback-section-title">画笔粗细 {penWidth}px</span>
             <input className="lesson-feedback-range" type="range" min="1" max="10" value={penWidth} onChange={(event) => setPenWidth(Number(event.target.value))} />
           </div>
 
-          {selectedBox && (
-            <>
-              <div className="lesson-feedback-tool-divider" />
-              <div className="lesson-feedback-boxstyle" aria-label="文本框样式">
-                <span className="lesson-feedback-boxstyle-title">文本框</span>
-
-                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="边框样式">
-                  {([
-                    { value: "dashed", label: "虚线" },
-                    { value: "solid", label: "实线" },
-                    { value: "none", label: "无框" }
-                  ] as const).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={cn("lesson-feedback-chip", (selectedBox.borderStyle ?? "dashed") === option.value && "is-active")}
-                      onClick={() => patchTextBox(selectedBox.id, { borderStyle: option.value })}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="字重">
-                  {([
-                    { value: 400, label: "常规" },
-                    { value: 700, label: "加粗" }
-                  ] as const).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={cn("lesson-feedback-chip", selectedBox.fontWeight === option.value && "is-active")}
-                      onClick={() => patchTextBox(selectedBox.id, { fontWeight: option.value })}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="字号">
-                  <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize - 1, 9, 22) })}>A-</button>
-                  <span className="lesson-feedback-boxstyle-value">{selectedBox.fontSize}</span>
-                  <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize + 1, 9, 22) })}>A+</button>
-                </div>
-
-                <span className="lesson-feedback-boxstyle-label">文字颜色</span>
-                <div className="lesson-feedback-palette">
-                  {presetColors.map((preset) => (
-                    <button
-                      key={`text-${preset.value}`}
-                      type="button"
-                      className={cn("lesson-feedback-dot", selectedBox.color.toLowerCase() === preset.value && "is-active")}
-                      style={{ background: preset.value }}
-                      onClick={() => patchTextBox(selectedBox.id, { color: preset.value })}
-                      title={preset.label}
-                      aria-label={`文字 ${preset.label}`}
-                    />
-                  ))}
-                  <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义文字颜色">
-                    <input type="color" value={selectedBox.color} onChange={(event) => patchTextBox(selectedBox.id, { color: event.target.value })} />
-                  </label>
-                </div>
-
-                <span className="lesson-feedback-boxstyle-label">边框与连线</span>
-                <div className="lesson-feedback-palette">
-                  {presetColors.map((preset) => (
-                    <button
-                      key={`border-${preset.value}`}
-                      type="button"
-                      className={cn("lesson-feedback-dot", selectedBox.borderColor.toLowerCase() === preset.value && "is-active")}
-                      style={{ background: preset.value }}
-                      onClick={() => patchTextBox(selectedBox.id, { borderColor: preset.value })}
-                      title={preset.label}
-                      aria-label={`边框 ${preset.label}`}
-                    />
-                  ))}
-                  <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义边框颜色">
-                    <input type="color" value={selectedBox.borderColor} onChange={(event) => patchTextBox(selectedBox.id, { borderColor: event.target.value })} />
-                  </label>
-                </div>
-
-                {selectedBox.studentIds.length > 0 && (
-                  <button
-                    type="button"
-                    className={cn("lesson-feedback-chip lesson-feedback-chip-wide", selectedBox.showBand && "is-active")}
-                    onClick={() => patchTextBox(selectedBox.id, { showBand: !selectedBox.showBand })}
-                  >
-                    {selectedBox.showBand ? "隐藏色带" : "显示色带"}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
         </aside>
 
         <div className="lesson-feedback-paper-viewport">
@@ -920,6 +828,105 @@ export function LessonFeedbackEditor({
             />
           </div>
         </div>
+
+        <aside className={cn("lesson-feedback-siderail", !selectedBox && "is-empty")} aria-label="文本框样式">
+          {selectedBox ? (
+            <div className="lesson-feedback-boxstyle" aria-label="文本框样式">
+                          <span className="lesson-feedback-boxstyle-title">文本框</span>
+            
+                          <div className="lesson-feedback-boxstyle-row" role="group" aria-label="边框样式">
+                            {([
+                              { value: "dashed", label: "虚线" },
+                              { value: "solid", label: "实线" },
+                              { value: "none", label: "无框" }
+                            ] as const).map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={cn("lesson-feedback-chip", (selectedBox.borderStyle ?? "dashed") === option.value && "is-active")}
+                                onClick={() => patchTextBox(selectedBox.id, { borderStyle: option.value })}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+            
+                          <div className="lesson-feedback-boxstyle-row" role="group" aria-label="字重">
+                            {([
+                              { value: 400, label: "常规" },
+                              { value: 700, label: "加粗" }
+                            ] as const).map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={cn("lesson-feedback-chip", selectedBox.fontWeight === option.value && "is-active")}
+                                onClick={() => patchTextBox(selectedBox.id, { fontWeight: option.value })}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+            
+                          <div className="lesson-feedback-boxstyle-row" role="group" aria-label="字号">
+                            <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize - 1, 9, 22) })}>A-</button>
+                            <span className="lesson-feedback-boxstyle-value">{selectedBox.fontSize}</span>
+                            <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize + 1, 9, 22) })}>A+</button>
+                          </div>
+            
+                          <span className="lesson-feedback-boxstyle-label">文字颜色（框内文字）</span>
+                          <div className="lesson-feedback-palette">
+                            {presetColors.map((preset) => (
+                              <button
+                                key={`text-${preset.value}`}
+                                type="button"
+                                className={cn("lesson-feedback-dot", selectedBox.color.toLowerCase() === preset.value && "is-active")}
+                                style={{ background: preset.value }}
+                                onClick={() => patchTextBox(selectedBox.id, { color: preset.value })}
+                                title={preset.label}
+                                aria-label={`文字 ${preset.label}`}
+                              />
+                            ))}
+                            <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义文字颜色">
+                              <input type="color" value={selectedBox.color} onChange={(event) => patchTextBox(selectedBox.id, { color: event.target.value })} />
+                            </label>
+                          </div>
+            
+                          <span className="lesson-feedback-boxstyle-label">边框与连线（含分组色带）</span>
+                          <div className="lesson-feedback-palette">
+                            {presetColors.map((preset) => (
+                              <button
+                                key={`border-${preset.value}`}
+                                type="button"
+                                className={cn("lesson-feedback-dot", selectedBox.borderColor.toLowerCase() === preset.value && "is-active")}
+                                style={{ background: preset.value }}
+                                onClick={() => patchTextBox(selectedBox.id, { borderColor: preset.value })}
+                                title={preset.label}
+                                aria-label={`边框 ${preset.label}`}
+                              />
+                            ))}
+                            <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义边框颜色">
+                              <input type="color" value={selectedBox.borderColor} onChange={(event) => patchTextBox(selectedBox.id, { borderColor: event.target.value })} />
+                            </label>
+                          </div>
+            
+                          {selectedBox.studentIds.length > 0 && (
+                            <button
+                              type="button"
+                              className={cn("lesson-feedback-chip lesson-feedback-chip-wide", selectedBox.showBand && "is-active")}
+                              onClick={() => patchTextBox(selectedBox.id, { showBand: !selectedBox.showBand })}
+                            >
+                              {selectedBox.showBand ? "隐藏色带" : "显示色带"}
+                            </button>
+                          )}
+                        </div>
+          ) : (
+            <div className="lesson-feedback-siderail-hint">
+              <Type size={20} />
+              <strong>文本框样式</strong>
+              <span>选中画布上的文本框后，可在这里调整边框、字号与颜色。</span>
+            </div>
+          )}
+        </aside>
       </div>
       {exportMessage && <div className="lesson-feedback-editor-message">{exportMessage}</div>}
     </section>

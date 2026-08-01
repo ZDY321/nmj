@@ -198,6 +198,9 @@ export type FeedbackWrappedTextOptions = {
   ellipsis?: boolean;
   unitScale?: number;
   valign?: "top" | "center";
+  // 传入真实的文字测量函数后按实际宽度折行（canvas measureText / DOM 度量）。
+  // 表格单元格沿用旧项目的估算宽度；文本框必须用它，否则导出断行会与网页不一致。
+  measure?: (text: string) => number;
 };
 
 export type FeedbackWrappedTextLayout = {
@@ -207,6 +210,29 @@ export type FeedbackWrappedTextLayout = {
   lineHeight: number;
   anchor: "start" | "middle";
 };
+
+// 按真实测量宽度折行，规则与浏览器 textarea 一致：逐字累加，超宽即换行。
+export function feedbackWrapTextMeasured(text: string, maxWidth: number, measure: (text: string) => number): string[] {
+  const output: string[] = [];
+  for (const paragraph of String(text || "").replace(/\r/g, "").split("\n")) {
+    if (!paragraph) {
+      output.push("");
+      continue;
+    }
+    let line = "";
+    for (const char of paragraph) {
+      const candidate = line + char;
+      if (line && measure(candidate) > maxWidth) {
+        output.push(line);
+        line = char;
+      } else {
+        line = candidate;
+      }
+    }
+    if (line || !output.length) output.push(line);
+  }
+  return output;
+}
 
 // 与旧项目 svgWrappedText 同一套排版规则，供两侧渲染器使用。
 export function feedbackWrappedTextLayout(
@@ -224,9 +250,10 @@ export function feedbackWrappedTextLayout(
   const padding = options.padding ?? 7;
   const paddingX = options.paddingX ?? padding;
   const paddingY = options.paddingY ?? padding;
-  const maxUnits = Math.max(1, (width - paddingX * 2) / (size * (options.unitScale || 0.94)));
   const maxLines = Math.max(1, Math.floor((height - paddingY * 2) / lineHeight));
-  const allLines = feedbackWrapText(text, maxUnits);
+  const allLines = options.measure
+    ? feedbackWrapTextMeasured(text, width - paddingX * 2, options.measure)
+    : feedbackWrapText(text, Math.max(1, (width - paddingX * 2) / (size * (options.unitScale || 0.94))));
   const lines = options.maxLines === Infinity ? allLines : allLines.slice(0, options.maxLines || maxLines);
   if (options.ellipsis !== false && allLines.length > lines.length && lines.length) {
     const last = lines.length - 1;

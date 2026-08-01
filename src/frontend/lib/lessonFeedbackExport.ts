@@ -359,6 +359,13 @@ function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedback
     }
     context.restore();
 
+    // 文本框按 canvas 实测宽度折行，与网页 textarea 的断行位置一致；
+    // 再用 clip 把超出框的行裁掉，避免像旧版那样漫到框外。
+    context.save();
+    context.beginPath();
+    context.rect(box.x, box.y, box.width, box.height);
+    context.clip();
+    context.font = `${box.fontWeight} ${box.fontSize}px ${feedbackBodyFontFamily}`;
     drawCellText(context, box.text, box.x, box.y, box.width, box.height, {
       size: box.fontSize,
       weight: box.fontWeight,
@@ -366,8 +373,10 @@ function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedback
       padding: 8,
       valign: "top",
       maxLines: Infinity,
-      ellipsis: false
+      ellipsis: false,
+      measure: (value) => context.measureText(value).width
     });
+    context.restore();
     void layout;
   });
 }

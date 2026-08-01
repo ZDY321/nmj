@@ -437,7 +437,7 @@
 
 .lesson-feedback-workspace {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 132px minmax(0, 1fr) auto;
   min-height: 720px;
 }
 
@@ -692,10 +692,16 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   resize: none;
   border: 0;
   outline: 0;
-  /* 与导出的 padding 8 / lineHeight 1.45 对齐。 */
+  /* 与导出严格对齐：padding 8、lineHeight 1.45、同一字体族，
+     并按字符换行——导出用 canvas 实测逐字折行，这里必须同规则才所见即所得。 */
   padding: 8px;
   background: transparent;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   line-height: 1.45;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 
 .lesson-feedback-box-delete {
@@ -736,6 +742,8 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 @media (max-width: 900px) {
   .lesson-feedback-actionbar { align-items: flex-start; flex-direction: column; }
   .lesson-feedback-workspace { grid-template-columns: 1fr; }
+  .lesson-feedback-siderail { position: static; width: auto; max-height: none; border-left: 0; border-top: 1px solid #dbe4ef; }
+  .lesson-feedback-siderail.is-empty { display: none; }
   .lesson-feedback-toolrail {
     position: static;
     max-height: none;
@@ -888,4 +896,50 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.35);
   pointer-events: none;
+}
+
+/* 右侧上下文工具栏：仅在选中文本框时显示具体控件，避免左栏被挤到需要滚动。 */
+.lesson-feedback-siderail {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  align-self: start;
+  display: flex;
+  width: 168px;
+  max-height: calc(100vh - 140px);
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 12px 10px;
+  border-left: 1px solid #dbe4ef;
+  background: #f8fbff;
+}
+
+.lesson-feedback-siderail .lesson-feedback-boxstyle {
+  padding: 10px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #e8eef6;
+}
+
+.lesson-feedback-siderail-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 10px;
+  border-radius: 10px;
+  color: #94a3b8;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #e8eef6;
+  text-align: center;
+}
+
+.lesson-feedback-siderail-hint strong { color: #52667a; font-size: 11px; }
+.lesson-feedback-siderail-hint span { font-size: 10px; font-weight: 600; line-height: 1.5; }
+
+.lesson-feedback-section-hint {
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.45;
 }
