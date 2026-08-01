@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { LessonFeedbackEditor } from "@/frontend/components/LessonFeedbackEditor";
+import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { ApiError } from "@/frontend/lib/cloud";
-import { sortCoursesByName, sortLessons } from "@/frontend/lib/helpers";
+import { courseHasActiveStudent, sortCoursesByName, sortLessons } from "@/frontend/lib/helpers";
 import {
   createLessonFeedbackRecord,
   emptyLessonFeedbackIndex,
@@ -30,7 +31,7 @@ import {
   loadEncryptedDocumentWithVersion,
   saveEncryptedDocument
 } from "@/frontend/lib/storage";
-import type { TeacherVault } from "@/shared/types";
+import type { CourseGroup, TeacherVault } from "@/shared/types";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error" | "conflict";
 
@@ -47,7 +48,16 @@ export function FeedbackView({
   focusRequest?: { lessonId: string; nonce: number } | null;
   syncNonce?: number;
 }) {
-  const courses = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
+  // 课程下拉只列在读课程：口径与课程档案一致（手动结课，或已无在读学生）。
+  // 结课课程的历史反馈仍从左侧列表打开，只是不能再新建。
+  const courses = useMemo(
+    () => sortCoursesByName(vault.courseGroups).filter((course) => course.status !== "paused" && courseHasActiveStudent(vault, course)),
+    [vault]
+  );
+  const { confirm, dialog } = useConfirmDialog();
+  // 历史筛选与旧数据导入仍需覆盖结课课程，否则它们的历史反馈会变得无法检索。
+  const allCourses = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
+  const isEndedCourse = (course: CourseGroup) => course.status === "paused" || !courseHasActiveStudent(vault, course);
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedLessonId, setSelectedLessonId] = useState("");
   const [historyCourseId, setHistoryCourseId] = useState("all");
@@ -354,11 +364,23 @@ export function FeedbackView({
     }
   }
 
-  async function reloadFromCloud(): Promise<void> {
-    if (activeRecordRef.current && savedSignaturesRef.current.get(activeRecordRef.current.id) !== recordSignature(activeRecordRef.current)) {
-      const confirmed = window.confirm("重新读取会舍弃当前尚未保存的修改，是否继续？");
-      if (!confirmed) return;
+  function requestReloadFromCloud(): void {
+    const current = activeRecordRef.current;
+    const dirty = Boolean(current) && savedSignaturesRef.current.get(current!.id) !== recordSignature(current!);
+    if (!dirty) {
+      void reloadFromCloud();
+      return;
     }
+    confirm({
+      title: "重新读取会丢弃未保存的修改？",
+      description: "当前反馈有尚未保存到云端的改动，重新读取后这些改动将无法恢复。",
+      confirmLabel: "丢弃并重新读取",
+      tone: "danger",
+      onConfirm: () => void reloadFromCloud()
+    });
+  }
+
+  async function reloadFromCloud(): Promise<void> {
     setSaveState("loading");
     try {
       const { value, updatedAt } = await loadEncryptedDocumentWithVersion<LessonFeedbackIndexDocument>(
@@ -407,9 +429,21 @@ export function FeedbackView({
     }
   }
 
+  function requestDeleteActiveRecord(): void {
+    const current = activeRecordRef.current;
+    if (!current) return;
+    confirm({
+      title: "删除这条课后反馈？",
+      description: `${current.className} ${current.date} ${current.periodLabel} 的反馈将从云端移除，此操作无法撤销。`,
+      confirmLabel: "删除反馈",
+      tone: "danger",
+      onConfirm: () => void deleteActiveRecord()
+    });
+  }
+
   async function deleteActiveRecord(): Promise<void> {
     const current = activeRecordRef.current;
-    if (!current || !window.confirm(`确认删除 ${current.className} ${current.date} 的课后反馈？此操作无法撤销。`)) return;
+    if (!current) return;
     setSaveState("saving");
     setMessage("");
     try {
@@ -435,7 +469,8 @@ export function FeedbackView({
       activeRecordRef.current = null;
       setActiveRecord(null);
       setSaveState("idle");
-      setMessage("反馈记录已删除。" );
+      // 不再提示“已删除”：这条提示会在列表上方占一行、随后消失，导致左侧条目位移误点。
+      setMessage("");
     } catch (error) {
       const conflict = error instanceof ApiError && error.status === 409;
       setSaveState(conflict ? "conflict" : "error");
@@ -608,7 +643,7 @@ export function FeedbackView({
               setSelectedLessonId("");
             }}>
               {courses.length === 0 && <option value="">暂无课程</option>}
-              {courses.map((course) => <option key={course.id} value={course.id}>{course.name} · {course.subject}{course.status === "paused" ? "（结课）" : ""}</option>)}
+              {courses.map((course) => <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>)}
             </Select>
           </label>
           <label>
@@ -623,7 +658,6 @@ export function FeedbackView({
             </Select>
           </label>
         </div>
-        {selectedCourse?.status === "paused" && <div className="lesson-feedback-course-ended">结课课程仍可建立和查看历史反馈，学生名单会在反馈中保存为独立快照。</div>}
       </section>
 
       {legacyData && (
@@ -644,7 +678,7 @@ export function FeedbackView({
                   <div><strong>{legacyClass.name}</strong><span>{legacyClass.subject || "未设置科目"} · {legacyClass.students.length} 名学生 · {lessonCount} 条反馈</span></div>
                   <Select value={legacyMappings[legacyClass.id] ?? ""} onChange={(event) => setLegacyMappings((current) => ({ ...current, [legacyClass.id]: event.target.value }))}>
                     <option value="">跳过这个旧班级</option>
-                    {courses.map((course) => <option key={course.id} value={course.id}>{course.name} · {course.subject}{course.status === "paused" ? "（结课）" : ""}</option>)}
+                    {allCourses.map((course) => <option key={course.id} value={course.id}>{course.name} · {course.subject}{isEndedCourse(course) ? "（结课）" : ""}</option>)}
                   </Select>
                 </div>
               );
@@ -664,7 +698,7 @@ export function FeedbackView({
           <span>{saveState === "error" || saveState === "conflict" ? <AlertTriangle size={16} /> : <Clock3 size={16} />}{message}</span>
           {saveState === "conflict" && (
             <span className="lesson-feedback-notice-actions">
-              <Button size="sm" variant="outline" onClick={() => void reloadFromCloud()}><RefreshCw size={14} /> 重新读取</Button>
+              <Button size="sm" variant="outline" onClick={requestReloadFromCloud}><RefreshCw size={14} /> 重新读取</Button>
               <Button size="sm" variant="destructive" onClick={() => void overwriteConflict()}>保留当前并覆盖</Button>
             </span>
           )}
@@ -676,7 +710,7 @@ export function FeedbackView({
           <div className="lesson-feedback-history-title"><History size={17} /><span>反馈历史</span><strong>{indexDocument.items.length}</strong></div>
           <Select value={historyCourseId} onChange={(event) => setHistoryCourseId(event.target.value)}>
             <option value="all">全部课程</option>
-            {courses.map((course) => <option key={course.id} value={course.id}>{course.name}{course.status === "paused" ? "（结课）" : ""}</option>)}
+            {allCourses.map((course) => <option key={course.id} value={course.id}>{course.name}{isEndedCourse(course) ? "（结课）" : ""}</option>)}
           </Select>
           <label className="lesson-feedback-search">
             <Search size={15} />
@@ -700,7 +734,7 @@ export function FeedbackView({
             <>
               <div className="lesson-feedback-record-toolbar">
                 <div><strong>{activeRecord.className}</strong><span>{activeRecord.date} · {activeRecord.periodLabel}{courses.find((course) => course.id === activeRecord.courseGroupId)?.status === "paused" ? " · 结课" : ""}</span></div>
-                <Button size="sm" variant="destructive" onClick={() => void deleteActiveRecord()}><Trash2 size={15} /> 删除反馈</Button>
+                <Button size="sm" variant="destructive" onClick={requestDeleteActiveRecord}><Trash2 size={15} /> 删除反馈</Button>
               </div>
               <LessonFeedbackEditor record={activeRecord} onChange={setActiveRecord} saveState={saveState} />
             </>
@@ -713,6 +747,7 @@ export function FeedbackView({
           )}
         </main>
       </div>
+      {dialog}
     </div>
   );
 }
