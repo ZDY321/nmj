@@ -201,7 +201,7 @@ export function ProgressView({
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [draft, setDraft] = useState<ProgressDraft>(emptyDraft);
-  const [sectionView, setSectionView] = useState<ProgressSectionView>("ledger");
+  const [sectionView, setSectionView] = useState<ProgressSectionView>("feedback");
   const { confirm, dialog } = useConfirmDialog();
 
   // 从今日提醒/排课的“课后反馈”按钮跳进来时，直接落到反馈子页。
@@ -295,9 +295,16 @@ export function ProgressView({
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-extrabold text-[#061226]">进度与作业</div>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">课程进度、学习清单与课后反馈都在这里。</div>
+          <div className="mt-1 text-xs font-semibold text-[#64748b]">课后反馈、课程进度与学习清单都在这里。</div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={sectionView === "feedback" ? "default" : "outline"}
+            onClick={() => setSectionView("feedback")}
+          >
+            <NotebookPen size={15} /> 课后反馈
+          </Button>
           <Button
             type="button"
             variant={sectionView === "ledger" ? "default" : "outline"}
@@ -311,13 +318,6 @@ export function ProgressView({
             onClick={() => setSectionView("checklist")}
           >
             <CheckCheck size={15} /> 学习清单
-          </Button>
-          <Button
-            type="button"
-            variant={sectionView === "feedback" ? "default" : "outline"}
-            onClick={() => setSectionView("feedback")}
-          >
-            <NotebookPen size={15} /> 课后反馈
           </Button>
         </div>
       </CardContent>
@@ -435,8 +435,8 @@ export function ProgressView({
       <div className="space-y-6">
         {dialog}
         {sectionSwitcher}
-        {/* 反馈编辑器是三栏固定高度布局，撑满外层容器宽度才不至于把工具栏挤窄。 */}
-        <div className="-mx-3 sm:-mx-6 lg:-mx-9" style={{ ["--feedback-chrome" as string]: "252px" }}>
+        {/* 与台账/清单子页同宽：不做负 margin 溢出，避免比上方切换条更宽。 */}
+        <div style={{ ["--feedback-chrome" as string]: "252px" }}>
           <LessonFeedbackWorkspace
             vault={vault}
             token={token ?? ""}
