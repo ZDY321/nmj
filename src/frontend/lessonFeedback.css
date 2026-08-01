@@ -1018,3 +1018,91 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   font-weight: 800;
   text-align: left;
 }
+
+/* 分段控件：与课薪系统其他按钮一致的圆角、描边与选中态，替代原先突兀的小方块。 */
+.lesson-feedback-segment {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.lesson-feedback-segment-item {
+  flex: 1;
+  padding: 6px 4px;
+  border: 0;
+  border-right: 1px solid #eef2f7;
+  background: transparent;
+  color: #52667a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.15s, color 0.15s;
+}
+
+.lesson-feedback-segment-item:last-child { border-right: 0; }
+.lesson-feedback-segment-item:hover { background: #f3f7fb; color: #061226; }
+.lesson-feedback-segment-item.is-active { background: #25324a; color: #ffffff; }
+
+.lesson-feedback-danger-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 7px;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  background: #fef3f2;
+  color: #b42318;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lesson-feedback-danger-button:hover { border-color: #f97066; background: #fee4e2; }
+
+/* 顶部纸张颜色选择。 */
+.lesson-feedback-paperpick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.lesson-feedback-paperpick > span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lesson-feedback-paperdot {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #cbd5df;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.lesson-feedback-paperdot.is-active { border-color: #25324a; box-shadow: 0 0 0 2px rgba(37, 50, 74, 0.18); }
+
+.lesson-feedback-wide-button {
+  width: 100%;
+  padding: 7px;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #52667a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.lesson-feedback-wide-button:hover { border-color: #94a9c0; background: #f3f7fb; color: #061226; }
+.lesson-feedback-wide-button.is-active { border-color: #235f58; background: #235f58; color: #ffffff; }

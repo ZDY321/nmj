@@ -43,6 +43,7 @@ import {
   feedbackSheetLayout,
   feedbackStudentRowCenter
 } from "@/frontend/lib/lessonFeedbackLayout";
+import { nearestStrokeId } from "@/frontend/lib/lessonFeedbackHitTest";
 import "@/frontend/lessonFeedback.css";
 
 type EditorTool = "select" | "eraser" | "text" | LessonFeedbackStrokeTool;
@@ -122,6 +123,7 @@ export function LessonFeedbackEditor({
   const [exportMessage, setExportMessage] = useState("");
   const [zoom, setZoom] = useState(1);
   const [focusedCommentId, setFocusedCommentId] = useState("");
+  const [selectedStrokeId, setSelectedStrokeId] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sheetCanvasRef = useRef<HTMLCanvasElement>(null);
   const suppressDeselectRef = useRef(false);
@@ -132,6 +134,7 @@ export function LessonFeedbackEditor({
   // 编辑器与导出共用同一份坐标，屏幕上的位置即导出图里的位置。
   const layout = useMemo(() => feedbackSheetLayout(record.students.length), [record.students.length]);
   const selectedBox = record.textBoxes.find((box) => box.id === selectedTextBoxId);
+  const selectedStroke = record.annotations.find((stroke) => stroke.id === selectedStrokeId);
   const focusedStudent = record.students.find((student) => student.id === focusedCommentId);
   const focusedEntry = focusedStudent
     ? { id: focusedStudent.id, name: focusedStudent.name, entry: record.entries[focusedStudent.id] ?? blankEntry }
@@ -172,9 +175,27 @@ export function LessonFeedbackEditor({
     if (!context) return;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, feedbackPageWidth, pageHeight);
-    record.annotations.forEach((stroke) => drawFeedbackStroke(context, stroke));
+    record.annotations.forEach((stroke) => {
+      drawFeedbackStroke(context, stroke);
+      if (stroke.id !== selectedStrokeId) return;
+      // 选中态：沿图形外包框画一圈虚线，位置一目了然。
+      const xs = stroke.points.map((item) => item.x);
+      const ys = stroke.points.map((item) => item.y);
+      const pad = Math.max(6, stroke.width);
+      context.save();
+      context.strokeStyle = "#1557c2";
+      context.lineWidth = 1;
+      context.setLineDash([4, 3]);
+      context.strokeRect(
+        Math.min(...xs) - pad,
+        Math.min(...ys) - pad,
+        Math.max(...xs) - Math.min(...xs) + pad * 2,
+        Math.max(...ys) - Math.min(...ys) + pad * 2
+      );
+      context.restore();
+    });
     if (draftStroke) drawFeedbackStroke(context, draftStroke);
-  }, [draftStroke, pageHeight, record.annotations]);
+  }, [draftStroke, pageHeight, record.annotations, selectedStrokeId]);
 
   useEffect(() => {
     if (!boxInteraction) return;
@@ -422,6 +443,14 @@ export function LessonFeedbackEditor({
     });
   }
 
+  function patchStroke(strokeId: string, patch: Partial<LessonFeedbackStroke>): void {
+    const next = cloneRecord(record);
+    const stroke = next.annotations.find((item) => item.id === strokeId);
+    if (!stroke) return;
+    Object.assign(stroke, patch);
+    emit(next);
+  }
+
   function deleteTextBox(boxId: string): void {
     const next = cloneRecord(record);
     next.textBoxes = next.textBoxes.filter((box) => box.id !== boxId);
@@ -476,7 +505,17 @@ export function LessonFeedbackEditor({
       emit(next);
       return;
     }
-    if (activeTool === "select") return;
+    if (activeTool === "select") {
+      // 选中模式下点到图形即选中它，右侧面板随之出现颜色/粗细/删除。
+      const hit = nearestStrokeId(record.annotations, point);
+      setSelectedStrokeId(hit);
+      if (hit) {
+        setSelectedTextBoxId("");
+        setFocusedCommentId("");
+        suppressDeselectRef.current = true;
+      }
+      return;
+    }
     event.currentTarget.setPointerCapture?.(event.pointerId);
     setDraftStroke({
       id: makeId("feedback_stroke"),
@@ -585,6 +624,25 @@ export function LessonFeedbackEditor({
           <Button type="button" size="sm" variant="outline" onClick={addGroupFeedback} disabled={selectedStudentIds.length === 0}>
             <UsersRound size={15} /> 多人反馈{selectedStudentIds.length > 0 ? ` (${selectedStudentIds.length})` : ""}
           </Button>
+          <div className="lesson-feedback-paperpick" role="group" aria-label="纸张颜色">
+            <span>纸张</span>
+            <button
+              type="button"
+              className={cn("lesson-feedback-paperdot", record.paperColor !== "white" && "is-active")}
+              style={{ background: "#fffdf9" }}
+              onClick={() => patchRecord({ paperColor: "soft" }, true)}
+              title="米白（默认）"
+              aria-label="米白纸张"
+            />
+            <button
+              type="button"
+              className={cn("lesson-feedback-paperdot", record.paperColor === "white" && "is-active")}
+              style={{ background: "#ffffff" }}
+              onClick={() => patchRecord({ paperColor: "white" }, true)}
+              title="纯白 A4"
+              aria-label="纯白纸张"
+            />
+          </div>
         </div>
         <div className="lesson-feedback-actiongroup">
           <Button type="button" size="icon" variant="ghost" className="h-9 w-9" onClick={undo} disabled={undoStackRef.current.length === 0} title="撤销">
@@ -635,15 +693,6 @@ export function LessonFeedbackEditor({
               <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义颜色">
                 <input type="color" value={activeColor} onChange={(event) => setActiveColor(event.target.value)} />
               </label>
-            </div>
-          </div>
-          <div className="lesson-feedback-section">
-            <span className="lesson-feedback-section-title">显示比例 {Math.round(zoom * 100)}%</span>
-            <span className="lesson-feedback-section-hint">只影响屏幕显示，导出图始终为原始清晰度</span>
-            <div className="lesson-feedback-boxstyle-row">
-              <button type="button" className="lesson-feedback-chip" onClick={() => setZoom((current) => clamp(Math.round((current - 0.1) * 10) / 10, 0.5, 2))}>-</button>
-              <button type="button" className="lesson-feedback-chip" onClick={() => setZoom(1)}>100%</button>
-              <button type="button" className="lesson-feedback-chip" onClick={() => setZoom((current) => clamp(Math.round((current + 0.1) * 10) / 10, 0.5, 2))}>+</button>
             </div>
           </div>
           <div className="lesson-feedback-section">
@@ -912,13 +961,64 @@ export function LessonFeedbackEditor({
           </div>
         </div>
 
-        <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && "is-empty")} aria-label="文本框样式">
-          {selectedBox ? (
+        <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && !selectedStroke && "is-empty")} aria-label="样式设置">
+          <div className="lesson-feedback-boxstyle-group">
+            <span className="lesson-feedback-boxstyle-title">显示比例 {Math.round(zoom * 100)}%</span>
+            <div className="lesson-feedback-segment" role="group" aria-label="显示比例">
+              <button type="button" className="lesson-feedback-segment-item" onClick={() => setZoom((current) => clamp(Math.round((current - 0.1) * 10) / 10, 0.5, 2))}>−</button>
+              <button type="button" className="lesson-feedback-segment-item" onClick={() => setZoom(1)}>100%</button>
+              <button type="button" className="lesson-feedback-segment-item" onClick={() => setZoom((current) => clamp(Math.round((current + 0.1) * 10) / 10, 0.5, 2))}>＋</button>
+            </div>
+          </div>
+
+          {selectedStroke ? (
+            <div className="lesson-feedback-boxstyle" aria-label="图形样式">
+              <div className="lesson-feedback-boxstyle-group">
+                <span className="lesson-feedback-boxstyle-title">{strokeToolLabel(selectedStroke.tool)}</span>
+                <span className="lesson-feedback-boxstyle-label">线条粗细 {selectedStroke.width}px</span>
+                <div className="lesson-feedback-segment" role="group" aria-label="线条粗细">
+                  <button type="button" className="lesson-feedback-segment-item" onClick={() => patchStroke(selectedStroke.id, { width: clamp(selectedStroke.width - 1, 1, 24) })}>细</button>
+                  <button type="button" className="lesson-feedback-segment-item" onClick={() => patchStroke(selectedStroke.id, { width: clamp(selectedStroke.width + 1, 1, 24) })}>粗</button>
+                </div>
+
+                <span className="lesson-feedback-boxstyle-label">颜色</span>
+                <div className="lesson-feedback-palette">
+                  {presetColors.map((preset) => (
+                    <button
+                      key={`stroke-${preset.value}`}
+                      type="button"
+                      className={cn("lesson-feedback-dot", selectedStroke.color.toLowerCase() === preset.value && "is-active")}
+                      style={{ background: preset.value }}
+                      onClick={() => patchStroke(selectedStroke.id, { color: preset.value })}
+                      title={preset.label}
+                      aria-label={`图形 ${preset.label}`}
+                    />
+                  ))}
+                  <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义颜色">
+                    <input type="color" value={selectedStroke.color} onChange={(event) => patchStroke(selectedStroke.id, { color: event.target.value })} />
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  className="lesson-feedback-danger-button"
+                  onClick={() => {
+                    const next = cloneRecord(record);
+                    next.annotations = next.annotations.filter((stroke) => stroke.id !== selectedStroke.id);
+                    setSelectedStrokeId("");
+                    emit(next);
+                  }}
+                >
+                  <Trash2 size={13} /> 删除这个图形
+                </button>
+              </div>
+            </div>
+          ) : selectedBox ? (
             <div className="lesson-feedback-boxstyle" aria-label="文本框样式">
               <div className="lesson-feedback-boxstyle-group">
                 <span className="lesson-feedback-boxstyle-title">外框</span>
                 <span className="lesson-feedback-boxstyle-label">边框线型</span>
-                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="边框线型">
+                <div className="lesson-feedback-segment" role="group" aria-label="边框线型">
                   {([
                     { value: "dashed", label: "虚线" },
                     { value: "solid", label: "实线" },
@@ -927,7 +1027,7 @@ export function LessonFeedbackEditor({
                     <button
                       key={option.value}
                       type="button"
-                      className={cn("lesson-feedback-chip", (selectedBox.borderStyle ?? "dashed") === option.value && "is-active")}
+                      className={cn("lesson-feedback-segment-item", (selectedBox.borderStyle ?? "dashed") === option.value && "is-active")}
                       onClick={() => patchTextBox(selectedBox.id, { borderStyle: option.value })}
                     >
                       {option.label}
@@ -936,9 +1036,9 @@ export function LessonFeedbackEditor({
                 </div>
 
                 <span className="lesson-feedback-boxstyle-label">边框粗细 {(selectedBox.borderWidth ?? 1.5)}px</span>
-                <div className="lesson-feedback-boxstyle-row">
-                  <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { borderWidth: clamp(Math.round(((selectedBox.borderWidth ?? 1.5) - 0.5) * 2) / 2, 0.5, 6) })}>细</button>
-                  <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { borderWidth: clamp(Math.round(((selectedBox.borderWidth ?? 1.5) + 0.5) * 2) / 2, 0.5, 6) })}>粗</button>
+                <div className="lesson-feedback-segment" role="group" aria-label="边框粗细">
+                  <button type="button" className="lesson-feedback-segment-item" onClick={() => patchTextBox(selectedBox.id, { borderWidth: clamp(Math.round(((selectedBox.borderWidth ?? 1.5) - 0.5) * 2) / 2, 0.5, 6) })}>细</button>
+                  <button type="button" className="lesson-feedback-segment-item" onClick={() => patchTextBox(selectedBox.id, { borderWidth: clamp(Math.round(((selectedBox.borderWidth ?? 1.5) + 0.5) * 2) / 2, 0.5, 6) })}>粗</button>
                 </div>
 
                 <span className="lesson-feedback-boxstyle-label">边框与连线颜色</span>
@@ -963,7 +1063,7 @@ export function LessonFeedbackEditor({
               <div className="lesson-feedback-boxstyle-group">
                 <span className="lesson-feedback-boxstyle-title">框内文字</span>
                 <span className="lesson-feedback-boxstyle-label">字重</span>
-                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="文字字重">
+                <div className="lesson-feedback-segment" role="group" aria-label="文字字重">
                   {([
                     { value: 400, label: "常规" },
                     { value: 700, label: "加粗" }
@@ -971,7 +1071,7 @@ export function LessonFeedbackEditor({
                     <button
                       key={option.value}
                       type="button"
-                      className={cn("lesson-feedback-chip", selectedBox.fontWeight === option.value && "is-active")}
+                      className={cn("lesson-feedback-segment-item", selectedBox.fontWeight === option.value && "is-active")}
                       onClick={() => patchTextBox(selectedBox.id, { fontWeight: option.value })}
                     >
                       {option.label}
@@ -980,9 +1080,9 @@ export function LessonFeedbackEditor({
                 </div>
 
                 <span className="lesson-feedback-boxstyle-label">字号 {selectedBox.fontSize}px</span>
-                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="文字字号">
-                  <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize - 1, 9, 22) })}>A-</button>
-                  <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize + 1, 9, 22) })}>A+</button>
+                <div className="lesson-feedback-segment" role="group" aria-label="文字字号">
+                  <button type="button" className="lesson-feedback-segment-item" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize - 1, 9, 22) })}>A−</button>
+                  <button type="button" className="lesson-feedback-segment-item" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize + 1, 9, 22) })}>A＋</button>
                 </div>
 
                 <span className="lesson-feedback-boxstyle-label">文字颜色</span>
@@ -1007,7 +1107,7 @@ export function LessonFeedbackEditor({
               {selectedBox.studentIds.length > 0 && (
                 <button
                   type="button"
-                  className={cn("lesson-feedback-chip lesson-feedback-chip-wide", selectedBox.showBand && "is-active")}
+                  className={cn("lesson-feedback-wide-button", selectedBox.showBand && "is-active")}
                   onClick={() => patchTextBox(selectedBox.id, { showBand: !selectedBox.showBand })}
                 >
                   {selectedBox.showBand ? "隐藏分组色带" : "显示分组色带"}
@@ -1019,7 +1119,7 @@ export function LessonFeedbackEditor({
               <div className="lesson-feedback-boxstyle-group">
                 <span className="lesson-feedback-boxstyle-title">{focusedEntry.name} 的评语</span>
                 <span className="lesson-feedback-boxstyle-label">字重</span>
-                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="评语字重">
+                <div className="lesson-feedback-segment" role="group" aria-label="评语字重">
                   {([
                     { value: 400, label: "常规" },
                     { value: 700, label: "加粗" }
@@ -1027,7 +1127,7 @@ export function LessonFeedbackEditor({
                     <button
                       key={option.value}
                       type="button"
-                      className={cn("lesson-feedback-chip", (focusedEntry.entry.commentFontWeight ?? 400) === option.value && "is-active")}
+                      className={cn("lesson-feedback-segment-item", (focusedEntry.entry.commentFontWeight ?? 400) === option.value && "is-active")}
                       onClick={() => updateEntry(focusedEntry.id, { commentFontWeight: option.value })}
                     >
                       {option.label}
@@ -1036,9 +1136,9 @@ export function LessonFeedbackEditor({
                 </div>
 
                 <span className="lesson-feedback-boxstyle-label">字号 {focusedEntry.entry.commentFontSize ?? 11.5}px</span>
-                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="评语字号">
-                  <button type="button" className="lesson-feedback-chip" onClick={() => updateEntry(focusedEntry.id, { commentFontSize: clamp((focusedEntry.entry.commentFontSize ?? 11.5) - 1, 8, 18) })}>A-</button>
-                  <button type="button" className="lesson-feedback-chip" onClick={() => updateEntry(focusedEntry.id, { commentFontSize: clamp((focusedEntry.entry.commentFontSize ?? 11.5) + 1, 8, 18) })}>A+</button>
+                <div className="lesson-feedback-segment" role="group" aria-label="评语字号">
+                  <button type="button" className="lesson-feedback-segment-item" onClick={() => updateEntry(focusedEntry.id, { commentFontSize: clamp((focusedEntry.entry.commentFontSize ?? 11.5) - 1, 8, 18) })}>A−</button>
+                  <button type="button" className="lesson-feedback-segment-item" onClick={() => updateEntry(focusedEntry.id, { commentFontSize: clamp((focusedEntry.entry.commentFontSize ?? 11.5) + 1, 8, 18) })}>A＋</button>
                 </div>
 
                 <span className="lesson-feedback-boxstyle-label">文字颜色</span>
@@ -1061,7 +1161,7 @@ export function LessonFeedbackEditor({
 
                 <button
                   type="button"
-                  className="lesson-feedback-chip lesson-feedback-chip-wide"
+                  className="lesson-feedback-wide-button"
                   onClick={() => updateEntry(focusedEntry.id, { commentColor: undefined, commentFontSize: undefined, commentFontWeight: undefined })}
                 >
                   恢复默认样式
@@ -1093,19 +1193,16 @@ function trimHistory(stack: LessonFeedbackRecord[]): void {
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));}
 
-function nearestStrokeId(strokes: LessonFeedbackStroke[], point: LessonFeedbackPoint): string {
-  let nearest = "";
-  let distance = 20;
-  strokes.forEach((stroke) => {
-    stroke.points.forEach((candidate) => {
-      const nextDistance = Math.hypot(candidate.x - point.x, candidate.y - point.y);
-      if (nextDistance < distance) {
-        distance = nextDistance;
-        nearest = stroke.id;
-      }
-    });
-  });
-  return nearest;
+function strokeToolLabel(tool: LessonFeedbackStrokeTool): string {
+  const labels: Record<LessonFeedbackStrokeTool, string> = {
+    pen: "画笔",
+    highlighter: "荧光笔",
+    line: "直线",
+    arrow: "箭头",
+    ellipse: "圆圈",
+    rect: "方框"
+  };
+  return labels[tool] ?? "图形";
 }
 
 function markClass(value: string): string {
