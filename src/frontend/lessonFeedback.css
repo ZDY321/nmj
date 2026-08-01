@@ -649,7 +649,7 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   display: flex;
   flex-direction: column;
   overflow: visible;
-  /* 虚线边框、透明底：与导出图一致，也让下方的分组色带透出来。 */
+  /* 边框样式由 box.borderStyle 逐框决定（内联样式覆盖），透明底让色带透出来。 */
   border: 1.5px dashed;
   border-radius: 3px;
 }
@@ -742,4 +742,74 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   .lesson-feedback-tool-divider { width: 1px; height: 42px; margin: 0 3px; }
   .lesson-feedback-width { min-width: 64px; }
   .lesson-feedback-paper-viewport { padding: 12px; }
+}
+
+/* 选中文本框后出现的样式面板：边框形态、字重、字号、文字与边框颜色。 */
+.lesson-feedback-boxstyle {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background: rgba(237, 243, 247, 0.7);
+}
+
+.lesson-feedback-boxstyle-title {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.lesson-feedback-boxstyle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.lesson-feedback-boxstyle-value {
+  min-width: 18px;
+  color: #25324a;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.lesson-feedback-chip {
+  padding: 3px 6px;
+  border: 1px solid #cbd5df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #52667a;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lesson-feedback-chip:hover { border-color: #94a9c0; color: #25324a; }
+.lesson-feedback-chip.is-active { border-color: #235f58; background: #235f58; color: #ffffff; }
+.lesson-feedback-chip-wide { width: 100%; }
+
+.lesson-feedback-swatch {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.lesson-feedback-swatch input {
+  width: 100%;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #cbd5df;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
 }

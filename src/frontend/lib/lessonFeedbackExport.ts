@@ -341,16 +341,20 @@ function drawBands(context: CanvasRenderingContext2D, record: LessonFeedbackReco
 
 function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedbackRecord, layout: FeedbackSheetLayout): void {
   record.textBoxes.forEach((box) => {
+    const borderStyle = box.borderStyle ?? "dashed";
+    const borderWidth = box.borderWidth ?? 1.5;
     context.save();
     if (box.backgroundColor && box.backgroundColor !== "transparent") {
       context.fillStyle = box.backgroundColor;
       context.fillRect(box.x, box.y, box.width, box.height);
     }
-    context.strokeStyle = box.borderColor || box.color;
-    context.lineWidth = 1.5;
-    context.setLineDash([6, 4]);
-    context.strokeRect(box.x, box.y, box.width, box.height);
-    context.setLineDash([]);
+    if (borderStyle !== "none") {
+      context.strokeStyle = box.borderColor || box.color;
+      context.lineWidth = borderWidth;
+      context.setLineDash(borderStyle === "dashed" ? [6, 4] : []);
+      context.strokeRect(box.x, box.y, box.width, box.height);
+      context.setLineDash([]);
+    }
     context.restore();
 
     drawCellText(context, box.text, box.x, box.y, box.width, box.height, {

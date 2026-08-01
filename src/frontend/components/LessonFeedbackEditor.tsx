@@ -96,6 +96,7 @@ export function LessonFeedbackEditor({
   const pageHeight = feedbackPageHeight(record);
   // 编辑器与导出共用同一份坐标，屏幕上的位置即导出图里的位置。
   const layout = useMemo(() => feedbackSheetLayout(record.students.length), [record.students.length]);
+  const selectedBox = record.textBoxes.find((box) => box.id === selectedTextBoxId);
   const isDrawingTool = activeTool !== "select";
 
   latestRecordRef.current = record;
@@ -243,21 +244,31 @@ export function LessonFeedbackEditor({
       setExportMessage("请先选择需要连线的学生。");
       return;
     }
-    const centers = selectedStudentIds.map((studentId) => rowCenters.get(studentId)).filter((value): value is number => value != null);
-    const centerY = centers.length > 0 ? centers.reduce((sum, value) => sum + value, 0) / centers.length : layout.studentStartY + 100;
     const next = cloneRecord(record);
+    // 与旧项目一致的默认抬头：单人省略“共同”二字，写完抬头换行，老师接着写评语。
+    const names = selectedStudentIds
+      .map((studentId) => record.students.find((student) => student.id === studentId)?.name)
+      .filter((name): name is string => Boolean(name))
+      .join("、");
+    const title = selectedStudentIds.length === 1
+      ? `（${names}）评价与建议：`
+      : `（${names}）共同评价与建议：`;
+    const rows = selectedStudentIds
+      .map((studentId) => record.students.findIndex((student) => student.id === studentId))
+      .filter((index) => index >= 0);
+    const firstRow = Math.min(...rows);
+    const lastRow = Math.max(...rows);
     const box: LessonFeedbackTextBox = {
       id: makeId("feedback_box"),
       // 落在“综合评价及建议”列内，括号自左侧汇聚过来。
-      x: layout.cols[6] + 70,
-      y: clamp(centerY - 48, layout.studentStartY + 8, pageHeight - 130),
-      width: 190,
-      height: 96,
-      // 留空：提示语走 textarea 的 placeholder，避免被当成正文画进导出图。
-      text: "",
-      color: "#25324a",
-      fontSize: 13,
-      fontWeight: 600,
+      x: layout.cols[6] + 6,
+      y: clamp(layout.studentStartY + firstRow * layout.studentRowHeight + 4, layout.studentStartY + 4, pageHeight - 130),
+      width: layout.cols[7] - layout.cols[6] - 12,
+      height: Math.max(54, (lastRow - firstRow + 1) * layout.studentRowHeight - 8),
+      text: `${title}\n`,
+      color: "#111827",
+      fontSize: 12,
+      fontWeight: 700,
       borderColor: activeColor,
       backgroundColor: "transparent",
       studentIds: [...selectedStudentIds],
@@ -267,6 +278,7 @@ export function LessonFeedbackEditor({
     emit(next);
     setSelectedTextBoxId(box.id);
     setActiveTool("select");
+    setSelectedStudentIds([]);
   }
 
   function addTextBox(point: LessonFeedbackPoint): void {
@@ -482,6 +494,75 @@ export function LessonFeedbackEditor({
             <span>{penWidth}px</span>
             <input type="range" min="1" max="10" value={penWidth} onChange={(event) => setPenWidth(Number(event.target.value))} />
           </label>
+
+          {selectedBox && (
+            <>
+              <div className="lesson-feedback-tool-divider" />
+              <div className="lesson-feedback-boxstyle" aria-label="文本框样式">
+                <span className="lesson-feedback-boxstyle-title">文本框</span>
+
+                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="边框样式">
+                  {([
+                    { value: "dashed", label: "虚线" },
+                    { value: "solid", label: "实线" },
+                    { value: "none", label: "无框" }
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn("lesson-feedback-chip", (selectedBox.borderStyle ?? "dashed") === option.value && "is-active")}
+                      onClick={() => patchTextBox(selectedBox.id, { borderStyle: option.value })}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="字重">
+                  {([
+                    { value: 400, label: "常规" },
+                    { value: 700, label: "加粗" }
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn("lesson-feedback-chip", selectedBox.fontWeight === option.value && "is-active")}
+                      onClick={() => patchTextBox(selectedBox.id, { fontWeight: option.value })}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="lesson-feedback-boxstyle-row" role="group" aria-label="字号">
+                  <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize - 1, 9, 22) })}>A-</button>
+                  <span className="lesson-feedback-boxstyle-value">{selectedBox.fontSize}</span>
+                  <button type="button" className="lesson-feedback-chip" onClick={() => patchTextBox(selectedBox.id, { fontSize: clamp(selectedBox.fontSize + 1, 9, 22) })}>A+</button>
+                </div>
+
+                <div className="lesson-feedback-boxstyle-row">
+                  <label className="lesson-feedback-swatch" title="文字颜色">
+                    <input type="color" value={selectedBox.color} onChange={(event) => patchTextBox(selectedBox.id, { color: event.target.value })} />
+                    <span>文字</span>
+                  </label>
+                  <label className="lesson-feedback-swatch" title="边框与连线颜色">
+                    <input type="color" value={selectedBox.borderColor} onChange={(event) => patchTextBox(selectedBox.id, { borderColor: event.target.value })} />
+                    <span>边框</span>
+                  </label>
+                </div>
+
+                {selectedBox.studentIds.length > 0 && (
+                  <button
+                    type="button"
+                    className={cn("lesson-feedback-chip lesson-feedback-chip-wide", selectedBox.showBand && "is-active")}
+                    onClick={() => patchTextBox(selectedBox.id, { showBand: !selectedBox.showBand })}
+                  >
+                    {selectedBox.showBand ? "隐藏色带" : "显示色带"}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </aside>
 
         <div className="lesson-feedback-paper-viewport">
@@ -622,7 +703,17 @@ export function LessonFeedbackEditor({
               <div
                 key={box.id}
                 className={cn("lesson-feedback-text-box", selectedTextBoxId === box.id && "is-selected", activeTool !== "select" && "is-disabled")}
-                style={{ left: box.x, top: box.y, width: box.width, height: box.height, borderColor: box.borderColor, background: box.backgroundColor, color: box.color }}
+                style={{
+                  left: box.x,
+                  top: box.y,
+                  width: box.width,
+                  height: box.height,
+                  borderColor: box.borderColor,
+                  borderStyle: box.borderStyle ?? "dashed",
+                  borderWidth: (box.borderStyle ?? "dashed") === "none" ? 0 : (box.borderWidth ?? 1.5),
+                  background: box.backgroundColor,
+                  color: box.color
+                }}
                 onClick={(event) => { event.stopPropagation(); setSelectedTextBoxId(box.id); }}
               >
                 <button type="button" className="lesson-feedback-box-handle" onPointerDown={(event) => beginBoxInteraction(event, box, "move")} title="拖动文本框">

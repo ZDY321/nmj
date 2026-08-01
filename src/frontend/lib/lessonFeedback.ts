@@ -40,6 +40,8 @@ export type LessonFeedbackStroke = {
   points: LessonFeedbackPoint[];
 };
 
+export type LessonFeedbackBorderStyle = "solid" | "dashed" | "none";
+
 export type LessonFeedbackTextBox = {
   id: string;
   x: number;
@@ -54,6 +56,9 @@ export type LessonFeedbackTextBox = {
   backgroundColor: string;
   studentIds: string[];
   showBand: boolean;
+  // 旧版反馈项目里可逐框调整的样式；未写入时按 dashed / 1.5 处理，兼容既有记录。
+  borderStyle?: LessonFeedbackBorderStyle;
+  borderWidth?: number;
 };
 
 export type LessonFeedbackRecord = {
@@ -126,8 +131,17 @@ export function feedbackAttendanceMark(status: AttendanceStatus | undefined): Le
   return "";
 }
 
-export function createLessonFeedbackRecord(
-  vault: TeacherVault,
+// 课次序号只数实际上过的课：取消、待排、草稿以及排在本节之后的课都不计入，
+// 因此中途停课或取消不会把编号顶高。给定课次本身若尚未标记完成，也按“下一节”接续。
+export function lessonFeedbackPeriodNumber(courseLessons: Lesson[], lesson?: Lesson): number {
+  const taught = courseLessons.filter((item) => item.status === "completed" || item.status === "makeup_completed");
+  if (!lesson) return taught.length + 1;
+  const index = taught.findIndex((item) => item.id === lesson.id);
+  if (index >= 0) return index + 1;
+  return taught.filter((item) => sortLessons(item, lesson) < 0).length + 1;
+}
+
+export function createLessonFeedbackRecord(  vault: TeacherVault,
   course: CourseGroup,
   lesson?: Lesson,
   now = new Date().toISOString()
@@ -141,8 +155,7 @@ export function createLessonFeedbackRecord(
   const courseLessons = vault.lessons
     .filter((item) => item.courseGroupId === course.id)
     .sort(sortLessons);
-  const lessonIndex = lesson ? courseLessons.findIndex((item) => item.id === lesson.id) : -1;
-  const periodNumber = lessonIndex >= 0 ? lessonIndex + 1 : courseLessons.length + 1;
+  const periodNumber = lessonFeedbackPeriodNumber(courseLessons, lesson);
 
   return {
     version: 1,

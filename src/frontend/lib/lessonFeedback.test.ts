@@ -3,9 +3,11 @@ import {
   createLessonFeedbackRecord,
   feedbackAttendanceMark,
   lessonFeedbackIndexItem,
+  lessonFeedbackPeriodNumber,
   upsertLessonFeedbackIndexItem,
   type LessonFeedbackIndexDocument
 } from "@/frontend/lib/lessonFeedback";
+import type { Lesson } from "@/shared/types";
 import { createSampleVault } from "@/frontend/lib/sampleData";
 
 describe("lesson feedback model", () => {
@@ -43,6 +45,7 @@ describe("lesson feedback model", () => {
     expect(feedbackAttendanceMark("absent")).toBe("×");
   });
 
+
   it("merges a record into a remote index without dropping other devices' entries", () => {
     const vault = createSampleVault();
     const course = vault.courseGroups[0];
@@ -78,5 +81,68 @@ describe("lesson feedback model", () => {
     expect(merged.items).toHaveLength(2);
     expect(merged.items[0].preview).toBe("新内容");
     expect(merged.items.filter((entry) => entry.id === item.id)).toHaveLength(1);
+  });
+});
+
+
+// 课次编号只数实际上过的课：停课、取消、待排都不该把编号顶高。
+describe("lesson feedback period numbering", () => {
+  function lesson(id: string, date: string, status: Lesson["status"]): Lesson {
+    return { id, date, startTime: "09:00", status } as Lesson;
+  }
+
+  it("counts only completed lessons", () => {
+    const lessons = [
+      lesson("a", "2026-05-01", "completed"),
+      lesson("b", "2026-05-08", "cancelled"),
+      lesson("c", "2026-05-15", "completed"),
+      lesson("d", "2026-05-22", "makeup_completed")
+    ];
+    expect(lessonFeedbackPeriodNumber(lessons, lessons[0])).toBe(1);
+    expect(lessonFeedbackPeriodNumber(lessons, lessons[2])).toBe(2);
+    expect(lessonFeedbackPeriodNumber(lessons, lessons[3])).toBe(3);
+  });
+
+  it("skips cancelled and pending lessons instead of inflating the number", () => {
+    const lessons = [
+      lesson("a", "2026-05-01", "completed"),
+      lesson("b", "2026-05-08", "cancelled"),
+      lesson("c", "2026-05-15", "scheduled"),
+      lesson("d", "2026-05-22", "draft"),
+      lesson("e", "2026-05-29", "makeup_pending"),
+      lesson("f", "2026-06-05", "completed")
+    ];
+    // 中间四节没上成，所以 6/5 只是第 2 节实际课。
+    expect(lessonFeedbackPeriodNumber(lessons, lessons[5])).toBe(2);
+  });
+
+  it("continues from the last taught lesson for a not-yet-completed lesson", () => {
+    const lessons = [
+      lesson("a", "2026-05-01", "completed"),
+      lesson("b", "2026-05-08", "completed"),
+      lesson("c", "2026-05-15", "scheduled")
+    ];
+    // 今天这节还没标完成，接在已上的 2 节之后。
+    expect(lessonFeedbackPeriodNumber(lessons, lessons[2])).toBe(3);
+  });
+
+  it("ignores later lessons when numbering a back-filled one", () => {
+    const lessons = [
+      lesson("a", "2026-05-01", "completed"),
+      lesson("b", "2026-05-08", "scheduled"),
+      lesson("c", "2026-05-15", "completed")
+    ];
+    // 补写 5/8 的反馈时，只数它之前上过的课，不受 5/15 影响。
+    expect(lessonFeedbackPeriodNumber(lessons, lessons[1])).toBe(2);
+  });
+
+  it("numbers a brand-new lesson after every taught one", () => {
+    const lessons = [
+      lesson("a", "2026-05-01", "completed"),
+      lesson("b", "2026-05-08", "completed"),
+      lesson("c", "2026-05-15", "cancelled")
+    ];
+    expect(lessonFeedbackPeriodNumber(lessons)).toBe(3);
+    expect(lessonFeedbackPeriodNumber([])).toBe(1);
   });
 });
