@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import {
   ArrowRight,
   CheckCheck,
@@ -34,10 +34,15 @@ import {
   drawFeedbackStroke,
   feedbackPageHeight,
   feedbackPageWidth,
-  feedbackStudentRowHeight,
-  feedbackStudentTableTop,
-  lessonFeedbackPngBlob
+  lessonFeedbackPngBlob,
+  renderLessonFeedbackCanvas
 } from "@/frontend/lib/lessonFeedbackExport";
+import {
+  feedbackBraceGeometry,
+  feedbackBracePath,
+  feedbackSheetLayout,
+  feedbackStudentRowCenter
+} from "@/frontend/lib/lessonFeedbackLayout";
 import "@/frontend/lessonFeedback.css";
 
 type EditorTool = "select" | "eraser" | "text" | LessonFeedbackStrokeTool;
@@ -84,10 +89,13 @@ export function LessonFeedbackEditor({
   const [boxInteraction, setBoxInteraction] = useState<BoxInteraction | null>(null);
   const [exportMessage, setExportMessage] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sheetCanvasRef = useRef<HTMLCanvasElement>(null);
   const latestRecordRef = useRef(record);
   const undoStackRef = useRef<LessonFeedbackRecord[]>([]);
   const redoStackRef = useRef<LessonFeedbackRecord[]>([]);
   const pageHeight = feedbackPageHeight(record);
+  // 编辑器与导出共用同一份坐标，屏幕上的位置即导出图里的位置。
+  const layout = useMemo(() => feedbackSheetLayout(record.students.length), [record.students.length]);
   const isDrawingTool = activeTool !== "select";
 
   latestRecordRef.current = record;
@@ -96,6 +104,21 @@ export function LessonFeedbackEditor({
     setSelectedStudentIds((current) => current.filter((studentId) => record.students.some((student) => student.id === studentId)));
     if (selectedTextBoxId && !record.textBoxes.some((box) => box.id === selectedTextBoxId)) setSelectedTextBoxId("");
   }, [record.id, record.students, record.textBoxes, selectedTextBoxId]);
+
+  // 表格骨架直接复用导出渲染器（includeValues: false），可编辑的值再用 DOM 控件叠上去。
+  // 这样屏幕与导出永远同一套几何，不会重现“连线在两边对不上”的问题。
+  useEffect(() => {
+    const host = sheetCanvasRef.current;
+    if (!host) return;
+    const ratio = window.devicePixelRatio || 1;
+    const painted = renderLessonFeedbackCanvas(record, { scale: ratio, includeValues: false });
+    host.width = painted.width;
+    host.height = painted.height;
+    const context = host.getContext("2d");
+    if (!context) return;
+    context.clearRect(0, 0, host.width, host.height);
+    context.drawImage(painted, 0, 0);
+  }, [record, pageHeight]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -148,8 +171,8 @@ export function LessonFeedbackEditor({
 
   const rowCenters = useMemo(() => new Map(record.students.map((student, index) => [
     student.id,
-    feedbackStudentTableTop + 66 + index * feedbackStudentRowHeight + feedbackStudentRowHeight / 2
-  ])), [record.students]);
+    feedbackStudentRowCenter(layout, index)
+  ])), [layout, record.students]);
 
   function emit(nextRecord: LessonFeedbackRecord, history = true): void {
     if (history) {
@@ -221,20 +244,22 @@ export function LessonFeedbackEditor({
       return;
     }
     const centers = selectedStudentIds.map((studentId) => rowCenters.get(studentId)).filter((value): value is number => value != null);
-    const centerY = centers.length > 0 ? centers.reduce((sum, value) => sum + value, 0) / centers.length : feedbackStudentTableTop + 100;
+    const centerY = centers.length > 0 ? centers.reduce((sum, value) => sum + value, 0) / centers.length : layout.studentStartY + 100;
     const next = cloneRecord(record);
     const box: LessonFeedbackTextBox = {
       id: makeId("feedback_box"),
-      x: 536,
-      y: clamp(centerY - 48, feedbackStudentTableTop + 68, pageHeight - 130),
+      // 落在“综合评价及建议”列内，括号自左侧汇聚过来。
+      x: layout.cols[6] + 70,
+      y: clamp(centerY - 48, layout.studentStartY + 8, pageHeight - 130),
       width: 190,
       height: 96,
-      text: "点击填写多人反馈",
+      // 留空：提示语走 textarea 的 placeholder，避免被当成正文画进导出图。
+      text: "",
       color: "#25324a",
       fontSize: 13,
       fontWeight: 600,
       borderColor: activeColor,
-      backgroundColor: "#ffffff",
+      backgroundColor: "transparent",
       studentIds: [...selectedStudentIds],
       showBand: true
     };
@@ -252,12 +277,12 @@ export function LessonFeedbackEditor({
       y: clamp(point.y, 32, pageHeight - 120),
       width: 210,
       height: 86,
-      text: "输入批注",
+      text: "",
       color: "#25324a",
       fontSize: 13,
       fontWeight: 600,
       borderColor: activeColor,
-      backgroundColor: "#ffffff",
+      backgroundColor: "transparent",
       studentIds: [],
       showBand: false
     };
@@ -465,84 +490,131 @@ export function LessonFeedbackEditor({
             style={{ width: feedbackPageWidth, height: pageHeight }}
             onClick={() => setSelectedTextBoxId("")}
           >
-            <header className="lesson-feedback-paper-header">
-              <h2>课堂学习反馈</h2>
-              <div>{record.className} · {record.subject} · {record.date} · {record.periodLabel}</div>
-              <div className="lesson-feedback-paper-meta">
-                <span>教师：{record.teacherName || "未设置"}</span>
-                <span>校区：{record.campusName || "未设置"}</span>
-                <span>时间：{record.startTime && record.endTime ? `${record.startTime}-${record.endTime}` : "未设置"}</span>
-              </div>
-            </header>
+            <canvas ref={sheetCanvasRef} className="lesson-feedback-sheet-canvas" style={{ width: feedbackPageWidth, height: pageHeight }} />
 
-            <label className="lesson-feedback-block lesson-feedback-content-block">
-              <span>课堂内容</span>
-              <textarea value={record.content} onChange={(event) => patchRecord({ content: event.target.value })} />
-            </label>
-            <label className="lesson-feedback-block lesson-feedback-homework-block">
-              <span>今日作业</span>
-              <textarea value={record.homework} onChange={(event) => patchRecord({ homework: event.target.value })} />
-            </label>
+            <input
+              className="lesson-feedback-field"
+              style={cellStyle(layout.metaXs[1], layout.metaY, layout.metaXs[2] - layout.metaXs[1], layout.metaHeight, { align: "center", size: 13 })}
+              value={record.teacherName}
+              onChange={(event) => patchRecord({ teacherName: event.target.value })}
+              aria-label="教师"
+            />
+            <input
+              className="lesson-feedback-field"
+              style={cellStyle(layout.metaXs[3], layout.metaY, layout.metaXs[4] - layout.metaXs[3], layout.metaHeight, { align: "center", size: 12 })}
+              value={record.periodLabel}
+              onChange={(event) => patchRecord({ periodLabel: event.target.value })}
+              aria-label="课次"
+            />
+            <input
+              className="lesson-feedback-field"
+              type="date"
+              style={cellStyle(layout.metaXs[5], layout.metaY, layout.metaXs[6] - layout.metaXs[5], layout.metaHeight, { align: "center", size: 12 })}
+              value={record.date}
+              onChange={(event) => patchRecord({ date: event.target.value })}
+              aria-label="日期"
+            />
 
-            <div className="lesson-feedback-student-table">
-              <div className="lesson-feedback-table-header">
-                <span>学生</span><span>到课</span><span>作业</span><span>听课表现</span><span>课堂参与</span><span>课堂笔记</span><span>综合评价</span>
-              </div>
-              {record.students.map((student, index) => {
-                const entry = record.entries[student.id];
-                const selected = selectedStudentIds.includes(student.id);
-                return (
-                  <div key={student.id} className={cn("lesson-feedback-student-row", selected && "is-selected")}>
-                    <div className="lesson-feedback-student-name">
-                      <input type="checkbox" checked={selected} onChange={() => toggleStudent(student.id)} aria-label={`选择 ${student.name}`} />
-                      <button type="button" onClick={() => toggleStudent(student.id)}>{student.name}</button>
-                      <span className="lesson-feedback-order-buttons">
-                        <button type="button" onClick={() => moveStudent(student.id, -1)} disabled={index === 0} title="上移"><ChevronUp size={12} /></button>
-                        <button type="button" onClick={() => moveStudent(student.id, 1)} disabled={index === record.students.length - 1} title="下移"><ChevronDown size={12} /></button>
-                      </span>
-                    </div>
-                    {(["attendance", "homework", "listening", "participation", "notes"] as const).map((field) => (
-                      <button
-                        key={field}
-                        type="button"
-                        className={cn("lesson-feedback-mark", markClass(entry?.[field] ?? ""))}
-                        onClick={() => cycleEntry(student.id, field)}
-                      >
-                        {entry?.[field] || "-"}
-                      </button>
-                    ))}
-                    <textarea value={entry?.comment ?? ""} onChange={(event) => updateEntry(student.id, { comment: event.target.value })} placeholder="个性化评价" />
-                  </div>
-                );
-              })}
-              {Array.from({ length: Math.max(8 - record.students.length, 0) }, (_, index) => <div className="lesson-feedback-empty-row" key={`empty-${index}`} />)}
-            </div>
+            <textarea
+              className="lesson-feedback-field lesson-feedback-field-block"
+              style={cellStyle(layout.marginX + 84, layout.contentY, layout.contentWidth - 84, layout.contentHeight, { size: 14, padding: 10 })}
+              value={record.content}
+              onChange={(event) => patchRecord({ content: event.target.value })}
+              aria-label="上课内容"
+            />
+            <textarea
+              className="lesson-feedback-field lesson-feedback-field-block"
+              style={cellStyle(layout.marginX + 84, layout.homeworkY, layout.contentWidth - 84, layout.homeworkHeight, { size: 14, padding: 10 })}
+              value={record.homework}
+              onChange={(event) => patchRecord({ homework: event.target.value })}
+              aria-label="今日作业"
+            />
 
-            <label className="lesson-feedback-general-notes" style={{ top: feedbackStudentTableTop + 66 + Math.max(record.students.length, 8) * feedbackStudentRowHeight + 24 }}>
-              <span>本节补充说明</span>
-              <textarea value={record.generalNotes} onChange={(event) => patchRecord({ generalNotes: event.target.value })} />
-            </label>
+            {record.students.map((student, index) => {
+              const entry = record.entries[student.id];
+              const rowY = layout.studentStartY + index * layout.studentRowHeight;
+              const selected = selectedStudentIds.includes(student.id);
+              const c = layout.cols;
+              const marks = [
+                { field: "attendance" as const, left: c[1], right: c[2] },
+                { field: "homework" as const, left: c[2], right: c[3] },
+                { field: "listening" as const, left: c[3], right: c[4] },
+                { field: "participation" as const, left: c[4], right: c[5] },
+                { field: "notes" as const, left: c[5], right: c[6] }
+              ];
+              return (
+                <div key={student.id}>
+                  <button
+                    type="button"
+                    className={cn("lesson-feedback-name-cell", selected && "is-selected")}
+                    style={cellStyle(c[0], rowY, c[1] - c[0], layout.studentRowHeight, { align: "center" })}
+                    onClick={(event) => { event.stopPropagation(); toggleStudent(student.id); }}
+                    title="点选可加入多人反馈"
+                  >
+                    <span>{student.name}</span>
+                  </button>
+                  <span className="lesson-feedback-order-buttons" style={{ top: rowY + 3, left: c[1] - 15 }}>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); moveStudent(student.id, -1); }} disabled={index === 0} title="上移"><ChevronUp size={10} /></button>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); moveStudent(student.id, 1); }} disabled={index === record.students.length - 1} title="下移"><ChevronDown size={10} /></button>
+                  </span>
+                  {marks.map(({ field, left, right }) => (
+                    <button
+                      key={field}
+                      type="button"
+                      className={cn("lesson-feedback-mark-cell", markClass(entry?.[field] ?? ""))}
+                      style={cellStyle(left, rowY, right - left, layout.studentRowHeight, { align: "center", size: field === "attendance" ? 18 : 16 })}
+                      onClick={(event) => { event.stopPropagation(); cycleEntry(student.id, field); }}
+                    >
+                      {entry?.[field] || ""}
+                    </button>
+                  ))}
+                  <textarea
+                    className="lesson-feedback-field lesson-feedback-comment-cell"
+                    style={cellStyle(c[6], rowY, c[7] - c[6], layout.studentRowHeight, { size: 11.5, padding: 5 })}
+                    value={entry?.comment ?? ""}
+                    onChange={(event) => updateEntry(student.id, { comment: event.target.value })}
+                    aria-label={`${student.name} 综合评价`}
+                  />
+                </div>
+              );
+            })}
+
+            <textarea
+              className="lesson-feedback-field lesson-feedback-field-block"
+              style={cellStyle(layout.rubricXs[1], layout.noteY, layout.contentWidth - 80, layout.noteHeight, { size: 11, padding: 6 })}
+              value={record.generalNotes}
+              onChange={(event) => patchRecord({ generalNotes: event.target.value })}
+              aria-label="备注"
+            />
 
             <svg className="lesson-feedback-connector-layer" width={feedbackPageWidth} height={pageHeight} viewBox={`0 0 ${feedbackPageWidth} ${pageHeight}`} aria-hidden="true">
               {record.textBoxes.flatMap((box) => {
-                const centers = box.studentIds.map((studentId) => rowCenters.get(studentId)).filter((value): value is number => value != null);
-                const band = box.showBand && centers.length > 0 ? (
-                  <rect
-                    key={`${box.id}-band`}
-                    x="48"
-                    y={Math.min(...centers) - feedbackStudentRowHeight / 2 + 2}
-                    width="698"
-                    height={Math.max(...centers) - Math.min(...centers) + feedbackStudentRowHeight - 4}
-                    fill={box.borderColor}
-                    opacity="0.08"
-                  />
-                ) : null;
-                const lines = centers.map((centerY, index) => {
-                  const targetX = box.x;
-                  const targetY = clamp(centerY, box.y + 16, box.y + box.height - 16);
-                  return <path key={`${box.id}-line-${index}`} d={`M 498 ${centerY} C 516 ${centerY}, ${targetX - 20} ${targetY}, ${targetX} ${targetY}`} fill="none" stroke={box.borderColor} strokeWidth="1.5" />;
-                });
-                return [band, ...lines];
+                const geo = feedbackBraceGeometry(box, record, layout);
+                if (!geo) return [];
+                const bands = box.showBand ? box.studentIds.map((studentId) => {
+                  const index = record.students.findIndex((student) => student.id === studentId);
+                  if (index < 0) return null;
+                  return (
+                    <rect
+                      key={`${box.id}-band-${studentId}`}
+                      x={layout.cols[0]}
+                      y={layout.studentStartY + index * layout.studentRowHeight}
+                      width={layout.cols[7] - layout.cols[0]}
+                      height={layout.studentRowHeight}
+                      fill={geo.color}
+                      opacity="0.14"
+                    />
+                  );
+                }) : [];
+                const branches = geo.nodes.flatMap((node) => [
+                  <path key={`${box.id}-path-${node.id}`} d={feedbackBracePath(node, geo.tip)} fill="none" stroke={geo.color} strokeWidth={geo.width} strokeLinecap="round" />,
+                  <circle key={`${box.id}-dot-${node.id}`} cx={node.x} cy={node.y} r={Math.max(2.4, geo.width + 0.6)} fill={geo.color} />
+                ]);
+                return [
+                  ...bands,
+                  ...branches,
+                  <circle key={`${box.id}-tip`} cx={geo.tip.x} cy={geo.tip.y} r={Math.max(2.6, geo.width + 1)} fill={geo.color} />
+                ];
               })}
             </svg>
 
@@ -558,6 +630,7 @@ export function LessonFeedbackEditor({
                 </button>
                 <textarea
                   value={box.text}
+                  placeholder={box.studentIds.length > 0 ? "点击填写多人反馈" : "输入批注"}
                   style={{ color: box.color, fontSize: box.fontSize, fontWeight: box.fontWeight }}
                   onChange={(event) => patchTextBox(box.id, { text: event.target.value })}
                 />
@@ -596,8 +669,7 @@ function trimHistory(stack: LessonFeedbackRecord[]): void {
 }
 
 function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), Math.max(min, max));
-}
+  return Math.min(Math.max(value, min), Math.max(min, max));}
 
 function nearestStrokeId(strokes: LessonFeedbackStroke[], point: LessonFeedbackPoint): string {
   let nearest = "";
@@ -632,4 +704,23 @@ function saveStateLabel(state: SaveState): string {
 
 function sanitizeFilename(value: string): string {
   return value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim() || "课后反馈";
+}
+
+// 控件按单元格坐标绝对定位，四周内缩 1px 以免盖住骨架上的黑色边框。
+function cellStyle(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  options: { align?: "left" | "center"; size?: number; padding?: number } = {}
+): CSSProperties {
+  return {
+    left: x + 1,
+    top: y + 1,
+    width: width - 2,
+    height: height - 2,
+    textAlign: options.align === "center" ? "center" : "left",
+    fontSize: options.size ?? 12,
+    padding: options.padding == null ? undefined : `${Math.max(0, options.padding - 1)}px`
+  };
 }

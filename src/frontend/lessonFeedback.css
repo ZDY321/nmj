@@ -531,221 +531,107 @@
   background: var(--feedback-paper);
   box-shadow: 0 20px 48px rgba(15, 35, 66, 0.16);
   color: var(--feedback-ink);
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   transform-origin: top center;
 }
 
-.lesson-feedback-paper-header {
+/* 表格骨架由 canvas 画出（与导出同一套坐标），可编辑控件按单元格坐标叠在其上。 */
+.lesson-feedback-sheet-canvas {
   position: absolute;
-  z-index: 2;
-  top: 34px;
-  left: 48px;
-  width: 698px;
-  text-align: center;
+  z-index: 1;
+  top: 0;
+  left: 0;
 }
 
-.lesson-feedback-paper-header h2 {
+.lesson-feedback-field {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
   margin: 0;
-  font-size: 28px;
-  line-height: 1.3;
-}
-
-.lesson-feedback-paper-header > div:nth-child(2) {
-  margin-top: 5px;
-  color: #52667a;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.lesson-feedback-paper-meta {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
-  margin-top: 14px;
-  text-align: left;
-  color: #52667a;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.lesson-feedback-block {
-  position: absolute;
-  z-index: 2;
-  left: 48px;
-  display: grid;
-  width: 698px;
-  height: 58px;
-  grid-template-columns: 82px minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid #d5dee8;
-  background: #f6f9fc;
-}
-
-.lesson-feedback-content-block { top: 148px; }
-.lesson-feedback-homework-block { top: 216px; }
-
-.lesson-feedback-block > span {
-  display: flex;
-  align-items: flex-start;
-  padding: 11px 10px;
-  color: #1557c2;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.lesson-feedback-block textarea,
-.lesson-feedback-general-notes textarea {
-  min-width: 0;
-  resize: none;
-  border: 0;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
   outline: 0;
-  color: #25324a;
   background: transparent;
-  font-size: 13px;
-  line-height: 18px;
-}
-
-.lesson-feedback-block textarea { padding: 10px 12px; }
-
-.lesson-feedback-student-table {
-  position: absolute;
-  z-index: 2;
-  top: 300px;
-  left: 48px;
-  width: 698px;
-  overflow: hidden;
-  border: 1px solid #8ba4be;
-  background: rgba(255, 255, 255, 0.58);
-}
-
-.lesson-feedback-table-header,
-.lesson-feedback-student-row {
-  display: grid;
-  grid-template-columns: 110px 56px 60px 68px 78px 78px 248px;
-}
-
-.lesson-feedback-table-header {
-  min-height: 66px;
-  color: #25324a;
-  background: #eaf2ff;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.lesson-feedback-table-header > span,
-.lesson-feedback-student-row > * {
-  min-width: 0;
-  border-right: 1px solid #8ba4be;
-}
-
-.lesson-feedback-table-header > span:last-child,
-.lesson-feedback-student-row > *:last-child { border-right: 0; }
-
-.lesson-feedback-table-header > span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 5px;
-  text-align: center;
-}
-
-.lesson-feedback-student-row {
-  position: relative;
-  height: 42px;
-  border-top: 1px solid #8ba4be;
-  transition: background-color 0.12s ease;
-}
-
-.lesson-feedback-student-row.is-selected { background: rgba(21, 87, 194, 0.09); }
-
-.lesson-feedback-student-name {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 5px;
-}
-
-.lesson-feedback-student-name input { width: 14px; height: 14px; accent-color: #1557c2; }
-
-.lesson-feedback-student-name > button {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  border: 0;
-  background: transparent;
-  color: #102a43;
+  color: var(--feedback-ink);
+  font: inherit;
   font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
 }
+
+.lesson-feedback-field:hover { border-color: rgba(35, 95, 88, 0.28); background: rgba(226, 243, 237, 0.42); }
+.lesson-feedback-field:focus { border-color: #4d8f84; background: rgba(255, 255, 255, 0.94); outline: 2px solid rgba(77, 143, 132, 0.2); }
+
+textarea.lesson-feedback-field { resize: none; overflow: hidden; }
+.lesson-feedback-field-block { padding: 6px 9px; }
+.lesson-feedback-comment-cell { padding: 2px 4px; font-size: 11.5px; }
+
+.lesson-feedback-name-cell {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--feedback-ink);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.lesson-feedback-name-cell:hover { border-color: rgba(35, 95, 88, 0.3); background: rgba(226, 243, 237, 0.45); }
+.lesson-feedback-name-cell.is-selected { border-color: #235f58; background: rgba(35, 95, 88, 0.14); }
 
 .lesson-feedback-order-buttons {
+  position: absolute;
+  z-index: 4;
   display: flex;
   flex-direction: column;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
+
+.lesson-feedback-paper:hover .lesson-feedback-order-buttons { opacity: 1; }
 
 .lesson-feedback-order-buttons button {
   display: grid;
-  width: 17px;
-  height: 16px;
+  width: 13px;
+  height: 12px;
   place-items: center;
-  border: 0;
+  padding: 0;
+  border: 1px solid #cbd5df;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.92);
   color: #64748b;
-  background: transparent;
+  cursor: pointer;
 }
 
-.lesson-feedback-order-buttons button:disabled { opacity: 0.25; }
+.lesson-feedback-order-buttons button:disabled { opacity: 0.25; cursor: default; }
 
-.lesson-feedback-mark {
-  border: 0;
-  color: #94a3b8;
-  background: transparent;
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.lesson-feedback-mark:hover { background: rgba(255, 255, 255, 0.8); }
-.lesson-feedback-mark.is-good { color: #15803d; }
-.lesson-feedback-mark.is-medium { color: #c2410c; }
-.lesson-feedback-mark.is-poor { color: #b91c1c; }
-
-.lesson-feedback-student-row > textarea {
-  resize: none;
-  border: 0;
-  outline: 0;
-  color: #52667a;
-  background: transparent;
-  padding: 5px 7px;
-  font-size: 11px;
-  line-height: 15px;
-}
-
-.lesson-feedback-empty-row {
-  height: 42px;
-  border-top: 1px solid #8ba4be;
-  background: repeating-linear-gradient(135deg, transparent, transparent 8px, rgba(139, 164, 190, 0.04) 8px, rgba(139, 164, 190, 0.04) 16px);
-}
-
-.lesson-feedback-general-notes {
+.lesson-feedback-mark-cell {
   position: absolute;
-  z-index: 2;
-  left: 48px;
+  z-index: 3;
+  box-sizing: border-box;
   display: grid;
-  width: 698px;
-  height: 86px;
-  grid-template-columns: 112px minmax(0, 1fr);
-  border: 1px solid #d5dee8;
-  background: #f8fbff;
-}
-
-.lesson-feedback-general-notes > span {
-  padding: 12px;
-  color: #1557c2;
-  font-size: 12px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--feedback-ink);
+  cursor: pointer;
+  font-family: inherit;
   font-weight: 700;
 }
 
-.lesson-feedback-general-notes textarea { padding: 10px; }
+.lesson-feedback-mark-cell:hover { border-color: rgba(35, 95, 88, 0.28); background: rgba(226, 243, 237, 0.42); }
+.lesson-feedback-mark-cell.is-good { color: #14795d; }
+.lesson-feedback-mark-cell.is-medium { color: #a85617; }
+.lesson-feedback-mark-cell.is-poor { color: #bd3029; }
+
 
 .lesson-feedback-connector-layer,
 .lesson-feedback-ink-canvas {
@@ -763,28 +649,36 @@
   display: flex;
   flex-direction: column;
   overflow: visible;
-  border: 1.5px solid;
-  border-radius: 6px;
-  box-shadow: 0 5px 14px rgba(15, 35, 66, 0.1);
+  /* 虚线边框、透明底：与导出图一致，也让下方的分组色带透出来。 */
+  border: 1.5px dashed;
+  border-radius: 3px;
 }
 
 .lesson-feedback-text-box.is-selected { outline: 2px solid rgba(21, 87, 194, 0.28); outline-offset: 2px; }
 .lesson-feedback-text-box.is-disabled { pointer-events: none; }
 
+/* 拖动条浮在框外：框内文字的起始位置因此与导出图一致。 */
 .lesson-feedback-box-handle {
+  position: absolute;
+  top: -19px;
+  left: -1px;
   display: flex;
-  height: 24px;
+  height: 18px;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 7px;
-  border: 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 0 6px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 3px 3px 0 0;
   color: #64748b;
   background: rgba(248, 251, 255, 0.94);
   cursor: move;
   font-size: 9px;
   font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
+
+.lesson-feedback-text-box:hover .lesson-feedback-box-handle,
+.lesson-feedback-text-box.is-selected .lesson-feedback-box-handle { opacity: 1; }
 
 .lesson-feedback-text-box textarea {
   min-height: 0;
@@ -792,7 +686,8 @@
   resize: none;
   border: 0;
   outline: 0;
-  padding: 6px 8px;
+  /* 与导出的 padding 8 / lineHeight 1.45 对齐。 */
+  padding: 8px;
   background: transparent;
   line-height: 1.45;
 }
