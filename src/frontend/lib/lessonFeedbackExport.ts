@@ -237,9 +237,25 @@ function drawStudentTable(
     fillCenteredText(context, entry.listening, (c[3] + c[4]) / 2, markY, 16, 700, feedbackMarkColor(entry.listening));
     fillCenteredText(context, entry.participation, (c[4] + c[5]) / 2, markY, 16, 700, feedbackMarkColor(entry.participation));
     fillCenteredText(context, entry.notes, (c[5] + c[6]) / 2, markY, 16, 700, feedbackMarkColor(entry.notes));
+    const commentSize = entry.commentFontSize ?? 11.5;
+    const commentWeight = entry.commentFontWeight ?? 400;
+    if (entry.commentHighlights?.length) {
+      context.save();
+      context.font = `${commentWeight} ${commentSize}px ${feedbackBodyFontFamily}`;
+      feedbackHighlightRects(
+        entry.comment,
+        entry.commentHighlights,
+        { x: c[6], y: rowY, width: c[7] - c[6], height: layout.studentRowHeight },
+        { size: commentSize, padding: 5, maxLines: Infinity, ellipsis: false, measure: (value) => context.measureText(value).width }
+      ).forEach((rect) => {
+        context.fillStyle = rect.color;
+        context.fillRect(rect.x, rect.y, rect.width, rect.height);
+      });
+      context.restore();
+    }
     drawCellText(context, entry.comment, c[6], rowY, c[7] - c[6], layout.studentRowHeight, {
-      size: entry.commentFontSize ?? 11.5,
-      weight: entry.commentFontWeight ?? 400,
+      size: commentSize,
+      weight: commentWeight,
       fill: entry.commentColor ?? feedbackInkColor,
       padding: 5
     });

@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { makeId } from "@/frontend/lib/crypto";
 import type {
   LessonFeedbackEntry,
+  LessonFeedbackHighlight,
   LessonFeedbackPoint,
   LessonFeedbackRecord,
   LessonFeedbackStroke,
@@ -148,8 +149,16 @@ export function LessonFeedbackEditor({
   const layout = useMemo(() => feedbackSheetLayout(record.students.length), [record.students.length]);
   const selectedBox = record.textBoxes.find((box) => box.id === selectedTextBoxId);
   const selectedStroke = record.annotations.find((stroke) => stroke.id === selectedStrokeId);
-  // 荧光面板对准“正在选字的框”，没有选区时退回当前选中的文本框。
-  const activeHighlightTarget = record.textBoxes.find((box) => box.id === (textSelection?.boxId || selectedTextBoxId));
+  // 荧光面板对准“正在选字的地方”：文本框或某个学生的评语格。
+  const highlightTargetId = textSelection?.boxId
+    || (focusedCommentId ? `comment:${focusedCommentId}` : "")
+    || selectedTextBoxId;
+  const highlightTargetMarks = highlightTargetId.startsWith("comment:")
+    ? record.entries[highlightTargetId.slice("comment:".length)]?.commentHighlights ?? []
+    : record.textBoxes.find((box) => box.id === highlightTargetId)?.highlights ?? [];
+  const hasHighlightTarget = highlightTargetId.startsWith("comment:")
+    ? Boolean(record.entries[highlightTargetId.slice("comment:".length)])
+    : record.textBoxes.some((box) => box.id === highlightTargetId);
   const focusedStudent = record.students.find((student) => student.id === focusedCommentId);
   const focusedEntry = focusedStudent
     ? { id: focusedStudent.id, name: focusedStudent.name, entry: record.entries[focusedStudent.id] ?? blankEntry }
@@ -256,8 +265,14 @@ export function LessonFeedbackEditor({
         const width = Math.max(...xs) - minX;
         const height = Math.max(...ys) - minY;
         // 以左上角为锚点缩放；下限避免图形被拖成零尺寸后无法再抓取。
-        const scaleX = width > 1 ? Math.max(0.1, (width + deltaX) / width) : 1;
-        const scaleY = height > 1 ? Math.max(0.1, (height + deltaY) / height) : 1;
+        let scaleX = width > 1 ? Math.max(0.1, (width + deltaX) / width) : 1;
+        let scaleY = height > 1 ? Math.max(0.1, (height + deltaY) / height) : 1;
+        // 按住 Shift 等比缩放：取两轴中较大的变化量，形状不走样。
+        if (event.shiftKey) {
+          const uniform = Math.abs(scaleX - 1) > Math.abs(scaleY - 1) ? scaleX : scaleY;
+          scaleX = uniform;
+          scaleY = uniform;
+        }
         stroke.points = strokeDrag.startPoints.map((point) => ({
           x: minX + (point.x - minX) * scaleX,
           y: minY + (point.y - minY) * scaleY
@@ -519,17 +534,47 @@ export function LessonFeedbackEditor({
     });
   }
 
-  function applyHighlight(color: string): void {
-    if (!textSelection) return;
-    const box = record.textBoxes.find((item) => item.id === textSelection.boxId);
-    if (!box) return;
-    const next = [...(box.highlights ?? []).filter((item) => item.end <= textSelection.start || item.start >= textSelection.end),
-      { start: textSelection.start, end: textSelection.end, color }];
-    patchTextBox(box.id, { highlights: next });
+  function commentHighlightRects(studentId: string, entry: LessonFeedbackEntry | undefined, rowY: number) {
+    if (!entry?.commentHighlights?.length) return [];
+    const size = entry.commentFontSize ?? 11.5;
+    const weight = entry.commentFontWeight ?? 400;
+    return feedbackHighlightRects(
+      entry.comment,
+      entry.commentHighlights,
+      { x: layout.cols[6], y: rowY, width: layout.cols[7] - layout.cols[6], height: layout.studentRowHeight },
+      {
+        size,
+        padding: 5,
+        valign: "center",
+        maxLines: Infinity,
+        ellipsis: false,
+        measure: measureWith(`${weight} ${size}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`)
+      }
+    );
   }
 
-  function clearHighlights(boxId: string): void {
-    patchTextBox(boxId, { highlights: [] });
+  function applyHighlight(color: string): void {
+    if (!textSelection) return;
+    const overlap = (item: LessonFeedbackHighlight) => item.end <= textSelection.start || item.start >= textSelection.end;
+    const mark = { start: textSelection.start, end: textSelection.end, color };
+
+    if (textSelection.boxId.startsWith("comment:")) {
+      const studentId = textSelection.boxId.slice("comment:".length);
+      const existing = record.entries[studentId]?.commentHighlights ?? [];
+      updateEntry(studentId, { commentHighlights: [...existing.filter(overlap), mark] });
+      return;
+    }
+    const box = record.textBoxes.find((item) => item.id === textSelection.boxId);
+    if (!box) return;
+    patchTextBox(box.id, { highlights: [...(box.highlights ?? []).filter(overlap), mark] });
+  }
+
+  function clearHighlights(targetId: string): void {
+    if (targetId.startsWith("comment:")) {
+      updateEntry(targetId.slice("comment:".length), { commentHighlights: [] });
+      return;
+    }
+    patchTextBox(targetId, { highlights: [] });
   }
 
   function beginStrokeDrag(event: ReactPointerEvent<HTMLElement>, stroke: LessonFeedbackStroke, mode: "move" | "resize"): void {
@@ -923,6 +968,20 @@ export function LessonFeedbackEditor({
                   >
                     A
                   </button>
+                  {(entry?.commentHighlights?.length ?? 0) > 0 && (
+                    <div
+                      className="lesson-feedback-highlight-layer"
+                      style={{ left: c[6] + 1, top: rowY + 1, width: c[7] - c[6] - 2, height: layout.studentRowHeight - 2 }}
+                      aria-hidden="true"
+                    >
+                      {commentHighlightRects(student.id, entry, rowY).map((rect, index) => (
+                        <span
+                          key={`${student.id}-hl-${index}`}
+                          style={{ left: rect.x - c[6] - 1, top: rect.y - rowY - 1, width: rect.width, height: rect.height, background: rect.color }}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <textarea
                     className="lesson-feedback-field lesson-feedback-comment-cell"
                     style={{
@@ -934,8 +993,22 @@ export function LessonFeedbackEditor({
                       fontWeight: entry?.commentFontWeight ?? undefined
                     }}
                     value={entry?.comment ?? ""}
-                    onChange={(event) => updateEntry(student.id, { comment: event.target.value })}
+                    onChange={(event) => {
+                      // 与文本框同一约定：文字一改就丢掉旧标记，避免下标错位。
+                      const cleared = (entry?.commentHighlights?.length ?? 0) > 0 && event.target.value !== entry?.comment;
+                      updateEntry(student.id, cleared
+                        ? { comment: event.target.value, commentHighlights: [] }
+                        : { comment: event.target.value });
+                    }}
                     onFocus={() => { setFocusedCommentId(student.id); setSelectedTextBoxId(""); }}
+                    onSelect={(event) => {
+                      const target = event.currentTarget;
+                      setTextSelection(
+                        target.selectionStart === target.selectionEnd
+                          ? null
+                          : { boxId: `comment:${student.id}`, start: target.selectionStart, end: target.selectionEnd }
+                      );
+                    }}
                     aria-label={`${student.name} 综合评价`}
                   />
                 </div>
@@ -1097,12 +1170,15 @@ export function LessonFeedbackEditor({
                   className="lesson-feedback-stroke-frame"
                   style={{ left, top, width, height }}
                   onPointerDown={(event) => beginStrokeDrag(event, selectedStroke, "move")}
-                  title="拖动可移动图形"
+                  title="拖动移动图形"
                 >
+                  {strokeDrag?.mode === "resize" && strokeDrag.id === selectedStroke.id && (
+                    <span className="lesson-feedback-stroke-tip">按住 Shift 不变形</span>
+                  )}
                   <span
                     className="lesson-feedback-stroke-resize"
                     onPointerDown={(event) => beginStrokeDrag(event, selectedStroke, "resize")}
-                    title="拖动可缩放图形"
+                    title="拖动缩放；按住 Shift 保持比例不变形"
                   />
                 </div>
               );
@@ -1130,7 +1206,7 @@ export function LessonFeedbackEditor({
           </div>
         </div>
 
-        <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && !selectedStroke && !activeHighlightTarget && "is-empty")} aria-label="样式设置">
+        <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && !selectedStroke && !hasHighlightTarget && "is-empty")} aria-label="样式设置">
           <div className="lesson-feedback-boxstyle-group">
             <span className="lesson-feedback-boxstyle-title">显示比例 {Math.round(zoom * 100)}%</span>
             <div className="lesson-feedback-segment" role="group" aria-label="显示比例">
@@ -1140,11 +1216,11 @@ export function LessonFeedbackEditor({
             </div>
           </div>
 
-          {activeHighlightTarget && (
+          {hasHighlightTarget && (
             <div className="lesson-feedback-boxstyle-group">
               <span className="lesson-feedback-boxstyle-title">荧光标记</span>
               <span className="lesson-feedback-section-hint">
-                {textSelection ? "点色块给选中的文字加底色" : "先在文本框里选中几个字"}
+                {textSelection ? "点色块给选中的文字加底色" : "先选中文本框或评语里的几个字"}
               </span>
               <div className="lesson-feedback-palette">
                 {feedbackHighlightColors.map((preset) => (
@@ -1161,9 +1237,9 @@ export function LessonFeedbackEditor({
                   />
                 ))}
               </div>
-              {(activeHighlightTarget.highlights?.length ?? 0) > 0 && (
-                <button type="button" className="lesson-feedback-wide-button" onClick={() => clearHighlights(activeHighlightTarget.id)}>
-                  清除本框荧光
+              {highlightTargetMarks.length > 0 && (
+                <button type="button" className="lesson-feedback-wide-button" onClick={() => clearHighlights(highlightTargetId)}>
+                  清除荧光标记
                 </button>
               )}
             </div>

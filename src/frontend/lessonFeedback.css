@@ -460,24 +460,28 @@
 
 .lesson-feedback-tool {
   display: flex;
-  min-height: 48px;
+  min-height: 46px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #52667a;
   background: transparent;
+  cursor: pointer;
   font-size: 10px;
   font-weight: 700;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .lesson-feedback-tool:hover,
+.lesson-feedback-tool:hover { border-color: #dbe4ef; background: #f3f7fb; color: #061226; }
+
 .lesson-feedback-tool.is-active {
-  border-color: #bfdbfe;
-  color: #1557c2;
-  background: #eaf2ff;
+  border-color: #25324a;
+  color: #ffffff;
+  background: #25324a;
 }
 
 .lesson-feedback-tool-divider {
@@ -842,14 +846,16 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px;
-  border-radius: 10px;
+  padding: 10px 8px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
   background: #ffffff;
-  box-shadow: inset 0 0 0 1px #e8eef6;
 }
 
+.lesson-feedback-section + .lesson-feedback-section { margin-top: 2px; }
+
 .lesson-feedback-section-title {
-  color: #64748b;
+  color: #25324a;
   font-size: 10px;
   font-weight: 800;
 }
@@ -889,7 +895,13 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   cursor: pointer;
 }
 
-.lesson-feedback-range { width: 100%; accent-color: #235f58; }
+.lesson-feedback-range {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  accent-color: #25324a;
+  cursor: pointer;
+}
 
 .lesson-feedback-boxstyle-label {
   color: #64748b;
@@ -1166,4 +1178,19 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   border-color: #64748b;
   border-style: dashed;
   background: rgba(148, 163, 184, 0.22);
+}
+
+/* 缩放提示：跟着操作框显示，说明 Shift 的作用。 */
+.lesson-feedback-stroke-tip {
+  position: absolute;
+  top: -24px;
+  right: 0;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(6, 18, 38, 0.86);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
 }

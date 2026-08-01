@@ -19,6 +19,8 @@ export type LessonFeedbackEntry = {
   // 评语可单独调整样式；未设置时沿用整表默认值。
   commentColor?: string;
   commentFontSize?: number;
+  // 评语内的荧光标记，语义与文本框一致：改文字即清空重标。
+  commentHighlights?: LessonFeedbackHighlight[];
   commentFontWeight?: 400 | 600 | 700;
 };
 
