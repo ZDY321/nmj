@@ -37,6 +37,7 @@ import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type Onboarding
 import { clearStoredSession, clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
 import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
+import type { ProgressSectionView } from "@/frontend/views/ProgressView";
 import { clearSavedScheduleImportLocalState } from "@/frontend/lib/scheduleImportReviewLocalState";
 import {
   clearUnlockedSession,
@@ -91,7 +92,6 @@ import type {
 
 const AdminView = lazy(() => import("@/frontend/views/AdminView").then((module) => ({ default: module.AdminView })));
 const CalendarView = lazy(() => import("@/frontend/views/CalendarView").then((module) => ({ default: module.CalendarView })));
-const GradesView = lazy(() => import("@/frontend/views/GradesView").then((module) => ({ default: module.GradesView })));
 const PayrollReviewView = lazy(() => import("@/frontend/views/PayrollReviewView").then((module) => ({ default: module.PayrollReviewView })));
 const ProgressView = lazy(() => import("@/frontend/views/ProgressView").then((module) => ({ default: module.ProgressView })));
 const ScheduleView = lazy(() => import("@/frontend/views/ScheduleView").then((module) => ({ default: module.ScheduleView })));
@@ -168,6 +168,7 @@ export function App() {
   const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
   const [studentsPanelFocus, setStudentsPanelFocus] = useState<{ panel: StudentsPanelFocus; nonce: number } | null>(null);
   const [progressChecklistFocus, setProgressChecklistFocus] = useState<ProgressChecklistFocus | null>(null);
+  const [progressSectionFocus, setProgressSectionFocus] = useState<{ section: ProgressSectionView; nonce: number } | null>(null);
   const [calendarOverviewFocus, setCalendarOverviewFocus] = useState<(CalendarOverviewFocusState & { nonce: number }) | null>(null);
   const [payrollReviewFocus, setPayrollReviewFocus] = useState<{ panel: PayrollPanelFocus; nonce: number } | null>(null);
   const [lessonFeedbackFocus, setLessonFeedbackFocus] = useState<{ lessonId: string; nonce: number } | null>(null);
@@ -1500,6 +1501,9 @@ export function App() {
     if (nextView === "students" && studentsPanel) {
       setStudentsPanelFocus({ panel: studentsPanel, nonce: Date.now() });
     }
+    if (stepKey === "grades") {
+      setProgressSectionFocus({ section: "grades", nonce: Date.now() });
+    }
     setView(nextView);
   }
 
@@ -1514,6 +1518,9 @@ export function App() {
         calendarMode: "view",
         nonce: Date.now()
       });
+    }
+    if (nextView === "progress") {
+      setProgressSectionFocus(null);
     }
     if (nextView !== "progress") {
       setLessonFeedbackFocus(null);
@@ -1553,7 +1560,7 @@ export function App() {
   }
 
   function openProgressLessonInScheduleRecords(lesson: Lesson) {
-    openLessonInScheduleRecords(lesson, { kind: "view", view: "progress", label: "返回进度与作业" });
+    openLessonInScheduleRecords(lesson, { kind: "view", view: "progress", label: "返回学情与作业" });
   }
 
   function openLessonInProgressChecklist(lesson: Lesson) {
@@ -1568,6 +1575,7 @@ export function App() {
       date: lesson.date,
       nonce: Date.now()
     });
+    setProgressSectionFocus(null);
     setView("progress");
   }
 
@@ -1577,7 +1585,8 @@ export function App() {
     setMobileNavOpen(false);
     setOnboardingVisible(false);
     setLessonFeedbackFocus({ lessonId: lesson.id, nonce: Date.now() });
-    // 课后反馈已并入“进度与作业”，跳转落到该页的反馈子页。
+    setProgressSectionFocus(null);
+    // 课后反馈已并入“学情与作业”，跳转落到该页的反馈子页。
     setView("progress");
   }
 
@@ -2067,6 +2076,7 @@ export function App() {
                     checklistFocus={progressChecklistFocus}
                     lessonFeedbackFocus={lessonFeedbackFocus}
                     lessonFeedbackSyncNonce={lessonFeedbackSyncNonce}
+                    sectionFocus={progressSectionFocus}
                     onSaveProgressRecord={saveStudentProgressRecord}
                     onSaveProgressRecords={saveStudentProgressRecords}
                     onDeleteProgressRecord={deleteStudentProgressRecord}
@@ -2077,6 +2087,8 @@ export function App() {
                     onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
                     onDeleteChecklistCompletions={deleteProgressChecklistCompletions}
                     onSaveExternalPromptTemplate={saveExternalPromptTemplate}
+                    onAddGradeRecord={addGradeRecord}
+                    onDeleteGradeRecord={deleteGradeRecord}
                     onOpenLessonInRecords={openProgressLessonInScheduleRecords}
                   />
                 )}
@@ -2125,13 +2137,6 @@ export function App() {
                     onDeleteSubject={deleteSubject}
                     onTransferStudentCourse={transferStudentCourse}
                     onOpenSchedule={() => changeView("schedule")}
-                  />
-                )}
-                {view === "grades" && (
-                  <GradesView
-                    vault={vault}
-                    onAddGradeRecord={addGradeRecord}
-                    onDeleteGradeRecord={deleteGradeRecord}
                   />
                 )}
                 {view === "payroll" && (

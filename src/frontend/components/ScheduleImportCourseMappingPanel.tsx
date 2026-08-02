@@ -12,6 +12,7 @@ import {
   buildImportPreview,
   canonicalImportCampusName,
   canonicalizeScheduleImportMapping,
+  filterScheduleImportCoursesByMonth,
   importMappingKey,
   mergeScheduleImportMappings,
   parseScheduleWorkbookFiles,
@@ -20,6 +21,7 @@ import {
   type ScheduleImportMapping
 } from "@/frontend/lib/scheduleImport";
 import { readSavedMapping, writeSavedMapping } from "@/frontend/lib/scheduleImportReview";
+import type { ScheduleImportSaveOptions } from "@/frontend/lib/scheduleImportArchive";
 
 export function ScheduleImportCourseMappingPanel({
   vault,
@@ -30,7 +32,7 @@ export function ScheduleImportCourseMappingPanel({
   vault: TeacherVault;
   scheduleImportState?: ScheduleImportVaultState | null;
   storageScope?: string;
-  onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
+  onSaveScheduleImport?: (state: ScheduleImportVaultState, options?: ScheduleImportSaveOptions) => void;
 }) {
   const persistedScheduleImport = scheduleImportState ?? vault.scheduleImport;
   const externalMapping = useMemo(
@@ -55,7 +57,15 @@ export function ScheduleImportCourseMappingPanel({
     setMapping((current) => mergeScheduleImportMappings(vault, current, externalMapping));
   }, [externalMapping, vault.campuses]);
 
-  const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
+  const importedMonths = useMemo(
+    () => Array.from(new Set(rawLessons.map((lesson) => lesson.date.slice(0, 7)).filter(Boolean))).sort(),
+    [rawLessons]
+  );
+  const courseOptions = useMemo(
+    () => filterScheduleImportCoursesByMonth(sortCoursesByName(vault.courseGroups), vault.lessons, rawLessons),
+    [rawLessons, vault.courseGroups, vault.lessons]
+  );
+  const courseOptionIds = useMemo(() => new Set(courseOptions.map((course) => course.id)), [courseOptions]);
   const previewRows = useMemo(() => buildImportPreview(vault, rawLessons, mapping), [mapping, rawLessons, vault]);
   const importedCourses = useMemo(() => buildImportedCourseRows(rawLessons, previewRows, mapping), [mapping, previewRows, rawLessons]);
   const importedMappingKeys = useMemo(() => importedCourses.reduce((keys, row) => {
@@ -190,7 +200,7 @@ export function ScheduleImportCourseMappingPanel({
         reviews: [...(previous?.reviews ?? [])],
         splitMergeExcludedLessonIds: previous?.splitMergeExcludedLessonIds ?? [],
         updatedAt: new Date().toISOString()
-      });
+      }, { syncReviewArchive: false });
       setMessage(cloudMessage);
       return;
     }
@@ -255,6 +265,11 @@ export function ScheduleImportCourseMappingPanel({
 
         <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
           映射按“校区 + 教务课程名称 + 学生提示 + 科目 + 班型”保存。教务课程名和云端课程名不一致时，只要这里保存过，下个月导入同类 Excel 就会自动对应。
+          {importedMonths.length > 0 && (
+            <div className="mt-1 font-bold text-[#1557c2]">
+              云端课程范围：{importedMonths.join("、")} · 范围内有课 {courseOptions.length} 个
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -264,7 +279,7 @@ export function ScheduleImportCourseMappingPanel({
           </label>
           <label className="relative block">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-            <Input className="h-10 pl-9" value={courseSearch} onChange={(event) => setCourseSearch(event.target.value)} placeholder="搜索右侧云端课程下拉选项" />
+            <Input className="h-10 pl-9" value={courseSearch} onChange={(event) => setCourseSearch(event.target.value)} placeholder={importedMonths.length > 0 ? "搜索本次月份内的云端课程档案" : "搜索右侧云端课程下拉选项"} />
           </label>
         </div>
 
@@ -303,9 +318,11 @@ export function ScheduleImportCourseMappingPanel({
                             {!selectedCourse && rule.courseId && <option value={rule.courseId}>课程档案已不存在</option>}
                             <option value="">选择云端课程档案</option>
                             {selectCourses.map((course) => (
-                              <option key={course.id} value={course.id}>{mappingCourseOptionLabel(vault, course)}</option>
+                              <option key={course.id} value={course.id}>
+                                {mappingCourseOptionLabel(vault, course)}{importedMonths.length > 0 && !courseOptionIds.has(course.id) ? " · 不在本次月份" : ""}
+                              </option>
                             ))}
-                            {selectCourses.length === 0 && <option disabled>没有匹配的课程档案</option>}
+                            {selectCourses.length === 0 && <option disabled>{courseSearch.trim() ? "没有匹配的课程档案" : importedMonths.length > 0 ? "本次月份没有云端课程档案" : "没有课程档案"}</option>}
                           </Select>
                           <Button
                             type="button"
@@ -383,9 +400,11 @@ export function ScheduleImportCourseMappingPanel({
                       <Select value={selectedCourseId} onChange={(event) => updateMapping(row, event.target.value)}>
                         <option value="">选择云端课程档案</option>
                         {selectCourses.map((course) => (
-                          <option key={course.id} value={course.id}>{mappingCourseOptionLabel(vault, course)}</option>
+                          <option key={course.id} value={course.id}>
+                            {mappingCourseOptionLabel(vault, course)}{importedMonths.length > 0 && !courseOptionIds.has(course.id) ? " · 不在本次月份" : ""}
+                          </option>
                         ))}
-                        {selectCourses.length === 0 && <option disabled>没有匹配的课程档案</option>}
+                        {selectCourses.length === 0 && <option disabled>{courseSearch.trim() ? "没有匹配的课程档案" : importedMonths.length > 0 ? "本次月份没有云端课程档案" : "没有课程档案"}</option>}
                       </Select>
                       <Button
                         type="button"

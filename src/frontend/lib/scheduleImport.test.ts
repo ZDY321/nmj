@@ -3,6 +3,7 @@ import {
   buildImportPreview,
   canonicalImportCampusName,
   canonicalizeScheduleImportMapping,
+  filterScheduleImportCoursesByMonth,
   importMappingKey,
   mergeScheduleImportMappings,
   parseCampusFromFileName,
@@ -104,6 +105,35 @@ describe("schedule import mapping campuses", () => {
       { [key]: "course_stale_workspace" },
       { [key]: "course_latest_cloud" }
     )).toEqual({ [key]: "course_latest_cloud" });
+  });
+});
+
+describe("schedule import mapping course month scope", () => {
+  const courses = [
+    { id: "course_june", name: "六月课程" },
+    { id: "course_july", name: "七月课程" },
+    { id: "course_august", name: "八月课程" },
+    { id: "course_unused", name: "无课课程" }
+  ];
+  const cloudLessons = [
+    { courseGroupId: "course_june", date: "2026-06-30" },
+    { courseGroupId: "course_july", date: "2026-07-01" },
+    { courseGroupId: "course_august", date: "2026-08-01" }
+  ];
+
+  it("shows only cloud courses that have lessons in the imported month", () => {
+    expect(filterScheduleImportCoursesByMonth(courses, cloudLessons, [{ date: "2026-07-15" }]).map((course) => course.id))
+      .toEqual(["course_july"]);
+  });
+
+  it("uses the union when imported files cover more than one month", () => {
+    expect(filterScheduleImportCoursesByMonth(courses, cloudLessons, [{ date: "2026-06-15" }, { date: "2026-07-15" }]).map((course) => course.id))
+      .toEqual(["course_june", "course_july"]);
+  });
+
+  it("keeps every course available before an Excel file is imported", () => {
+    expect(filterScheduleImportCoursesByMonth(courses, cloudLessons, []).map((course) => course.id))
+      .toEqual(["course_june", "course_july", "course_august", "course_unused"]);
   });
 });
 

@@ -38,7 +38,7 @@ export function getOnboardingStepStates(vault: TeacherVault, visitedSteps: Onboa
     },
     {
       key: "grades",
-      view: "grades",
+      view: "progress",
       dataDone: Boolean(vault.gradeRecords?.length)
     }
   ];

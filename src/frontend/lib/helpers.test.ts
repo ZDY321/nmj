@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyVault } from "@/frontend/lib/sampleData";
-import { courseRequiresSameGradeStudents, courseStatsStatusLabel, linkSyncedLessonsToPreviousLessons, previousLesson } from "@/frontend/lib/helpers";
+import { courseRequiresSameGradeStudents, courseStatsStatusLabel, linkSyncedLessonsToPreviousLessons, navItems, previousLesson, viewTitles } from "@/frontend/lib/helpers";
 import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
 
 const course: CourseGroup = {
@@ -40,6 +40,14 @@ function makeLesson(id: string, date: string, patch: Partial<Lesson> = {}): Less
     ...patch
   };
 }
+
+describe("main navigation", () => {
+  it("keeps grade records inside the learning overview instead of a separate page", () => {
+    expect(viewTitles.progress).toBe("学情与作业");
+    expect(navItems.find((item) => item.key === "progress")?.label).toBe("学情与作业");
+    expect(navItems.some((item) => String(item.key) === "grades")).toBe(false);
+  });
+});
 
 describe("lesson timeline helpers", () => {
   it("uses the last actually taught lesson as the previous content source", () => {

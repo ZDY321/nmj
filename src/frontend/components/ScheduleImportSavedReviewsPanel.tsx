@@ -1,4 +1,4 @@
-import { CalendarDays, Trash2 } from "lucide-react";
+import { CalendarDays, Eye, Trash2 } from "lucide-react";
 import type { ScheduleImportReviewRecord } from "@/shared/types";
 import { savedScheduleImportReviewLimit } from "@/frontend/lib/scheduleImportReview";
 
@@ -23,40 +23,56 @@ export function ScheduleImportSavedReviewsPanel({
     <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 text-sm font-extrabold text-[#061226]">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-[#061226]">
             <CalendarDays size={16} className="text-[#1557c2]" />
             已保存对账
+            {openedReviewId && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#1557c2] px-2 py-0.5 text-[10px] font-extrabold text-white">
+                <Eye size={11} /> 正在查看历史记录
+              </span>
+            )}
           </div>
           <div className="mt-1 text-xs font-semibold text-[#64748b]">每月一份，最多保留最近 {savedScheduleImportReviewLimit} 个月，当前 {reviews.length} 个月。</div>
         </div>
         <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-          {reviews.slice(0, 8).map((review) => (
-            <div
-              key={review.id}
-              className={`flex shrink-0 items-stretch overflow-hidden rounded-[10px] border text-left text-xs font-bold transition-colors ${
-                openedReviewId === review.id ? "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2]" : "border-[#e8eef6] bg-[#f8fbff] text-[#25324a]"
-              }`}
-            >
-              <button
-                type="button"
-                aria-label={`在下方日历中打开${reviewTitle(review)}`}
-                onClick={() => onOpenReview(review)}
-                className="px-3 py-2 text-left hover:bg-white/70"
+          {reviews.slice(0, 8).map((review) => {
+            const isOpened = openedReviewId === review.id;
+            return (
+              <div
+                key={review.id}
+                className={`flex min-w-[190px] shrink-0 items-stretch overflow-hidden rounded-[10px] border text-left text-xs font-bold transition-all ${
+                  isOpened
+                    ? "border-[#1557c2] bg-[#1557c2] text-white shadow-[0_8px_18px_rgba(21,87,194,0.24)] ring-2 ring-[#93c5fd] ring-offset-1"
+                    : "border-[#e8eef6] bg-[#f8fbff] text-[#25324a] hover:border-[#93c5fd]"
+                }`}
               >
-                <span className="block">{reviewTitle(review)}</span>
-                <span className="mt-0.5 block text-[10px] text-[#64748b]">{review.rawLessonCount} 节教务 · 待核对 {reviewNeedsAttention(review)}</span>
-              </button>
-              <button
-                type="button"
-                title="删除保存的对账结果"
-                aria-label={`删除${reviewTitle(review)}`}
-                onClick={() => onDeleteReview(review)}
-                className="border-l border-[#dbe4ef] px-2 text-[#b91c1c] hover:bg-[#fee2e2]"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  aria-label={`在下方日历中打开${reviewTitle(review)}`}
+                  aria-current={isOpened ? "true" : undefined}
+                  onClick={() => onOpenReview(review)}
+                  className={`min-w-0 flex-1 px-3 py-2 text-left ${isOpened ? "hover:bg-white/10" : "hover:bg-white/70"}`}
+                >
+                  <span className="block">{reviewTitle(review)}</span>
+                  <span className={`mt-0.5 block text-[10px] ${isOpened ? "text-[#dbeafe]" : "text-[#64748b]"}`}>
+                    {review.rawLessonCount} 节教务 · 待核对 {reviewNeedsAttention(review)}
+                  </span>
+                  <span className={`mt-1 flex h-4 items-center gap-1 text-[10px] font-extrabold ${isOpened ? "text-white" : "invisible"}`}>
+                    <Eye size={11} /> 正在查看
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  title="删除保存的对账结果"
+                  aria-label={`删除${reviewTitle(review)}`}
+                  onClick={() => onDeleteReview(review)}
+                  className={`border-l px-2 ${isOpened ? "border-white/25 text-[#fee2e2] hover:bg-[#b91c1c]" : "border-[#dbe4ef] text-[#b91c1c] hover:bg-[#fee2e2]"}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -68,6 +68,20 @@ export type ImportPreviewLesson = ImportedScheduleLesson & {
 
 export type ScheduleImportMapping = Record<string, string>;
 
+export function filterScheduleImportCoursesByMonth<T extends Pick<CourseGroup, "id">>(
+  courses: readonly T[],
+  cloudLessons: readonly Pick<Lesson, "courseGroupId" | "date">[],
+  importedLessons: readonly Pick<ImportedScheduleLesson, "date">[]
+): T[] {
+  const importedMonths = new Set(importedLessons.map((lesson) => lesson.date.slice(0, 7)).filter(Boolean));
+  if (importedMonths.size === 0) return [...courses];
+
+  const courseIdsInScope = new Set(cloudLessons
+    .filter((lesson) => importedMonths.has(lesson.date.slice(0, 7)))
+    .map((lesson) => lesson.courseGroupId));
+  return courses.filter((course) => courseIdsInScope.has(course.id));
+}
+
 export type ScheduleImportSummary = {
   total: number;
   matched: number;

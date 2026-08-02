@@ -72,6 +72,7 @@ import {
   writeSavedWorkspace,
   type StatusFilter
 } from "@/frontend/lib/scheduleImportReview";
+import type { ScheduleImportSaveOptions } from "@/frontend/lib/scheduleImportArchive";
 
 export function ScheduleImportPanel({
   vault,
@@ -85,7 +86,7 @@ export function ScheduleImportPanel({
   vault: TeacherVault;
   onOpenLesson?: (lesson: Lesson) => void;
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
-  onSaveScheduleImport?: (state: ScheduleImportVaultState) => void;
+  onSaveScheduleImport?: (state: ScheduleImportVaultState, options?: ScheduleImportSaveOptions) => void;
   onOpenGuide?: () => void;
   scheduleImportState?: ScheduleImportVaultState | null;
   storageScope?: string;
@@ -398,12 +399,10 @@ export function ScheduleImportPanel({
   }
 
   function updateFileCampus(fileName: string, campusId: string) {
-    setOpenedReviewId("");
     setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
   }
 
   function removeImportedFile(fileName: string) {
-    setOpenedReviewId("");
     const removedResolutionKeys = new Set(rows.filter((row) => row.fileName === fileName).map((row) => resolutionKey(row)));
     setRawLessons((current) => current.filter((lesson) => lesson.fileName !== fileName));
     setFileCampusOverrides((current) => {
@@ -416,13 +415,15 @@ export function ScheduleImportPanel({
   }
 
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) {
-    setOpenedReviewId("");
     const key = resolutionKey(row);
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
     const nextSplitMergeExcludedLessonIds = combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, nextResolutions);
     setResolutions(nextResolutions);
     if (patch.status) {
-      onSaveScheduleImport?.(buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds));
+      onSaveScheduleImport?.(
+        buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds),
+        { syncReviewArchive: false }
+      );
       const label = resolutionStatusLabel(patch.status);
       setMessage(
         resolutionExcludesImportStats(patch.status)

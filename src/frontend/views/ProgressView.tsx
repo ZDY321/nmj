@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  BarChart3,
   BookOpen,
   CalendarDays,
   CheckCircle2,
@@ -49,6 +50,7 @@ import { progressCourseMatchesStudentStatusScope, type ProgressStudentStatusScop
 import { ProgressChecklistView } from "@/frontend/views/ProgressChecklistView";
 import type {
   CourseGroup,
+  GradeRecord,
   Lesson,
   ProgressChecklistCompletion,
   ProgressChecklistTemplate,
@@ -63,7 +65,9 @@ import type {
 type HomeworkFilter = "all" | StudentHomeworkStatus;
 type ProgressFilter = "all" | StudentProgressStatus;
 type ProgressSortOption = "smart" | "today" | "course_name" | "campus" | "grade";
-type ProgressSectionView = "ledger" | "checklist" | "feedback";
+export type ProgressSectionView = "ledger" | "checklist" | "feedback" | "grades";
+
+const GradesView = lazy(() => import("@/frontend/views/GradesView").then((module) => ({ default: module.GradesView })));
 
 type ProgressDraft = {
   progressText: string;
@@ -153,6 +157,7 @@ export function ProgressView({
   checklistFocus,
   lessonFeedbackFocus,
   lessonFeedbackSyncNonce,
+  sectionFocus,
   onSaveProgressRecord,
   onSaveProgressRecords,
   onDeleteProgressRecord,
@@ -163,6 +168,8 @@ export function ProgressView({
   onDeleteChecklistCompletion,
   onDeleteChecklistCompletions,
   onSaveExternalPromptTemplate,
+  onAddGradeRecord,
+  onDeleteGradeRecord,
   onOpenLessonInRecords
 }: {
   vault: TeacherVault;
@@ -172,6 +179,7 @@ export function ProgressView({
   checklistFocus?: ProgressChecklistFocus | null;
   lessonFeedbackFocus?: { lessonId: string; nonce: number } | null;
   lessonFeedbackSyncNonce?: number;
+  sectionFocus?: { section: ProgressSectionView; nonce: number } | null;
   onSaveProgressRecord: (record: StudentProgressRecord) => void;
   onSaveProgressRecords: (records: StudentProgressRecord[]) => void;
   onDeleteProgressRecord: (recordId: string) => void;
@@ -182,6 +190,8 @@ export function ProgressView({
   onDeleteChecklistCompletion: (completionId: string) => void;
   onDeleteChecklistCompletions: (completionIds: string[]) => void;
   onSaveExternalPromptTemplate: (template: string) => void;
+  onAddGradeRecord: (record: GradeRecord) => void;
+  onDeleteGradeRecord: (recordId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -212,6 +222,10 @@ export function ProgressView({
   useEffect(() => {
     if (checklistFocus) setSectionView("checklist");
   }, [checklistFocus?.nonce]);
+
+  useEffect(() => {
+    if (sectionFocus?.section) setSectionView(sectionFocus.section);
+  }, [sectionFocus?.nonce]);
 
   const progressRecords = vault.studentProgressRecords ?? [];
   const gradeOptions = Array.from(new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))).sort(compareByName);
@@ -294,8 +308,8 @@ export function ProgressView({
     <Card className="overflow-hidden">
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-sm font-extrabold text-[#061226]">进度与作业</div>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">课后反馈、课程进度与学习清单都在这里。</div>
+          <div className="text-sm font-extrabold text-[#061226]">学情与作业</div>
+          <div className="mt-1 text-xs font-semibold text-[#64748b]">课后反馈、课程进度、学习清单与成绩记录都在这里。</div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -318,6 +332,13 @@ export function ProgressView({
             onClick={() => setSectionView("checklist")}
           >
             <CheckCheck size={15} /> 学习清单
+          </Button>
+          <Button
+            type="button"
+            variant={sectionView === "grades" ? "default" : "outline"}
+            onClick={() => setSectionView("grades")}
+          >
+            <BarChart3 size={15} /> 成绩记录
           </Button>
         </div>
       </CardContent>
@@ -468,6 +489,26 @@ export function ProgressView({
           onOpenLessonInRecords={onOpenLessonInRecords}
           onSaveExternalPromptTemplate={onSaveExternalPromptTemplate}
         />
+      </div>
+    );
+  }
+
+  if (sectionView === "grades") {
+    return (
+      <div className="space-y-6">
+        {dialog}
+        {sectionSwitcher}
+        <Suspense fallback={(
+          <div className="flex min-h-[280px] items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-sm font-bold text-[#64748b]">
+            正在加载成绩记录...
+          </div>
+        )}>
+          <GradesView
+            vault={vault}
+            onAddGradeRecord={onAddGradeRecord}
+            onDeleteGradeRecord={onDeleteGradeRecord}
+          />
+        </Suspense>
       </div>
     );
   }

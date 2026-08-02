@@ -91,7 +91,7 @@ export function OnboardingGuide({
       title: "补充成绩记录",
       description: "有考试或测验时，按学生和科目录入成绩，后续可看走势。",
       detail: "成绩记录不会影响工资，只用于教学跟进和家长沟通。",
-      view: "grades",
+      view: "progress",
       button: "去成绩记录"
     }
   ];

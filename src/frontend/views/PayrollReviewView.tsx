@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { PayrollLessonDetailsCard } from "@/frontend/components/PayrollLessonDetailsCard";
 import { PayrollMetricSummaryCards } from "@/frontend/components/PayrollMetricSummaryCards";
@@ -14,6 +14,12 @@ import { todayIso } from "@/frontend/lib/calculations";
 import { campusName, formatPrivateMoney } from "@/frontend/lib/helpers";
 import { usePayrollReviewData } from "@/frontend/hooks/usePayrollReviewData";
 import { loadEncryptedDocumentWithVersion, saveEncryptedDocument } from "@/frontend/lib/storage";
+import {
+  mergeScheduleImportArchive,
+  scheduleImportMainState,
+  scheduleImportReviewArchiveState,
+  type ScheduleImportSaveOptions
+} from "@/frontend/lib/scheduleImportArchive";
 
 type TypeFilter = "all" | CourseType;
 type LessonStatusFilter = "all" | Lesson["status"];
@@ -59,6 +65,11 @@ export function PayrollReviewView({
   const [scheduleImportArchive, setScheduleImportArchive] = useState<ScheduleImportVaultState | null>(vault.scheduleImport ?? null);
   const [scheduleImportArchiveLoading, setScheduleImportArchiveLoading] = useState(false);
   const [scheduleImportArchiveError, setScheduleImportArchiveError] = useState("");
+  const scheduleImportEditRevisionRef = useRef(0);
+  const reviewArchiveEditRevisionRef = useRef(0);
+  const reviewArchiveLoadSequenceRef = useRef(0);
+  const reviewArchiveSaveSequenceRef = useRef(0);
+  const reviewArchiveSaveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const {
     campusOptions,
@@ -117,12 +128,16 @@ export function PayrollReviewView({
 
   useEffect(() => {
     if (!token || !password) {
+      reviewArchiveLoadSequenceRef.current += 1;
       setScheduleImportArchive(vault.scheduleImport ?? null);
       setScheduleImportArchiveLoading(false);
       setScheduleImportArchiveError("");
       return;
     }
     let cancelled = false;
+    const loadSequence = ++reviewArchiveLoadSequenceRef.current;
+    const editRevisionAtLoad = scheduleImportEditRevisionRef.current;
+    const reviewRevisionAtLoad = reviewArchiveEditRevisionRef.current;
     setScheduleImportArchiveLoading(true);
     setScheduleImportArchiveError("");
     loadEncryptedDocumentWithVersion<ScheduleImportVaultState>(
@@ -132,29 +147,24 @@ export function PayrollReviewView({
       scheduleImportArchiveDocKey
     )
       .then(({ value }) => {
-        if (cancelled) return;
+        if (cancelled || reviewArchiveLoadSequenceRef.current !== loadSequence) return;
         const fallback = vault.scheduleImport ?? null;
-        const nextArchive = value ?? fallback;
-        setScheduleImportArchive(nextArchive);
+        setScheduleImportArchive((current) => mergeScheduleImportArchive(
+          current ?? fallback,
+          value,
+          { preferMainReviews: reviewArchiveEditRevisionRef.current !== reviewRevisionAtLoad }
+        ));
         setScheduleImportArchiveLoading(false);
-        if (!value && fallback?.reviews.length) {
-          void saveEncryptedDocument(
-            token,
-            password,
-            scheduleImportArchiveDocType,
-            scheduleImportArchiveDocKey,
-            fallback
-          )
-            .then(() => setScheduleImportArchiveError(""))
-            .catch(() => setScheduleImportArchiveError("旧核对历史迁移到独立云端文档失败；当前页面仍可查看，稍后再次进入会重试。"));
+        if (!value && fallback?.reviews.length && scheduleImportEditRevisionRef.current === editRevisionAtLoad) {
+          queueReviewArchiveSave(fallback, "旧核对历史迁移到独立云端文档失败");
           onSaveScheduleImport?.(scheduleImportMainState(fallback));
         }
       })
-      .catch(() => {
-        if (!cancelled) {
-          setScheduleImportArchive(vault.scheduleImport ?? null);
+      .catch((error) => {
+        if (!cancelled && reviewArchiveLoadSequenceRef.current === loadSequence) {
+          setScheduleImportArchive((current) => current ?? vault.scheduleImport ?? null);
           setScheduleImportArchiveLoading(false);
-          setScheduleImportArchiveError("核对历史云端文档读取失败，当前显示主档案里的本地兼容数据。");
+          setScheduleImportArchiveError(scheduleImportArchiveErrorMessage("核对历史云端文档读取失败，当前显示主档案数据", error));
         }
       });
     return () => {
@@ -162,19 +172,42 @@ export function PayrollReviewView({
     };
   }, [password, token]);
 
-  function saveScheduleImportState(state: ScheduleImportVaultState): void {
-    setScheduleImportArchive(state);
-    onSaveScheduleImport?.(scheduleImportMainState(state));
-    if (token && password) {
-      void saveEncryptedDocument(
+  function queueReviewArchiveSave(state: ScheduleImportVaultState, failureMessage: string): void {
+    if (!token || !password) return;
+    const saveSequence = ++reviewArchiveSaveSequenceRef.current;
+    const archiveState = scheduleImportReviewArchiveState(state);
+    const saveJob = reviewArchiveSaveChainRef.current.then(async () => {
+      await saveEncryptedDocument(
         token,
         password,
         scheduleImportArchiveDocType,
         scheduleImportArchiveDocKey,
-        state
-      )
-        .then(() => setScheduleImportArchiveError(""))
-        .catch(() => setScheduleImportArchiveError("核对历史明细未能同步到独立云端文档；课程映射和拆分/合并标记已保存到主档案。"));
+        archiveState
+      );
+    });
+    reviewArchiveSaveChainRef.current = saveJob.then(() => undefined, () => undefined);
+    void saveJob
+      .then(() => {
+        if (reviewArchiveSaveSequenceRef.current === saveSequence) setScheduleImportArchiveError("");
+      })
+      .catch((error) => {
+        if (reviewArchiveSaveSequenceRef.current === saveSequence) {
+          setScheduleImportArchiveError(scheduleImportArchiveErrorMessage(failureMessage, error));
+        }
+      });
+  }
+
+  function saveScheduleImportState(state: ScheduleImportVaultState, options: ScheduleImportSaveOptions = {}): void {
+    scheduleImportEditRevisionRef.current += 1;
+    if (options.syncReviewArchive !== false) reviewArchiveEditRevisionRef.current += 1;
+    setScheduleImportArchive(state);
+    onSaveScheduleImport?.(token && password ? scheduleImportMainState(state) : state);
+    if (options.syncReviewArchive === false) {
+      return;
+    }
+    if (token && password) {
+      setScheduleImportArchiveError("");
+      queueReviewArchiveSave(state, "核对历史明细未能同步到独立云端文档；课程映射和拆分/合并标记已保存到主档案");
     }
   }
 
@@ -219,18 +252,17 @@ export function PayrollReviewView({
             {scheduleImportArchiveError}
           </div>
         )}
-        {scheduleImportArchiveLoading ? (
+        {scheduleImportArchiveLoading && (
           <div className="rounded-[14px] border border-[#dbe4ef] bg-white px-4 py-3 text-sm font-bold text-[#475569]">
-            正在读取已保存的教务对账历史和课程映射...
+            正在后台读取已保存的教务对账历史，课程映射可先查看和修改...
           </div>
-        ) : (
-          <ScheduleImportCourseMappingPanel
-            vault={vault}
-            storageScope={storageScope}
-            scheduleImportState={scheduleImportArchive}
-            onSaveScheduleImport={saveScheduleImportState}
-          />
         )}
+        <ScheduleImportCourseMappingPanel
+          vault={vault}
+          storageScope={storageScope}
+          scheduleImportState={scheduleImportArchive}
+          onSaveScheduleImport={saveScheduleImportState}
+        />
         </>
       ) : payrollPanel === "reconcile" ? (
         <>
@@ -239,21 +271,20 @@ export function PayrollReviewView({
             {scheduleImportArchiveError}
           </div>
         )}
-        {scheduleImportArchiveLoading ? (
+        {scheduleImportArchiveLoading && (
           <div className="rounded-[14px] border border-[#dbe4ef] bg-white px-4 py-3 text-sm font-bold text-[#475569]">
-            正在读取已保存的教务对账历史和拆分合并标记...
+            正在后台读取已保存的教务对账历史，当前对账工作区可先使用...
           </div>
-        ) : (
-          <ScheduleImportPanel
-            vault={vault}
-            storageScope={storageScope}
-            scheduleImportState={scheduleImportArchive}
-            onSaveScheduleImport={saveScheduleImportState}
-            onOpenLesson={onOpenReconcileLessonInCalendar}
-            onSuggestSchedule={onSuggestSchedule}
-            onOpenGuide={() => setPayrollPanel("guide")}
-          />
         )}
+        <ScheduleImportPanel
+          vault={vault}
+          storageScope={storageScope}
+          scheduleImportState={scheduleImportArchive}
+          onSaveScheduleImport={saveScheduleImportState}
+          onOpenLesson={onOpenReconcileLessonInCalendar}
+          onSuggestSchedule={onSuggestSchedule}
+          onOpenGuide={() => setPayrollPanel("guide")}
+        />
         </>
       ) : (
       <>
@@ -370,9 +401,6 @@ export function PayrollReviewView({
   );
 }
 
-function scheduleImportMainState(state: ScheduleImportVaultState): ScheduleImportVaultState {
-  return {
-    ...state,
-    reviews: []
-  };
+function scheduleImportArchiveErrorMessage(prefix: string, error: unknown): string {
+  return error instanceof Error && error.message ? `${prefix}：${error.message}` : `${prefix}。`;
 }
