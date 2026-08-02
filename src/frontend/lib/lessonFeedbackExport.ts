@@ -25,6 +25,7 @@ import {
   feedbackRubricRows,
   feedbackSheetLayout,
   feedbackSheetTitle,
+  feedbackTextBoxContentRect,
   feedbackTitleFontFamily,
   feedbackWrappedTextLayout,
   type FeedbackSheetLayout,
@@ -389,9 +390,11 @@ function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedback
     context.clip();
     context.font = `${box.fontWeight} ${box.fontSize}px ${feedbackBodyFontFamily}`;
     // 荧光标记压在文字下方，先画底色再画字。
+    // 文字区要扣掉边框占用的宽度，才和网页里的 textarea 完全同宽。
+    const content = feedbackTextBoxContentRect(box);
     const textOptions = {
       size: box.fontSize,
-      // 与旧项目一致的框内留白：左右 3、上下 2，同宽的框因此能多放一个字。
+      // 与旧项目一致的框内留白：左右 3、上下 2。
       paddingX: 3,
       paddingY: 2,
       valign: "top" as const,
@@ -399,11 +402,11 @@ function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedback
       ellipsis: false,
       measure: (value: string) => context.measureText(value).width
     };
-    feedbackHighlightRects(box.text, box.highlights ?? [], box, textOptions).forEach((rect) => {
+    feedbackHighlightRects(box.text, box.highlights ?? [], content, textOptions).forEach((rect) => {
       context.fillStyle = rect.color;
       context.fillRect(rect.x, rect.y, rect.width, rect.height);
     });
-    drawCellText(context, box.text, box.x, box.y, box.width, box.height, {
+    drawCellText(context, box.text, content.x, content.y, content.width, content.height, {
       size: box.fontSize,
       weight: box.fontWeight,
       fill: box.color,

@@ -45,7 +45,7 @@ import {
   feedbackStudentRowCenter
 } from "@/frontend/lib/lessonFeedbackLayout";
 import { nearestStrokeId } from "@/frontend/lib/lessonFeedbackHitTest";
-import { feedbackHighlightColors, feedbackHighlightRects } from "@/frontend/lib/lessonFeedbackLayout";
+import { feedbackHighlightColors, feedbackHighlightRects, feedbackTextBoxContentRect } from "@/frontend/lib/lessonFeedbackLayout";
 import "@/frontend/lessonFeedback.css";
 
 type EditorTool = "select" | "eraser" | "text" | LessonFeedbackStrokeTool;
@@ -524,7 +524,8 @@ export function LessonFeedbackEditor({
 
   function highlightRectsFor(box: LessonFeedbackTextBox) {
     if (!box.highlights?.length) return [];
-    return feedbackHighlightRects(box.text, box.highlights, box, {
+    // 与导出用同一个可用区（已扣掉边框），否则两边折行不同、荧光就会错位。
+    return feedbackHighlightRects(box.text, box.highlights, feedbackTextBoxContentRect(box), {
       size: box.fontSize,
       paddingX: 3,
       paddingY: 2,
@@ -1120,13 +1121,27 @@ export function LessonFeedbackEditor({
                   <span>{box.studentIds.length > 0 ? `${box.studentIds.length} 人反馈` : "文本框"}</span>
                 </button>
                 {/* 荧光层垫在 textarea 下方：文字仍由 textarea 正常渲染，这里只画底色矩形。 */}
-                <div className="lesson-feedback-highlight-layer" aria-hidden="true">
-                  {highlightRectsFor(box).map((rect, index) => (
-                    <span
-                      key={`${box.id}-hl-${index}`}
-                      style={{ left: rect.x - box.x, top: rect.y - box.y, width: rect.width, height: rect.height, background: rect.color }}
-                    />
-                  ))}
+                {/* 荧光层与文字区严格同框：inset 取 CSS 边框宽度，内部坐标即页面坐标减去内容区原点。 */}
+                <div
+                  className="lesson-feedback-highlight-layer"
+                  style={{ inset: (box.borderStyle ?? "dashed") === "none" ? 0 : (box.borderWidth ?? 1.5) }}
+                  aria-hidden="true"
+                >
+                  {highlightRectsFor(box).map((rect, index) => {
+                    const content = feedbackTextBoxContentRect(box);
+                    return (
+                      <span
+                        key={`${box.id}-hl-${index}`}
+                        style={{
+                          left: rect.x - content.x,
+                          top: rect.y - content.y,
+                          width: rect.width,
+                          height: rect.height,
+                          background: rect.color
+                        }}
+                      />
+                    );
+                  })}
                 </div>
                 <textarea
                   ref={(node) => { textAreaRefs.current[box.id] = node; }}

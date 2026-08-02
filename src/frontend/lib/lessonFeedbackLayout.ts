@@ -394,3 +394,26 @@ export const feedbackHighlightColors: Array<{ value: string; label: string }> = 
   { value: "rgba(244, 114, 182, 0.38)", label: "荧光粉" },
   { value: "rgba(96, 165, 250, 0.38)", label: "荧光蓝" }
 ];
+
+// 文本框的文字可用区：屏幕上 textarea 是 border-box 且铺满整个框，
+// 边框会吃掉可用宽度。导出若只减内边距就会比网页多放字，折行位置随之错开、
+// 荧光标记也跟着偏。这里只扣边框，左右各 3、上下各 2 的留白由 padding 参数负责
+//（旧项目的编辑器额外内缩 3px，本项目没有这层，因此不加那一项）。
+export function feedbackTextBoxContentRect(box: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  borderStyle?: string;
+  borderWidth?: number;
+}): { x: number; y: number; width: number; height: number } {
+  const style = box.borderStyle ?? "dashed";
+  const borderWidth = style === "none" ? 0 : Math.min(Math.max(Number(box.borderWidth) || 1.5, 0), 10);
+  const inset = borderWidth;
+  return {
+    x: box.x + inset,
+    y: box.y + inset,
+    width: Math.max(1, box.width - inset * 2),
+    height: Math.max(1, box.height - inset * 2)
+  };
+}
