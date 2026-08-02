@@ -32,6 +32,7 @@ import {
 import { feedbackTextBoxHighlightRects, feedbackTextBoxLines } from "@/frontend/lib/lessonFeedbackTextMetrics";
 import type {
   LessonFeedbackEntry,
+  LessonFeedbackFieldKey,
   LessonFeedbackPoint,
   LessonFeedbackRecord,
   LessonFeedbackStroke,
@@ -147,8 +148,20 @@ function drawMetaRow(
   // 班级取自课程档案，不可编辑，因此始终画在骨架里。
   fillCenteredText(context, record.className || "", (metaXs[7] + metaXs[8]) / 2, centerY, 13, 650);
   if (!includeValues) return;
-  drawCellText(context, record.teacherName, metaXs[1], metaY, metaXs[2] - metaXs[1], metaHeight, { size: 13, anchor: "middle" });
-  drawCellText(context, record.periodLabel, metaXs[3], metaY, metaXs[4] - metaXs[3], metaHeight, { size: 12, anchor: "middle" });
+  const teacherStyle = record.fieldStyles?.teacherName ?? {};
+  const periodStyle = record.fieldStyles?.periodLabel ?? {};
+  drawCellText(context, record.teacherName, metaXs[1], metaY, metaXs[2] - metaXs[1], metaHeight, {
+    size: teacherStyle.fontSize ?? 13,
+    weight: teacherStyle.fontWeight ?? 400,
+    fill: teacherStyle.color ?? feedbackInkColor,
+    anchor: "middle"
+  });
+  drawCellText(context, record.periodLabel, metaXs[3], metaY, metaXs[4] - metaXs[3], metaHeight, {
+    size: periodStyle.fontSize ?? 12,
+    weight: periodStyle.fontWeight ?? 400,
+    fill: periodStyle.color ?? feedbackInkColor,
+    anchor: "middle"
+  });
   drawCellText(context, feedbackFormatDate(record.date), metaXs[5], metaY, metaXs[6] - metaXs[5], metaHeight, { size: 12, anchor: "middle" });
 }
 
@@ -159,16 +172,35 @@ function drawContentRows(
   includeValues: boolean
 ): void {
   const { marginX: m, contentWidth: w } = layout;
-  const rows: Array<[string, string, number, number]> = [
-    ["上课内容", record.content, layout.contentY, layout.contentHeight],
-    ["今日作业", record.homework, layout.homeworkY, layout.homeworkHeight]
+  const rows: Array<[string, string, number, number, LessonFeedbackFieldKey]> = [
+    ["上课内容", record.content, layout.contentY, layout.contentHeight, "content"],
+    ["今日作业", record.homework, layout.homeworkY, layout.homeworkHeight, "homework"]
   ];
-  rows.forEach(([label, value, y, height]) => {
+  rows.forEach(([label, value, y, height, key]) => {
     strokeRect(context, m, y, w, height);
     strokeLine(context, m + 84, y, m + 84, y + height);
     fillCenteredText(context, label, m + 42, y + height / 2, 13, 650);
     if (!includeValues) return;
-    drawCellText(context, value, m + 84, y, w - 84, height, { size: 14, padding: 10, valign: "top" });
+    const style = record.fieldStyles?.[key] ?? {};
+    if (style.highlights?.length) {
+      feedbackTextBoxHighlightRects(value, style.highlights, {
+        width: w - 84 - 2,
+        fontSize: style.fontSize ?? 14,
+        fontWeight: style.fontWeight ?? 400,
+        paddingX: 9,
+        paddingY: 9
+      }).forEach((rect) => {
+        context.fillStyle = rect.color;
+        context.fillRect(m + 84 + 1 + rect.x, y + 1 + rect.y, rect.width, rect.height);
+      });
+    }
+    drawCellText(context, value, m + 84, y, w - 84, height, {
+      size: style.fontSize ?? 14,
+      weight: style.fontWeight ?? 400,
+      fill: style.color ?? feedbackInkColor,
+      padding: 10,
+      valign: "top"
+    });
   });
 }
 
@@ -342,7 +374,25 @@ function drawRubric(
   });
   fillCenteredText(context, "备注", (rubricXs[0] + rubricXs[1]) / 2, layout.noteY + layout.noteHeight / 2, 11, 600);
   if (!includeValues) return;
-  drawCellText(context, record.generalNotes, rubricXs[1], layout.noteY, w - 80, layout.noteHeight, { size: 11, padding: 6 });
+  const noteStyle = record.fieldStyles?.generalNotes ?? {};
+  if (noteStyle.highlights?.length) {
+    feedbackTextBoxHighlightRects(record.generalNotes, noteStyle.highlights, {
+      width: w - 80 - 2,
+      fontSize: noteStyle.fontSize ?? 11,
+      fontWeight: noteStyle.fontWeight ?? 400,
+      paddingX: 5,
+      paddingY: 5
+    }).forEach((rect) => {
+      context.fillStyle = rect.color;
+      context.fillRect(rubricXs[1] + 1 + rect.x, layout.noteY + 1 + rect.y, rect.width, rect.height);
+    });
+  }
+  drawCellText(context, record.generalNotes, rubricXs[1], layout.noteY, w - 80, layout.noteHeight, {
+    size: noteStyle.fontSize ?? 11,
+    weight: noteStyle.fontWeight ?? 400,
+    fill: noteStyle.color ?? feedbackInkColor,
+    padding: 6
+  });
 }
 
 function drawBands(context: CanvasRenderingContext2D, record: LessonFeedbackRecord, layout: FeedbackSheetLayout): void {

@@ -24,7 +24,9 @@ import { cn } from "@/lib/utils";
 import { makeId } from "@/frontend/lib/crypto";
 import type {
   LessonFeedbackEntry,
+  LessonFeedbackFieldKey,
   LessonFeedbackHighlight,
+  LessonFeedbackTextStyle,
   LessonFeedbackPoint,
   LessonFeedbackRecord,
   LessonFeedbackStroke,
@@ -81,6 +83,24 @@ const blankEntry: LessonFeedbackEntry = {
   comment: ""
 };
 
+const fieldLabels: Record<LessonFeedbackFieldKey, string> = {
+  content: "上课内容",
+  homework: "今日作业",
+  generalNotes: "备注",
+  teacherName: "教师",
+  periodLabel: "课次",
+  date: "日期"
+};
+
+const fieldDefaultSizes: Record<LessonFeedbackFieldKey, number> = {
+  content: 14,
+  homework: 14,
+  generalNotes: 11,
+  teacherName: 13,
+  periodLabel: 12,
+  date: 12
+};
+
 const attendanceCycle = ["", "√", "○", "×"];
 const gradeCycle = ["", "A", "B", "C"];
 const tools: Array<{ value: EditorTool; label: string; icon: typeof MousePointer2 }> = [
@@ -126,6 +146,7 @@ export function LessonFeedbackEditor({
   const [exportMessage, setExportMessage] = useState("");
   const [zoom, setZoom] = useState(1);
   const [focusedCommentId, setFocusedCommentId] = useState("");
+  const [focusedField, setFocusedField] = useState<LessonFeedbackFieldKey | "">("");
   const [selectedStrokeId, setSelectedStrokeId] = useState("");
   const [textSelection, setTextSelection] = useState<{ boxId: string; start: number; end: number } | null>(null);
   const [brushCursor, setBrushCursor] = useState<LessonFeedbackPoint | null>(null);
@@ -153,13 +174,18 @@ export function LessonFeedbackEditor({
   // 荧光面板对准“正在选字的地方”：文本框或某个学生的评语格。
   const highlightTargetId = textSelection?.boxId
     || (focusedCommentId ? `comment:${focusedCommentId}` : "")
+    || (focusedField ? `field:${focusedField}` : "")
     || selectedTextBoxId;
   const highlightTargetMarks = highlightTargetId.startsWith("comment:")
     ? record.entries[highlightTargetId.slice("comment:".length)]?.commentHighlights ?? []
-    : record.textBoxes.find((box) => box.id === highlightTargetId)?.highlights ?? [];
+    : highlightTargetId.startsWith("field:")
+      ? record.fieldStyles?.[highlightTargetId.slice("field:".length) as LessonFeedbackFieldKey]?.highlights ?? []
+      : record.textBoxes.find((box) => box.id === highlightTargetId)?.highlights ?? [];
   const hasHighlightTarget = highlightTargetId.startsWith("comment:")
     ? Boolean(record.entries[highlightTargetId.slice("comment:".length)])
-    : record.textBoxes.some((box) => box.id === highlightTargetId);
+    : highlightTargetId.startsWith("field:")
+      ? true
+      : record.textBoxes.some((box) => box.id === highlightTargetId);
   const focusedStudent = record.students.find((student) => student.id === focusedCommentId);
   const focusedEntry = focusedStudent
     ? { id: focusedStudent.id, name: focusedStudent.name, entry: record.entries[focusedStudent.id] ?? blankEntry }
@@ -520,6 +546,73 @@ export function LessonFeedbackEditor({
     return feedbackTextBoxHighlightRects(box.text, box.highlights, textBoxStyleOf(box));
   }
 
+  // 字段样式：读时带默认值，写时只存差异，未调整过的字段不会被写进记录。
+  function fieldStyleOf(key: LessonFeedbackFieldKey, defaultSize: number) {
+    const style = record.fieldStyles?.[key] ?? {};
+    return {
+      color: style.color,
+      fontSize: style.fontSize ?? defaultSize,
+      fontWeight: style.fontWeight ?? 400,
+      highlights: style.highlights ?? []
+    };
+  }
+
+  function patchFieldStyle(key: LessonFeedbackFieldKey, patch: Partial<LessonFeedbackTextStyle>): void {
+    const next = cloneRecord(record);
+    next.fieldStyles = { ...(next.fieldStyles ?? {}), [key]: { ...(next.fieldStyles?.[key] ?? {}), ...patch } };
+    emit(next);
+  }
+
+  function fieldTextStyle(key: LessonFeedbackFieldKey, defaultSize: number) {
+    const style = fieldStyleOf(key, defaultSize);
+    return { color: style.color, fontSize: style.fontSize, fontWeight: style.fontWeight };
+  }
+
+  // 字段荧光层：与 cellStyle 生成的内联样式同框（内缩 1、padding 减 1）。
+  function fieldHighlightLayer(
+    key: LessonFeedbackFieldKey,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    defaultSize: number,
+    padding: number
+  ) {
+    const style = fieldStyleOf(key, defaultSize);
+    if (!style.highlights.length) return null;
+    const inner = Math.max(0, padding - 1);
+    const rects = feedbackTextBoxHighlightRects(fieldTextOf(key), style.highlights, {
+      width: width - 2,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      paddingX: inner,
+      paddingY: inner
+    });
+    return (
+      <div
+        className="lesson-feedback-highlight-layer"
+        style={{ left: x + 1, top: y + 1, width: width - 2, height: height - 2, right: "auto", bottom: "auto", zIndex: 2 }}
+        aria-hidden="true"
+      >
+        {rects.map((rect, index) => (
+          <span
+            key={`${key}-hl-${index}`}
+            style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height, background: rect.color }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  function fieldTextOf(key: LessonFeedbackFieldKey): string {
+    if (key === "content") return record.content;
+    if (key === "homework") return record.homework;
+    if (key === "generalNotes") return record.generalNotes;
+    if (key === "teacherName") return record.teacherName;
+    if (key === "periodLabel") return record.periodLabel;
+    return record.date;
+  }
+
   function textBoxStyleOf(box: LessonFeedbackTextBox) {
     const border = (box.borderStyle ?? "dashed") === "none" ? 0 : (box.borderWidth ?? 1.5);
     return {
@@ -553,6 +646,12 @@ export function LessonFeedbackEditor({
       updateEntry(studentId, { commentHighlights: [...existing.filter(overlap), mark] });
       return;
     }
+    if (textSelection.boxId.startsWith("field:")) {
+      const key = textSelection.boxId.slice("field:".length) as LessonFeedbackFieldKey;
+      const existing = record.fieldStyles?.[key]?.highlights ?? [];
+      patchFieldStyle(key, { highlights: [...existing.filter(overlap), mark] });
+      return;
+    }
     const box = record.textBoxes.find((item) => item.id === textSelection.boxId);
     if (!box) return;
     patchTextBox(box.id, { highlights: [...(box.highlights ?? []).filter(overlap), mark] });
@@ -561,6 +660,10 @@ export function LessonFeedbackEditor({
   function clearHighlights(targetId: string): void {
     if (targetId.startsWith("comment:")) {
       updateEntry(targetId.slice("comment:".length), { commentHighlights: [] });
+      return;
+    }
+    if (targetId.startsWith("field:")) {
+      patchFieldStyle(targetId.slice("field:".length) as LessonFeedbackFieldKey, { highlights: [] });
       return;
     }
     patchTextBox(targetId, { highlights: [] });
@@ -850,9 +953,14 @@ export function LessonFeedbackEditor({
               // 焦点落到评语格以外的控件时，清掉评语焦点与选区，
               // 否则右侧面板会一直停留在上一次点过的学生评语上。
               const target = event.target as HTMLElement;
-              if (target.classList?.contains("lesson-feedback-comment-cell")) return;
+              if (target.classList?.contains("lesson-feedback-comment-cell")) {
+                setFocusedField("");
+                return;
+              }
               setFocusedCommentId("");
               setTextSelection(null);
+              // 不是可样式化的字段就清空，右侧面板才不会停在上一处。
+              if (!target.classList?.contains("lesson-feedback-field")) setFocusedField("");
             }}
             onClick={(event) => {
               // 拖动手柄松手会补一个 click，直接清空会让右侧样式栏闪退。
@@ -884,6 +992,7 @@ export function LessonFeedbackEditor({
               style={cellStyle(layout.metaXs[1], layout.metaY, layout.metaXs[2] - layout.metaXs[1], layout.metaHeight, { align: "center", size: 13 })}
               value={record.teacherName}
               onChange={(event) => patchRecord({ teacherName: event.target.value })}
+              onFocus={() => setFocusedField("teacherName")}
               aria-label="教师"
             />
             <input
@@ -891,6 +1000,7 @@ export function LessonFeedbackEditor({
               style={cellStyle(layout.metaXs[3], layout.metaY, layout.metaXs[4] - layout.metaXs[3], layout.metaHeight, { align: "center", size: 12 })}
               value={record.periodLabel}
               onChange={(event) => patchRecord({ periodLabel: event.target.value })}
+              onFocus={() => setFocusedField("periodLabel")}
               aria-label="课次"
             />
             <input
@@ -902,18 +1012,54 @@ export function LessonFeedbackEditor({
               aria-label="日期"
             />
 
+            {fieldHighlightLayer("content", layout.marginX + 84, layout.contentY, layout.contentWidth - 84, layout.contentHeight, 14, 10)}
+            {fieldHighlightLayer("homework", layout.marginX + 84, layout.homeworkY, layout.contentWidth - 84, layout.homeworkHeight, 14, 10)}
+            {fieldHighlightLayer("generalNotes", layout.rubricXs[1], layout.noteY, layout.contentWidth - 80, layout.noteHeight, 11, 6)}
+
             <textarea
               className="lesson-feedback-field lesson-feedback-field-block"
-              style={cellStyle(layout.marginX + 84, layout.contentY, layout.contentWidth - 84, layout.contentHeight, { size: 14, padding: 10 })}
+              style={{
+                ...cellStyle(layout.marginX + 84, layout.contentY, layout.contentWidth - 84, layout.contentHeight, { size: fieldStyleOf("content", 14).fontSize, padding: 10 }),
+                ...fieldTextStyle("content", 14)
+              }}
               value={record.content}
-              onChange={(event) => patchRecord({ content: event.target.value })}
+              onChange={(event) => {
+                const cleared = (record.fieldStyles?.content?.highlights?.length ?? 0) > 0;
+                if (cleared) patchFieldStyle("content", { highlights: [] });
+                patchRecord({ content: event.target.value });
+              }}
+              onFocus={() => setFocusedField("content")}
+              onSelect={(event) => {
+                const target = event.currentTarget;
+                setTextSelection(
+                  target.selectionStart === target.selectionEnd
+                    ? null
+                    : { boxId: "field:content", start: target.selectionStart, end: target.selectionEnd }
+                );
+              }}
               aria-label="上课内容"
             />
             <textarea
               className="lesson-feedback-field lesson-feedback-field-block"
-              style={cellStyle(layout.marginX + 84, layout.homeworkY, layout.contentWidth - 84, layout.homeworkHeight, { size: 14, padding: 10 })}
+              style={{
+                ...cellStyle(layout.marginX + 84, layout.homeworkY, layout.contentWidth - 84, layout.homeworkHeight, { size: fieldStyleOf("homework", 14).fontSize, padding: 10 }),
+                ...fieldTextStyle("homework", 14)
+              }}
               value={record.homework}
-              onChange={(event) => patchRecord({ homework: event.target.value })}
+              onChange={(event) => {
+                const cleared = (record.fieldStyles?.homework?.highlights?.length ?? 0) > 0;
+                if (cleared) patchFieldStyle("homework", { highlights: [] });
+                patchRecord({ homework: event.target.value });
+              }}
+              onFocus={() => setFocusedField("homework")}
+              onSelect={(event) => {
+                const target = event.currentTarget;
+                setTextSelection(
+                  target.selectionStart === target.selectionEnd
+                    ? null
+                    : { boxId: "field:homework", start: target.selectionStart, end: target.selectionEnd }
+                );
+              }}
               aria-label="今日作业"
             />
 
@@ -1026,9 +1172,25 @@ export function LessonFeedbackEditor({
 
             <textarea
               className="lesson-feedback-field lesson-feedback-field-block"
-              style={cellStyle(layout.rubricXs[1], layout.noteY, layout.contentWidth - 80, layout.noteHeight, { size: 11, padding: 6 })}
+              style={{
+                ...cellStyle(layout.rubricXs[1], layout.noteY, layout.contentWidth - 80, layout.noteHeight, { size: fieldStyleOf("generalNotes", 11).fontSize, padding: 6 }),
+                ...fieldTextStyle("generalNotes", 11)
+              }}
               value={record.generalNotes}
-              onChange={(event) => patchRecord({ generalNotes: event.target.value })}
+              onChange={(event) => {
+                const cleared = (record.fieldStyles?.generalNotes?.highlights?.length ?? 0) > 0;
+                if (cleared) patchFieldStyle("generalNotes", { highlights: [] });
+                patchRecord({ generalNotes: event.target.value });
+              }}
+              onFocus={() => setFocusedField("generalNotes")}
+              onSelect={(event) => {
+                const target = event.currentTarget;
+                setTextSelection(
+                  target.selectionStart === target.selectionEnd
+                    ? null
+                    : { boxId: "field:generalNotes", start: target.selectionStart, end: target.selectionEnd }
+                );
+              }}
               aria-label="备注"
             />
 
@@ -1220,7 +1382,7 @@ export function LessonFeedbackEditor({
           </div>
         </div>
 
-        <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && !selectedStroke && !hasHighlightTarget && "is-empty")} aria-label="样式设置">
+        <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && !selectedStroke && !hasHighlightTarget && !focusedField && "is-empty")} aria-label="样式设置">
           {hasHighlightTarget && (
             <div className="lesson-feedback-boxstyle-group">
               <span className="lesson-feedback-boxstyle-title">荧光标记</span>
@@ -1408,6 +1570,81 @@ export function LessonFeedbackEditor({
                   </span>
                 </button>
               )}
+            </div>
+          ) : focusedField ? (
+            <div className="lesson-feedback-boxstyle" aria-label="字段文字样式">
+              <div className="lesson-feedback-boxstyle-group">
+                <span className="lesson-feedback-boxstyle-title">{fieldLabels[focusedField]}</span>
+                <span className="lesson-feedback-boxstyle-label">字重</span>
+                <div className="lesson-feedback-segment" role="group" aria-label="字段字重">
+                  {([
+                    { value: 400, label: "常规" },
+                    { value: 700, label: "加粗" }
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn("lesson-feedback-segment-item", fieldStyleOf(focusedField, 12).fontWeight === option.value && "is-active")}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => patchFieldStyle(focusedField, { fontWeight: option.value })}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                <span className="lesson-feedback-boxstyle-label">字号 {fieldStyleOf(focusedField, fieldDefaultSizes[focusedField]).fontSize}px</span>
+                <div className="lesson-feedback-segment" role="group" aria-label="字段字号">
+                  <button
+                    type="button"
+                    className="lesson-feedback-segment-item"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => patchFieldStyle(focusedField, { fontSize: clamp(fieldStyleOf(focusedField, fieldDefaultSizes[focusedField]).fontSize - 1, 8, 22) })}
+                  >
+                    A−
+                  </button>
+                  <button
+                    type="button"
+                    className="lesson-feedback-segment-item"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => patchFieldStyle(focusedField, { fontSize: clamp(fieldStyleOf(focusedField, fieldDefaultSizes[focusedField]).fontSize + 1, 8, 22) })}
+                  >
+                    A＋
+                  </button>
+                </div>
+
+                <span className="lesson-feedback-boxstyle-label">文字颜色</span>
+                <div className="lesson-feedback-palette">
+                  {presetColors.map((preset) => (
+                    <button
+                      key={`field-${preset.value}`}
+                      type="button"
+                      className={cn("lesson-feedback-dot", (fieldStyleOf(focusedField, 12).color ?? "").toLowerCase() === preset.value && "is-active")}
+                      style={{ background: preset.value }}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => patchFieldStyle(focusedField, { color: preset.value })}
+                      title={preset.label}
+                      aria-label={`字段 ${preset.label}`}
+                    />
+                  ))}
+                  <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义文字颜色">
+                    <input
+                      type="color"
+                      value={fieldStyleOf(focusedField, 12).color ?? "#1f2523"}
+                      onChange={(event) => patchFieldStyle(focusedField, { color: event.target.value })}
+                    />
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  className="lesson-feedback-wide-button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => patchFieldStyle(focusedField, { color: undefined, fontSize: undefined, fontWeight: undefined })}
+                >
+                  恢复默认样式
+                </button>
+              </div>
             </div>
           ) : focusedEntry ? (
             <div className="lesson-feedback-boxstyle" aria-label="评语样式">

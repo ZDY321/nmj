@@ -77,6 +77,23 @@ export type LessonFeedbackTextBox = {
   highlights?: LessonFeedbackHighlight[];
 };
 
+// 表格里可编辑字段的文字样式。用一张按字段名索引的表，而不是给每个字段
+// 各加四个属性——以后新增字段不必再改数据结构。
+export type LessonFeedbackTextStyle = {
+  color?: string;
+  fontSize?: number;
+  fontWeight?: 400 | 600 | 700;
+  highlights?: LessonFeedbackHighlight[];
+};
+
+export type LessonFeedbackFieldKey =
+  | "content"
+  | "homework"
+  | "generalNotes"
+  | "teacherName"
+  | "periodLabel"
+  | "date";
+
 export type LessonFeedbackHighlight = {
   start: number;
   end: number;
@@ -104,6 +121,8 @@ export type LessonFeedbackRecord = {
   annotations: LessonFeedbackStroke[];
   textBoxes: LessonFeedbackTextBox[];
   paperColor: "soft" | "white";
+  // 表头/内容/作业/备注等字段的文字样式；未设置的字段沿用默认。
+  fieldStyles?: Partial<Record<LessonFeedbackFieldKey, LessonFeedbackTextStyle>>;
   createdAt: string;
   updatedAt: string;
   legacySourceId?: string;
