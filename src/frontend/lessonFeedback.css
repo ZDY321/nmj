@@ -176,6 +176,7 @@
 .lesson-feedback-layout {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
+  align-items: stretch;
   min-width: 0;
   overflow: hidden;
   border: 1px solid #dbe4ef;
@@ -183,8 +184,15 @@
   background: #fff;
 }
 
+/* 整栏用 flex 竖排，列表 flex:1 自适应。
+   历史列表如果自己用 100vh 算高度，折叠/展开会改变这一栏的固有高度，
+   进而把 grid 行拉高——右侧编辑器已有固定高度，多出来的就是底部空白。 */
 .lesson-feedback-history {
+  display: flex;
   min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
   padding: 14px;
   border-right: 1px solid #dbe4ef;
   background: #f8fafc;
@@ -231,9 +239,9 @@
 
 .lesson-feedback-history-list {
   display: flex;
-  max-height: calc(100vh - 360px);
-  min-height: 280px;
+  min-height: 0;
   margin-top: 10px;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 6px;
   overflow-y: auto;
@@ -420,6 +428,20 @@
   flex-wrap: wrap;
 }
 
+/* 已点选学生时，按钮进入与左侧工具、字重按钮一致的深色就绪态。 */
+.lesson-feedback-group-action.is-active:not(:disabled) {
+  border-color: #25324a;
+  color: #ffffff;
+  background: #25324a;
+  box-shadow: 0 5px 12px rgba(37, 50, 74, 0.18);
+}
+
+.lesson-feedback-group-action.is-active:not(:disabled):hover {
+  border-color: #172033;
+  color: #ffffff;
+  background: #172033;
+}
+
 .lesson-feedback-save-state {
   padding: 5px 9px;
   border-radius: 8px;
@@ -571,9 +593,11 @@
 .lesson-feedback-field:hover { border-color: rgba(35, 95, 88, 0.28); background: rgba(226, 243, 237, 0.42); }
 .lesson-feedback-field:focus { border-color: #4d8f84; background: rgba(255, 255, 255, 0.94); outline: 2px solid rgba(77, 143, 132, 0.2); }
 
-/* 评语格：底色留透明，否则聚焦时的白底会盖住下方的荧光标记。 */
-.lesson-feedback-comment-cell:hover,
-.lesson-feedback-comment-cell:focus { background: transparent; }
+/* 可加荧光的字段：底色留透明，否则悬停/聚焦时的白底会盖住下方的荧光标记。 */
+.lesson-feedback-field.lesson-feedback-comment-cell:hover,
+.lesson-feedback-field.lesson-feedback-comment-cell:focus,
+.lesson-feedback-field.lesson-feedback-field-block:hover,
+.lesson-feedback-field.lesson-feedback-field-block:focus { background: transparent; }
 
 textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 .lesson-feedback-field-block { padding: 6px 9px; }
@@ -1414,7 +1438,8 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 
 .lesson-feedback-layout.is-history-collapsed .lesson-feedback-history-title {
   writing-mode: vertical-rl;
-  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
   margin-bottom: 0;
   justify-content: flex-start;
   gap: 10px;

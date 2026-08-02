@@ -852,7 +852,15 @@ export function LessonFeedbackEditor({
             <CheckCheck size={15} /> 一键全勤 + 作业 A + 表现 A
           </Button>
           <Button type="button" size="sm" variant="outline" onClick={clearMarks}>清空评分</Button>
-          <Button type="button" size="sm" variant="outline" onClick={addGroupFeedback} disabled={selectedStudentIds.length === 0}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={cn("lesson-feedback-group-action", selectedStudentIds.length > 0 && "is-active")}
+            onClick={addGroupFeedback}
+            disabled={selectedStudentIds.length === 0}
+            title={selectedStudentIds.length > 0 ? `已选择 ${selectedStudentIds.length} 名学生，点击创建多人反馈` : "先在表格中点选学生姓名"}
+          >
             <UsersRound size={15} /> 多人反馈{selectedStudentIds.length > 0 ? ` (${selectedStudentIds.length})` : ""}
           </Button>
           <div className="lesson-feedback-paperpick" role="group" aria-label="显示比例">
