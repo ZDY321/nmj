@@ -289,7 +289,7 @@ export function feedbackFormatDate(dateText: string): string {
 
 // 括号连线：学生侧触点仍留在“课堂笔记”列内，但自列心右移半个字，
 // 既不盖住评分文字，也不会贴到右侧的文本框上。
-const braceNodeShift = 6;
+const braceNodeShift = 8;
 
 export type FeedbackBracePoint = { x: number; y: number };
 

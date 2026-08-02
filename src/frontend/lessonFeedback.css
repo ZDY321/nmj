@@ -451,26 +451,27 @@
   width: 132px;
   height: 100%;
   flex-shrink: 0;
-  gap: 8px;
+  gap: 3px;
   overflow-y: auto;
-  padding: 12px 10px;
+  padding: 10px 8px;
   border-right: 1px solid #dbe4ef;
   background: #f8fbff;
 }
 
 .lesson-feedback-tool {
   display: flex;
-  min-height: 46px;
-  flex-direction: column;
+  min-height: 34px;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   color: #52667a;
   background: transparent;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
@@ -569,6 +570,10 @@
 
 .lesson-feedback-field:hover { border-color: rgba(35, 95, 88, 0.28); background: rgba(226, 243, 237, 0.42); }
 .lesson-feedback-field:focus { border-color: #4d8f84; background: rgba(255, 255, 255, 0.94); outline: 2px solid rgba(77, 143, 132, 0.2); }
+
+/* 评语格：底色留透明，否则聚焦时的白底会盖住下方的荧光标记。 */
+.lesson-feedback-comment-cell:hover,
+.lesson-feedback-comment-cell:focus { background: transparent; }
 
 textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 .lesson-feedback-field-block { padding: 6px 9px; }
@@ -852,7 +857,7 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   background: #ffffff;
 }
 
-.lesson-feedback-section + .lesson-feedback-section { margin-top: 2px; }
+.lesson-feedback-section { margin-top: 5px; }
 
 .lesson-feedback-section-title {
   color: #25324a;
@@ -1254,3 +1259,66 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   min-height: 1px;
   border-radius: 999px;
 }
+
+/* 顶部缩放控件：与纸张选择同一外观。 */
+.lesson-feedback-zoom-step,
+.lesson-feedback-zoom-value {
+  padding: 2px 6px;
+  border: 1px solid #dbe4ef;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #52667a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lesson-feedback-zoom-value { min-width: 42px; }
+.lesson-feedback-zoom-step:hover,
+.lesson-feedback-zoom-value:hover { border-color: #94a9c0; color: #061226; }
+
+/* 开关：替代原先的整宽按钮，与系统其他开关一致。 */
+.lesson-feedback-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #52667a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lesson-feedback-toggle:hover { border-color: #94a9c0; color: #061226; }
+
+.lesson-feedback-toggle-track {
+  position: relative;
+  display: block;
+  width: 30px;
+  height: 17px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #dbe4ef;
+  transition: background 0.15s;
+}
+
+.lesson-feedback-toggle-track.is-on { background: #235f58; }
+
+.lesson-feedback-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 35, 66, 0.28);
+  transition: transform 0.15s;
+}
+
+.lesson-feedback-toggle-track.is-on .lesson-feedback-toggle-knob { transform: translateX(13px); }

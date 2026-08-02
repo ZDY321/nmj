@@ -128,6 +128,7 @@ export function LessonFeedbackEditor({
   const [selectedStrokeId, setSelectedStrokeId] = useState("");
   const [textSelection, setTextSelection] = useState<{ boxId: string; start: number; end: number } | null>(null);
   const [brushCursor, setBrushCursor] = useState<LessonFeedbackPoint | null>(null);
+  const [customHighlight, setCustomHighlight] = useState("#facc15");
   const [strokeDrag, setStrokeDrag] = useState<{
     id: string;
     mode: "move" | "resize";
@@ -763,6 +764,12 @@ export function LessonFeedbackEditor({
           <Button type="button" size="sm" variant="outline" onClick={addGroupFeedback} disabled={selectedStudentIds.length === 0}>
             <UsersRound size={15} /> 多人反馈{selectedStudentIds.length > 0 ? ` (${selectedStudentIds.length})` : ""}
           </Button>
+          <div className="lesson-feedback-paperpick" role="group" aria-label="显示比例">
+            <span>比例</span>
+            <button type="button" className="lesson-feedback-zoom-step" onClick={() => setZoom((current) => clamp(Math.round((current - 0.1) * 10) / 10, 0.5, 2))} title="缩小">−</button>
+            <button type="button" className="lesson-feedback-zoom-value" onClick={() => setZoom(1)} title="恢复 100%">{Math.round(zoom * 100)}%</button>
+            <button type="button" className="lesson-feedback-zoom-step" onClick={() => setZoom((current) => clamp(Math.round((current + 0.1) * 10) / 10, 0.5, 2))} title="放大">＋</button>
+          </div>
           <div className="lesson-feedback-paperpick" role="group" aria-label="纸张颜色">
             <span>纸张</span>
             <button
@@ -976,7 +983,8 @@ export function LessonFeedbackEditor({
                   {(entry?.commentHighlights?.length ?? 0) > 0 && (
                     <div
                       className="lesson-feedback-highlight-layer"
-                      style={{ left: c[6] + 1, top: rowY + 1, width: c[7] - c[6] - 2, height: layout.studentRowHeight - 2 }}
+                      // z-index 2：压在骨架 canvas(1) 之上、表单控件(3) 之下，否则会被 canvas 盖住。
+                      style={{ left: c[6] + 1, top: rowY + 1, width: c[7] - c[6] - 2, height: layout.studentRowHeight - 2, right: "auto", bottom: "auto", zIndex: 2 }}
                       aria-hidden="true"
                     >
                       {commentHighlightRects(student.id, entry, rowY).map((rect, index) => (
@@ -1212,15 +1220,6 @@ export function LessonFeedbackEditor({
         </div>
 
         <aside className={cn("lesson-feedback-siderail", !selectedBox && !focusedEntry && !selectedStroke && !hasHighlightTarget && "is-empty")} aria-label="样式设置">
-          <div className="lesson-feedback-boxstyle-group">
-            <span className="lesson-feedback-boxstyle-title">显示比例 {Math.round(zoom * 100)}%</span>
-            <div className="lesson-feedback-segment" role="group" aria-label="显示比例">
-              <button type="button" className="lesson-feedback-segment-item" onClick={() => setZoom((current) => clamp(Math.round((current - 0.1) * 10) / 10, 0.5, 2))}>−</button>
-              <button type="button" className="lesson-feedback-segment-item" onClick={() => setZoom(1)}>100%</button>
-              <button type="button" className="lesson-feedback-segment-item" onClick={() => setZoom((current) => clamp(Math.round((current + 0.1) * 10) / 10, 0.5, 2))}>＋</button>
-            </div>
-          </div>
-
           {hasHighlightTarget && (
             <div className="lesson-feedback-boxstyle-group">
               <span className="lesson-feedback-boxstyle-title">荧光标记</span>
@@ -1241,6 +1240,17 @@ export function LessonFeedbackEditor({
                     aria-label={preset.label}
                   />
                 ))}
+                <label className="lesson-feedback-dot lesson-feedback-dot-custom" title="自定义荧光色">
+                  <input
+                    type="color"
+                    value={customHighlight}
+                    disabled={!textSelection}
+                    onChange={(event) => {
+                      setCustomHighlight(event.target.value);
+                      applyHighlight(hexToHighlight(event.target.value));
+                    }}
+                  />
+                </label>
               </div>
               {highlightTargetMarks.length > 0 && (
                 <button type="button" className="lesson-feedback-wide-button" onClick={() => clearHighlights(highlightTargetId)}>
@@ -1386,10 +1396,15 @@ export function LessonFeedbackEditor({
               {selectedBox.studentIds.length > 0 && (
                 <button
                   type="button"
-                  className={cn("lesson-feedback-wide-button", selectedBox.showBand && "is-active")}
+                  className="lesson-feedback-toggle"
+                  role="switch"
+                  aria-checked={selectedBox.showBand}
                   onClick={() => patchTextBox(selectedBox.id, { showBand: !selectedBox.showBand })}
                 >
-                  {selectedBox.showBand ? "隐藏分组色带" : "显示分组色带"}
+                  <span>分组色带</span>
+                  <span className={cn("lesson-feedback-toggle-track", selectedBox.showBand && "is-on")}>
+                    <span className="lesson-feedback-toggle-knob" />
+                  </span>
                 </button>
               )}
             </div>
@@ -1471,6 +1486,15 @@ function trimHistory(stack: LessonFeedbackRecord[]): void {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));}
+
+// 荧光底色必须半透明，否则会盖住文字。
+function hexToHighlight(hex: string): string {
+  const value = hex.replace("#", "");
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, 0.42)`;
+}
 
 function strokeToolLabel(tool: LessonFeedbackStrokeTool): string {
   const labels: Record<LessonFeedbackStrokeTool, string> = {
