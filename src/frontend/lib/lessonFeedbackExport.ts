@@ -16,7 +16,6 @@ import {
   feedbackExportScale,
   feedbackFormatDate,
   feedbackGuideLine,
-  feedbackHighlightRects,
   feedbackInkColor,
   feedbackMarkColor,
   feedbackPageWidth,
@@ -25,12 +24,12 @@ import {
   feedbackRubricRows,
   feedbackSheetLayout,
   feedbackSheetTitle,
-  feedbackTextBoxContentRect,
   feedbackTitleFontFamily,
   feedbackWrappedTextLayout,
   type FeedbackSheetLayout,
   type FeedbackWrappedTextOptions
 } from "@/frontend/lib/lessonFeedbackLayout";
+import { feedbackTextBoxHighlightRects, feedbackTextBoxLines } from "@/frontend/lib/lessonFeedbackTextMetrics";
 import type {
   LessonFeedbackEntry,
   LessonFeedbackPoint,
@@ -241,18 +240,17 @@ function drawStudentTable(
     const commentSize = entry.commentFontSize ?? 11.5;
     const commentWeight = entry.commentFontWeight ?? 400;
     if (entry.commentHighlights?.length) {
-      context.save();
-      context.font = `${commentWeight} ${commentSize}px ${feedbackBodyFontFamily}`;
-      feedbackHighlightRects(
-        entry.comment,
-        entry.commentHighlights,
-        { x: c[6], y: rowY, width: c[7] - c[6], height: layout.studentRowHeight },
-        { size: commentSize, padding: 5, maxLines: Infinity, ellipsis: false, measure: (value) => context.measureText(value).width }
-      ).forEach((rect) => {
+      // 与编辑器同一套浏览器排版；坐标基准是格子内缩 1px 后的 border-box。
+      feedbackTextBoxHighlightRects(entry.comment, entry.commentHighlights, {
+        width: c[7] - c[6] - 2,
+        fontSize: commentSize,
+        fontWeight: commentWeight,
+        paddingX: 4,
+        paddingY: 4
+      }).forEach((rect) => {
         context.fillStyle = rect.color;
-        context.fillRect(rect.x, rect.y, rect.width, rect.height);
+        context.fillRect(c[6] + 1 + rect.x, rowY + 1 + rect.y, rect.width, rect.height);
       });
-      context.restore();
     }
     drawCellText(context, entry.comment, c[6], rowY, c[7] - c[6], layout.studentRowHeight, {
       size: commentSize,
@@ -382,40 +380,32 @@ function drawTextBoxes(context: CanvasRenderingContext2D, record: LessonFeedback
     }
     context.restore();
 
-    // 文本框按 canvas 实测宽度折行，与网页 textarea 的断行位置一致；
-    // 再用 clip 把超出框的行裁掉，避免像旧版那样漫到框外。
+    // clip 把超出框的行裁掉，避免文字漫到框外。
     context.save();
     context.beginPath();
     context.rect(box.x, box.y, box.width, box.height);
     context.clip();
     context.font = `${box.fontWeight} ${box.fontSize}px ${feedbackBodyFontFamily}`;
-    // 荧光标记压在文字下方，先画底色再画字。
-    // 文字区要扣掉边框占用的宽度，才和网页里的 textarea 完全同宽。
-    const content = feedbackTextBoxContentRect(box);
-    const textOptions = {
-      size: box.fontSize,
-      // 与旧项目一致的框内留白：左右 3、上下 2。
-      paddingX: 3,
-      paddingY: 2,
-      valign: "top" as const,
-      maxLines: Infinity,
-      ellipsis: false,
-      measure: (value: string) => context.measureText(value).width
-    };
-    feedbackHighlightRects(box.text, box.highlights ?? [], content, textOptions).forEach((rect) => {
+    // 断行与荧光位置都取自浏览器对同样式镜像元素的真实排版，导出图因此与网页
+    // textarea 逐字一致，不会在换行处差一个字；荧光压在文字下方，先画底色再画字。
+    const border = (box.borderStyle ?? "dashed") === "none" ? 0 : (box.borderWidth ?? 1.5);
+    const style = { width: box.width - border * 2, fontSize: box.fontSize, fontWeight: box.fontWeight };
+    const originX = box.x + border;
+    const originY = box.y + border;
+
+    feedbackTextBoxHighlightRects(box.text, box.highlights ?? [], style).forEach((rect) => {
       context.fillStyle = rect.color;
-      context.fillRect(rect.x, rect.y, rect.width, rect.height);
+      context.fillRect(originX + rect.x, originY + rect.y, rect.width, rect.height);
     });
-    drawCellText(context, box.text, content.x, content.y, content.width, content.height, {
-      size: box.fontSize,
-      weight: box.fontWeight,
-      fill: box.color,
-      paddingX: 3,
-      paddingY: 2,
-      valign: "top",
-      maxLines: Infinity,
-      ellipsis: false,
-      measure: (value) => context.measureText(value).width
+
+    const lines = feedbackTextBoxLines(box.text, style);
+    const lineHeight = box.fontSize * 1.45;
+    context.fillStyle = box.color;
+    context.textAlign = "left";
+    context.textBaseline = "alphabetic";
+    lines.forEach((line, index) => {
+      // 2 是 textarea 的上内边距，0.82em 把基线落到与 DOM 相同的位置。
+      context.fillText(line, originX + 3, originY + 2 + box.fontSize * 0.82 + index * lineHeight);
     });
     context.restore();
     void layout;

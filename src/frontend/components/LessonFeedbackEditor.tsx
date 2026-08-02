@@ -45,7 +45,8 @@ import {
   feedbackStudentRowCenter
 } from "@/frontend/lib/lessonFeedbackLayout";
 import { nearestStrokeId } from "@/frontend/lib/lessonFeedbackHitTest";
-import { feedbackHighlightColors, feedbackHighlightRects, feedbackTextBoxContentRect } from "@/frontend/lib/lessonFeedbackLayout";
+import { feedbackHighlightColors } from "@/frontend/lib/lessonFeedbackLayout";
+import { feedbackTextBoxHighlightRects } from "@/frontend/lib/lessonFeedbackTextMetrics";
 import "@/frontend/lessonFeedback.css";
 
 type EditorTool = "select" | "eraser" | "text" | LessonFeedbackStrokeTool;
@@ -138,7 +139,6 @@ export function LessonFeedbackEditor({
     originalRecord: LessonFeedbackRecord;
   } | null>(null);
   const textAreaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
-  const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sheetCanvasRef = useRef<HTMLCanvasElement>(null);
   const suppressDeselectRef = useRef(false);
@@ -513,46 +513,33 @@ export function LessonFeedbackEditor({
     });
   }
 
-  // 用离屏 canvas 做文字测量：与导出同一套 measureText，屏幕与导出的高亮位置才一致。
-  function measureWith(font: string): (value: string) => number {
-    if (!measureCanvasRef.current) measureCanvasRef.current = document.createElement("canvas");
-    const context = measureCanvasRef.current.getContext("2d");
-    if (!context) return (value) => value.length * 12;
-    context.font = font;
-    return (value) => context.measureText(value).width;
-  }
-
   function highlightRectsFor(box: LessonFeedbackTextBox) {
     if (!box.highlights?.length) return [];
-    // 与导出用同一个可用区（已扣掉边框），否则两边折行不同、荧光就会错位。
-    return feedbackHighlightRects(box.text, box.highlights, feedbackTextBoxContentRect(box), {
-      size: box.fontSize,
-      paddingX: 3,
-      paddingY: 2,
-      valign: "top",
-      maxLines: Infinity,
-      ellipsis: false,
-      measure: measureWith(`${box.fontWeight} ${box.fontSize}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`)
-    });
+    // 断行以浏览器为准：自算的折行在换行临界点会与 textarea 差一个字，
+    // 荧光因此标到相邻的字上。这里直接读浏览器排好的字符矩形。
+    return feedbackTextBoxHighlightRects(box.text, box.highlights, textBoxStyleOf(box));
   }
 
-  function commentHighlightRects(studentId: string, entry: LessonFeedbackEntry | undefined, rowY: number) {
+  function textBoxStyleOf(box: LessonFeedbackTextBox) {
+    const border = (box.borderStyle ?? "dashed") === "none" ? 0 : (box.borderWidth ?? 1.5);
+    return {
+      width: box.width - border * 2,
+      fontSize: box.fontSize,
+      fontWeight: box.fontWeight
+    };
+  }
+
+  // 评语格同样以浏览器排版为准；坐标相对格子的 border-box 左上角。
+  function commentHighlightRects(entry: LessonFeedbackEntry | undefined) {
     if (!entry?.commentHighlights?.length) return [];
-    const size = entry.commentFontSize ?? 11.5;
-    const weight = entry.commentFontWeight ?? 400;
-    return feedbackHighlightRects(
-      entry.comment,
-      entry.commentHighlights,
-      { x: layout.cols[6], y: rowY, width: layout.cols[7] - layout.cols[6], height: layout.studentRowHeight },
-      {
-        size,
-        padding: 5,
-        valign: "center",
-        maxLines: Infinity,
-        ellipsis: false,
-        measure: measureWith(`${weight} ${size}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif`)
-      }
-    );
+    return feedbackTextBoxHighlightRects(entry.comment, entry.commentHighlights, {
+      // 与 cellStyle 生成的内联样式一致：宽度内缩 2、padding 4（= 传入的 5 减 1）。
+      width: layout.cols[7] - layout.cols[6] - 2,
+      fontSize: entry.commentFontSize ?? 11.5,
+      fontWeight: entry.commentFontWeight ?? 400,
+      paddingX: 4,
+      paddingY: 4
+    });
   }
 
   function applyHighlight(color: string): void {
@@ -988,10 +975,10 @@ export function LessonFeedbackEditor({
                       style={{ left: c[6] + 1, top: rowY + 1, width: c[7] - c[6] - 2, height: layout.studentRowHeight - 2, right: "auto", bottom: "auto", zIndex: 2 }}
                       aria-hidden="true"
                     >
-                      {commentHighlightRects(student.id, entry, rowY).map((rect, index) => (
+                      {commentHighlightRects(entry).map((rect, index) => (
                         <span
                           key={`${student.id}-hl-${index}`}
-                          style={{ left: rect.x - c[6] - 1, top: rect.y - rowY - 1, width: rect.width, height: rect.height, background: rect.color }}
+                          style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height, background: rect.color }}
                         />
                       ))}
                     </div>
@@ -1127,21 +1114,12 @@ export function LessonFeedbackEditor({
                   style={{ inset: (box.borderStyle ?? "dashed") === "none" ? 0 : (box.borderWidth ?? 1.5) }}
                   aria-hidden="true"
                 >
-                  {highlightRectsFor(box).map((rect, index) => {
-                    const content = feedbackTextBoxContentRect(box);
-                    return (
-                      <span
-                        key={`${box.id}-hl-${index}`}
-                        style={{
-                          left: rect.x - content.x,
-                          top: rect.y - content.y,
-                          width: rect.width,
-                          height: rect.height,
-                          background: rect.color
-                        }}
-                      />
-                    );
-                  })}
+                  {highlightRectsFor(box).map((rect, index) => (
+                    <span
+                      key={`${box.id}-hl-${index}`}
+                      style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height, background: rect.color }}
+                    />
+                  ))}
                 </div>
                 <textarea
                   ref={(node) => { textAreaRefs.current[box.id] = node; }}
