@@ -10,7 +10,10 @@ import type { CourseGroup, CourseType, ScheduleImportVaultState, TeacherVault } 
 import { campusName, compareByName, courseHasActiveStudent, courseName, courseTypeLabel, sortCoursesByName, studentNames } from "@/frontend/lib/helpers";
 import {
   buildImportPreview,
+  canonicalImportCampusName,
+  canonicalizeScheduleImportMapping,
   importMappingKey,
+  mergeScheduleImportMappings,
   parseScheduleWorkbookFiles,
   type ImportedScheduleLesson,
   type ImportPreviewLesson,
@@ -31,12 +34,13 @@ export function ScheduleImportCourseMappingPanel({
 }) {
   const persistedScheduleImport = scheduleImportState ?? vault.scheduleImport;
   const externalMapping = useMemo(
-    () => ({
-      ...readSavedMapping(storageScope),
-      ...(persistedScheduleImport?.mappings ?? {}),
-      ...(vault.scheduleImport?.mappings ?? {})
-    }),
-    [persistedScheduleImport?.updatedAt, storageScope, vault.scheduleImport?.updatedAt]
+    () => mergeScheduleImportMappings(
+      vault,
+      readSavedMapping(storageScope),
+      vault.scheduleImport?.mappings,
+      persistedScheduleImport?.mappings
+    ),
+    [persistedScheduleImport?.mappings, storageScope, vault.campuses, vault.scheduleImport?.mappings]
   );
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>([]);
   const [mapping, setMapping] = useState<ScheduleImportMapping>(externalMapping);
@@ -48,8 +52,8 @@ export function ScheduleImportCourseMappingPanel({
   const { confirm, dialog } = useConfirmDialog();
 
   useEffect(() => {
-    setMapping((current) => ({ ...externalMapping, ...current }));
-  }, [externalMapping]);
+    setMapping((current) => mergeScheduleImportMappings(vault, current, externalMapping));
+  }, [externalMapping, vault.campuses]);
 
   const courseOptions = useMemo(() => sortCoursesByName(vault.courseGroups), [vault.courseGroups]);
   const previewRows = useMemo(() => buildImportPreview(vault, rawLessons, mapping), [mapping, rawLessons, vault]);
@@ -59,7 +63,7 @@ export function ScheduleImportCourseMappingPanel({
     keys.add(row.normalizedKey);
     return keys;
   }, new Set<string>()), [importedCourses]);
-  const savedRules = useMemo(() => buildSavedMappingRules(mapping, importedMappingKeys), [importedMappingKeys, mapping]);
+  const savedRules = useMemo(() => buildSavedMappingRules(vault, mapping, importedMappingKeys), [importedMappingKeys, mapping, vault]);
   const visibleSavedRules = useMemo(
     () => filterSavedMappingRules(vault, savedRules, search),
     [savedRules, search, vault]
@@ -175,12 +179,13 @@ export function ScheduleImportCourseMappingPanel({
   }
 
   function persistMapping(nextMapping: ScheduleImportMapping, cloudMessage: string, localMessage: string) {
-    setMapping(nextMapping);
-    const localOk = writeSavedMapping(storageScope, nextMapping);
+    const canonicalMapping = canonicalizeScheduleImportMapping(vault, nextMapping);
+    setMapping(canonicalMapping);
+    const localOk = writeSavedMapping(storageScope, canonicalMapping);
     if (onSaveScheduleImport) {
       const previous = persistedScheduleImport ?? vault.scheduleImport;
       onSaveScheduleImport({
-        mappings: { ...nextMapping },
+        mappings: { ...canonicalMapping },
         resolutions: { ...(previous?.resolutions ?? {}) },
         reviews: [...(previous?.reviews ?? [])],
         splitMergeExcludedLessonIds: previous?.splitMergeExcludedLessonIds ?? [],
@@ -451,7 +456,7 @@ type SavedCourseMappingRule = {
   usedInCurrentImport: boolean;
 };
 
-function buildSavedMappingRules(mapping: ScheduleImportMapping, importedKeys: ReadonlySet<string>): SavedCourseMappingRule[] {
+function buildSavedMappingRules(vault: TeacherVault, mapping: ScheduleImportMapping, importedKeys: ReadonlySet<string>): SavedCourseMappingRule[] {
   return Object.entries(mapping)
     .flatMap(([key, courseId]) => {
       if (!courseId) return [];
@@ -459,7 +464,7 @@ function buildSavedMappingRules(mapping: ScheduleImportMapping, importedKeys: Re
       return [{
         key,
         courseId,
-        campusName,
+        campusName: canonicalImportCampusName(vault, campusName),
         title,
         studentNameHint,
         subjectHint,
@@ -535,13 +540,9 @@ function courseIdForMappingRow(mapping: ScheduleImportMapping, row: Pick<Importe
 }
 
 function setMappingValue(mapping: ScheduleImportMapping, row: ImportedCourseMappingRow, courseId: string) {
-  if (courseId) {
-    mapping[row.key] = courseId;
-    mapping[row.normalizedKey] = courseId;
-    return;
-  }
   delete mapping[row.key];
   delete mapping[row.normalizedKey];
+  if (courseId) mapping[row.normalizedKey] = courseId;
 }
 
 function filterImportedCourseRows(vault: TeacherVault, rows: ImportedCourseMappingRow[], mapping: ScheduleImportMapping, query: string): ImportedCourseMappingRow[] {
@@ -591,7 +592,7 @@ function mappingCourseOptionLabel(vault: TeacherVault, course: CourseGroup): str
 }
 
 function mappingCourseStatusLabel(vault: TeacherVault, course: CourseGroup): string {
-  if (course.status === "paused") return "课程已暂停";
+  if (course.status === "paused") return "课程已结课";
   if (courseHasActiveStudent(vault, course)) return "";
   if (course.studentIds.length === 0) return historicalStudentNamesForCourse(vault, course) ? "仅保留历史课节学生" : "未关联学生";
   const linkedStudents = course.studentIds

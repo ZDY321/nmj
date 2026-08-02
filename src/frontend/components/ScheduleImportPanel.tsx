@@ -25,6 +25,7 @@ import {
 import {
   buildImportPreview,
   downloadMergedScheduleWorkbook,
+  mergeScheduleImportMappings,
   parseScheduleWorkbookFiles,
   summarizeImportPreview,
   type ImportedScheduleLesson,
@@ -95,9 +96,15 @@ export function ScheduleImportPanel({
     () => ({ ...vault, scheduleImport: persistedScheduleImport ?? undefined }),
     [persistedScheduleImport, vault]
   );
-  const cloudMapping = { ...(persistedScheduleImport?.mappings ?? {}), ...(vault.scheduleImport?.mappings ?? {}) };
+  const cloudMapping = useMemo(
+    () => mergeScheduleImportMappings(vault, vault.scheduleImport?.mappings, persistedScheduleImport?.mappings),
+    [persistedScheduleImport?.mappings, vault.campuses, vault.scheduleImport?.mappings]
+  );
   const cloudResolutions = { ...(persistedScheduleImport?.resolutions ?? {}), ...(vault.scheduleImport?.resolutions ?? {}) };
-  const savedMapping = useMemo(() => ({ ...readSavedMapping(storageScope), ...cloudMapping, ...savedWorkspace.mapping }), [cloudMapping, savedWorkspace.mapping, storageScope]);
+  const savedMapping = useMemo(
+    () => mergeScheduleImportMappings(vault, savedWorkspace.mapping, readSavedMapping(storageScope), cloudMapping),
+    [cloudMapping, savedWorkspace.mapping, storageScope, vault.campuses]
+  );
   const savedResolutions = useMemo(() => ({ ...cloudResolutions, ...savedWorkspace.resolutions }), [cloudResolutions, savedWorkspace.resolutions]);
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>(savedWorkspace.rawLessons);
   const [mapping, setMapping] = useState<ScheduleImportMapping>(savedMapping);
@@ -235,15 +242,9 @@ export function ScheduleImportPanel({
     needsAttentionFromSavedReviewCounts(savedReviewLiveCounts.get(review.id) ?? savedReviewEffectiveCounts(review));
 
   useEffect(() => {
-    setMapping((current) => {
-      const merged = { ...cloudMapping };
-      for (const key in current) {
-        merged[key] = current[key];
-      }
-      return merged;
-    });
+    setMapping((current) => mergeScheduleImportMappings(vault, current, cloudMapping));
     setResolutions((current) => ({ ...cloudResolutions, ...current }));
-  }, [persistedScheduleImport?.updatedAt, vault.scheduleImport?.updatedAt]);
+  }, [cloudMapping, vault.campuses]);
 
   useEffect(() => {
     if (monthOptions.length === 0) return;

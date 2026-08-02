@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildImportPreview,
+  canonicalImportCampusName,
+  canonicalizeScheduleImportMapping,
+  importMappingKey,
+  mergeScheduleImportMappings,
   parseCampusFromFileName,
   parseExportYearFromFileName,
   parseScheduleCell,
@@ -59,6 +63,49 @@ const classCourse: CourseGroup = {
   feeRule: { mode: "class_headcount", baseFee: 80, perPresentStudentFee: 10 },
   status: "active"
 };
+
+describe("schedule import mapping campuses", () => {
+  it("uses the system campus name for a recognized import alias", () => {
+    expect(canonicalImportCampusName(makeVault(), "东城")).toBe("东城校区");
+  });
+
+  it("merges campus aliases into the canonical mapping key", () => {
+    const aliasKey = importMappingKey({
+      campusName: "东城",
+      title: "小明数学一对一",
+      studentNameHint: "小明",
+      subjectHint: "数学",
+      courseTypeHint: "one_on_one"
+    });
+    const canonicalKey = importMappingKey({
+      campusName: campus.name,
+      title: "小明数学一对一",
+      studentNameHint: "小明",
+      subjectHint: "数学",
+      courseTypeHint: "one_on_one"
+    });
+
+    expect(canonicalizeScheduleImportMapping(makeVault(), {
+      [aliasKey]: "course_from_alias",
+      [canonicalKey]: oneOnOneCourse.id
+    })).toEqual({ [canonicalKey]: oneOnOneCourse.id });
+  });
+
+  it("lets the latest mapping source override a stale workspace rule", () => {
+    const key = importMappingKey({
+      campusName: campus.name,
+      title: "【暑】XH九年级化学朱大勇班",
+      subjectHint: "化学",
+      courseTypeHint: "class"
+    });
+
+    expect(mergeScheduleImportMappings(
+      makeVault(),
+      { [key]: "course_stale_workspace" },
+      { [key]: "course_latest_cloud" }
+    )).toEqual({ [key]: "course_latest_cloud" });
+  });
+});
 
 function makeVault(patch: Partial<TeacherVault> = {}): TeacherVault {
   return {
@@ -211,6 +258,70 @@ describe("schedule import parsing and matching", () => {
       presentCount: 0,
       expectedCount: 1,
       warnings: ["未全员到课", "缺勤未到"]
+    });
+  });
+
+  it("keeps a class mapping when the roster changes and another course uses the same time", () => {
+    const chemistryCourse: CourseGroup = {
+      ...classCourse,
+      id: "course_chemistry",
+      name: "延安八升九化班课",
+      subject: "化学",
+      studentIds: ["student_ming", "student_li"]
+    };
+    const physicsCourse: CourseGroup = {
+      ...classCourse,
+      id: "course_physics",
+      name: "延安八升九物班课",
+      subject: "物理"
+    };
+    const chemistryLesson = makeLesson({
+      id: "lesson_chemistry",
+      courseGroupId: chemistryCourse.id,
+      type: "class",
+      date: "2026-07-01",
+      startTime: "14:00",
+      endTime: "15:50",
+      expectedStudentIds: ["student_ming", "student_hong", "student_li"],
+      attendance: students.map((student) => ({ studentId: student.id, status: "attended" as const }))
+    });
+    const physicsLesson = makeLesson({
+      id: "lesson_physics",
+      courseGroupId: physicsCourse.id,
+      type: "class",
+      date: "2026-07-01",
+      startTime: "14:00",
+      endTime: "15:50"
+    });
+    const imported = makeImportedLesson({
+      id: "import_chemistry",
+      date: "2026-07-01",
+      startTime: "14:00",
+      endTime: "15:50",
+      title: "【暑】XH九年级化学朱大勇班",
+      subjectHint: "化学",
+      courseTypeHint: "class",
+      studentNameHint: undefined,
+      presentCount: 3,
+      expectedCount: 3
+    });
+    const key = importMappingKey(imported);
+    const vault = makeVault({
+      courseGroups: [chemistryCourse, physicsCourse],
+      lessons: [physicsLesson, chemistryLesson]
+    });
+    const mapping = mergeScheduleImportMappings(
+      vault,
+      { [key]: physicsCourse.id },
+      { [key]: chemistryCourse.id }
+    );
+
+    expect(buildImportPreview(vault, [imported], mapping)[0]).toMatchObject({
+      matchedCourseId: chemistryCourse.id,
+      mappedCourseId: chemistryCourse.id,
+      systemLessonId: chemistryLesson.id,
+      status: "matched",
+      issues: []
     });
   });
 

@@ -133,6 +133,40 @@ export function importMappingKey(lesson: Pick<ImportedScheduleLesson, "campusNam
   ].join("|");
 }
 
+export function canonicalImportCampusName(vault: TeacherVault, importedCampusName: string): string {
+  return matchCampus(vault, importedCampusName)?.name ?? importedCampusName;
+}
+
+export function canonicalizeScheduleImportMapping(vault: TeacherVault, mapping: ScheduleImportMapping): ScheduleImportMapping {
+  const entries = Object.entries(mapping).filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const normalizedEntries = entries.map(([key, courseId]) => {
+    const parts = key.split("|");
+    if (parts.length < 5) return { key, canonicalKey: key, courseId };
+    parts[0] = normalizeText(canonicalImportCampusName(vault, parts[0]));
+    return { key, canonicalKey: parts.join("|"), courseId };
+  });
+  const result: ScheduleImportMapping = {};
+  const canonicalKeys = new Set(normalizedEntries
+    .filter(({ key, canonicalKey }) => key === canonicalKey)
+    .map(({ canonicalKey }) => canonicalKey));
+
+  // 先保留正式校区键；若旧别名与正式规则冲突，正式规则应当优先。
+  normalizedEntries.forEach(({ key, canonicalKey, courseId }) => {
+    if (key === canonicalKey) result[canonicalKey] = courseId;
+  });
+  normalizedEntries.forEach(({ canonicalKey, courseId }) => {
+    if (!canonicalKeys.has(canonicalKey)) result[canonicalKey] = courseId;
+  });
+  return result;
+}
+
+export function mergeScheduleImportMappings(vault: TeacherVault, ...sources: Array<ScheduleImportMapping | null | undefined>): ScheduleImportMapping {
+  return Object.assign(
+    {},
+    ...sources.map((source) => canonicalizeScheduleImportMapping(vault, source ?? {}))
+  );
+}
+
 export function parseScheduleCell(
   cellText: unknown,
   context: { fileName: string; campusName: string; year: number }
