@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, BookOpenCheck, Clock3, FilePlus2, History, RefreshCw, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, BookOpenCheck, ChevronLeft, ChevronRight, Clock3, FilePlus2, History, RefreshCw, Search, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -71,6 +71,8 @@ export function LessonFeedbackWorkspace({
   const [legacyFileName, setLegacyFileName] = useState("");
   const [importing, setImporting] = useState(false);
   const [indexLoaded, setIndexLoaded] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const legacyFileInputRef = useRef<HTMLInputElement>(null);
   const indexRef = useRef(indexDocument);
   const indexVersionRef = useRef("");
@@ -615,7 +617,7 @@ export function LessonFeedbackWorkspace({
 
   return (
     <div className="lesson-feedback-view">
-      <section className="lesson-feedback-create-panel">
+      <section className="lesson-feedback-create-panel is-compact">
         <div className="lesson-feedback-panel-heading">
           <div>
             <div className="lesson-feedback-eyebrow"><BookOpenCheck size={15} /> 课程与课次</div>
@@ -629,36 +631,72 @@ export function LessonFeedbackWorkspace({
               hidden
               onChange={(event) => void chooseLegacyFile(event.target.files?.[0])}
             />
-            <Button variant="outline" onClick={() => legacyFileInputRef.current?.click()}><Upload size={16} /> 导入旧反馈 JSON</Button>
-            <Button onClick={() => void createOrOpenFeedback()} disabled={!selectedCourse}>
-              <FilePlus2 size={17} /> {selectedLessonId && indexDocument.items.some((item) => item.lessonId === selectedLessonId) ? "打开本课次反馈" : "新建反馈"}
+            <Button size="sm" variant="outline" onClick={() => legacyFileInputRef.current?.click()}>
+              <Upload size={14} /> 导入旧 JSON
+            </Button>
+            <Button size="sm" onClick={() => setCreateDialogOpen(true)} disabled={courses.length === 0}>
+              <FilePlus2 size={15} /> 新建反馈
             </Button>
           </div>
         </div>
-        <div className="lesson-feedback-create-grid">
-          <label>
-            <span>课程</span>
-            <Select value={selectedCourseId} onChange={(event) => {
-              setSelectedCourseId(event.target.value);
-              setSelectedLessonId("");
-            }}>
-              {courses.length === 0 && <option value="">暂无课程</option>}
-              {courses.map((course) => <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>)}
-            </Select>
-          </label>
-          <label>
-            <span>对应课次</span>
-            <Select value={selectedLessonId} onChange={(event) => setSelectedLessonId(event.target.value)} disabled={!selectedCourse}>
-              <option value="">不关联具体课次，按课程名单创建</option>
-              {lessons.map((lesson) => (
-                <option key={lesson.id} value={lesson.id}>
-                  {lesson.date} {lesson.startTime}-{lesson.endTime}{lesson.status === "cancelled" ? "（已取消）" : ""}
-                </option>
-              ))}
-            </Select>
-          </label>
-        </div>
       </section>
+
+      {createDialogOpen && (
+        <div className="lesson-feedback-modal-backdrop" onClick={() => setCreateDialogOpen(false)}>
+          <div
+            className="lesson-feedback-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="选择课程与课次"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="lesson-feedback-modal-head">
+              <div>
+                <div className="lesson-feedback-eyebrow"><BookOpenCheck size={15} /> 课程与课次</div>
+                <h3>选择要建立反馈的课</h3>
+              </div>
+              <button type="button" className="lesson-feedback-modal-close" onClick={() => setCreateDialogOpen(false)} aria-label="关闭">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="lesson-feedback-modal-body">
+              <label>
+                <span>课程</span>
+                <Select value={selectedCourseId} onChange={(event) => {
+                  setSelectedCourseId(event.target.value);
+                  setSelectedLessonId("");
+                }}>
+                  {courses.length === 0 && <option value="">暂无课程</option>}
+                  {courses.map((course) => <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>)}
+                </Select>
+              </label>
+              <label>
+                <span>对应课次</span>
+                <Select value={selectedLessonId} onChange={(event) => setSelectedLessonId(event.target.value)} disabled={!selectedCourse}>
+                  <option value="">不关联具体课次，按课程名单创建</option>
+                  {lessons.map((lesson) => (
+                    <option key={lesson.id} value={lesson.id}>
+                      {lesson.date} {lesson.startTime}-{lesson.endTime}{lesson.status === "cancelled" ? "（已取消）" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            </div>
+            <div className="lesson-feedback-modal-foot">
+              <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>取消</Button>
+              <Button
+                disabled={!selectedCourse}
+                onClick={() => {
+                  setCreateDialogOpen(false);
+                  void createOrOpenFeedback();
+                }}
+              >
+                <FilePlus2 size={16} /> {selectedLessonId && indexDocument.items.some((item) => item.lessonId === selectedLessonId) ? "打开本课次反馈" : "新建反馈"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {legacyData && (
         <section className="lesson-feedback-import-panel">
@@ -705,9 +743,20 @@ export function LessonFeedbackWorkspace({
         </div>
       )}
 
-      <div className="lesson-feedback-layout">
+      <div className={`lesson-feedback-layout${historyCollapsed ? " is-history-collapsed" : ""}`}>
         <aside className="lesson-feedback-history">
-          <div className="lesson-feedback-history-title"><History size={17} /><span>反馈历史</span><strong>{indexDocument.items.length}</strong></div>
+          <button
+            type="button"
+            className="lesson-feedback-history-title"
+            onClick={() => setHistoryCollapsed((current) => !current)}
+            title={historyCollapsed ? "展开反馈历史" : "折叠反馈历史"}
+            aria-expanded={!historyCollapsed}
+          >
+            <History size={17} />
+            <span>反馈历史</span>
+            <strong>{indexDocument.items.length}</strong>
+            {historyCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+          </button>
           <Select value={historyCourseId} onChange={(event) => setHistoryCourseId(event.target.value)}>
             <option value="all">全部课程</option>
             {allCourses.map((course) => <option key={course.id} value={course.id}>{course.name}{isEndedCourse(course) ? "（结课）" : ""}</option>)}

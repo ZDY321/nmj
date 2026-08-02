@@ -1322,3 +1322,112 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
 }
 
 .lesson-feedback-toggle-track.is-on .lesson-feedback-toggle-knob { transform: translateX(13px); }
+
+/* 建立反馈：改为按钮 + 弹框，面板本身只保留标题行。 */
+.lesson-feedback-create-panel.is-compact { padding: 12px 16px; }
+
+.lesson-feedback-modal-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(6, 18, 38, 0.36);
+  backdrop-filter: blur(2px);
+}
+
+.lesson-feedback-modal {
+  width: 100%;
+  max-width: 420px;
+  overflow: hidden;
+  border: 1px solid #dbe4ef;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(6, 18, 38, 0.24);
+}
+
+.lesson-feedback-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 12px;
+}
+
+.lesson-feedback-modal-head h3 {
+  margin: 4px 0 0;
+  color: #061226;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.lesson-feedback-modal-close {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.lesson-feedback-modal-close:hover { background: #f3f7fb; color: #061226; }
+
+.lesson-feedback-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 18px 16px;
+}
+
+.lesson-feedback-modal-body > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #52667a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lesson-feedback-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid #e8eef6;
+  background: #f8fbff;
+}
+
+/* 反馈历史折叠：整栏收成一条窄边，只留可点的标题。 */
+.lesson-feedback-layout.is-history-collapsed { grid-template-columns: 44px minmax(0, 1fr); }
+
+.lesson-feedback-layout.is-history-collapsed .lesson-feedback-history > *:not(.lesson-feedback-history-title) {
+  display: none;
+}
+
+.lesson-feedback-layout.is-history-collapsed .lesson-feedback-history { padding: 8px 4px; }
+
+.lesson-feedback-layout.is-history-collapsed .lesson-feedback-history-title {
+  writing-mode: vertical-rl;
+  height: 100%;
+  margin-bottom: 0;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.lesson-feedback-layout.is-history-collapsed .lesson-feedback-history-title strong { display: none; }
+
+button.lesson-feedback-history-title {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.lesson-feedback-history-title:hover { color: #061226; }

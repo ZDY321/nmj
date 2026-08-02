@@ -846,6 +846,14 @@ export function LessonFeedbackEditor({
           <div
             className={cn("lesson-feedback-paper", isDrawingTool && "is-drawing", showsBrushCursor && "is-brush")}
             style={{ width: feedbackPageWidth, height: pageHeight, transform: `scale(${zoom})` }}
+            onFocusCapture={(event) => {
+              // 焦点落到评语格以外的控件时，清掉评语焦点与选区，
+              // 否则右侧面板会一直停留在上一次点过的学生评语上。
+              const target = event.target as HTMLElement;
+              if (target.classList?.contains("lesson-feedback-comment-cell")) return;
+              setFocusedCommentId("");
+              setTextSelection(null);
+            }}
             onClick={(event) => {
               // 拖动手柄松手会补一个 click，直接清空会让右侧样式栏闪退。
               if (suppressDeselectRef.current) {
