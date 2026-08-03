@@ -133,7 +133,8 @@ type ScheduleCalendarFocus = {
   } | null;
 };
 
-const syncCheckIntervalSeconds = 90;
+// 这里只控制云端版本轮询；编辑后的保存仍使用下面的短防抖间隔。
+const syncCheckIntervalSeconds = 5 * 60;
 const saveDebounceMs = 500;
 
 export function App() {

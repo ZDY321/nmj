@@ -195,11 +195,20 @@ export function LessonFeedbackWorkspace({
       if (document.hidden) return;
       void syncFromCloud();
     };
+    const flushWhenHidden = () => {
+      if (document.hidden) void flushActiveRecord();
+      else void syncFromCloud();
+    };
+    const flushBeforePageHide = () => {
+      void flushActiveRecord();
+    };
     window.addEventListener("focus", handleWake);
-    document.addEventListener("visibilitychange", handleWake);
+    window.addEventListener("pagehide", flushBeforePageHide);
+    document.addEventListener("visibilitychange", flushWhenHidden);
     return () => {
       window.removeEventListener("focus", handleWake);
-      document.removeEventListener("visibilitychange", handleWake);
+      window.removeEventListener("pagehide", flushBeforePageHide);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
     };
   }, [indexLoaded, password, token]);
 
