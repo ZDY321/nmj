@@ -1544,3 +1544,111 @@ button.lesson-feedback-history-title {
 }
 
 button.lesson-feedback-history-title:hover { color: #061226; }
+
+/* 移动端把桌面右侧样式栏移到纸张上方，并改成与批注栏一致的横向工具条。 */
+@media (max-width: 900px) {
+  .lesson-feedback-workspace {
+    grid-template-areas:
+      "annotation-tools"
+      "style-tools"
+      "paper";
+  }
+
+  .lesson-feedback-toolrail { grid-area: annotation-tools; }
+  .lesson-feedback-paper-viewport { grid-area: paper; }
+
+  .lesson-feedback-siderail {
+    grid-area: style-tools;
+    box-sizing: border-box;
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: none;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px;
+    border-top: 0;
+    border-right: 0;
+    border-bottom: 1px solid #dbe4ef;
+    border-left: 0;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .lesson-feedback-siderail.is-empty { display: none; }
+
+  .lesson-feedback-siderail > .lesson-feedback-boxstyle,
+  .lesson-feedback-siderail > .lesson-feedback-boxstyle-group {
+    width: max-content;
+    max-width: none;
+    flex: 0 0 auto;
+  }
+
+  .lesson-feedback-siderail .lesson-feedback-boxstyle,
+  .lesson-feedback-siderail > .lesson-feedback-boxstyle-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: inset 0 0 0 1px #e8eef6;
+  }
+
+  .lesson-feedback-siderail .lesson-feedback-boxstyle-group {
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+  }
+
+  .lesson-feedback-siderail .lesson-feedback-boxstyle-group + .lesson-feedback-boxstyle-group {
+    margin-left: 2px;
+    padding-top: 0;
+    padding-left: 8px;
+    border-top: 0;
+    border-left: 1px solid #e8eef6;
+  }
+
+  .lesson-feedback-siderail .lesson-feedback-boxstyle-title,
+  .lesson-feedback-siderail .lesson-feedback-boxstyle-label {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .lesson-feedback-siderail .lesson-feedback-segment,
+  .lesson-feedback-siderail .lesson-feedback-palette {
+    display: flex;
+    flex: 0 0 auto;
+  }
+
+  .lesson-feedback-siderail .lesson-feedback-segment-item {
+    min-width: 38px;
+    flex: 0 0 auto;
+    padding: 6px 8px;
+  }
+
+  .lesson-feedback-siderail .lesson-feedback-palette { gap: 3px; }
+
+  .lesson-feedback-siderail .lesson-feedback-dot {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    aspect-ratio: auto;
+    border-radius: 6px;
+  }
+
+  .lesson-feedback-siderail .lesson-feedback-wide-button,
+  .lesson-feedback-siderail .lesson-feedback-danger-button,
+  .lesson-feedback-siderail .lesson-feedback-toggle {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
