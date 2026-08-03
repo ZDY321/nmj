@@ -9,6 +9,8 @@ import {
   parseCampusFromFileName,
   parseExportYearFromFileName,
   parseScheduleCell,
+  scheduleImportMappingsForCourseIds,
+  scheduleImportMappingsForKeys,
   scheduleImportLimits,
   summarizeImportPreview,
   validateScheduleImportFiles,
@@ -105,6 +107,35 @@ describe("schedule import mapping campuses", () => {
       { [key]: "course_stale_workspace" },
       { [key]: "course_latest_cloud" }
     )).toEqual({ [key]: "course_latest_cloud" });
+  });
+
+  it("selects current import mappings without deleting historical rules", () => {
+    const julyKey = "east|july class||math|class";
+    const juneKey = "east|june class||math|class";
+    const allMappings = {
+      [juneKey]: "course_june",
+      [julyKey]: "course_july"
+    };
+
+    expect(scheduleImportMappingsForKeys(allMappings, new Set([julyKey]))).toEqual({
+      [julyKey]: "course_july"
+    });
+    expect(allMappings).toEqual({
+      [juneKey]: "course_june",
+      [julyKey]: "course_july"
+    });
+  });
+
+  it("reuses only mappings whose cloud course has lessons in the current month", () => {
+    const mappings = {
+      "east|current class||math|class": "course_july",
+      "east|historical class||math|class": "course_june"
+    };
+
+    expect(scheduleImportMappingsForCourseIds(mappings, new Set(["course_july"]))).toEqual({
+      "east|current class||math|class": "course_july"
+    });
+    expect(mappings).toHaveProperty("east|historical class||math|class", "course_june");
   });
 });
 

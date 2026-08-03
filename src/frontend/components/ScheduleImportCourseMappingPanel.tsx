@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { FileSpreadsheet, Link2, Search, Trash2, Wand2 } from "lucide-react";
+import { FileSpreadsheet, History, Link2, Search, Trash2, Wand2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,8 @@ import {
   importMappingKey,
   mergeScheduleImportMappings,
   parseScheduleWorkbookFiles,
+  scheduleImportMappingsForCourseIds,
+  scheduleImportMappingsForKeys,
   type ImportedScheduleLesson,
   type ImportPreviewLesson,
   type ScheduleImportMapping
@@ -48,6 +50,7 @@ export function ScheduleImportCourseMappingPanel({
   const [mapping, setMapping] = useState<ScheduleImportMapping>(externalMapping);
   const [search, setSearch] = useState("");
   const [courseSearch, setCourseSearch] = useState("");
+  const [savedRuleScope, setSavedRuleScope] = useState<"current" | "all">("current");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
@@ -66,28 +69,38 @@ export function ScheduleImportCourseMappingPanel({
     [rawLessons, vault.courseGroups, vault.lessons]
   );
   const courseOptionIds = useMemo(() => new Set(courseOptions.map((course) => course.id)), [courseOptions]);
-  const previewRows = useMemo(() => buildImportPreview(vault, rawLessons, mapping), [mapping, rawLessons, vault]);
-  const importedCourses = useMemo(() => buildImportedCourseRows(rawLessons, previewRows, mapping), [mapping, previewRows, rawLessons]);
+  const applicableMapping = useMemo(
+    () => importedMonths.length > 0 ? scheduleImportMappingsForCourseIds(mapping, courseOptionIds) : mapping,
+    [courseOptionIds, importedMonths.length, mapping]
+  );
+  const previewRows = useMemo(() => buildImportPreview(vault, rawLessons, applicableMapping), [applicableMapping, rawLessons, vault]);
+  const importedCourses = useMemo(
+    () => buildImportedCourseRows(rawLessons, previewRows, applicableMapping, importedMonths.length > 0 ? courseOptionIds : undefined),
+    [applicableMapping, courseOptionIds, importedMonths.length, previewRows, rawLessons]
+  );
   const importedMappingKeys = useMemo(() => importedCourses.reduce((keys, row) => {
     keys.add(row.key);
     keys.add(row.normalizedKey);
     return keys;
   }, new Set<string>()), [importedCourses]);
   const savedRules = useMemo(() => buildSavedMappingRules(vault, mapping, importedMappingKeys), [importedMappingKeys, mapping, vault]);
+  const currentMapping = useMemo(() => scheduleImportMappingsForKeys(mapping, importedMappingKeys), [importedMappingKeys, mapping]);
+  const currentSavedRules = useMemo(() => buildSavedMappingRules(vault, currentMapping, importedMappingKeys), [currentMapping, importedMappingKeys, vault]);
+  const scopedSavedRules = savedRuleScope === "all" ? savedRules : currentSavedRules;
   const visibleSavedRules = useMemo(
-    () => filterSavedMappingRules(vault, savedRules, search),
-    [savedRules, search, vault]
+    () => filterSavedMappingRules(vault, scopedSavedRules, search),
+    [scopedSavedRules, search, vault]
   );
   const filteredCourses = useMemo(
     () => filterMappingCourses(vault, courseOptions, courseSearch),
     [courseOptions, courseSearch, vault]
   );
   const visibleRows = useMemo(
-    () => filterImportedCourseRows(vault, importedCourses, mapping, search),
-    [importedCourses, mapping, search, vault]
+    () => filterImportedCourseRows(vault, importedCourses, applicableMapping, search),
+    [applicableMapping, importedCourses, search, vault]
   );
-  const mappedCount = importedCourses.filter((row) => courseIdForMappingRow(mapping, row)).length;
-  const suggestedCount = importedCourses.filter((row) => !courseIdForMappingRow(mapping, row) && row.suggestedCourseId).length;
+  const mappedCount = importedCourses.filter((row) => courseIdForMappingRow(applicableMapping, row)).length;
+  const suggestedCount = importedCourses.filter((row) => !courseIdForMappingRow(applicableMapping, row) && row.suggestedCourseId).length;
   const savedMappingCount = savedRules.length;
 
   async function handleFiles(files: FileList | null) {
@@ -97,6 +110,9 @@ export function ScheduleImportCourseMappingPanel({
     try {
       const parsed = await parseScheduleWorkbookFiles(files);
       setRawLessons(parsed);
+      setSavedRuleScope("current");
+      setSearch("");
+      setCourseSearch("");
       setMessage(parsed.length > 0 ? `已读取 ${new Set(parsed.map((lesson) => lesson.fileName)).size} 个文件、${new Set(parsed.map(importMappingKey)).size} 个教务课程名称。` : "没有从文件中解析到课程，请确认是否为校宝导出的 .xls/.xlsx。");
     } catch (error) {
       setRawLessons([]);
@@ -180,7 +196,7 @@ export function ScheduleImportCourseMappingPanel({
     const nextMapping = { ...mapping };
     let changed = 0;
     importedCourses.forEach((row) => {
-      if (courseIdForMappingRow(nextMapping, row) || !row.suggestedCourseId) return;
+      if (courseIdForMappingRow(applicableMapping, row) || !row.suggestedCourseId) return;
       setMappingValue(nextMapping, row, row.suggestedCourseId);
       changed += 1;
     });
@@ -275,7 +291,7 @@ export function ScheduleImportCourseMappingPanel({
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <label className="relative block">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-            <Input className="h-10 pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索已保存规则、教务课程名、校区、科目或已映射课程" />
+            <Input className="h-10 pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索当前视图中的规则、教务课程名、校区、科目或已映射课程" />
           </label>
           <label className="relative block">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
@@ -287,9 +303,33 @@ export function ScheduleImportCourseMappingPanel({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-sm font-extrabold text-[#061226]">已保存规则</div>
-              <div className="text-xs font-semibold leading-5 text-[#64748b]">不需要重新导入 Excel，也可以直接查看、修改或删除历史课程名称映射。</div>
+              <div className="text-xs font-semibold leading-5 text-[#64748b]">
+                {savedRuleScope === "current"
+                  ? "默认只显示本次 Excel 用到的规则，上个月及更早的规则继续保留但不占用当前列表。"
+                  : "这里集中查看、修改或删除全部历史课程名称映射。"}
+              </div>
             </div>
-            <Badge variant="secondary">显示 {visibleSavedRules.length}/{savedRules.length}</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-[8px] border border-[#cbd6e3] bg-[#f8fbff] p-1" role="group" aria-label="映射规则显示范围">
+                <button
+                  type="button"
+                  aria-pressed={savedRuleScope === "current"}
+                  onClick={() => setSavedRuleScope("current")}
+                  className={`rounded-[6px] px-3 py-1.5 text-xs font-extrabold transition-colors ${savedRuleScope === "current" ? "bg-[#061226] text-white" : "text-[#475569] hover:bg-white"}`}
+                >
+                  本次导入 {currentSavedRules.length}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={savedRuleScope === "all"}
+                  onClick={() => setSavedRuleScope("all")}
+                  className={`inline-flex items-center gap-1 rounded-[6px] px-3 py-1.5 text-xs font-extrabold transition-colors ${savedRuleScope === "all" ? "bg-[#061226] text-white" : "text-[#475569] hover:bg-white"}`}
+                >
+                  <History size={13} /> 全部历史 {savedRules.length}
+                </button>
+              </div>
+              <Badge variant="secondary">显示 {visibleSavedRules.length}/{scopedSavedRules.length}</Badge>
+            </div>
           </div>
           {visibleSavedRules.length > 0 && (
             <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
@@ -306,6 +346,9 @@ export function ScheduleImportCourseMappingPanel({
                           <span className="break-words text-base font-extrabold text-[#061226]">{rule.title || "未命名课程"}</span>
                           <Badge variant="secondary" className="text-[10px]">{rule.campusName || "未识别校区"}</Badge>
                           {rule.usedInCurrentImport && <Badge variant="sky" className="text-[10px]">本次导入</Badge>}
+                          {selectedCourse && importedMonths.length > 0 && !courseOptionIds.has(selectedCourse.id) && (
+                            <Badge variant="amber" className="text-[10px]">历史映射 · 本月无课</Badge>
+                          )}
                           {!selectedCourse && <Badge variant="amber" className="text-[10px]">课程档案已不存在</Badge>}
                         </div>
                         <div className="mt-2 text-xs font-semibold leading-5 text-[#64748b]">
@@ -344,14 +387,24 @@ export function ScheduleImportCourseMappingPanel({
               })}
             </div>
           )}
-          {savedRules.length === 0 && (
+          {savedRuleScope === "all" && savedRules.length === 0 && (
             <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
               暂无已保存课程名称映射规则。
             </div>
           )}
-          {savedRules.length > 0 && visibleSavedRules.length === 0 && (
+          {savedRuleScope === "current" && rawLessons.length === 0 && (
             <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
-              当前搜索条件下没有已保存规则。
+              导入新的 Excel 后，这里只显示本次需要复用的映射；旧规则可在“全部历史”中查看。
+            </div>
+          )}
+          {savedRuleScope === "current" && rawLessons.length > 0 && currentSavedRules.length === 0 && (
+            <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
+              本次导入没有可复用的历史映射，可以在下方为当前课程建立新映射。
+            </div>
+          )}
+          {scopedSavedRules.length > 0 && visibleSavedRules.length === 0 && (
+            <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">
+              当前搜索条件下没有映射规则。
             </div>
           )}
         </div>
@@ -365,7 +418,7 @@ export function ScheduleImportCourseMappingPanel({
             <Badge variant={mappedCount === importedCourses.length && importedCourses.length > 0 ? "sage" : "amber"}>本次已映射 {mappedCount}/{importedCourses.length}</Badge>
           </div>
           {visibleRows.map((row) => {
-            const selectedCourseId = courseIdForMappingRow(mapping, row) ?? "";
+            const selectedCourseId = courseIdForMappingRow(applicableMapping, row) ?? "";
             const selectedCourse = selectedCourseId ? vault.courseGroups.find((course) => course.id === selectedCourseId) : undefined;
             const suggestedCourse = !selectedCourseId && row.suggestedCourseId ? vault.courseGroups.find((course) => course.id === row.suggestedCourseId) : undefined;
             const selectCourses = selectedCourse && !filteredCourses.some((course) => course.id === selectedCourse.id)
@@ -522,7 +575,8 @@ function filterSavedMappingRules(vault: TeacherVault, rules: SavedCourseMappingR
 function buildImportedCourseRows(
   lessons: ImportedScheduleLesson[],
   previewRows: ImportPreviewLesson[],
-  mapping: ScheduleImportMapping
+  mapping: ScheduleImportMapping,
+  allowedSuggestedCourseIds?: ReadonlySet<string>
 ): ImportedCourseMappingRow[] {
   const rows = new Map<string, ImportedCourseMappingRow & { monthSet: Set<string> }>();
   lessons.forEach((lesson, index) => {
@@ -544,7 +598,11 @@ function buildImportedCourseRows(
     };
     current.count += 1;
     current.monthSet.add(lesson.date.slice(0, 7));
-    if (!courseIdForMappingRow(mapping, current) && preview?.matchedCourseId) {
+    if (
+      !courseIdForMappingRow(mapping, current) &&
+      preview?.matchedCourseId &&
+      (!allowedSuggestedCourseIds || allowedSuggestedCourseIds.has(preview.matchedCourseId))
+    ) {
       current.suggestedCourseId = preview.matchedCourseId;
     }
     rows.set(key, current);

@@ -27,6 +27,7 @@ import {
   downloadMergedScheduleWorkbook,
   mergeScheduleImportMappings,
   parseScheduleWorkbookFiles,
+  scheduleImportMappingsForCourseIds,
   summarizeImportPreview,
   type ImportedScheduleLesson,
   type ImportPreviewLesson,
@@ -74,6 +75,17 @@ import {
 } from "@/frontend/lib/scheduleImportReview";
 import type { ScheduleImportSaveOptions } from "@/frontend/lib/scheduleImportArchive";
 
+type ScheduleImportWorkspaceSnapshot = {
+  rawLessons: ImportedScheduleLesson[];
+  resolutions: ScheduleImportResolutionMap;
+  fileCampusOverrides: ScheduleImportMapping;
+  selectedMonth: string;
+  selectedDate: string;
+  campusFilter: string;
+  statusFilter: StatusFilter;
+  search: string;
+};
+
 export function ScheduleImportPanel({
   vault,
   onOpenLesson,
@@ -109,6 +121,7 @@ export function ScheduleImportPanel({
   const savedResolutions = useMemo(() => ({ ...cloudResolutions, ...savedWorkspace.resolutions }), [cloudResolutions, savedWorkspace.resolutions]);
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>(savedWorkspace.rawLessons);
   const [mapping, setMapping] = useState<ScheduleImportMapping>(savedMapping);
+  const [historicalMapping, setHistoricalMapping] = useState<ScheduleImportMapping | null>(null);
   const [resolutions, setResolutions] = useState<ScheduleImportResolutionMap>(savedResolutions);
   const [fileCampusOverrides, setFileCampusOverrides] = useState<ScheduleImportMapping>(savedWorkspace.fileCampusOverrides);
   const [message, setMessage] = useState("");
@@ -120,15 +133,31 @@ export function ScheduleImportPanel({
   const [search, setSearch] = useState(savedWorkspace.search);
   const [openedReviewId, setOpenedReviewId] = useState("");
   const calendarPanelRef = useRef<HTMLDivElement>(null);
+  const workspaceBeforeHistoryRef = useRef<ScheduleImportWorkspaceSnapshot | null>(null);
   const { confirm, dialog } = useConfirmDialog();
 
   const campusOptions = useMemo(
     () => sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId),
     [vault.campuses, vault.profile.homeCampusId]
   );
+  const rawLessonMonths = useMemo(
+    () => new Set(rawLessons.map((lesson) => lesson.date.slice(0, 7)).filter(Boolean)),
+    [rawLessons]
+  );
+  const currentMonthCourseIds = useMemo(
+    () => new Set(vault.lessons
+      .filter((lesson) => rawLessonMonths.has(lesson.date.slice(0, 7)))
+      .map((lesson) => lesson.courseGroupId)),
+    [rawLessonMonths, vault.lessons]
+  );
+  const currentMapping = useMemo(
+    () => rawLessonMonths.size > 0 ? scheduleImportMappingsForCourseIds(mapping, currentMonthCourseIds) : mapping,
+    [currentMonthCourseIds, mapping, rawLessonMonths.size]
+  );
+  const previewMapping = historicalMapping ?? currentMapping;
   const importedRows = useMemo(
-    () => buildImportPreview(vault, rawLessons, mapping, fileCampusOverrides),
-    [fileCampusOverrides, mapping, rawLessons, vault]
+    () => buildImportPreview(vault, rawLessons, previewMapping, fileCampusOverrides),
+    [fileCampusOverrides, previewMapping, rawLessons, vault]
   );
   const rows = useMemo(
     () => [...importedRows, ...buildLocalOnlyRows(vault, importedRows, rawLessons)],
@@ -261,6 +290,7 @@ export function ScheduleImportPanel({
   }, [displayMonth, selectedDate]);
 
   useEffect(() => {
+    if (openedReviewId) return;
     writeSavedMapping(storageScope, mapping);
     writeSavedWorkspace(storageScope, {
       rawLessons,
@@ -274,7 +304,7 @@ export function ScheduleImportPanel({
       search,
       savedAt: new Date().toISOString()
     });
-  }, [campusFilter, fileCampusOverrides, mapping, rawLessons, resolutions, search, selectedDate, selectedMonth, statusFilter, storageScope]);
+  }, [campusFilter, fileCampusOverrides, mapping, openedReviewId, rawLessons, resolutions, search, selectedDate, selectedMonth, statusFilter, storageScope]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -314,11 +344,15 @@ export function ScheduleImportPanel({
     matchingReviews: ScheduleImportReviewRecord[],
     mode: "append" | "inherit" | "fresh"
   ) {
+      const leavingHistoricalReview = Boolean(openedReviewId);
+      const sourceRawLessons = leavingHistoricalReview ? [] : rawLessons;
+      const sourceResolutions = leavingHistoricalReview ? {} : resolutions;
+      const sourceFileCampusOverrides = leavingHistoricalReview ? {} : fileCampusOverrides;
       const parsedFileNames = new Set(parsed.map((lesson) => lesson.fileName));
       const parsedMonths = new Set(parsed.map((lesson) => lesson.date.slice(0, 7)));
       const retainedRawLessons = mode === "append"
-        ? rawLessons.filter((lesson) => !parsedFileNames.has(lesson.fileName))
-        : rawLessons.filter((lesson) => !parsedMonths.has(lesson.date.slice(0, 7)));
+        ? sourceRawLessons.filter((lesson) => !parsedFileNames.has(lesson.fileName))
+        : sourceRawLessons.filter((lesson) => !parsedMonths.has(lesson.date.slice(0, 7)));
       const nextRawLessons = [...retainedRawLessons, ...parsed]
         .sort((a, b) => `${a.date} ${a.startTime} ${a.campusName}`.localeCompare(`${b.date} ${b.startTime} ${b.campusName}`));
       const inheritedMapping = mode === "inherit"
@@ -326,15 +360,15 @@ export function ScheduleImportPanel({
         : {};
       const nextMapping = { ...inheritedMapping, ...mapping };
       const inferredOverrides = mode === "inherit"
-        ? inheritSavedReviewCampusOverrides(parsed, matchingReviews, fileCampusOverrides)
-        : fileCampusOverrides;
+        ? inheritSavedReviewCampusOverrides(parsed, matchingReviews, sourceFileCampusOverrides)
+        : sourceFileCampusOverrides;
       const builtOverrides = buildDefaultCampusOverrides(vault, nextRawLessons, inferredOverrides);
       const activeFileNames = new Set(nextRawLessons.map((lesson) => lesson.fileName));
       const nextOverrides = Object.fromEntries(Object.entries(builtOverrides).filter(([fileName]) => activeFileNames.has(fileName)));
 
       let nextResolutions = mode === "append"
-        ? { ...resolutions }
-        : resolutionsWithoutMonths(resolutions, parsedMonths);
+        ? { ...sourceResolutions }
+        : resolutionsWithoutMonths(sourceResolutions, parsedMonths);
       let unchangedCount = 0;
       let inheritedCount = 0;
       let changedCount = 0;
@@ -360,9 +394,11 @@ export function ScheduleImportPanel({
 
       setRawLessons(nextRawLessons);
       setMapping(nextMapping);
+      setHistoricalMapping(null);
       setResolutions(nextResolutions);
       setFileCampusOverrides(nextOverrides);
       setOpenedReviewId("");
+      workspaceBeforeHistoryRef.current = null;
       setCampusFilter("all");
       setStatusFilter("all");
       setSearch("");
@@ -399,10 +435,18 @@ export function ScheduleImportPanel({
   }
 
   function updateFileCampus(fileName: string, campusId: string) {
+    if (openedReviewId) {
+      setMessage("历史对账正在以只读快照查看；退出历史查看后再修改校区。");
+      return;
+    }
     setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
   }
 
   function removeImportedFile(fileName: string) {
+    if (openedReviewId) {
+      setMessage("历史对账正在以只读快照查看；退出历史查看后再移除文件。");
+      return;
+    }
     const removedResolutionKeys = new Set(rows.filter((row) => row.fileName === fileName).map((row) => resolutionKey(row)));
     setRawLessons((current) => current.filter((lesson) => lesson.fileName !== fileName));
     setFileCampusOverrides((current) => {
@@ -415,6 +459,10 @@ export function ScheduleImportPanel({
   }
 
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) {
+    if (openedReviewId) {
+      setMessage("历史对账正在以只读快照查看，不会修改当前映射或处理标记。请先退出历史查看，或重新导入 Excel 继续对账。");
+      return;
+    }
     const key = resolutionKey(row);
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
     const nextSplitMergeExcludedLessonIds = combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, nextResolutions);
@@ -473,6 +521,10 @@ export function ScheduleImportPanel({
   }
 
   function requestSaveMapping(afterSave?: () => void) {
+    if (openedReviewId) {
+      setMessage("历史对账是只读快照，不能直接覆盖当前对账。请重新导入 Excel 继续本月对账后再保存。");
+      return;
+    }
     const overflowCount = savedScheduleImportReviewOverflowCount(savedReviews, displayMonth);
     if (overflowCount > 0) {
       const deletedReviews = savedReviews
@@ -512,8 +564,11 @@ export function ScheduleImportPanel({
       splitMergeExcludedLessonIds: previous.splitMergeExcludedLessonIds ?? [],
       updatedAt: new Date().toISOString()
     });
-    setOpenedReviewId((current) => current === review.id ? "" : current);
-    setMessage("已删除这个月保存的对账结果，课程映射和差异标注仍保留。");
+    if (openedReviewId === review.id) {
+      restoreWorkspaceAfterHistory("已删除这个月保存的对账结果，并返回之前的对账现场；当前课程映射没有改变。");
+      return;
+    }
+    setMessage("已删除这个月保存的对账结果，当前课程映射和差异标注仍保留。");
   }
 
   function focusCalendarPanel() {
@@ -528,21 +583,29 @@ export function ScheduleImportPanel({
       setMessage("这条保存的对账没有可恢复的教务 Excel 课节，无法导入到核对列表。");
       return;
     }
-    const nextMapping = { ...(review.mapping ?? {}) };
+    if (!workspaceBeforeHistoryRef.current) {
+      workspaceBeforeHistoryRef.current = {
+        rawLessons: [...rawLessons],
+        resolutions: { ...resolutions },
+        fileCampusOverrides: { ...fileCampusOverrides },
+        selectedMonth,
+        selectedDate,
+        campusFilter,
+        statusFilter,
+        search
+      };
+    }
+    const nextHistoricalMapping = { ...(review.mapping ?? {}) };
     const reviewResolutions = review.resolutions && Object.keys(review.resolutions).length > 0
       ? { ...review.resolutions }
       : resolutionsFromSavedReviewRows(review.rows);
-    const nextResolutions = {
-      ...resolutionsWithoutMonths(resolutions, [review.month]),
-      ...reviewResolutions
-    };
     const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
     const nextSelectedMonth = review.month || nextRawLessons[0]?.date.slice(0, 7) || todayIso().slice(0, 7);
     const nextSelectedDate = review.selectedDate || nextRawLessons[0]?.date || `${nextSelectedMonth}-01`;
 
     setRawLessons(nextRawLessons);
-    setMapping(nextMapping);
-    setResolutions(nextResolutions);
+    setHistoricalMapping(nextHistoricalMapping);
+    setResolutions(reviewResolutions);
     setFileCampusOverrides(nextFileCampusOverrides);
     setSelectedMonth(nextSelectedMonth);
     setSelectedDate(nextSelectedDate);
@@ -551,21 +614,24 @@ export function ScheduleImportPanel({
     setSearch("");
     setOpenedReviewId(review.id);
 
-    writeSavedMapping(storageScope, nextMapping);
-    writeSavedWorkspace(storageScope, {
-      rawLessons: nextRawLessons,
-      mapping: nextMapping,
-      resolutions: nextResolutions,
-      fileCampusOverrides: nextFileCampusOverrides,
-      selectedMonth: nextSelectedMonth,
-      selectedDate: nextSelectedDate,
-      campusFilter: "all",
-      statusFilter: "all",
-      search: "",
-      savedAt: new Date().toISOString()
-    });
-    setMessage(`正在下方日历中查看「${savedReviewTitle(review)}」，已切换到 ${nextSelectedMonth}。`);
+    setMessage(`正在只读查看「${savedReviewTitle(review)}」的历史快照，已切换到 ${nextSelectedMonth}；当时的映射不会恢复到当前规则。`);
     focusCalendarPanel();
+  }
+
+  function restoreWorkspaceAfterHistory(nextMessage = "已退出历史查看，并返回之前的对账现场；当前课程映射没有改变。") {
+    const previous = workspaceBeforeHistoryRef.current ?? readSavedWorkspace(storageScope);
+    setRawLessons([...previous.rawLessons]);
+    setResolutions({ ...previous.resolutions });
+    setFileCampusOverrides({ ...previous.fileCampusOverrides });
+    setSelectedMonth(previous.selectedMonth || todayIso().slice(0, 7));
+    setSelectedDate(previous.selectedDate || todayIso());
+    setCampusFilter(previous.campusFilter || "all");
+    setStatusFilter(previous.statusFilter || "all");
+    setSearch(previous.search || "");
+    setHistoricalMapping(null);
+    setOpenedReviewId("");
+    workspaceBeforeHistoryRef.current = null;
+    setMessage(nextMessage);
   }
 
   function openSavedReviewInCalendar(review: ScheduleImportReviewRecord) {
@@ -581,15 +647,20 @@ export function ScheduleImportPanel({
       return;
     }
 
+    if (openedReviewId) {
+      loadSavedReviewIntoWorkspace(review);
+      return;
+    }
+
     if (rawLessons.length === 0) {
       loadSavedReviewIntoWorkspace(review);
       return;
     }
 
     confirm({
-      title: "打开保存对账并替换当前日历？",
-      description: `下方日历当前有 ${rawLessons.length} 节教务对账数据。打开「${savedReviewTitle(review)}」会替换当前对账现场，并自动切换到 ${review.month}；已保存的历史记录不会删除。`,
-      confirmLabel: "替换并打开",
+      title: "临时查看保存的对账？",
+      description: `下方日历当前有 ${rawLessons.length} 节教务对账数据。打开「${savedReviewTitle(review)}」后会临时切换到 ${review.month} 的只读快照；退出历史查看时会恢复当前现场，历史映射不会写回当前规则。`,
+      confirmLabel: "打开历史快照",
       secondaryLabel: "保存当前后打开",
       cancelLabel: "取消",
       onSecondary: () => requestSaveMapping(() => loadSavedReviewIntoWorkspace(review)),
@@ -598,7 +669,12 @@ export function ScheduleImportPanel({
   }
 
   function clearImport() {
+    if (openedReviewId) {
+      restoreWorkspaceAfterHistory();
+      return;
+    }
     setOpenedReviewId("");
+    setHistoricalMapping(null);
     setRawLessons([]);
     setFileCampusOverrides({});
     setResolutions({});
@@ -646,6 +722,7 @@ export function ScheduleImportPanel({
           reviewTitle={savedReviewTitle}
           reviewNeedsAttention={reviewNeedsAttentionForDisplay}
           onOpenReview={openSavedReviewInCalendar}
+          onCloseReview={() => restoreWorkspaceAfterHistory()}
           onDeleteReview={(review) => {
             confirm({
               title: "删除保存的对账结果？",

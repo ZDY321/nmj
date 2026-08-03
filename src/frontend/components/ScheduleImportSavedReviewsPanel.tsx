@@ -1,4 +1,4 @@
-import { CalendarDays, Eye, Trash2 } from "lucide-react";
+import { CalendarDays, Eye, Trash2, X } from "lucide-react";
 import type { ScheduleImportReviewRecord } from "@/shared/types";
 import { savedScheduleImportReviewLimit } from "@/frontend/lib/scheduleImportReview";
 
@@ -8,6 +8,7 @@ export function ScheduleImportSavedReviewsPanel({
   reviewTitle,
   reviewNeedsAttention,
   onOpenReview,
+  onCloseReview,
   onDeleteReview
 }: {
   reviews: ScheduleImportReviewRecord[];
@@ -15,6 +16,7 @@ export function ScheduleImportSavedReviewsPanel({
   reviewTitle: (review: ScheduleImportReviewRecord) => string;
   reviewNeedsAttention: (review: ScheduleImportReviewRecord) => number;
   onOpenReview: (review: ScheduleImportReviewRecord) => void;
+  onCloseReview: () => void;
   onDeleteReview: (review: ScheduleImportReviewRecord) => void;
 }) {
   if (reviews.length === 0) return null;
@@ -27,9 +29,19 @@ export function ScheduleImportSavedReviewsPanel({
             <CalendarDays size={16} className="text-[#1557c2]" />
             已保存对账
             {openedReviewId && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#1557c2] px-2 py-0.5 text-[10px] font-extrabold text-white">
-                <Eye size={11} /> 正在查看历史记录
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#1557c2] px-2 py-0.5 text-[10px] font-extrabold text-white">
+                  <Eye size={11} /> 正在查看历史记录
+                </span>
+                <button
+                  type="button"
+                  onClick={onCloseReview}
+                  title="退出历史查看并返回之前的对账现场"
+                  className="inline-flex items-center gap-1 rounded-[6px] border border-[#cbd6e3] bg-white px-2 py-1 text-[10px] font-extrabold text-[#25324a] hover:bg-[#f8fbff]"
+                >
+                  <X size={11} /> 退出历史查看
+                </button>
+              </>
             )}
           </div>
           <div className="mt-1 text-xs font-semibold text-[#64748b]">每月一份，最多保留最近 {savedScheduleImportReviewLimit} 个月，当前 {reviews.length} 个月。</div>

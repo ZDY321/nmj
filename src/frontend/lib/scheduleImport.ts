@@ -181,6 +181,20 @@ export function mergeScheduleImportMappings(vault: TeacherVault, ...sources: Arr
   );
 }
 
+export function scheduleImportMappingsForKeys(
+  mapping: ScheduleImportMapping,
+  keys: ReadonlySet<string>
+): ScheduleImportMapping {
+  return Object.fromEntries(Object.entries(mapping).filter(([key, courseId]) => Boolean(courseId) && keys.has(key)));
+}
+
+export function scheduleImportMappingsForCourseIds(
+  mapping: ScheduleImportMapping,
+  courseIds: ReadonlySet<string>
+): ScheduleImportMapping {
+  return Object.fromEntries(Object.entries(mapping).filter(([, courseId]) => Boolean(courseId) && courseIds.has(courseId)));
+}
+
 export function parseScheduleCell(
   cellText: unknown,
   context: { fileName: string; campusName: string; year: number }
