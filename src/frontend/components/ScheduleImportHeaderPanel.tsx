@@ -125,8 +125,12 @@ export function ScheduleImportHeaderPanel({
             onClick={() => setImportSetupExpanded((current) => !current)}
             className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
           >
-            <span className="flex min-w-0 items-center gap-2 text-sm font-extrabold text-[#061226]">
-              <Upload size={16} className="text-[#1557c2]" /> 教务 Excel 文件与对应校区
+            <span className="flex min-w-0 items-start gap-2">
+              <Upload size={16} className="mt-0.5 shrink-0 text-[#1557c2]" />
+              <span className="min-w-0">
+                <span className="block text-sm font-extrabold text-[#061226]">教务 Excel 文件与对应校区</span>
+                <span className="block text-[11px] font-semibold leading-4 text-[#64748b]">新课程先做名称映射，再导入对账；已有映射可直接导入。</span>
+              </span>
             </span>
             <span className="flex shrink-0 items-center gap-2">
               <Badge variant="secondary" className="text-[10px]">{fileSummaries.length} 个文件</Badge>
