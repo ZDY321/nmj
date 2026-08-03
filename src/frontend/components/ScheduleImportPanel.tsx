@@ -11,7 +11,6 @@ import type {
   ScheduleImportResolution,
   ScheduleImportResolutionMap,
   ScheduleImportReviewRecord,
-  ScheduleImportSavedRow,
   ScheduleImportVaultState,
   TeacherVault
 } from "@/shared/types";
@@ -60,6 +59,8 @@ import {
   resolutionNeedsAttention,
   resolutionStatusLabel,
   savedReviewEffectiveCounts,
+  savedReviewResolutionMap,
+  savedReviewRowsAsPreview,
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
   savedReviewTitle,
@@ -122,6 +123,7 @@ export function ScheduleImportPanel({
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>(savedWorkspace.rawLessons);
   const [mapping, setMapping] = useState<ScheduleImportMapping>(savedMapping);
   const [historicalMapping, setHistoricalMapping] = useState<ScheduleImportMapping | null>(null);
+  const [historicalRows, setHistoricalRows] = useState<ImportPreviewLesson[] | null>(null);
   const [resolutions, setResolutions] = useState<ScheduleImportResolutionMap>(savedResolutions);
   const [fileCampusOverrides, setFileCampusOverrides] = useState<ScheduleImportMapping>(savedWorkspace.fileCampusOverrides);
   const [message, setMessage] = useState("");
@@ -156,12 +158,12 @@ export function ScheduleImportPanel({
   );
   const previewMapping = historicalMapping ?? currentMapping;
   const importedRows = useMemo(
-    () => buildImportPreview(vault, rawLessons, previewMapping, fileCampusOverrides),
-    [fileCampusOverrides, previewMapping, rawLessons, vault]
+    () => historicalRows ?? buildImportPreview(vault, rawLessons, previewMapping, fileCampusOverrides),
+    [fileCampusOverrides, historicalRows, previewMapping, rawLessons, vault]
   );
   const rows = useMemo(
-    () => [...importedRows, ...buildLocalOnlyRows(vault, importedRows, rawLessons)],
-    [importedRows, rawLessons, vault]
+    () => historicalRows ?? [...importedRows, ...buildLocalOnlyRows(vault, importedRows, rawLessons)],
+    [historicalRows, importedRows, rawLessons, vault]
   );
   const linkedSystemLessonSources = useMemo(() => linkedSystemLessonSourcesFromRows(rows, resolutions), [resolutions, rows]);
   const linkedSystemLessonIds = useMemo(() => linkedSystemLessonIdsFromRows(rows, resolutions), [resolutions, rows]);
@@ -222,8 +224,12 @@ export function ScheduleImportPanel({
     [linkedSystemLessonIds, resolutions, rows]
   );
   const importedLessonStats = useMemo(
-    () => summarizeScheduleImportImportedLessons(vault, importedRows, resolutions),
-    [importedRows, resolutions, vault]
+    () => summarizeScheduleImportImportedLessons(
+      vault,
+      historicalRows ? importedRows.filter((row) => row.fileName !== "云端课表" && !row.id.startsWith("local-only-")) : importedRows,
+      resolutions
+    ),
+    [historicalRows, importedRows, resolutions, vault]
   );
   const systemLessonStats = useMemo(() => {
     return summarizeScheduleImportSystemLessons(vault, rows, resolutions, splitMergeExcludedLessonIds);
@@ -395,6 +401,7 @@ export function ScheduleImportPanel({
       setRawLessons(nextRawLessons);
       setMapping(nextMapping);
       setHistoricalMapping(null);
+      setHistoricalRows(null);
       setResolutions(nextResolutions);
       setFileCampusOverrides(nextOverrides);
       setOpenedReviewId("");
@@ -509,7 +516,10 @@ export function ScheduleImportPanel({
       splitMergeExcludedLessonIds
     });
     onSaveScheduleImport?.(nextScheduleImport);
-    setOpenedReviewId(nextScheduleImport.reviews[0]?.id ?? "");
+    setOpenedReviewId("");
+    setHistoricalMapping(null);
+    setHistoricalRows(null);
+    workspaceBeforeHistoryRef.current = null;
     setMessage(
       savedMappingOk && savedWorkspaceOk && onSaveScheduleImport
         ? `${displayMonth} 对账结果已更新；课程映射和逐课处理已保存到云端加密档案。`
@@ -596,15 +606,14 @@ export function ScheduleImportPanel({
       };
     }
     const nextHistoricalMapping = { ...(review.mapping ?? {}) };
-    const reviewResolutions = review.resolutions && Object.keys(review.resolutions).length > 0
-      ? { ...review.resolutions }
-      : resolutionsFromSavedReviewRows(review.rows);
+    const reviewResolutions = savedReviewResolutionMap(review);
     const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
     const nextSelectedMonth = review.month || nextRawLessons[0]?.date.slice(0, 7) || todayIso().slice(0, 7);
     const nextSelectedDate = review.selectedDate || nextRawLessons[0]?.date || `${nextSelectedMonth}-01`;
 
     setRawLessons(nextRawLessons);
     setHistoricalMapping(nextHistoricalMapping);
+    setHistoricalRows(savedReviewRowsAsPreview(review.rows));
     setResolutions(reviewResolutions);
     setFileCampusOverrides(nextFileCampusOverrides);
     setSelectedMonth(nextSelectedMonth);
@@ -629,6 +638,7 @@ export function ScheduleImportPanel({
     setStatusFilter(previous.statusFilter || "all");
     setSearch(previous.search || "");
     setHistoricalMapping(null);
+    setHistoricalRows(null);
     setOpenedReviewId("");
     workspaceBeforeHistoryRef.current = null;
     setMessage(nextMessage);
@@ -675,6 +685,7 @@ export function ScheduleImportPanel({
     }
     setOpenedReviewId("");
     setHistoricalMapping(null);
+    setHistoricalRows(null);
     setRawLessons([]);
     setFileCampusOverrides({});
     setResolutions({});
@@ -948,9 +959,7 @@ function liveSavedReviewEffectiveCounts(vault: TeacherVault, review: ScheduleImp
   if (rawLessons.length === 0) return savedReviewEffectiveCounts(review);
   const previewRows = buildImportPreview(vault, rawLessons, review.mapping ?? {}, review.fileCampusOverrides ?? {});
   const rows = [...previewRows, ...buildLocalOnlyRows(vault, previewRows, rawLessons)];
-  const resolutions = review.resolutions && Object.keys(review.resolutions).length > 0
-    ? review.resolutions
-    : resolutionsFromSavedReviewRows(review.rows);
+  const resolutions = savedReviewResolutionMap(review);
   const linkedSystemLessonIds = linkedSystemLessonIdsFromRows(rows, resolutions);
   const effectiveRows = rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds));
   const statisticRows = effectiveRows.filter((row) => {
@@ -972,28 +981,4 @@ function liveSavedReviewEffectiveCounts(vault: TeacherVault, review: ScheduleImp
 
 function needsAttentionFromSavedReviewCounts(counts: ReturnType<typeof savedReviewEffectiveCounts>): number {
   return counts.attendanceMismatch + counts.timeMismatch + counts.courseMismatch + counts.systemMissing + counts.importMissing + counts.needsMapping + counts.recheckRequired;
-}
-
-function resolutionsFromSavedReviewRows(rows: ScheduleImportSavedRow[]): ScheduleImportResolutionMap {
-  return Object.fromEntries(rows.flatMap((row) => {
-    if (!row.resolutionStatus || row.resolutionStatus === "unreviewed") return [];
-    return [[resolutionKeyForSavedRow(row), {
-      status: row.resolutionStatus,
-      note: row.resolutionNote,
-      linkedSystemLessonIds: row.linkedSystemLessonIds,
-      updatedAt: row.resolutionUpdatedAt ?? new Date().toISOString()
-    } satisfies ScheduleImportResolution]];
-  }));
-}
-
-function resolutionKeyForSavedRow(row: ScheduleImportSavedRow): string {
-  return [
-    row.systemLessonId || row.id,
-    row.fileName,
-    row.date,
-    row.startTime,
-    row.endTime,
-    row.matchedCourseId ?? "",
-    row.title
-  ].join("|");
 }

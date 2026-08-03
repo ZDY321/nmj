@@ -1,5 +1,6 @@
 import type {
   Lesson,
+  ScheduleImportResolution,
   ScheduleImportResolutionMap,
   ScheduleImportReviewRecord,
   ScheduleImportVaultState,
@@ -49,6 +50,44 @@ export function openedScheduleImportReviewForMonths(
   if (!openedReviewId) return undefined;
   const openedReview = reviews.find((review) => review.id === openedReviewId);
   return openedReview && importedMonths.has(openedReview.month) ? openedReview : undefined;
+}
+
+export function savedReviewRowsAsPreview(rows: ScheduleImportReviewRecord["rows"]): ImportPreviewLesson[] {
+  return rows.map((row) => ({
+    ...row,
+    rawText: row.rawText ?? "",
+    warnings: row.warnings ?? [],
+    issues: row.issues ?? [],
+    status: row.status as ImportPreviewLesson["status"]
+  }));
+}
+
+export function savedReviewResolutionMap(review: ScheduleImportReviewRecord): ScheduleImportResolutionMap {
+  const embeddedResolutions = Object.fromEntries(review.rows.flatMap((row) => {
+    if (!row.resolutionStatus && !row.resolutionNote?.trim() && !row.linkedSystemLessonIds?.length) return [];
+    return [[savedReviewRowResolutionKey(row), {
+      status: row.resolutionStatus ?? "unreviewed",
+      note: row.resolutionNote,
+      linkedSystemLessonIds: row.linkedSystemLessonIds,
+      updatedAt: row.resolutionUpdatedAt ?? review.savedAt
+    } satisfies ScheduleImportResolution]];
+  }));
+  return {
+    ...embeddedResolutions,
+    ...(review.resolutions ?? {})
+  };
+}
+
+function savedReviewRowResolutionKey(row: ScheduleImportReviewRecord["rows"][number]): string {
+  return [
+    row.systemLessonId || row.id,
+    row.fileName,
+    row.date,
+    row.startTime,
+    row.endTime,
+    row.matchedCourseId ?? "",
+    row.title
+  ].join("|");
 }
 
 export function buildNextScheduleImportState(

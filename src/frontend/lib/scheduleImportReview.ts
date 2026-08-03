@@ -52,6 +52,8 @@ export {
   formatSavedReviewCount,
   formatSavedReviewNumber,
   savedReviewEffectiveCounts,
+  savedReviewResolutionMap,
+  savedReviewRowsAsPreview,
   savedReviewNeedsAttention,
   savedReviewTitle,
   latestScheduleImportReviewsByMonth,

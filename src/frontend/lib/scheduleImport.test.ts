@@ -21,6 +21,8 @@ import {
   buildNextScheduleImportState,
   openedScheduleImportReviewForMonths,
   savedReviewEffectiveCounts,
+  savedReviewResolutionMap,
+  savedReviewRowsAsPreview,
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
   summarizeScheduleImportSystemLessons
@@ -596,6 +598,53 @@ describe("schedule import file limits", () => {
 });
 
 describe("schedule import review records", () => {
+  it("restores saved row snapshots and fills gaps in a partial top-level resolution map", () => {
+    const firstRow = makePreviewRow({
+      id: "saved_unmapped",
+      matchedCourseId: undefined,
+      systemLessonId: undefined,
+      status: "needs_mapping",
+      issues: ["课程未匹配"]
+    });
+    const secondRow = makePreviewRow({
+      id: "saved_time_mismatch",
+      matchedCourseId: undefined,
+      systemLessonId: undefined,
+      startTime: "13:00",
+      endTime: "14:50",
+      status: "time_mismatch",
+      issues: ["时间不一致"]
+    });
+    const review = makeSavedReview("saved_snapshot", "2026-06-22T04:00:00.000Z");
+    review.rows = [
+      {
+        ...firstRow,
+        resolutionStatus: "accepted",
+        resolutionNote: "行内确认无误",
+        resolutionUpdatedAt: "2026-06-22T03:00:00.000Z"
+      },
+      {
+        ...secondRow,
+        resolutionStatus: "fixed",
+        resolutionNote: "行内已修正",
+        resolutionUpdatedAt: "2026-06-22T03:10:00.000Z"
+      }
+    ];
+    review.resolutions = {
+      [resolutionKey(firstRow)]: {
+        status: "accepted",
+        note: "顶层确认无误",
+        updatedAt: "2026-06-22T03:20:00.000Z"
+      }
+    };
+
+    expect(savedReviewRowsAsPreview(review.rows).map((row) => row.status)).toEqual(["needs_mapping", "time_mismatch"]);
+    expect(savedReviewResolutionMap(review)).toMatchObject({
+      [resolutionKey(firstRow)]: { status: "accepted", note: "顶层确认无误" },
+      [resolutionKey(secondRow)]: { status: "fixed", note: "行内已修正" }
+    });
+  });
+
   it("only offers saved-review inheritance for the history record currently opened in the workspace", () => {
     const juneReview = makeSavedReview("review_june", "2026-06-30T00:00:00.000Z", "2026-06");
     const julyReview = makeSavedReview("review_july", "2026-07-31T00:00:00.000Z", "2026-07");
