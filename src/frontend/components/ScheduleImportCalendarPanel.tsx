@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import type { ScheduleImportResolution, ScheduleImportResolutionMap, TeacherVault } from "@/shared/types";
 import type { ImportMatchStatus, ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
 import { courseName as localCourseName } from "@/frontend/lib/helpers";
-import { resolutionExcludesImportStats } from "@/frontend/lib/scheduleImportReview";
+import { resolutionExcludesImportStats, resolutionNeedsAttention } from "@/frontend/lib/scheduleImportReview";
 
 export function ScheduleImportCalendarPanel({
   vault,
@@ -43,10 +43,12 @@ export function ScheduleImportCalendarPanel({
 }) {
   const rowHasMissingLessonFee = (row: ImportPreviewLesson): boolean =>
     resolutions[resolutionKey(row)]?.status === "missing_lesson_fee";
-  const rowHasProblem = (row: ImportPreviewLesson): boolean =>
-    effectiveRowStatus(row, resolutions[resolutionKey(row)], linkedSystemLessonIds) !== "matched" ||
-    rowHasMissingLessonFee(row) ||
-    attentionLabelMarksProblem(rowAttentionLabel?.(row));
+  const rowHasProblem = (row: ImportPreviewLesson): boolean => {
+    const resolution = resolutions[resolutionKey(row)];
+    return effectiveRowStatus(row, resolution, linkedSystemLessonIds) !== "matched" ||
+      resolutionNeedsAttention(resolution?.status) ||
+      attentionLabelMarksProblem(rowAttentionLabel?.(row));
+  };
   const selectedDateProblemCount = selectedDateRows.filter(rowHasProblem).length;
   const selectedDateMissingFeeCount = selectedDateRows.filter(rowHasMissingLessonFee).length;
   const selectedDateNotDueCount = selectedDateRows.filter((row) => resolutionExcludesImportStats(resolutions[resolutionKey(row)]?.status)).length;
@@ -114,12 +116,13 @@ export function ScheduleImportCalendarPanel({
                   {dayRows.slice(0, 3).map((row) => {
                     const resolution = resolutions[resolutionKey(row)];
                     const rowReviewed = isReviewedResolution(resolution);
+                    const rowNeedsAttention = resolutionNeedsAttention(resolution?.status);
                     const rowStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
                     const attentionLabel = rowAttentionLabel?.(row);
                     const attentionIsProblem = attentionLabelMarksProblem(attentionLabel);
-                    const rowPrefix = resolutionExcludesImportStats(resolution?.status) ? "未到日期 · " : rowReviewed ? rowStatus === "matched" ? "已确认 · " : "已标 · " : "";
+                    const rowPrefix = rowNeedsAttention ? "需复核 · " : resolutionExcludesImportStats(resolution?.status) ? "未到日期 · " : rowReviewed ? rowStatus === "matched" ? "已确认 · " : "已标 · " : "";
                     return (
-                      <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${attentionLabel ? attentionLabelClass(attentionIsProblem) : statusPillClass(rowStatus, rowReviewed && rowStatus !== "matched")}`}>
+                      <span key={row.id} className={`block truncate rounded-[8px] px-2 py-1 text-[10px] font-bold ${rowNeedsAttention ? "bg-[#fff3e4] text-[#9a3412] ring-1 ring-[#fdba74]" : attentionLabel ? attentionLabelClass(attentionIsProblem) : statusPillClass(rowStatus, rowReviewed && rowStatus !== "matched")}`}>
                         {attentionLabel ? `${attentionLabel} · ` : rowPrefix}{row.startTime} {row.status === "import_missing" ? "云端" : "教务"} · {row.matchedCourseId ? localCourseName(vault, row.matchedCourseId) : row.title}
                       </span>
                     );

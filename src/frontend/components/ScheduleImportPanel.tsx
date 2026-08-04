@@ -61,7 +61,6 @@ import {
   resolutionStatusLabel,
   savedReviewEffectiveCounts,
   savedReviewResolutionMap,
-  savedReviewRowsAsPreview,
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
   savedReviewTitle,
@@ -606,12 +605,25 @@ export function ScheduleImportPanel({
     });
   }
 
-  function loadSavedReviewIntoWorkspace(review: ScheduleImportReviewRecord) {
+  function currentSavedReviewComparison(review: ScheduleImportReviewRecord) {
     const nextRawLessons = rawLessonsFromSavedReview(review);
-    if (nextRawLessons.length === 0) {
+    if (nextRawLessons.length === 0) return null;
+    const nextMapping = mergeScheduleImportMappings(vault, review.mapping ?? {}, mapping);
+    const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
+    const nextImportedRows = buildImportPreview(vault, nextRawLessons, nextMapping, nextFileCampusOverrides);
+    const nextRows = [...nextImportedRows, ...buildLocalOnlyRows(vault, nextImportedRows, nextRawLessons)];
+    const baseResolutions = resolutionsWithoutMonths(cloudResolutions, [review.month]);
+    const merge = mergeSavedReviewResolutions(review, nextRows, baseResolutions);
+    return { nextRawLessons, nextMapping, nextFileCampusOverrides, nextRows, merge };
+  }
+
+  function loadSavedReviewIntoWorkspace(review: ScheduleImportReviewRecord) {
+    const comparison = currentSavedReviewComparison(review);
+    if (!comparison) {
       setMessage("这条保存的对账没有可恢复的教务 Excel 课节，无法导入到核对列表。");
       return;
     }
+    const { nextRawLessons, nextMapping, nextFileCampusOverrides, nextRows, merge } = comparison;
     if (!workspaceBeforeHistoryRef.current) {
       workspaceBeforeHistoryRef.current = {
         rawLessons: [...rawLessons],
@@ -625,16 +637,13 @@ export function ScheduleImportPanel({
         calendarVisible
       };
     }
-    const nextHistoricalMapping = { ...(review.mapping ?? {}) };
-    const reviewResolutions = savedReviewResolutionMap(review);
-    const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
     const nextSelectedMonth = review.month || nextRawLessons[0]?.date.slice(0, 7) || todayIso().slice(0, 7);
     const nextSelectedDate = review.selectedDate || nextRawLessons[0]?.date || `${nextSelectedMonth}-01`;
 
     setRawLessons(nextRawLessons);
-    setHistoricalMapping(nextHistoricalMapping);
-    setHistoricalRows(savedReviewRowsAsPreview(review.rows));
-    setResolutions(reviewResolutions);
+    setHistoricalMapping(nextMapping);
+    setHistoricalRows(nextRows);
+    setResolutions(merge.resolutions);
     setFileCampusOverrides(nextFileCampusOverrides);
     setSelectedMonth(nextSelectedMonth);
     setSelectedDate(nextSelectedDate);
@@ -645,7 +654,7 @@ export function ScheduleImportPanel({
     setEditingReviewId("");
     setCalendarVisible(true);
 
-    setMessage(`正在只读查看「${savedReviewTitle(review)}」的历史快照，已切换到 ${nextSelectedMonth}；当时的映射不会恢复到当前规则。`);
+    setMessage(`正在只读查看「${savedReviewTitle(review)}」；与当前云端课表比较后，未变化 ${merge.unchangedCount} 节，变化 ${merge.changedCount} 节需复核。历史保存记录不会被修改。`);
     focusCalendarPanel();
   }
 
@@ -670,11 +679,12 @@ export function ScheduleImportPanel({
   }
 
   function editSavedReview(review: ScheduleImportReviewRecord) {
-    const nextRawLessons = rawLessonsFromSavedReview(review);
-    if (nextRawLessons.length === 0) {
+    const comparison = currentSavedReviewComparison(review);
+    if (!comparison) {
       setMessage("这条保存的对账没有可恢复的教务 Excel 课节，无法继续编辑。");
       return;
     }
+    const { nextRawLessons, nextMapping, nextFileCampusOverrides, nextRows, merge } = comparison;
     if (!workspaceBeforeHistoryRef.current) {
       workspaceBeforeHistoryRef.current = {
         rawLessons: [...rawLessons],
@@ -688,12 +698,6 @@ export function ScheduleImportPanel({
         calendarVisible
       };
     }
-    const nextMapping = mergeScheduleImportMappings(vault, review.mapping ?? {}, mapping);
-    const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
-    const nextImportedRows = buildImportPreview(vault, nextRawLessons, nextMapping, nextFileCampusOverrides);
-    const nextRows = [...nextImportedRows, ...buildLocalOnlyRows(vault, nextImportedRows, nextRawLessons)];
-    const baseResolutions = resolutionsWithoutMonths(cloudResolutions, [review.month]);
-    const merge = mergeSavedReviewResolutions(review, nextRows, baseResolutions);
     const nextSelectedMonth = review.month || nextRawLessons[0]?.date.slice(0, 7) || todayIso().slice(0, 7);
 
     setRawLessons(nextRawLessons);

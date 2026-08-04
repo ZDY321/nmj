@@ -16,6 +16,7 @@ import {
   linkedLessonsForResolution,
   quickResolutionActionsForRow,
   resolutionExcludesImportStats,
+  resolutionNeedsAttention,
   resolutionStatusLabel,
   resolutionStatuses,
   splitMergeCandidateLessons,
@@ -55,6 +56,7 @@ export function ScheduleImportReconciliationRow({
   const systemTimeLabel = systemLesson ? lessonTimeRangeBillingLabel(vault, systemLesson) : "";
   const systemAttendanceNoteText = systemLesson ? lessonAttendanceNoteText(vault, systemLesson) : "";
   const resolutionStatus = resolution?.status ?? "unreviewed";
+  const needsAttention = resolutionNeedsAttention(resolutionStatus);
   const baseReviewed = isReviewedResolution(resolution);
   const excludedFromImportStats = resolutionExcludesImportStats(resolutionStatus);
   const baseDisplayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
@@ -110,11 +112,11 @@ export function ScheduleImportReconciliationRow({
   }, [canCollapseDetails]);
 
   return (
-    <div className={`rounded-[14px] border p-3 ${statusSurfaceClass(displayStatus, reviewed && !resolvedAsMatched)}`}>
+    <div className={`rounded-[14px] border p-3 ${needsAttention ? "border-[#fdba74] bg-[#fff7ed] ring-1 ring-[#fed7aa]" : statusSurfaceClass(displayStatus, reviewed && !resolvedAsMatched)}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge variant={statusVariant(displayStatus)}>{statusLabel(displayStatus)}</Badge>
+            <Badge variant={needsAttention ? "amber" : statusVariant(displayStatus)}>{needsAttention ? "需复核" : statusLabel(displayStatus)}</Badge>
             {hasArrears && <Badge variant="destructive">已欠费</Badge>}
             {hasNoShow && <Badge variant="amber">缺勤未到</Badge>}
             <Badge variant="secondary">{row.date}</Badge>
@@ -125,7 +127,7 @@ export function ScheduleImportReconciliationRow({
               </Badge>
             )}
             {systemLesson?.status === "cancelled" && <Badge variant="destructive">{lessonStatusLabels[systemLesson.status]}</Badge>}
-            {reviewed && <Badge variant="sky">{resolutionStatusLabel(resolutionStatus)}</Badge>}
+            {reviewed && <Badge variant={needsAttention ? "amber" : "sky"}>{resolutionStatusLabel(resolutionStatus)}</Badge>}
             {excludedFromImportStats && <Badge variant="secondary">不计入导入统计</Badge>}
             {resolvedByLinkedImport && <Badge variant="plum">由 {linkedBySources.length} 条教务课合并成此云端课</Badge>}
             {resolvedAsMatched && !resolvedByLinkedImport && <Badge variant="sage">已计入已对应</Badge>}
