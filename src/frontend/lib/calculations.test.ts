@@ -3,9 +3,11 @@ import {
   buildFeeSnapshot,
   buildSubstituteClassFeeSnapshot,
   completedAmount,
+  obligationCampusDeductions,
   obligationSummary,
   payrollExcludedSplitMergeLessonIds,
-  salaryBreakdown
+  salaryBreakdown,
+  yearlyTrend
 } from "@/frontend/lib/calculations";
 import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
 import type {
@@ -465,5 +467,57 @@ describe("salary calculations", () => {
     expect(breakdown.oneOnOne).toBe(720);
     expect(breakdown.obligationDeduction).toBe(600);
     expect(breakdown.total).toBe(120);
+  });
+
+  it("allocates cross-campus obligation deductions to the lessons actually deducted", () => {
+    const otherCampus = { id: "campus_2", name: "Other Campus" };
+    const otherCourse: CourseGroup = {
+      ...oneOnOneCourse,
+      id: "course_other_campus",
+      name: "Other campus course",
+      defaultCampusId: otherCampus.id,
+      feeRule: { mode: "fixed", fixedFee: 80 }
+    };
+    const baseVault = makeVault({
+      profile: {
+        displayName: "Teacher",
+        baseSalary: 0,
+        currency: "CNY",
+        homeCampusId: campus.id,
+        monthlyObligationHours: 10,
+        obligationHourlyDeduction: 50
+      },
+      campuses: [campus, otherCampus],
+      courseGroups: [oneOnOneCourse, otherCourse]
+    });
+    const homeLessons = Array.from({ length: 4 }, (_, index) => lessonWithSnapshot(baseVault, oneOnOneCourse, {
+      id: `lesson_home_${index + 1}`,
+      date: `2026-06-${String(index + 1).padStart(2, "0")}`,
+      expectedStudentIds: ["student_1"],
+      attendance: [attended("student_1")]
+    }));
+    const otherLessons = Array.from({ length: 2 }, (_, index) => lessonWithSnapshot(baseVault, otherCourse, {
+      id: `lesson_other_${index + 1}`,
+      date: `2026-06-${String(index + 5).padStart(2, "0")}`,
+      campusId: otherCampus.id,
+      expectedStudentIds: ["student_1"],
+      attendance: [attended("student_1")]
+    }));
+    const vault = makeVault({ ...baseVault, lessons: [...homeLessons, ...otherLessons] });
+    const obligation = obligationSummary(vault, "2026-06");
+    const campusDeductions = obligationCampusDeductions(vault, obligation);
+    const homeOnlyDeductions = obligationCampusDeductions(vault, obligation, new Set(homeLessons.map((lesson) => lesson.id)));
+    const homeDeduction = campusDeductions.find((item) => item.campusId === campus.id);
+    const otherDeduction = campusDeductions.find((item) => item.campusId === otherCampus.id);
+
+    expect(obligation.deductedHours).toBe(10);
+    expect(obligation.amount).toBe(560);
+    expect(homeDeduction).toMatchObject({ deductedHours: 8, amount: 480 });
+    expect(otherDeduction).toMatchObject({ deductedHours: 2, amount: 80 });
+    expect(homeOnlyDeductions).toEqual([{ campusId: campus.id, deductedHours: 8, amount: 480 }]);
+    expect(4 * 120 - (homeDeduction?.amount ?? 0)).toBe(0);
+    expect(2 * 80 - (otherDeduction?.amount ?? 0)).toBe(80);
+    expect(salaryBreakdown(vault, "2026-06").total).toBe(80);
+    expect(yearlyTrend(vault, "2026").find((item) => item.month === "2026-06")?.total).toBe(80);
   });
 });

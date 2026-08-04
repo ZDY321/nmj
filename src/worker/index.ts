@@ -10,6 +10,7 @@ import type {
   FeedbackStatus,
   Notice,
   NoticeRecord,
+  SchoolPalExportScript,
   SessionUser,
   UserFeedback,
   UserDeletionState,
@@ -196,6 +197,8 @@ const vaultDocType = "vault";
 const vaultDocKey = "primary";
 const sessionDays = 30;
 const deletionGraceDays = 10;
+const schoolPalExportScriptSettingKey = "schoolpal_export_script";
+const schoolPalExportScriptMaxLength = 500_000;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -621,6 +624,36 @@ async function upsertSetting(env: Env, key: string, value: string): Promise<void
 async function getPublicSettings(env: Env): Promise<Response> {
   const registrationEnabled = (await getSetting(env, "registration_enabled")) !== "false";
   return json({ registrationEnabled } satisfies PublicSettings);
+}
+
+async function getSchoolPalExportScript(env: Env): Promise<Response> {
+  const row = await env.DB.prepare("SELECT value, updated_at FROM app_settings WHERE key = ?")
+    .bind(schoolPalExportScriptSettingKey)
+    .first<{ value: string; updated_at: string }>();
+  return json({
+    content: row?.value ?? "",
+    updatedAt: row?.updated_at ?? null
+  } satisfies SchoolPalExportScript);
+}
+
+async function updateSchoolPalExportScript(request: Request, env: Env): Promise<Response> {
+  const body = await readJson<{ content?: unknown }>(request);
+  const content = typeof body.content === "string" ? body.content.trim() : "";
+  if (!content) {
+    return json({ error: "SchoolPal export script required" }, 400);
+  }
+  if (content.length > schoolPalExportScriptMaxLength) {
+    return json({ error: "SchoolPal export script too large" }, 400);
+  }
+  const updatedAt = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  )
+    .bind(schoolPalExportScriptSettingKey, content, updatedAt)
+    .run();
+  return json({ content, updatedAt } satisfies SchoolPalExportScript);
 }
 
 async function updateRegistrationSetting(request: Request, env: Env): Promise<Response> {
@@ -2184,6 +2217,7 @@ const apiRouteHandlers = {
   listLoginNotices,
   createLoginNotice,
   updateLoginNoticeRecord,
+  updateSchoolPalExportScript,
   listFeedback,
   listAiProviders,
   saveAiProvider,
@@ -2197,6 +2231,7 @@ const apiRouteHandlers = {
   cancelDeleteUser,
   getLoginNotice,
   getPublicSettings,
+  getSchoolPalExportScript,
   authLookup,
   registerUser,
   loginUser,

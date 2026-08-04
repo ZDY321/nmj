@@ -32,8 +32,8 @@ export function PayrollObligationDeductionCard({
           <CardTitle>义务课时扣费明细</CardTitle>
           <CardDescription className="mt-2">
             {deductionApplies
-              ? `${selectedMonth} · ${campusName(vault, effectiveObligationCampusId)}，每月最多自动扣 10 小时；先扣本校区单节总课时费较低的课次，本校区不够时再合并其他校区课次继续抵扣，实际课时不足不额外补扣。`
-              : `当前筛选校区不单独扣义务课时；扣费归入 ${campusName(vault, effectiveObligationCampusId)}，可切换到全部校区或义务本校区查看明细。`}
+              ? `${selectedMonth} · 多校区合并每月最多自动扣 10 小时；先扣本校区单节总课时费较低的课次，本校区不够时再扣其他校区，扣费按实际课节所在校区分摊，实际课时不足不额外补扣。`
+              : `当前筛选校区没有分摊到义务课时扣费；自动扣费按实际被扣课节归属校区，手动扣费归入 ${campusName(vault, effectiveObligationCampusId)}。`}
           </CardDescription>
         </div>
         {deductionApplies && (

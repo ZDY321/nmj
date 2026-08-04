@@ -31,6 +31,7 @@ export function PayrollReviewView({
   vault,
   amountsVisible,
   token,
+  isAdmin,
   password,
   panelFocus,
   storageScope,
@@ -42,6 +43,7 @@ export function PayrollReviewView({
   vault: TeacherVault;
   amountsVisible: boolean;
   token?: string;
+  isAdmin: boolean;
   password?: string;
   panelFocus?: { panel: PayrollPanel; nonce: number } | null;
   storageScope?: string;
@@ -244,7 +246,7 @@ export function PayrollReviewView({
       </div>
 
       {payrollPanel === "guide" ? (
-        <PayrollScheduleExportGuide />
+        <PayrollScheduleExportGuide isAdmin={isAdmin} token={token} />
       ) : payrollPanel === "mapping" ? (
         <>
         {scheduleImportArchiveError && (

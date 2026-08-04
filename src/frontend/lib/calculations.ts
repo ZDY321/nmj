@@ -1164,6 +1164,39 @@ export type ObligationLessonDeduction = {
   amount: number;
 };
 
+export type ObligationCampusDeduction = {
+  campusId?: string;
+  deductedHours: number;
+  amount: number;
+};
+
+export function obligationCampusDeductions(
+  vault: TeacherVault,
+  obligation: ObligationSummary,
+  includedLessonIds?: ReadonlySet<string>
+): ObligationCampusDeduction[] {
+  if (obligation.mode === "manual") {
+    return obligation.amount > 0
+      ? [{ campusId: obligation.campus?.id, deductedHours: 0, amount: obligation.amount }]
+      : [];
+  }
+
+  const lessonsById = new Map(vault.lessons.map((lesson) => [lesson.id, lesson]));
+  const deductionsByCampus = new Map<string, ObligationCampusDeduction>();
+  obligation.lessonDeductions.forEach((deduction) => {
+    if (includedLessonIds && !includedLessonIds.has(deduction.lessonId)) return;
+    const lesson = lessonsById.get(deduction.lessonId);
+    if (!lesson) return;
+    const campusId = lesson.campusId ?? getCourse(vault, lesson.courseGroupId)?.defaultCampusId;
+    const key = campusId ?? "__unset";
+    const current = deductionsByCampus.get(key) ?? { campusId, deductedHours: 0, amount: 0 };
+    current.deductedHours += deduction.deductedHours;
+    current.amount += deduction.amount;
+    deductionsByCampus.set(key, current);
+  });
+  return Array.from(deductionsByCampus.values());
+}
+
 export function obligationSummary(vault: TeacherVault, month: string, campusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId): ObligationSummary {
   const courseId = vault.profile.obligationCourseGroupId;
   const mode = vault.profile.obligationDeductionMode ?? "auto_gap";

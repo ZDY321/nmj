@@ -11,6 +11,7 @@ export type AdminRouteHandlers<Env, AuthContext> = {
   listLoginNotices: (env: Env) => Promise<Response>;
   createLoginNotice: (request: Request, env: Env) => Promise<Response>;
   updateLoginNoticeRecord: (request: Request, env: Env, noticeId: string) => Promise<Response>;
+  updateSchoolPalExportScript: (request: Request, env: Env) => Promise<Response>;
   listFeedback: (env: Env) => Promise<Response>;
   listAiProviders: (env: Env, actorUserId: string) => Promise<Response>;
   saveAiProvider: (request: Request, env: Env, providerId?: string) => Promise<Response>;
@@ -28,6 +29,7 @@ export type ApiRouteHandlers<Env, AuthContext> = AdminRouteHandlers<Env, AuthCon
   json: (data: unknown, status?: number) => Response;
   getLoginNotice: (env: Env) => Promise<Response>;
   getPublicSettings: (env: Env) => Promise<Response>;
+  getSchoolPalExportScript: (env: Env) => Promise<Response>;
   authLookup: (request: Request, env: Env) => Promise<Response>;
   registerUser: (request: Request, env: Env) => Promise<Response>;
   loginUser: (request: Request, env: Env) => Promise<Response>;
@@ -100,6 +102,10 @@ export async function handleAdminRoutes<Env, AuthContext extends { user: { id: s
 
   if (request.method === "PUT" && pathname === "/api/admin/registration") {
     return handlers.updateRegistrationSetting(request, env);
+  }
+
+  if (request.method === "PUT" && pathname === "/api/admin/schoolpal-export-script") {
+    return handlers.updateSchoolPalExportScript(request, env);
   }
 
   if (request.method === "POST" && pathname === "/api/admin/deletions/run-due") {
@@ -191,6 +197,10 @@ export async function handleApiRoutes<Env, AuthContext extends { user: { id: str
 
   if (request.method === "GET" && pathname === "/api/public/settings") {
     return handlers.getPublicSettings(env);
+  }
+
+  if (request.method === "GET" && pathname === "/api/public/schoolpal-export-script") {
+    return handlers.getSchoolPalExportScript(env);
   }
 
   if (request.method === "GET" && pathname === "/api/auth/lookup") {

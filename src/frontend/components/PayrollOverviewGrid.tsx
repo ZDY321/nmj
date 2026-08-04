@@ -201,7 +201,7 @@ export function PayrollOverviewGrid({
               </div>
             </div>
             <div className="rounded-[8px] border border-[#bfdbfe] bg-[#eaf2ff] p-5">
-              <div className="text-sm font-bold text-[#1557c2]">本月收入总和</div>
+              <div className="text-sm font-bold text-[#1557c2]">本月实际收入总和</div>
               <div className="mt-2 text-3xl font-extrabold text-[#061226]">{formatPrivateMoney(breakdown.total, amountsVisible)}</div>
             </div>
           </div>

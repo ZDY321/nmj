@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { BookOpen, ChevronDown, Download, FileSpreadsheet, MapPin, RefreshCw, Save, Upload, X } from "lucide-react";
+import { BookOpen, ChevronDown, Download, FileSpreadsheet, Info, MapPin, RefreshCw, Save, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -129,7 +129,10 @@ export function ScheduleImportHeaderPanel({
               <Upload size={16} className="mt-0.5 shrink-0 text-[#1557c2]" />
               <span className="min-w-0">
                 <span className="block text-sm font-extrabold text-[#061226]">教务 Excel 文件与对应校区</span>
-                <span className="block text-[11px] font-semibold leading-4 text-[#64748b]">新课程先映射再对账；已有映射可直接导入。</span>
+                <span className="mt-1.5 inline-flex max-w-full items-start gap-1.5 rounded-[8px] border border-[#d8e5f2] bg-[#f3f7fb] px-2 py-1 text-[11px] font-bold leading-4 text-[#49627d]">
+                  <Info size={12} className="mt-0.5 shrink-0 text-[#6685a5]" />
+                  <span>新课程先做名称映射，再导入对账；已有映射可直接导入。</span>
+                </span>
               </span>
             </span>
             <span className="flex shrink-0 items-center gap-2">

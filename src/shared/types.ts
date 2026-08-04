@@ -658,6 +658,11 @@ export type AdminSummary = {
   registrationEnabled: boolean;
 };
 
+export type SchoolPalExportScript = {
+  content: string;
+  updatedAt: string | null;
+};
+
 export type UserFeedback = {
   id: string;
   userId: string | null;

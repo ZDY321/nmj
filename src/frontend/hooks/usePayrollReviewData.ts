@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
 import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
-import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, isSubstituteClassLesson, lessonBillableHoursForVault, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
+import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, isSubstituteClassLesson, lessonBillableHoursForVault, obligationCampusDeductions, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
 import { matchesMakeupLessonFilter } from "@/frontend/lib/scheduleViewHelpers";
 import {
   campusName,
@@ -139,9 +139,10 @@ export function usePayrollReviewData({
     () => obligationSummary(vault, selectedMonth),
     [selectedMonth, vault]
   );
-  const currentCampusObligation = useMemo(
-    () => campusFilter === "all" ? monthObligation : obligationSummary(vault, selectedMonth, campusFilter),
-    [campusFilter, monthObligation, selectedMonth, vault]
+  const currentCampusObligation = monthObligation;
+  const filteredObligationByCampus = useMemo(
+    () => obligationCampusDeductions(vault, monthObligation, new Set(filteredLessons.map((lesson) => lesson.id))),
+    [filteredLessons, monthObligation, vault]
   );
   const campusLessonFee = useMemo(
     () => filteredLessons.reduce((sum, lesson) => sum + completedAmount(lesson), 0),
@@ -161,8 +162,10 @@ export function usePayrollReviewData({
     }, 0),
     [filteredLessons, vault]
   );
-  const obligationDeductionApplies = campusFilter === "all" || campusFilter === effectiveObligationCampusId;
-  const campusDeduction = obligationDeductionApplies ? currentCampusObligation.amount : 0;
+  const campusDeduction = campusFilter === "all"
+    ? filteredObligationByCampus.reduce((sum, item) => sum + item.amount, 0)
+    : filteredObligationByCampus.find((item) => item.campusId === campusFilter)?.amount ?? 0;
+  const obligationDeductionApplies = campusFilter === "all" || campusDeduction > 0;
   const campusNet = campusLessonFee - campusDeduction;
 
   const lessonCampusAmounts = useMemo<Record<OverviewCampusKey, PayrollCampusAmountDetail[]>>(() => {
@@ -215,14 +218,11 @@ export function usePayrollReviewData({
       .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
       .filter((lesson) => matchesReviewFilters(lesson, false));
     const campusSummaryBaseLessonIds = new Set(campusSummaryBaseLessons.map((lesson) => lesson.id));
-    const obligationHoursByCampus = new Map<string, number>();
-    monthObligation.lessonDeductions.forEach((deduction) => {
-      if (!campusSummaryBaseLessonIds.has(deduction.lessonId)) return;
-      const lesson = vault.lessons.find((item) => item.id === deduction.lessonId);
-      const campusId = lesson ? lessonCampusId(vault, lesson) : undefined;
-      if (!campusId) return;
-      obligationHoursByCampus.set(campusId, (obligationHoursByCampus.get(campusId) ?? 0) + deduction.deductedHours);
-    });
+    const obligationByCampus = new Map(
+      obligationCampusDeductions(vault, monthObligation, campusSummaryBaseLessonIds)
+        .filter((item): item is typeof item & { campusId: string } => Boolean(item.campusId))
+        .map((item) => [item.campusId, item])
+    );
     return campusOptions.map((campus) => {
       const lessons = campusSummaryBaseLessons.filter((lesson) => lessonCampusId(vault, lesson) === campus.id);
       const completedLessons = lessons.filter((lesson) => lesson.status === "completed" || lesson.status === "makeup_completed");
@@ -231,8 +231,9 @@ export function usePayrollReviewData({
       const hours = lessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
       const completedHours = completedLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
       const unfinishedHours = unfinishedLessons.reduce((sum, lesson) => sum + lessonBillableHoursForVault(vault, lesson), 0);
-      const obligation = campus.id === effectiveObligationCampusId ? obligationSummary(vault, selectedMonth, campus.id).amount : 0;
-      const obligationHours = obligationHoursByCampus.get(campus.id) ?? 0;
+      const campusObligation = obligationByCampus.get(campus.id);
+      const obligation = campusObligation?.amount ?? 0;
+      const obligationHours = campusObligation?.deductedHours ?? 0;
       return {
         campus,
         lessons,
@@ -248,7 +249,7 @@ export function usePayrollReviewData({
         net: amount - obligation
       };
     });
-  }, [campusOptions, effectiveObligationCampusId, gradeFilter, monthLessons, monthObligation, selectedMonth, splitMergeExcludedLessonIds, statusFilter, typeFilter, vault]);
+  }, [campusOptions, gradeFilter, monthLessons, monthObligation, splitMergeExcludedLessonIds, statusFilter, typeFilter, vault]);
 
   const monthSummaryLessonCount = useMemo(
     () => campusSummaries.reduce((sum, item) => sum + item.lessons.length, 0),

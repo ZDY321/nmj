@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CheckCircle2, Clipboard, Download, ExternalLink, FileCode2, FileSpreadsheet, Globe2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clipboard, Download, ExternalLink, FileCode2, FileSpreadsheet, Globe2, Pencil, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { getSchoolPalExportScript, updateSchoolPalExportScript } from "@/frontend/lib/cloud";
 
 const tampermonkeyEdgeUrl = "https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd";
 const tampermonkeyDownloadUrl = "https://www.tampermonkey.net/?browser=edge";
@@ -12,27 +14,47 @@ const scriptUrl = "schoolpal-export-helper.user.js";
 const linkClass =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-[10px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2 text-sm font-extrabold text-[#1557c2] transition-colors hover:border-[#93c5fd] hover:bg-[#dbeafe]";
 
-export function PayrollScheduleExportGuide() {
+export function PayrollScheduleExportGuide({ isAdmin, token }: { isAdmin: boolean; token?: string }) {
   const [scriptText, setScriptText] = useState("");
+  const [savedScriptText, setSavedScriptText] = useState("");
+  const [scriptUpdatedAt, setScriptUpdatedAt] = useState<string | null>(null);
   const [scriptLoadError, setScriptLoadError] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [editingScript, setEditingScript] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    fetch(scriptUrl, { cache: "no-store" })
-      .then((response) => {
+    void (async () => {
+      try {
+        const cloudScript = await getSchoolPalExportScript();
+        if (cloudScript.content) {
+          if (cancelled) return;
+          setScriptText(cloudScript.content);
+          setSavedScriptText(cloudScript.content);
+          setScriptUpdatedAt(cloudScript.updatedAt);
+          setScriptLoadError("");
+          return;
+        }
+      } catch {
+        // Local Vite development and older deployments fall back to the bundled script.
+      }
+
+      try {
+        const response = await fetch(scriptUrl, { cache: "no-store" });
         if (!response.ok) throw new Error(`脚本读取失败：${response.status}`);
-        return response.text();
-      })
-      .then((text) => {
+        const text = await response.text();
         if (cancelled) return;
         setScriptText(text);
+        setSavedScriptText(text);
+        setScriptUpdatedAt(null);
         setScriptLoadError("");
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) return;
         setScriptLoadError("脚本内容读取失败，请重新刷新页面。");
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -51,6 +73,43 @@ export function PayrollScheduleExportGuide() {
     } catch {
       setCopyState("error");
     }
+  }
+
+  function downloadScript() {
+    if (!scriptText) return;
+    const url = URL.createObjectURL(new Blob([scriptText], { type: "text/javascript;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "校宝查看与导出助手.user.js";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }
+
+  async function saveScript() {
+    if (!isAdmin || !token || !scriptText.trim()) return;
+    setSaveState("saving");
+    setSaveError("");
+    try {
+      const saved = await updateSchoolPalExportScript(token, scriptText);
+      setScriptText(saved.content);
+      setSavedScriptText(saved.content);
+      setScriptUpdatedAt(saved.updatedAt);
+      setEditingScript(false);
+      setSaveState("saved");
+      window.setTimeout(() => setSaveState("idle"), 1800);
+    } catch (error) {
+      setSaveState("error");
+      setSaveError(error instanceof Error ? error.message : "脚本保存失败，请稍后重试。");
+    }
+  }
+
+  function cancelScriptEditing() {
+    setScriptText(savedScriptText);
+    setEditingScript(false);
+    setSaveState("idle");
+    setSaveError("");
   }
 
   return (
@@ -97,13 +156,33 @@ export function PayrollScheduleExportGuide() {
               <CardDescription className="mt-2">复制脚本全文后，在 Tampermonkey 管理面板中新建脚本并粘贴保存。</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
+              {isAdmin && !editingScript && (
+                <Button type="button" size="sm" variant="outline" onClick={() => setEditingScript(true)} disabled={!scriptText}>
+                  <Pencil size={14} /> 编辑脚本
+                </Button>
+              )}
+              {isAdmin && editingScript && (
+                <>
+                  <Button type="button" size="sm" variant="outline" onClick={cancelScriptEditing} disabled={saveState === "saving"}>
+                    <RotateCcw size={14} /> 取消修改
+                  </Button>
+                  <Button type="button" size="sm" onClick={() => void saveScript()} disabled={saveState === "saving" || !scriptText.trim()}>
+                    <Save size={14} /> {saveState === "saving" ? "保存中..." : "保存到云端"}
+                  </Button>
+                </>
+              )}
               <Button type="button" size="sm" onClick={() => void copyScript()} disabled={!scriptText}>
                 <Clipboard size={14} /> {copyState === "copied" ? "已复制" : "复制脚本全文"}
               </Button>
-              <a href={scriptUrl} download="校宝查看与导出助手-0.1.0.user.js" className={linkClass}>
+              <button type="button" onClick={downloadScript} disabled={!scriptText} className={`${linkClass} disabled:cursor-not-allowed disabled:opacity-50`}>
                 <Download size={15} /> 下载脚本
-              </a>
+              </button>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#64748b]">
+            <Badge variant={scriptUpdatedAt ? "sage" : "secondary"}>{scriptUpdatedAt ? "云端版本" : "内置版本"}</Badge>
+            {isAdmin && <Badge variant="amber">仅管理员可编辑</Badge>}
+            {scriptUpdatedAt && <span>最近在线保存：{new Date(scriptUpdatedAt).toLocaleString("zh-CN")}</span>}
           </div>
           {copyState === "error" && (
             <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
@@ -115,11 +194,31 @@ export function PayrollScheduleExportGuide() {
               {scriptLoadError}
             </div>
           )}
+          {saveState === "saved" && (
+            <div className="rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-bold text-[#166534]">
+              脚本已保存到云端，其他账号刷新后会读取新版本。
+            </div>
+          )}
+          {saveState === "error" && (
+            <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
+              {saveError || "脚本保存失败，请稍后重试。"}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          <pre className="max-h-[360px] overflow-auto rounded-[12px] border border-[#dbe4ef] bg-[#061226] p-4 text-xs font-semibold leading-5 text-[#eaf2ff]">
-            {scriptText || scriptLoadError || "正在加载脚本内容..."}
-          </pre>
+          {isAdmin && editingScript ? (
+            <Textarea
+              value={scriptText}
+              onChange={(event) => setScriptText(event.target.value)}
+              spellCheck={false}
+              aria-label="编辑校宝查看与导出助手脚本"
+              className="min-h-[420px] max-h-[65vh] resize-y overflow-auto border-[#1e3551] bg-[#061226] p-4 font-mono text-xs font-semibold leading-5 text-[#eaf2ff] focus-visible:ring-[#93c5fd]"
+            />
+          ) : (
+            <pre className="max-h-[360px] overflow-auto rounded-[12px] border border-[#dbe4ef] bg-[#061226] p-4 text-xs font-semibold leading-5 text-[#eaf2ff]">
+              {scriptText || scriptLoadError || "正在加载脚本内容..."}
+            </pre>
+          )}
         </CardContent>
       </Card>
 

@@ -2145,6 +2145,7 @@ export function App() {
                     vault={vault}
                     amountsVisible={amountsVisible}
                     token={token}
+                    isAdmin={role === "admin"}
                     password={password}
                     panelFocus={payrollReviewFocus}
                     storageScope={username}

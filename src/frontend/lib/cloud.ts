@@ -8,6 +8,7 @@ import type {
   FeedbackStatus,
   Notice,
   NoticeRecord,
+  SchoolPalExportScript,
   UserFeedback
 } from "@/shared/types";
 
@@ -94,7 +95,9 @@ function translateApiError(error: string): string {
     "AI provider disabled": "当前 AI 接口已停用。",
     "AI daily limit reached": "当前 AI 接口今天调用次数已达上限。",
     "AI schedule draft failed": "AI 生成建议失败。",
-    "Notice content required": "请填写公告内容。"
+    "Notice content required": "请填写公告内容。",
+    "SchoolPal export script required": "脚本内容不能为空。",
+    "SchoolPal export script too large": "脚本内容过大，请精简后再保存。"
   };
   return messages[error] ?? error;
 }
@@ -111,6 +114,10 @@ export async function getLoginNotice(): Promise<Notice> {
   return apiRequest<Notice>("/api/public/login-notice");
 }
 
+export async function getSchoolPalExportScript(): Promise<SchoolPalExportScript> {
+  return apiRequest<SchoolPalExportScript>("/api/public/schoolpal-export-script");
+}
+
 export async function getAdminSummary(token: string): Promise<AdminSummary> {
   return apiRequest<AdminSummary>("/api/admin/summary", { token });
 }
@@ -124,6 +131,14 @@ export async function updateAdminNotice(token: string, notice: Notice): Promise<
     method: "PUT",
     token,
     body: JSON.stringify(notice)
+  });
+}
+
+export async function updateSchoolPalExportScript(token: string, content: string): Promise<SchoolPalExportScript> {
+  return apiRequest<SchoolPalExportScript>("/api/admin/schoolpal-export-script", {
+    method: "PUT",
+    token,
+    body: JSON.stringify({ content })
   });
 }
 
