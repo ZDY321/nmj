@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, BookOpenCheck, ChevronLeft, ChevronRight, Clock3, FilePlus2, History, RefreshCw, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, BookOpenCheck, ChevronLeft, ChevronRight, Clock3, Download, FilePlus2, History, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -641,7 +641,7 @@ export function LessonFeedbackWorkspace({
               onChange={(event) => void chooseLegacyFile(event.target.files?.[0])}
             />
             <Button size="sm" variant="outline" onClick={() => legacyFileInputRef.current?.click()}>
-              <Upload size={14} /> 导入旧 JSON
+              <Download size={14} /> 导入旧 JSON
             </Button>
             <Button size="sm" onClick={() => setCreateDialogOpen(true)} disabled={courses.length === 0}>
               <FilePlus2 size={15} /> 新建反馈
@@ -711,7 +711,7 @@ export function LessonFeedbackWorkspace({
         <section className="lesson-feedback-import-panel">
           <div className="lesson-feedback-import-heading">
             <div>
-              <div className="lesson-feedback-eyebrow"><Upload size={15} /> 旧反馈迁移</div>
+              <div className="lesson-feedback-eyebrow"><Download size={15} /> 旧反馈迁移</div>
               <h3>{legacyFileName}</h3>
               <p>已识别 {legacyData.classes.length} 个班级、{legacyData.lessons.length} 条反馈。请选择每个旧班级在课薪系统中对应的课程。</p>
             </div>
@@ -734,7 +734,7 @@ export function LessonFeedbackWorkspace({
           <div className="lesson-feedback-import-footer">
             <span>同名学生会自动关联当前档案；未匹配学生仍会保留姓名快照，不会写入学生档案。</span>
             <Button disabled={importing || !Object.values(legacyMappings).some(Boolean)} onClick={() => void importLegacyRecords()}>
-              <Upload size={16} /> {importing ? "正在加密导入..." : "确认映射并导入"}
+              <Download size={16} /> {importing ? "正在加密导入..." : "确认映射并导入"}
             </Button>
           </div>
         </section>
