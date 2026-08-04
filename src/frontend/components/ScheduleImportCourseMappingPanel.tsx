@@ -22,7 +22,7 @@ import {
   type ImportPreviewLesson,
   type ScheduleImportMapping
 } from "@/frontend/lib/scheduleImport";
-import { readSavedMapping, writeSavedMapping } from "@/frontend/lib/scheduleImportReview";
+import { readSavedMapping, readSavedWorkspace, writeSavedMapping, writeSavedWorkspace } from "@/frontend/lib/scheduleImportReview";
 import type { ScheduleImportSaveOptions } from "@/frontend/lib/scheduleImportArchive";
 
 export function ScheduleImportCourseMappingPanel({
@@ -38,13 +38,10 @@ export function ScheduleImportCourseMappingPanel({
 }) {
   const persistedScheduleImport = scheduleImportState ?? vault.scheduleImport;
   const externalMapping = useMemo(
-    () => mergeScheduleImportMappings(
-      vault,
-      readSavedMapping(storageScope),
-      vault.scheduleImport?.mappings,
-      persistedScheduleImport?.mappings
-    ),
-    [persistedScheduleImport?.mappings, storageScope, vault.campuses, vault.scheduleImport?.mappings]
+    () => persistedScheduleImport
+      ? canonicalizeScheduleImportMapping(vault, persistedScheduleImport.mappings)
+      : mergeScheduleImportMappings(vault, readSavedMapping(storageScope)),
+    [persistedScheduleImport?.mappings, storageScope, vault.campuses]
   );
   const [rawLessons, setRawLessons] = useState<ImportedScheduleLesson[]>([]);
   const [mapping, setMapping] = useState<ScheduleImportMapping>(externalMapping);
@@ -57,7 +54,8 @@ export function ScheduleImportCourseMappingPanel({
   const { confirm, dialog } = useConfirmDialog();
 
   useEffect(() => {
-    setMapping((current) => mergeScheduleImportMappings(vault, current, externalMapping));
+    // The persisted schedule-import state is authoritative, including an empty mapping after deletion.
+    setMapping(externalMapping);
   }, [externalMapping, vault.campuses]);
 
   const importedMonths = useMemo(
@@ -208,6 +206,12 @@ export function ScheduleImportCourseMappingPanel({
     const canonicalMapping = canonicalizeScheduleImportMapping(vault, nextMapping);
     setMapping(canonicalMapping);
     const localOk = writeSavedMapping(storageScope, canonicalMapping);
+    const workspace = readSavedWorkspace(storageScope);
+    const workspaceOk = writeSavedWorkspace(storageScope, {
+      ...workspace,
+      mapping: { ...canonicalMapping },
+      savedAt: new Date().toISOString()
+    });
     if (onSaveScheduleImport) {
       const previous = persistedScheduleImport ?? vault.scheduleImport;
       onSaveScheduleImport({
@@ -220,7 +224,7 @@ export function ScheduleImportCourseMappingPanel({
       setMessage(cloudMessage);
       return;
     }
-    setMessage(localOk ? localMessage : "保存失败：浏览器本地存储空间可能不足。");
+    setMessage(localOk && workspaceOk ? localMessage : "保存失败：浏览器本地存储空间可能不足。");
   }
 
   return (

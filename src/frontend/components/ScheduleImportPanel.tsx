@@ -112,10 +112,14 @@ export function ScheduleImportPanel({
     [persistedScheduleImport, vault]
   );
   const cloudMapping = useMemo(
-    () => mergeScheduleImportMappings(vault, vault.scheduleImport?.mappings, persistedScheduleImport?.mappings),
-    [persistedScheduleImport?.mappings, vault.campuses, vault.scheduleImport?.mappings]
+    // Prefer the current archive state over the parent vault snapshot. The latter can
+    // briefly contain the pre-delete mapping while the parent update is settling.
+    () => mergeScheduleImportMappings(vault, persistedScheduleImport?.mappings),
+    [persistedScheduleImport?.mappings, vault.campuses]
   );
-  const cloudResolutions = { ...(persistedScheduleImport?.resolutions ?? {}), ...(vault.scheduleImport?.resolutions ?? {}) };
+  // As with mappings, an empty current resolution map is an intentional deletion,
+  // so do not merge it with the parent vault's older snapshot.
+  const cloudResolutions = { ...(persistedScheduleImport?.resolutions ?? {}) };
   const savedMapping = useMemo(
     () => mergeScheduleImportMappings(vault, savedWorkspace.mapping, readSavedMapping(storageScope), cloudMapping),
     [cloudMapping, savedWorkspace.mapping, storageScope, vault.campuses]
