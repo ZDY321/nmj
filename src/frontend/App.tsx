@@ -104,6 +104,7 @@ type CalendarOverviewFocusState = {
   month: string;
   overviewPage: "month" | "week";
   weekCampusFilter: string;
+  weekCourseTypeFilter: "all" | CourseType;
   weekGradeFilter: string;
   weekSubjectFilter: string;
   weekStudentFilter: string;

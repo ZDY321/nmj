@@ -12,6 +12,7 @@ export type CalendarOverviewReturnFocus = {
   month: string;
   overviewPage: "month" | "week";
   weekCampusFilter: string;
+  weekCourseTypeFilter: CourseTypeFilter;
   weekGradeFilter: string;
   weekSubjectFilter: string;
   weekStudentFilter: string;

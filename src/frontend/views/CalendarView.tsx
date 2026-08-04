@@ -11,19 +11,17 @@ import {
   addDays,
   calendarDates,
   compareByName,
+  courseTypeOptionsForVault,
   courseTypeLabel,
   campusName,
   formatPrivateMoney,
-  findStudent,
   lessonAttendanceNoteText,
   lessonStatusLabels,
   lessonStatusSurfaceClass,
   lessonStatusVariant,
-  lessonCampusId,
   lessonDisplayName,
   lessonDisplaySubject,
   lessonStudentDisplay,
-  lessonStudentIds,
   lessonTimeRangeLabel,
   makeupNeededStudentIds,
   monthShift,
@@ -31,7 +29,6 @@ import {
   shortWeekdayLabels,
   sortLessons,
   sortCampusesForProfile,
-  studentNames,
   subjectOptionsForVault,
   weekDatesFor,
   weekStartsOn,
@@ -41,8 +38,8 @@ import {
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
-import { attendanceStatusForLessonStatus, matchesMakeupLessonFilter } from "@/frontend/lib/scheduleViewHelpers";
-import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
+import { attendanceStatusForLessonStatus, matchesCalendarLessonFilters } from "@/frontend/lib/scheduleViewHelpers";
+import type { CourseTypeFilter, MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { timeToMinutes } from "@/frontend/lib/time";
 
 type CalendarOverviewPage = "month" | "week";
@@ -58,6 +55,7 @@ type CalendarOverviewFocusState = {
   month: string;
   overviewPage: CalendarOverviewPage;
   weekCampusFilter: string;
+  weekCourseTypeFilter: CourseTypeFilter;
   weekGradeFilter: string;
   weekSubjectFilter: string;
   weekStudentFilter: string;
@@ -153,6 +151,7 @@ export function CalendarView({
   const [selectedDate, setSelectedDate] = useState(() => focusRequest?.selectedDate ?? todayIso());
   const [overviewPage, setOverviewPage] = useState<CalendarOverviewPage>(() => focusRequest?.overviewPage ?? "month");
   const [weekCampusFilter, setWeekCampusFilter] = useState(() => focusRequest?.weekCampusFilter ?? "all");
+  const [weekCourseTypeFilter, setWeekCourseTypeFilter] = useState<CourseTypeFilter>(() => focusRequest?.weekCourseTypeFilter ?? "all");
   const [weekGradeFilter, setWeekGradeFilter] = useState(() => focusRequest?.weekGradeFilter ?? "all");
   const [weekSubjectFilter, setWeekSubjectFilter] = useState(() => focusRequest?.weekSubjectFilter ?? "all");
   const [weekStudentFilter, setWeekStudentFilter] = useState(() => focusRequest?.weekStudentFilter ?? "");
@@ -161,14 +160,21 @@ export function CalendarView({
   const { confirm, dialog } = useConfirmDialog();
   const weekStartPreference = weekStartsOn(vault);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
+  const courseTypeOptions = courseTypeOptionsForVault(vault);
   const gradeOptions = Array.from(
     new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))
   ).sort(compareByName);
   const subjectOptions = subjectOptionsForVault(vault);
   const days = calendarDates(month, weekStartPreference);
   const visibleLessons = vault.lessons;
-  const normalizedWeekStudentFilter = weekStudentFilter.trim().toLowerCase();
-  const filteredVisibleLessons = visibleLessons.filter((lesson) => matchesCalendarLessonFilter(lesson));
+  const filteredVisibleLessons = visibleLessons.filter((lesson) => matchesCalendarLessonFilters(vault, lesson, {
+    campusFilter: weekCampusFilter,
+    courseTypeFilter: weekCourseTypeFilter,
+    gradeFilter: weekGradeFilter,
+    subjectFilter: weekSubjectFilter,
+    studentFilter: weekStudentFilter,
+    makeupFilter: weekMakeupFilter
+  }));
 
   const selectedLessons = filteredVisibleLessons.filter((l) => l.date === selectedDate).sort(sortLessons);
   const selectedDateAllLessons = visibleLessons.filter((l) => l.date === selectedDate).sort(sortLessons);
@@ -203,6 +209,7 @@ export function CalendarView({
     setMonth(focusRequest.month);
     setOverviewPage(focusRequest.overviewPage);
     setWeekCampusFilter(focusRequest.weekCampusFilter);
+    setWeekCourseTypeFilter(focusRequest.weekCourseTypeFilter ?? "all");
     setWeekGradeFilter(focusRequest.weekGradeFilter);
     setWeekSubjectFilter(focusRequest.weekSubjectFilter);
     setWeekStudentFilter(focusRequest.weekStudentFilter);
@@ -220,6 +227,7 @@ export function CalendarView({
       month,
       overviewPage,
       weekCampusFilter,
+      weekCourseTypeFilter,
       weekGradeFilter,
       weekSubjectFilter,
       weekStudentFilter,
@@ -302,35 +310,6 @@ export function CalendarView({
         showRefreshMessage(`已刷新 ${dateWithWeekday(selectedDate)} 的 ${refreshedLessons.length} 节课。`, "success");
       }
     });
-  }
-
-  function matchesCalendarLessonFilter(lesson: Lesson): boolean {
-    const campusId = lessonCampusId(vault, lesson);
-    const studentIds = lessonStudentIds(lesson);
-    const searchable = [
-      lessonDisplayName(vault, lesson),
-      lessonDisplaySubject(vault, lesson),
-      campusName(vault, campusId),
-      studentNames(vault, studentIds),
-      lesson.note ?? "",
-      lessonAttendanceNoteText(vault, lesson),
-      ...studentIds.map((studentId) => {
-        const student = findStudent(vault, studentId);
-        return [student?.name ?? "", student?.grade ?? "", student?.note ?? ""].join(" ");
-      })
-    ]
-      .join(" ")
-      .toLowerCase();
-    const subject = lessonDisplaySubject(vault, lesson);
-    const matchesCampus = weekCampusFilter === "all" || campusId === weekCampusFilter;
-    const matchesSubject = weekSubjectFilter === "all" || subject === weekSubjectFilter;
-    const matchesGrade =
-      weekGradeFilter === "all" ||
-      studentIds.some((studentId) => findStudent(vault, studentId)?.grade?.trim() === weekGradeFilter);
-    const matchesStudent =
-      !normalizedWeekStudentFilter || normalizedWeekStudentFilter.split(/\s+/).filter(Boolean).every((term) => searchable.includes(term));
-    const matchesMakeup = matchesMakeupLessonFilter(lesson, weekMakeupFilter);
-    return matchesCampus && matchesSubject && matchesGrade && matchesStudent && matchesMakeup;
   }
 
   function makeupMarkerForLesson(lesson: Lesson): string | null {
@@ -480,13 +459,22 @@ export function CalendarView({
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
-            <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium">校区</label>
                 <Select value={weekCampusFilter} onChange={(event) => setWeekCampusFilter(event.target.value)} className="h-10 bg-white">
                   <option value="all">全部校区</option>
                   {campusOptions.map((campus) => (
                     <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="min-w-0 space-y-2">
+                <label className="text-sm font-medium">班型筛选</label>
+                <Select value={weekCourseTypeFilter} onChange={(event) => setWeekCourseTypeFilter(event.target.value as CourseTypeFilter)} className="h-10 bg-white">
+                  <option value="all">全部班型</option>
+                  {courseTypeOptions.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
                   ))}
                 </Select>
               </div>
@@ -517,7 +505,7 @@ export function CalendarView({
                   <option value="substitute_class">代班补课</option>
                 </Select>
               </div>
-              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-3 sm:col-span-2 lg:col-span-4">
+              <div className="grid min-w-0 grid-cols-1 items-end gap-3 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto] lg:col-span-3 xl:col-span-5">
                 <div className="min-w-0 space-y-2">
                   <label className="text-sm font-medium">搜索筛选</label>
                   <label className="relative block min-w-0">
@@ -534,13 +522,14 @@ export function CalendarView({
                   type="button"
                   onClick={() => {
                     setWeekCampusFilter("all");
+                    setWeekCourseTypeFilter("all");
                     setWeekGradeFilter("all");
                     setWeekSubjectFilter("all");
                     setWeekMakeupFilter("all");
                     setWeekStudentFilter("");
                   }}
-                  disabled={weekCampusFilter === "all" && weekGradeFilter === "all" && weekSubjectFilter === "all" && weekMakeupFilter === "all" && !weekStudentFilter}
-                  className="h-10 shrink-0 rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a] transition-colors hover:bg-[#eef4fb] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={weekCampusFilter === "all" && weekCourseTypeFilter === "all" && weekGradeFilter === "all" && weekSubjectFilter === "all" && weekMakeupFilter === "all" && !weekStudentFilter}
+                  className="h-10 w-full shrink-0 rounded-[10px] border border-[#dbe4ef] bg-white px-3 text-sm font-bold text-[#25324a] transition-colors hover:bg-[#eef4fb] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   清除
                 </button>
