@@ -40,6 +40,7 @@ export {
   linkedSystemLessonSourcesFromRows,
   quickResolutionActionsForRow,
   resolutionKey,
+  rowReviewFingerprint,
   mergeSavedReviewResolutions,
   resolutionsWithoutMonths,
   type ScheduleImportIncrementalMerge,

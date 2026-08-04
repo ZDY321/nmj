@@ -18,7 +18,8 @@ import {
   effectiveSavedRowStatus,
   linkedSystemLessonIdsFromRows,
   linkedSystemLessonIdsFromSavedRows,
-  resolutionKey
+  resolutionKey,
+  rowReviewFingerprint
 } from "@/frontend/lib/scheduleImportReviewMatching";
 import { resolutionExcludesImportStats } from "@/frontend/lib/scheduleImportReviewStatus";
 
@@ -105,11 +106,12 @@ export function buildNextScheduleImportState(
   }
 ): ScheduleImportVaultState {
   const now = new Date().toISOString();
-  const review = buildReviewRecord(vault, context, now);
+  const resolutions = resolutionsWithDataFingerprints(context.rows, context.resolutions);
+  const review = buildReviewRecord(vault, { ...context, resolutions }, now);
   const previous = vault.scheduleImport;
   return {
     mappings: { ...context.mapping },
-    resolutions: { ...context.resolutions },
+    resolutions,
     reviews: [
       review,
       ...latestScheduleImportReviewsByMonth(previous?.reviews ?? []).filter((item) => item.month !== review.month)
@@ -117,6 +119,23 @@ export function buildNextScheduleImportState(
     splitMergeExcludedLessonIds: context.splitMergeExcludedLessonIds ?? previous?.splitMergeExcludedLessonIds ?? [],
     updatedAt: now
   };
+}
+
+function resolutionsWithDataFingerprints(
+  rows: ImportPreviewLesson[],
+  resolutions: ScheduleImportResolutionMap
+): ScheduleImportResolutionMap {
+  const next = { ...resolutions };
+  rows.forEach((row) => {
+    const key = resolutionKey(row);
+    const resolution = next[key];
+    if (!resolution || resolution.status === "unreviewed" || resolution.dataFingerprint) return;
+    next[key] = {
+      ...resolution,
+      dataFingerprint: rowReviewFingerprint(row)
+    };
+  });
+  return next;
 }
 
 function buildReviewRecord(

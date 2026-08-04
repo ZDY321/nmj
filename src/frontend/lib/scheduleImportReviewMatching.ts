@@ -32,7 +32,7 @@ export function normalizeLinkedSystemLessonIds(value: unknown): string[] | undef
 export function buildUpdatedResolutions(
   current: ScheduleImportResolutionMap,
   key: string,
-  patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>
+  patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds" | "dataFingerprint">>
 ): ScheduleImportResolutionMap {
   const previous = current[key] ?? { status: "unreviewed" as ScheduleImportResolutionStatus, updatedAt: new Date().toISOString() };
   const next: ScheduleImportResolution = {
@@ -169,6 +169,39 @@ export function resolutionKey(row: ImportPreviewLesson): string {
   ].join("|");
 }
 
+const reviewFingerprintPrefix = "review-v1:";
+
+export function rowReviewFingerprint(row: ImportPreviewLesson | ScheduleImportSavedRow): string {
+  const payload = JSON.stringify([
+    row.campusId ?? normalizeComparisonText(row.campusName),
+    row.date,
+    row.startTime,
+    row.endTime,
+    normalizeComparisonText(row.title),
+    normalizeComparisonText(row.subjectHint),
+    row.courseTypeHint,
+    normalizeComparisonNameList(row.studentNameHint),
+    normalizeComparisonText(row.teacher ?? ""),
+    normalizeComparisonText(row.assistant ?? ""),
+    normalizeComparisonText(row.room ?? ""),
+    row.presentCount ?? null,
+    row.expectedCount ?? null,
+    normalizeComparisonText(row.note ?? ""),
+    row.matchedCourseId ?? row.mappedCourseId ?? "",
+    row.systemLessonId ?? "",
+    row.systemLessonStatus ?? "",
+    normalizeComparisonText(row.systemLessonNote ?? ""),
+    row.systemActualPresentCount ?? null,
+    row.systemPresentCount ?? null,
+    row.systemExpectedCount ?? null,
+    normalizeComparisonNameList(row.systemPresentStudentNames),
+    normalizeComparisonNameList(row.systemExpectedStudentNames),
+    row.systemMakeupCompletedCount ?? null,
+    normalizeComparisonNameList(row.systemMakeupCompletedStudentNames)
+  ]);
+  return `${reviewFingerprintPrefix}${fnv1a64(payload)}`;
+}
+
 export type ScheduleImportIncrementalMerge = {
   resolutions: ScheduleImportResolutionMap;
   unchangedCount: number;
@@ -212,10 +245,17 @@ export function mergeSavedReviewResolutions(
     usedSavedRows.add(savedIndex);
     const savedRow = savedRows[savedIndex];
     const previousResolution = savedResolutionForRow(review, savedRow);
-    if (rowComparisonFingerprint(row) === rowComparisonFingerprint(savedRow)) {
+    const currentFingerprint = rowReviewFingerprint(row);
+    const savedFingerprint = validReviewFingerprint(previousResolution?.dataFingerprint)
+      ? previousResolution.dataFingerprint
+      : rowReviewFingerprint(savedRow);
+    if (currentFingerprint === savedFingerprint) {
       unchangedCount += 1;
       if (previousResolution) {
-        resolutions[resolutionKey(row)] = { ...previousResolution };
+        resolutions[resolutionKey(row)] = {
+          ...previousResolution,
+          dataFingerprint: currentFingerprint
+        };
         inheritedCount += 1;
       }
       return;
@@ -234,6 +274,7 @@ export function mergeSavedReviewResolutions(
     resolutions[resolutionKey(row)] = {
       status: "recheck_required",
       note: noteParts.join(" "),
+      dataFingerprint: savedFingerprint,
       updatedAt: new Date().toISOString()
     };
   });
@@ -258,7 +299,7 @@ function findSavedRowIndex(
     .filter((index) => !usedSavedRows.has(index));
   if (row.systemLessonId) {
     const sameSystemLesson = availableIndexes.filter((index) => savedRows[index].systemLessonId === row.systemLessonId);
-    const exactSystemMatch = sameSystemLesson.find((index) => rowComparisonFingerprint(savedRows[index]) === rowComparisonFingerprint(row));
+    const exactSystemMatch = sameSystemLesson.find((index) => rowReviewFingerprint(savedRows[index]) === rowReviewFingerprint(row));
     if (exactSystemMatch !== undefined) return exactSystemMatch;
     if (sameSystemLesson.length === 1) return sameSystemLesson[0];
     const sameIdentity = sameSystemLesson.find((index) => rowIdentityKey(savedRows[index]) === rowIdentityKey(row));
@@ -282,38 +323,31 @@ function rowIdentityKey(row: ImportPreviewLesson | ScheduleImportSavedRow): stri
   return [campus, row.date, row.startTime, row.endTime, course].join("|");
 }
 
-function rowComparisonFingerprint(row: ImportPreviewLesson | ScheduleImportSavedRow): string {
-  return JSON.stringify([
-    row.campusId ?? normalizeComparisonText(row.campusName),
-    row.date,
-    row.startTime,
-    row.endTime,
-    normalizeComparisonText(row.title),
-    normalizeComparisonText(row.subjectHint),
-    row.courseTypeHint,
-    normalizeComparisonText(row.studentNameHint ?? ""),
-    normalizeComparisonText(row.teacher ?? ""),
-    normalizeComparisonText(row.assistant ?? ""),
-    normalizeComparisonText(row.room ?? ""),
-    row.presentCount ?? null,
-    row.expectedCount ?? null,
-    normalizeComparisonText(row.note ?? ""),
-    row.matchedCourseId ?? row.mappedCourseId ?? "",
-    row.systemLessonId ?? "",
-    row.systemLessonStatus ?? "",
-    normalizeComparisonText(row.systemLessonNote ?? ""),
-    row.systemActualPresentCount ?? null,
-    row.systemPresentCount ?? null,
-    row.systemExpectedCount ?? null,
-    normalizeComparisonText(row.systemPresentStudentNames ?? ""),
-    normalizeComparisonText(row.systemExpectedStudentNames ?? ""),
-    row.systemMakeupCompletedCount ?? null,
-    normalizeComparisonText(row.systemMakeupCompletedStudentNames ?? "")
-  ]);
+function validReviewFingerprint(value?: string): value is string {
+  return Boolean(value && new RegExp(`^${reviewFingerprintPrefix}[0-9a-f]{16}$`).test(value));
 }
 
 function normalizeComparisonText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function normalizeComparisonNameList(value?: string): string {
+  return (value ?? "")
+    .split(/[、,，;；\n]+/)
+    .map(normalizeComparisonText)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
+    .join("|");
+}
+
+function fnv1a64(value: string): string {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= BigInt(value.charCodeAt(index));
+    hash = BigInt.asUintN(64, hash * prime);
+  }
+  return hash.toString(16).padStart(16, "0");
 }
 
 function savedResolutionForRow(

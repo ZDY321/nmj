@@ -496,6 +496,7 @@ export type ScheduleImportResolution = {
   status: ScheduleImportResolutionStatus;
   note?: string;
   linkedSystemLessonIds?: string[];
+  dataFingerprint?: string;
   updatedAt: string;
 };
 

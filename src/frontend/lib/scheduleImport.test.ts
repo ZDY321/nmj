@@ -29,7 +29,7 @@ import {
 } from "@/frontend/lib/scheduleImportReviewRecords";
 import { summarizeScheduleImportImportedLessons } from "@/frontend/lib/scheduleImportReviewLessons";
 import { buildDefaultCampusOverrides, buildLocalOnlyRows } from "@/frontend/lib/scheduleImportReviewRows";
-import { mergeSavedReviewResolutions, resolutionKey } from "@/frontend/lib/scheduleImportReviewMatching";
+import { mergeSavedReviewResolutions, resolutionKey, rowReviewFingerprint } from "@/frontend/lib/scheduleImportReviewMatching";
 import type {
   CourseGroup,
   CourseType,
@@ -762,6 +762,21 @@ describe("schedule import review records", () => {
         resolutionNote: "拆分合并确认",
         linkedSystemLessonIds: [linkedLesson.id]
       });
+      expect(savedReview.resolutions?.[resolutionKey(splitMergeRow)]?.dataFingerprint).toMatch(/^review-v1:[0-9a-f]{16}$/);
+      expect(nextState.resolutions?.[resolutionKey(splitMergeRow)]?.dataFingerprint).toBe(rowReviewFingerprint(splitMergeRow));
+      const immediateMerge = mergeSavedReviewResolutions(savedReview, [splitMergeRow, importMissingRow], {});
+      expect(immediateMerge).toMatchObject({
+        unchangedCount: 2,
+        inheritedCount: 1,
+        changedCount: 0,
+        newCount: 0,
+        removedCount: 0
+      });
+      expect(immediateMerge.resolutions[resolutionKey(splitMergeRow)]).toMatchObject({
+        status: "split_merge_ok",
+        linkedSystemLessonIds: [linkedLesson.id],
+        dataFingerprint: rowReviewFingerprint(splitMergeRow)
+      });
       expect(savedReviewEffectiveCounts(savedReview)).toEqual({
         matched: 2,
         attendanceMismatch: 0,
@@ -781,11 +796,14 @@ describe("schedule import review records", () => {
     const previousRow = makePreviewRow({
       id: "old_file_row",
       fileName: "校宝课表导出2026-07-20.xls",
-      date: "2026-07-05"
+      date: "2026-07-05",
+      systemPresentStudentNames: "小明、小红",
+      systemExpectedStudentNames: "小明、小红"
     });
     const previousResolution = {
       status: "accepted" as const,
       note: "人工确认无误。",
+      dataFingerprint: rowReviewFingerprint(previousRow),
       updatedAt: "2026-07-20T08:00:00.000Z"
     };
     const review = makeSavedReview("july_review", "2026-07-20T09:00:00.000Z", "2026-07");
@@ -800,7 +818,9 @@ describe("schedule import review records", () => {
     const renamedButUnchanged = makePreviewRow({
       ...previousRow,
       id: "new_file_row",
-      fileName: "校宝课表导出2026-07-30.xls"
+      fileName: "校宝课表导出2026-07-30.xls",
+      systemPresentStudentNames: "小红、小明",
+      systemExpectedStudentNames: "小红、小明"
     });
     const unchangedMerge = mergeSavedReviewResolutions(review, [renamedButUnchanged], {});
     expect(unchangedMerge).toMatchObject({
@@ -812,7 +832,8 @@ describe("schedule import review records", () => {
     });
     expect(unchangedMerge.resolutions[resolutionKey(renamedButUnchanged)]).toMatchObject({
       status: "accepted",
-      note: "人工确认无误。"
+      note: "人工确认无误。",
+      dataFingerprint: rowReviewFingerprint(renamedButUnchanged)
     });
 
     const changedAttendance = { ...renamedButUnchanged, presentCount: 0, status: "attendance_mismatch" as const };

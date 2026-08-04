@@ -69,6 +69,7 @@ function normalizeResolutions(value: unknown): ScheduleImportResolutionMap {
         status: status as ScheduleImportResolutionStatus,
         note: typeof rawResolution.note === "string" ? rawResolution.note : undefined,
         linkedSystemLessonIds: normalizeLinkedSystemLessonIds(rawResolution.linkedSystemLessonIds),
+        dataFingerprint: typeof rawResolution.dataFingerprint === "string" ? rawResolution.dataFingerprint : undefined,
         updatedAt: typeof rawResolution.updatedAt === "string" ? rawResolution.updatedAt : new Date().toISOString()
       } satisfies ScheduleImportResolution]];
     })

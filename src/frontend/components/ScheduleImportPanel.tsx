@@ -59,6 +59,7 @@ import {
   resolutionMarksRowResolved,
   resolutionNeedsAttention,
   resolutionStatusLabel,
+  rowReviewFingerprint,
   savedReviewEffectiveCounts,
   savedReviewResolutionMap,
   savedReviewRowsAsPreview,
@@ -487,7 +488,12 @@ export function ScheduleImportPanel({
       return;
     }
     const key = resolutionKey(row);
-    const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
+    const nextResolutions = buildUpdatedResolutions(resolutions, key, patch.status === undefined
+      ? patch
+      : {
+          ...patch,
+          dataFingerprint: patch.status === "unreviewed" ? undefined : rowReviewFingerprint(row)
+        });
     const nextSplitMergeExcludedLessonIds = combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, nextResolutions);
     setResolutions(nextResolutions);
     if (!editingReviewId) {
@@ -613,9 +619,9 @@ export function ScheduleImportPanel({
   function currentSavedReviewComparison(review: ScheduleImportReviewRecord) {
     const nextRawLessons = rawLessonsFromSavedReview(review);
     if (nextRawLessons.length === 0) return null;
-    const nextMapping = mergeScheduleImportMappings(vault, review.mapping ?? {}, mapping);
+    const nextMapping = mergeScheduleImportMappings(vault, mapping);
     const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
-    const nextImportedRows = buildImportPreview(vault, nextRawLessons, nextMapping, nextFileCampusOverrides);
+    const nextImportedRows = buildImportPreview(vault, nextRawLessons, currentMapping, nextFileCampusOverrides);
     const nextRows = [...nextImportedRows, ...buildLocalOnlyRows(vault, nextImportedRows, nextRawLessons)];
     const baseResolutions = resolutionsWithoutMonths(cloudResolutions, [review.month]);
     const merge = mergeSavedReviewResolutions(review, nextRows, baseResolutions);
