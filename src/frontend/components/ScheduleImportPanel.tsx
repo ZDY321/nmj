@@ -61,6 +61,7 @@ import {
   resolutionStatusLabel,
   savedReviewEffectiveCounts,
   savedReviewResolutionMap,
+  savedReviewRowsAsPreview,
   savedScheduleImportReviewOverflowCount,
   savedScheduleImportReviewLimit,
   savedReviewTitle,
@@ -277,12 +278,8 @@ export function ScheduleImportPanel({
     () => latestScheduleImportReviewsByMonth(persistedScheduleImport?.reviews ?? []),
     [persistedScheduleImport?.reviews]
   );
-  const savedReviewLiveCounts = useMemo(
-    () => new Map(savedReviews.map((review) => [review.id, liveSavedReviewEffectiveCounts(vault, review)])),
-    [savedReviews, vault]
-  );
   const reviewNeedsAttentionForDisplay = (review: ScheduleImportReviewRecord): number =>
-    needsAttentionFromSavedReviewCounts(savedReviewLiveCounts.get(review.id) ?? savedReviewEffectiveCounts(review));
+    needsAttentionFromSavedReviewCounts(savedReviewEffectiveCounts(review));
 
   useEffect(() => {
     setMapping((current) => mergeScheduleImportMappings(vault, current, cloudMapping));
@@ -626,12 +623,11 @@ export function ScheduleImportPanel({
   }
 
   function loadSavedReviewIntoWorkspace(review: ScheduleImportReviewRecord) {
-    const comparison = currentSavedReviewComparison(review);
-    if (!comparison) {
+    const nextRawLessons = rawLessonsFromSavedReview(review);
+    if (nextRawLessons.length === 0) {
       setMessage("这条保存的对账没有可恢复的教务 Excel 课节，无法导入到核对列表。");
       return;
     }
-    const { nextRawLessons, nextMapping, nextFileCampusOverrides, nextRows, merge } = comparison;
     if (!workspaceBeforeHistoryRef.current) {
       workspaceBeforeHistoryRef.current = {
         rawLessons: [...rawLessons],
@@ -645,13 +641,16 @@ export function ScheduleImportPanel({
         calendarVisible
       };
     }
+    const nextHistoricalMapping = { ...(review.mapping ?? {}) };
+    const reviewResolutions = savedReviewResolutionMap(review);
+    const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
     const nextSelectedMonth = review.month || nextRawLessons[0]?.date.slice(0, 7) || todayIso().slice(0, 7);
     const nextSelectedDate = review.selectedDate || nextRawLessons[0]?.date || `${nextSelectedMonth}-01`;
 
     setRawLessons(nextRawLessons);
-    setHistoricalMapping(nextMapping);
-    setHistoricalRows(nextRows);
-    setResolutions(merge.resolutions);
+    setHistoricalMapping(nextHistoricalMapping);
+    setHistoricalRows(savedReviewRowsAsPreview(review.rows));
+    setResolutions(reviewResolutions);
     setFileCampusOverrides(nextFileCampusOverrides);
     setSelectedMonth(nextSelectedMonth);
     setSelectedDate(nextSelectedDate);
@@ -662,7 +661,7 @@ export function ScheduleImportPanel({
     setEditingReviewId("");
     setCalendarVisible(true);
 
-    setMessage(`正在只读查看「${savedReviewTitle(review)}」；与当前云端课表比较后，未变化 ${merge.unchangedCount} 节，变化 ${merge.changedCount} 节需复核。历史保存记录不会被修改。`);
+    setMessage(`正在只读查看「${savedReviewTitle(review)}」的保存快照；下方展示的是保存当时的核对结果。点击继续编辑时，才会与当前云端课表比较。`);
     focusCalendarPanel();
   }
 
@@ -1056,31 +1055,6 @@ function inheritSavedReviewCampusOverrides(
     if (campusIds.size === 1) next[fileName] = Array.from(campusIds)[0];
   });
   return next;
-}
-
-function liveSavedReviewEffectiveCounts(vault: TeacherVault, review: ScheduleImportReviewRecord): ReturnType<typeof savedReviewEffectiveCounts> {
-  const rawLessons = rawLessonsFromSavedReview(review);
-  if (rawLessons.length === 0) return savedReviewEffectiveCounts(review);
-  const previewRows = buildImportPreview(vault, rawLessons, review.mapping ?? {}, review.fileCampusOverrides ?? {});
-  const rows = [...previewRows, ...buildLocalOnlyRows(vault, previewRows, rawLessons)];
-  const resolutions = savedReviewResolutionMap(review);
-  const linkedSystemLessonIds = linkedSystemLessonIdsFromRows(rows, resolutions);
-  const effectiveRows = rows.map((row) => applyResolutionToRow(row, resolutions[resolutionKey(row)], linkedSystemLessonIds));
-  const statisticRows = effectiveRows.filter((row) => {
-    const resolutionStatus = resolutions[resolutionKey(row)]?.status;
-    return !resolutionExcludesImportStats(resolutionStatus) && resolutionStatus !== "recheck_required";
-  });
-  const summary = summarizeImportPreview(statisticRows);
-  return {
-    matched: summary.matched,
-    attendanceMismatch: summary.attendanceMismatch,
-    timeMismatch: summary.timeMismatch,
-    courseMismatch: summary.courseMismatch,
-    systemMissing: summary.systemMissing,
-    importMissing: summary.importMissing,
-    needsMapping: summary.needsMapping,
-    recheckRequired: rows.filter((row) => resolutions[resolutionKey(row)]?.status === "recheck_required").length
-  };
 }
 
 function needsAttentionFromSavedReviewCounts(counts: ReturnType<typeof savedReviewEffectiveCounts>): number {
