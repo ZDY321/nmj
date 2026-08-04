@@ -50,18 +50,19 @@ export function ScheduleImportCalendarPanel({
   const selectedDateProblemCount = selectedDateRows.filter(rowHasProblem).length;
   const selectedDateMissingFeeCount = selectedDateRows.filter(rowHasMissingLessonFee).length;
   const selectedDateNotDueCount = selectedDateRows.filter((row) => resolutionExcludesImportStats(resolutions[resolutionKey(row)]?.status)).length;
+  const selectedDateHasRows = selectedDateRows.length > 0;
   const selectedDateHasProblems = selectedDateProblemCount > 0;
-  const selectedDateOnlyNotDue = selectedDateRows.length > 0 && selectedDateRows.length === selectedDateNotDueCount;
+  const selectedDateOnlyNotDue = selectedDateHasRows && selectedDateRows.length === selectedDateNotDueCount;
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <div className="rounded-[16px] border border-[#dbe4ef] bg-white p-3">
-        <div className="mb-2 grid grid-cols-7 gap-2">
+      <div className="rounded-[16px] border border-[#dbe4ef] bg-white p-2 sm:p-3">
+        <div className="mb-1.5 grid grid-cols-7 gap-1 md:mb-2 md:gap-2">
           {weekdayLabels.map((label) => (
-            <div key={label} className="rounded-[10px] bg-[#f8fbff] px-2 py-2 text-center text-xs font-extrabold text-[#64748b]">{label}</div>
+            <div key={label} className="rounded-[7px] bg-[#f8fbff] px-0 py-1.5 text-center text-[10px] font-extrabold text-[#64748b] md:rounded-[10px] md:px-2 md:py-2 md:text-xs">{label}</div>
           ))}
         </div>
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1 md:gap-2">
           {days.map((date) => {
             const dayRows = filteredRows.filter((row) => row.date === date);
             const isSelected = selectedDate === date;
@@ -75,7 +76,7 @@ export function ScheduleImportCalendarPanel({
                 key={date}
                 type="button"
                 onClick={() => onDateSelect(date)}
-                className={`min-h-[126px] rounded-[14px] border p-2 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] ${
+                className={`min-h-[58px] rounded-[9px] border p-1.5 text-left transition-all hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] md:min-h-[108px] md:rounded-[12px] md:p-2 md:hover:-translate-y-0.5 xl:min-h-[126px] xl:rounded-[14px] ${
                   isSelected
                     ? "border-[#1557c2] bg-[#eaf2ff] shadow-[0_10px_24px_rgba(21,87,194,0.12)] ring-2 ring-[#bfdbfe]"
                     : !isCurrentMonth
@@ -89,16 +90,27 @@ export function ScheduleImportCalendarPanel({
                           : "border-[#e8eef6] bg-white"
                 }`}
               >
-                <div className="flex items-start justify-between gap-1.5">
-                  <span className="shrink-0 text-sm font-extrabold text-[#061226]">{Number(date.slice(8))}</span>
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1">
+                <div className="flex items-start justify-between gap-1 md:gap-1.5">
+                  <span className="shrink-0 text-xs font-extrabold text-[#061226] md:text-sm">{Number(date.slice(8))}</span>
+                  <div className="hidden min-w-0 flex-1 flex-wrap items-center justify-end gap-1 md:flex">
                     {reviewedDayCount > 0 && <Badge variant="sky" className="px-1.5 text-[10px] leading-4">已标 {reviewedDayCount}</Badge>}
                     {missingFeeDayCount > 0 && <Badge variant="destructive" className="px-1.5 text-[10px] leading-4">欠费 {missingFeeDayCount}</Badge>}
                     {notDueDayCount > 0 && <Badge variant="secondary" className="px-1.5 text-[10px] leading-4">未到 {notDueDayCount}</Badge>}
                     {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="px-1.5 text-[10px] leading-4">{dayRows.length}</Badge>}
                   </div>
                 </div>
-                <div className="mt-2 flex flex-col gap-1">
+                <div className="mt-2 flex items-center justify-center md:hidden">
+                  {dayRows.length > 0 && (
+                    <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-extrabold ring-1 ${
+                      hasProblems
+                        ? "bg-[#fff3e4] text-[#9a3412] ring-[#fdba74]"
+                        : reviewedDayCount > 0
+                          ? "bg-[#dbeafe] text-[#1557c2] ring-[#93c5fd]"
+                          : "bg-[#dcfce7] text-[#15803d] ring-[#86efac]"
+                    }`}>{dayRows.length}</span>
+                  )}
+                </div>
+                <div className="mt-2 hidden flex-col gap-1 md:flex">
                   {dayRows.slice(0, 3).map((row) => {
                     const resolution = resolutions[resolutionKey(row)];
                     const rowReviewed = isReviewedResolution(resolution);
@@ -124,22 +136,24 @@ export function ScheduleImportCalendarPanel({
 
       <div className="space-y-3">
         <div className="rounded-[14px] border border-[#dbe4ef] bg-white p-4">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex items-center gap-2 text-sm font-extrabold text-[#061226]">
                 <CalendarDays size={16} className="text-[#1557c2]" /> {selectedDate}
               </div>
               <div className="mt-1 text-xs font-semibold text-[#64748b]">当前筛选 {selectedDateRows.length} 条</div>
             </div>
-            <Badge variant={selectedDateHasProblems ? "amber" : selectedDateOnlyNotDue ? "secondary" : "sage"}>
-              {selectedDateHasProblems ? `有差异 ${selectedDateProblemCount} 节` : selectedDateOnlyNotDue ? "未到日期" : "已对应"}
-            </Badge>
-            {selectedDateMissingFeeCount > 0 && <Badge variant="destructive">欠费 {selectedDateMissingFeeCount} 节</Badge>}
-            {selectedDateNotDueCount > 0 && <Badge variant="secondary">未到日期 {selectedDateNotDueCount} 节</Badge>}
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <Badge variant={!selectedDateHasRows ? "secondary" : selectedDateHasProblems ? "amber" : selectedDateOnlyNotDue ? "secondary" : "sage"}>
+                {!selectedDateHasRows ? "无课节" : selectedDateHasProblems ? `有差异 ${selectedDateProblemCount} 节` : selectedDateOnlyNotDue ? "未到日期" : "已对应"}
+              </Badge>
+              {selectedDateMissingFeeCount > 0 && <Badge variant="destructive">欠费 {selectedDateMissingFeeCount} 节</Badge>}
+              {selectedDateNotDueCount > 0 && <Badge variant="secondary">未到日期 {selectedDateNotDueCount} 节</Badge>}
+            </div>
           </div>
         </div>
 
-        <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
+        <div className="space-y-3 md:max-h-[720px] md:overflow-y-auto md:pr-1">
           {selectedDateRows.map((row) => renderRow(row))}
           {selectedDateRows.length === 0 && (
             <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">

@@ -1,21 +1,25 @@
-import { CalendarDays, Eye, Trash2, X } from "lucide-react";
+import { CalendarDays, Eye, Pencil, Trash2, X } from "lucide-react";
 import type { ScheduleImportReviewRecord } from "@/shared/types";
 import { savedScheduleImportReviewLimit } from "@/frontend/lib/scheduleImportReview";
 
 export function ScheduleImportSavedReviewsPanel({
   reviews,
   openedReviewId,
+  editingReviewId,
   reviewTitle,
   reviewNeedsAttention,
   onOpenReview,
+  onEditReview,
   onCloseReview,
   onDeleteReview
 }: {
   reviews: ScheduleImportReviewRecord[];
   openedReviewId: string;
+  editingReviewId?: string;
   reviewTitle: (review: ScheduleImportReviewRecord) => string;
   reviewNeedsAttention: (review: ScheduleImportReviewRecord) => number;
   onOpenReview: (review: ScheduleImportReviewRecord) => void;
+  onEditReview: (review: ScheduleImportReviewRecord) => void;
   onCloseReview: () => void;
   onDeleteReview: (review: ScheduleImportReviewRecord) => void;
 }) {
@@ -30,16 +34,29 @@ export function ScheduleImportSavedReviewsPanel({
             已保存对账
             {openedReviewId && (
               <>
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#1557c2] px-2 py-0.5 text-[10px] font-extrabold text-white">
-                  <Eye size={11} /> 正在查看历史记录
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold text-white ${editingReviewId ? "bg-[#0f766e]" : "bg-[#1557c2]"}`}>
+                  {editingReviewId ? <Pencil size={11} /> : <Eye size={11} />} {editingReviewId ? "正在编辑历史记录" : "正在查看历史记录"}
                 </span>
+                {!editingReviewId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const review = reviews.find((item) => item.id === openedReviewId);
+                      if (review) onEditReview(review);
+                    }}
+                    title="把这条历史记录载入当前工作区继续编辑"
+                    className="inline-flex items-center gap-1 rounded-[6px] border border-[#99f6e4] bg-[#f0fdfa] px-2 py-1 text-[10px] font-extrabold text-[#0f766e] hover:bg-[#ccfbf1]"
+                  >
+                    <Pencil size={11} /> 继续编辑
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onCloseReview}
-                  title="退出历史查看并返回之前的对账现场"
+                  title={editingReviewId ? "取消编辑并返回进入历史前的对账现场" : "退出历史查看并返回之前的对账现场"}
                   className="inline-flex items-center gap-1 rounded-[6px] border border-[#cbd6e3] bg-white px-2 py-1 text-[10px] font-extrabold text-[#25324a] hover:bg-[#f8fbff]"
                 >
-                  <X size={11} /> 退出历史查看
+                  <X size={11} /> {editingReviewId ? "取消编辑" : "退出历史查看"}
                 </button>
               </>
             )}

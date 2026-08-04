@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDays } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { ScheduleImportCalendarPanel } from "@/frontend/components/ScheduleImportCalendarPanel";
@@ -85,6 +86,7 @@ type ScheduleImportWorkspaceSnapshot = {
   campusFilter: string;
   statusFilter: StatusFilter;
   search: string;
+  calendarVisible: boolean;
 };
 
 export function ScheduleImportPanel({
@@ -134,6 +136,8 @@ export function ScheduleImportPanel({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(savedWorkspace.statusFilter);
   const [search, setSearch] = useState(savedWorkspace.search);
   const [openedReviewId, setOpenedReviewId] = useState("");
+  const [editingReviewId, setEditingReviewId] = useState("");
+  const [calendarVisible, setCalendarVisible] = useState(false);
   const calendarPanelRef = useRef<HTMLDivElement>(null);
   const workspaceBeforeHistoryRef = useRef<ScheduleImportWorkspaceSnapshot | null>(null);
   const { confirm, dialog } = useConfirmDialog();
@@ -296,7 +300,7 @@ export function ScheduleImportPanel({
   }, [displayMonth, selectedDate]);
 
   useEffect(() => {
-    if (openedReviewId) return;
+    if (openedReviewId && !editingReviewId) return;
     writeSavedMapping(storageScope, mapping);
     writeSavedWorkspace(storageScope, {
       rawLessons,
@@ -310,7 +314,7 @@ export function ScheduleImportPanel({
       search,
       savedAt: new Date().toISOString()
     });
-  }, [campusFilter, fileCampusOverrides, mapping, openedReviewId, rawLessons, resolutions, search, selectedDate, selectedMonth, statusFilter, storageScope]);
+  }, [campusFilter, editingReviewId, fileCampusOverrides, mapping, openedReviewId, rawLessons, resolutions, search, selectedDate, selectedMonth, statusFilter, storageScope]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -350,10 +354,11 @@ export function ScheduleImportPanel({
     matchingReviews: ScheduleImportReviewRecord[],
     mode: "append" | "inherit" | "fresh"
   ) {
-      const leavingHistoricalReview = Boolean(openedReviewId);
-      const sourceRawLessons = leavingHistoricalReview ? [] : rawLessons;
-      const sourceResolutions = leavingHistoricalReview ? {} : resolutions;
-      const sourceFileCampusOverrides = leavingHistoricalReview ? {} : fileCampusOverrides;
+      const leavingHistoricalReview = Boolean(openedReviewId && !editingReviewId);
+      const startingFreshWorkspace = leavingHistoricalReview || !calendarVisible;
+      const sourceRawLessons = startingFreshWorkspace ? [] : rawLessons;
+      const sourceResolutions = startingFreshWorkspace ? {} : resolutions;
+      const sourceFileCampusOverrides = startingFreshWorkspace ? {} : fileCampusOverrides;
       const parsedFileNames = new Set(parsed.map((lesson) => lesson.fileName));
       const parsedMonths = new Set(parsed.map((lesson) => lesson.date.slice(0, 7)));
       const retainedRawLessons = mode === "append"
@@ -405,6 +410,7 @@ export function ScheduleImportPanel({
       setResolutions(nextResolutions);
       setFileCampusOverrides(nextOverrides);
       setOpenedReviewId("");
+      setCalendarVisible(nextRawLessons.length > 0);
       workspaceBeforeHistoryRef.current = null;
       setCampusFilter("all");
       setStatusFilter("all");
@@ -442,7 +448,7 @@ export function ScheduleImportPanel({
   }
 
   function updateFileCampus(fileName: string, campusId: string) {
-    if (openedReviewId) {
+    if (openedReviewId && !editingReviewId) {
       setMessage("历史对账正在以只读快照查看；退出历史查看后再修改校区。");
       return;
     }
@@ -450,7 +456,7 @@ export function ScheduleImportPanel({
   }
 
   function removeImportedFile(fileName: string) {
-    if (openedReviewId) {
+    if (openedReviewId && !editingReviewId) {
       setMessage("历史对账正在以只读快照查看；退出历史查看后再移除文件。");
       return;
     }
@@ -466,7 +472,7 @@ export function ScheduleImportPanel({
   }
 
   function updateResolution(row: ImportPreviewLesson, patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) {
-    if (openedReviewId) {
+    if (openedReviewId && !editingReviewId) {
       setMessage("历史对账正在以只读快照查看，不会修改当前映射或处理标记。请先退出历史查看，或重新导入 Excel 继续对账。");
       return;
     }
@@ -474,7 +480,7 @@ export function ScheduleImportPanel({
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
     const nextSplitMergeExcludedLessonIds = combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, nextResolutions);
     setResolutions(nextResolutions);
-    if (patch.status) {
+    if (patch.status && !editingReviewId) {
       onSaveScheduleImport?.(
         buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds),
         { syncReviewArchive: false }
@@ -487,6 +493,8 @@ export function ScheduleImportPanel({
           ? `已标为「${label}」，这条差异已计入已对应，顶部统计和状态筛选已更新。`
           : `已标为「${label}」，这条差异仍保留在待核对统计中。`
       );
+    } else if (patch.status && editingReviewId) {
+      setMessage(`历史对账已修改为「${resolutionStatusLabel(patch.status)}」，点击保存后才会更新该月历史记录。`);
     }
   }
 
@@ -517,6 +525,7 @@ export function ScheduleImportPanel({
     });
     onSaveScheduleImport?.(nextScheduleImport);
     setOpenedReviewId("");
+    setEditingReviewId("");
     setHistoricalMapping(null);
     setHistoricalRows(null);
     workspaceBeforeHistoryRef.current = null;
@@ -531,7 +540,7 @@ export function ScheduleImportPanel({
   }
 
   function requestSaveMapping(afterSave?: () => void) {
-    if (openedReviewId) {
+    if (openedReviewId && !editingReviewId) {
       setMessage("历史对账是只读快照，不能直接覆盖当前对账。请重新导入 Excel 继续本月对账后再保存。");
       return;
     }
@@ -602,7 +611,8 @@ export function ScheduleImportPanel({
         selectedDate,
         campusFilter,
         statusFilter,
-        search
+        search,
+        calendarVisible
       };
     }
     const nextHistoricalMapping = { ...(review.mapping ?? {}) };
@@ -622,13 +632,16 @@ export function ScheduleImportPanel({
     setStatusFilter("all");
     setSearch("");
     setOpenedReviewId(review.id);
+    setEditingReviewId("");
+    setCalendarVisible(true);
 
     setMessage(`正在只读查看「${savedReviewTitle(review)}」的历史快照，已切换到 ${nextSelectedMonth}；当时的映射不会恢复到当前规则。`);
     focusCalendarPanel();
   }
 
   function restoreWorkspaceAfterHistory(nextMessage = "已退出历史查看，并返回之前的对账现场；当前课程映射没有改变。") {
-    const previous = workspaceBeforeHistoryRef.current ?? readSavedWorkspace(storageScope);
+    const previousSnapshot = workspaceBeforeHistoryRef.current;
+    const previous = previousSnapshot ?? readSavedWorkspace(storageScope);
     setRawLessons([...previous.rawLessons]);
     setResolutions({ ...previous.resolutions });
     setFileCampusOverrides({ ...previous.fileCampusOverrides });
@@ -640,11 +653,30 @@ export function ScheduleImportPanel({
     setHistoricalMapping(null);
     setHistoricalRows(null);
     setOpenedReviewId("");
+    setEditingReviewId("");
+    setCalendarVisible(previousSnapshot?.calendarVisible ?? false);
     workspaceBeforeHistoryRef.current = null;
     setMessage(nextMessage);
   }
 
+  function editSavedReview(review: ScheduleImportReviewRecord) {
+    if (openedReviewId !== review.id) {
+      loadSavedReviewIntoWorkspace(review);
+    }
+    setMapping({ ...(review.mapping ?? {}) });
+    setHistoricalMapping(null);
+    setHistoricalRows(null);
+    setEditingReviewId(review.id);
+    setOpenedReviewId(review.id);
+    setCalendarVisible(true);
+    setMessage(`已载入「${savedReviewTitle(review)}」继续编辑；修改后点击保存会更新这个月的历史对账。`);
+  }
+
   function openSavedReviewInCalendar(review: ScheduleImportReviewRecord) {
+    if (editingReviewId) {
+      setMessage("当前正在编辑历史对账，请先保存或取消编辑后再切换其他历史记录。");
+      return;
+    }
     if (openedReviewId === review.id) {
       const nextMonth = review.month || todayIso().slice(0, 7);
       setSelectedMonth(nextMonth);
@@ -658,6 +690,11 @@ export function ScheduleImportPanel({
     }
 
     if (openedReviewId) {
+      loadSavedReviewIntoWorkspace(review);
+      return;
+    }
+
+    if (!calendarVisible) {
       loadSavedReviewIntoWorkspace(review);
       return;
     }
@@ -687,6 +724,7 @@ export function ScheduleImportPanel({
     setHistoricalMapping(null);
     setHistoricalRows(null);
     setRawLessons([]);
+    setCalendarVisible(false);
     setFileCampusOverrides({});
     setResolutions({});
     setMessage("");
@@ -709,14 +747,14 @@ export function ScheduleImportPanel({
     <Card className="overflow-hidden border-2 border-[#bfdbfe]">
       <CardContent className="space-y-4">
         <ScheduleImportHeaderPanel
-          rawLessonCount={rawLessons.length}
-          rowCount={rows.length}
+          rawLessonCount={calendarVisible ? rawLessons.length : 0}
+          rowCount={calendarVisible ? rows.length : 0}
           loading={loading}
-          summary={summary}
-          fileSummaries={fileSummaries}
-          monthCount={monthOptions.length}
+          summary={calendarVisible ? summary : summarizeImportPreview([])}
+          fileSummaries={calendarVisible ? fileSummaries : []}
+          monthCount={calendarVisible ? monthOptions.length : 0}
           campusOptions={campusOptions}
-          fileCampusOverrides={fileCampusOverrides}
+          fileCampusOverrides={calendarVisible ? fileCampusOverrides : {}}
           message={message}
           onFilesSelected={(files) => void handleFiles(files)}
           onSave={saveMapping}
@@ -730,9 +768,11 @@ export function ScheduleImportPanel({
         <ScheduleImportSavedReviewsPanel
           reviews={savedReviews}
           openedReviewId={openedReviewId}
+          editingReviewId={editingReviewId}
           reviewTitle={savedReviewTitle}
           reviewNeedsAttention={reviewNeedsAttentionForDisplay}
           onOpenReview={openSavedReviewInCalendar}
+          onEditReview={editSavedReview}
           onCloseReview={() => restoreWorkspaceAfterHistory()}
           onDeleteReview={(review) => {
             confirm({
@@ -746,77 +786,87 @@ export function ScheduleImportPanel({
           }}
         />
 
-        <ScheduleImportStatusControls
-          summary={summary}
-          resolvedAsMatchedCount={resolvedAsMatchedCount}
-          resolutionCounts={resolutionCounts}
-          rawImportedLessonCount={importedLessonStats.rawCount}
-          rawImportedLessonHours={importedLessonStats.rawHours}
-          importedLessonCount={importedLessonStats.count}
-          importedLessonHours={importedLessonStats.hours}
-          excludedImportedLessonCount={importedLessonStats.excludedCount}
-          excludedImportedLessonHours={importedLessonStats.excludedHours}
-          cancelledImportedLessonCount={importedLessonStats.cancelledExcludedCount}
-          cancelledImportedLessonHours={importedLessonStats.cancelledExcludedHours}
-          absentImportedLessonCount={importedLessonStats.absentExcludedCount}
-          absentImportedLessonHours={importedLessonStats.absentExcludedHours}
-          systemLessonCount={systemLessonStats.count}
-          systemLessonHours={systemLessonStats.hours}
-          systemCompletedLessonCount={systemLessonStats.completedCount}
-          systemCompletedLessonHours={systemLessonStats.completedHours}
-          needsAttention={needsAttention}
-          needsAttentionHours={needsAttentionHours}
-          selectedMonth={displayMonth}
-          campusFilter={campusFilter}
-          statusFilter={statusFilter}
-          search={search}
-          campusOptions={campusOptions}
-          onStatusToggle={applyStatusFilter}
-          onMonthChange={setSelectedMonth}
-          onCampusChange={setCampusFilter}
-          onStatusChange={setStatusFilter}
-          onSearchChange={setSearch}
-        />
+        {calendarVisible ? (
+          <>
+            <ScheduleImportStatusControls
+              summary={summary}
+              resolvedAsMatchedCount={resolvedAsMatchedCount}
+              resolutionCounts={resolutionCounts}
+              rawImportedLessonCount={importedLessonStats.rawCount}
+              rawImportedLessonHours={importedLessonStats.rawHours}
+              importedLessonCount={importedLessonStats.count}
+              importedLessonHours={importedLessonStats.hours}
+              excludedImportedLessonCount={importedLessonStats.excludedCount}
+              excludedImportedLessonHours={importedLessonStats.excludedHours}
+              cancelledImportedLessonCount={importedLessonStats.cancelledExcludedCount}
+              cancelledImportedLessonHours={importedLessonStats.cancelledExcludedHours}
+              absentImportedLessonCount={importedLessonStats.absentExcludedCount}
+              absentImportedLessonHours={importedLessonStats.absentExcludedHours}
+              systemLessonCount={systemLessonStats.count}
+              systemLessonHours={systemLessonStats.hours}
+              systemCompletedLessonCount={systemLessonStats.completedCount}
+              systemCompletedLessonHours={systemLessonStats.completedHours}
+              needsAttention={needsAttention}
+              needsAttentionHours={needsAttentionHours}
+              selectedMonth={displayMonth}
+              campusFilter={campusFilter}
+              statusFilter={statusFilter}
+              search={search}
+              campusOptions={campusOptions}
+              onStatusToggle={applyStatusFilter}
+              onMonthChange={setSelectedMonth}
+              onCampusChange={setCampusFilter}
+              onStatusChange={setStatusFilter}
+              onSearchChange={setSearch}
+            />
 
-        <div ref={calendarPanelRef} className="scroll-mt-4">
-          <ScheduleImportCalendarPanel
-            vault={vault}
-            days={days}
-            weekdayLabels={weekdayLabels}
-            displayMonth={displayMonth}
-            selectedDate={selectedDate}
-            filteredRows={filteredRows}
-            selectedDateRows={selectedDateRows}
-            resolutions={resolutions}
-            linkedSystemLessonIds={linkedSystemLessonIds}
-            onDateSelect={setSelectedDate}
-            effectiveRowStatus={effectiveRowStatus}
-            resolutionKey={resolutionKey}
-            isReviewedResolution={isReviewedResolution}
-            statusPillClass={statusPillClass}
-            rowAttentionLabel={splitMergeReviewLabel}
-            renderRow={(row) => (
-              <ScheduleImportReconciliationRow
-                key={row.id}
-                row={row}
+            <div ref={calendarPanelRef} className="scroll-mt-4">
+              <ScheduleImportCalendarPanel
                 vault={vault}
-                resolution={resolutions[resolutionKey(row)]}
+                days={days}
+                weekdayLabels={weekdayLabels}
+                displayMonth={displayMonth}
+                selectedDate={selectedDate}
+                filteredRows={filteredRows}
+                selectedDateRows={selectedDateRows}
+                resolutions={resolutions}
                 linkedSystemLessonIds={linkedSystemLessonIds}
-                linkedBySources={row.systemLessonId ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId) : []}
-                staleLinkedByPreviousResolution={Boolean(row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId))}
-                invalidLinkedSystemLessonIds={(() => {
-                  const linkedIds = resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? [];
-                  const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
-                  if (hasCurrentDirectMatch) return [];
-                  return linkedIds.some((lessonId) => existingSystemLessonIds.has(lessonId)) ? [] : linkedIds.filter((lessonId) => !existingSystemLessonIds.has(lessonId));
-                })()}
-                onResolutionChange={(patch) => updateResolution(row, patch)}
-                onOpenLesson={onOpenLesson}
-                onSuggestSchedule={onSuggestSchedule}
+                onDateSelect={setSelectedDate}
+                effectiveRowStatus={effectiveRowStatus}
+                resolutionKey={resolutionKey}
+                isReviewedResolution={isReviewedResolution}
+                statusPillClass={statusPillClass}
+                rowAttentionLabel={splitMergeReviewLabel}
+                renderRow={(row) => (
+                  <ScheduleImportReconciliationRow
+                    key={row.id}
+                    row={row}
+                    vault={vault}
+                    resolution={resolutions[resolutionKey(row)]}
+                    linkedSystemLessonIds={linkedSystemLessonIds}
+                    linkedBySources={row.systemLessonId ? linkedSystemLessonSources.filter((source) => source.lessonId === row.systemLessonId) : []}
+                    staleLinkedByPreviousResolution={Boolean(row.systemLessonId && staleLinkedSystemLessonIds.has(row.systemLessonId))}
+                    invalidLinkedSystemLessonIds={(() => {
+                      const linkedIds = resolutions[resolutionKey(row)]?.linkedSystemLessonIds ?? [];
+                      const hasCurrentDirectMatch = Boolean(row.systemLessonId && (row.status === "matched" || row.status === "attendance_mismatch"));
+                      if (hasCurrentDirectMatch) return [];
+                      return linkedIds.some((lessonId) => existingSystemLessonIds.has(lessonId)) ? [] : linkedIds.filter((lessonId) => !existingSystemLessonIds.has(lessonId));
+                    })()}
+                    onResolutionChange={(patch) => updateResolution(row, patch)}
+                    onOpenLesson={onOpenLesson}
+                    onSuggestSchedule={onSuggestSchedule}
+                  />
+                )}
               />
-            )}
-          />
-        </div>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] px-4 py-8 text-center">
+            <CalendarDays size={24} className="mx-auto text-[#6685a5]" />
+            <div className="mt-3 text-sm font-extrabold text-[#25324a]">尚未打开对账日历</div>
+            <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">导入新的教务 Excel 开始本次对账，或选择上方已保存对账查看历史结果。</div>
+          </div>
+        )}
       </CardContent>
       {dialog}
     </Card>
