@@ -822,6 +822,19 @@ describe("schedule import review records", () => {
       status: "recheck_required"
     });
     expect(changedMerge.resolutions[resolutionKey(changedAttendance)]?.note).toContain("上次处理：确认无误");
+
+    const changedCloudCourse = {
+      ...renamedButUnchanged,
+      matchedCourseId: "course_reassigned",
+      mappedCourseId: "course_reassigned",
+      systemLessonId: "lesson_reassigned"
+    };
+    const changedCloudCourseMerge = mergeSavedReviewResolutions(review, [changedCloudCourse], {});
+    expect(changedCloudCourseMerge).toMatchObject({ changedCount: 1, newCount: 0, removedCount: 0 });
+    expect(changedCloudCourseMerge.resolutions[resolutionKey(changedCloudCourse)]).toMatchObject({
+      status: "recheck_required"
+    });
+
     const changedResolution = changedMerge.resolutions[resolutionKey(changedAttendance)];
     const changedReview: ScheduleImportReviewRecord = {
       ...review,

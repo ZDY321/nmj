@@ -410,6 +410,7 @@ export function ScheduleImportPanel({
       setResolutions(nextResolutions);
       setFileCampusOverrides(nextOverrides);
       setOpenedReviewId("");
+      setEditingReviewId("");
       setCalendarVisible(nextRawLessons.length > 0);
       workspaceBeforeHistoryRef.current = null;
       setCampusFilter("all");
@@ -453,6 +454,11 @@ export function ScheduleImportPanel({
       return;
     }
     setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
+    if (editingReviewId) {
+      setHistoricalMapping(null);
+      setHistoricalRows(null);
+      setMessage("文件校区已修改，已根据当前云端课表重新计算本月对应结果；原逐课处理标记仍会尽量保留。");
+    }
   }
 
   function removeImportedFile(fileName: string) {
@@ -468,6 +474,10 @@ export function ScheduleImportPanel({
       return next;
     });
     setResolutions((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !removedResolutionKeys.has(key))));
+    if (editingReviewId) {
+      setHistoricalMapping(null);
+      setHistoricalRows(null);
+    }
     setMessage(`已移除「${fileName}」。`);
   }
 
@@ -660,16 +670,48 @@ export function ScheduleImportPanel({
   }
 
   function editSavedReview(review: ScheduleImportReviewRecord) {
-    if (openedReviewId !== review.id) {
-      loadSavedReviewIntoWorkspace(review);
+    const nextRawLessons = rawLessonsFromSavedReview(review);
+    if (nextRawLessons.length === 0) {
+      setMessage("这条保存的对账没有可恢复的教务 Excel 课节，无法继续编辑。");
+      return;
     }
-    setMapping({ ...(review.mapping ?? {}) });
+    if (!workspaceBeforeHistoryRef.current) {
+      workspaceBeforeHistoryRef.current = {
+        rawLessons: [...rawLessons],
+        resolutions: { ...resolutions },
+        fileCampusOverrides: { ...fileCampusOverrides },
+        selectedMonth,
+        selectedDate,
+        campusFilter,
+        statusFilter,
+        search,
+        calendarVisible
+      };
+    }
+    const nextMapping = mergeScheduleImportMappings(vault, review.mapping ?? {}, mapping);
+    const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
+    const nextImportedRows = buildImportPreview(vault, nextRawLessons, nextMapping, nextFileCampusOverrides);
+    const nextRows = [...nextImportedRows, ...buildLocalOnlyRows(vault, nextImportedRows, nextRawLessons)];
+    const baseResolutions = resolutionsWithoutMonths(cloudResolutions, [review.month]);
+    const merge = mergeSavedReviewResolutions(review, nextRows, baseResolutions);
+    const nextSelectedMonth = review.month || nextRawLessons[0]?.date.slice(0, 7) || todayIso().slice(0, 7);
+
+    setRawLessons(nextRawLessons);
+    setMapping(nextMapping);
+    setFileCampusOverrides(nextFileCampusOverrides);
+    setResolutions(merge.resolutions);
     setHistoricalMapping(null);
     setHistoricalRows(null);
+    setSelectedMonth(nextSelectedMonth);
+    setSelectedDate(review.selectedDate || nextRawLessons[0]?.date || `${nextSelectedMonth}-01`);
+    setCampusFilter("all");
+    setStatusFilter("all");
+    setSearch("");
     setEditingReviewId(review.id);
     setOpenedReviewId(review.id);
     setCalendarVisible(true);
-    setMessage(`已载入「${savedReviewTitle(review)}」继续编辑；修改后点击保存会更新这个月的历史对账。`);
+    setMessage(`已将「${savedReviewTitle(review)}」与当前云端课表比较：未变化 ${merge.unchangedCount} 节，继承处理 ${merge.inheritedCount} 节；变化 ${merge.changedCount} 节待复核，新增 ${merge.newCount} 节，上次有 ${merge.removedCount} 节当前不再出现。`);
+    focusCalendarPanel();
   }
 
   function openSavedReviewInCalendar(review: ScheduleImportReviewRecord) {

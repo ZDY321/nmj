@@ -226,7 +226,7 @@ export function mergeSavedReviewResolutions(
       ? resolutionStatusLabel(previousResolution.status)
       : statusLabel(savedRow.status as ImportMatchStatus);
     const noteParts = [
-      "新导入的数据与上次保存结果不同，请重新核对。",
+      "当前数据与上次保存结果不同，请重新核对。",
       `上次处理：${previousLabel}。`,
       previousResolution?.note?.trim() ? `上次备注：${previousResolution.note.trim()}` : "",
       previousResolution?.linkedSystemLessonIds?.length ? `上次关联 ${previousResolution.linkedSystemLessonIds.length} 节云端课。` : ""
@@ -264,7 +264,14 @@ function findSavedRowIndex(
     const sameIdentity = sameSystemLesson.find((index) => rowIdentityKey(savedRows[index]) === rowIdentityKey(row));
     if (sameIdentity !== undefined) return sameIdentity;
   }
+  const sameImportedLesson = availableIndexes.filter((index) => importedLessonIdentityKey(savedRows[index]) === importedLessonIdentityKey(row));
+  if (sameImportedLesson.length === 1) return sameImportedLesson[0];
   return availableIndexes.find((index) => rowIdentityKey(savedRows[index]) === rowIdentityKey(row)) ?? -1;
+}
+
+function importedLessonIdentityKey(row: ImportPreviewLesson | ScheduleImportSavedRow): string {
+  const campus = row.campusId ? `id:${row.campusId}` : `name:${normalizeComparisonText(row.campusName)}`;
+  return [campus, row.date, row.startTime, row.endTime, normalizeComparisonText(row.title)].join("|");
 }
 
 function rowIdentityKey(row: ImportPreviewLesson | ScheduleImportSavedRow): string {
