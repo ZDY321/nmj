@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyVault } from "@/frontend/lib/sampleData";
-import { filterStudentStatsLessons, type StudentStatsLessonFilters } from "@/frontend/lib/scheduleViewHelpers";
+import {
+  calendarLessonsForDateWithFilters,
+  filterStudentStatsLessons,
+  type CalendarLessonFilters,
+  type StudentStatsLessonFilters
+} from "@/frontend/lib/scheduleViewHelpers";
 import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
 
 const defaultFilters: StudentStatsLessonFilters = {
@@ -15,6 +20,15 @@ const defaultFilters: StudentStatsLessonFilters = {
   statusFilter: "all",
   subjectFilter: "all",
   makeupFilter: "all"
+};
+
+const defaultCalendarFilters: CalendarLessonFilters = {
+  campusFilter: "all",
+  courseTypeFilter: "all",
+  gradeFilter: "all",
+  makeupFilter: "all",
+  studentFilter: "",
+  subjectFilter: "all"
 };
 
 function makeCourse(id: string, studentId: string, status: CourseGroup["status"] = "active"): CourseGroup {
@@ -83,5 +97,23 @@ describe("student lesson statistics filters", () => {
       ...defaultFilters,
       courseFilter: "course_transition"
     }).map((lesson) => lesson.id)).toEqual(["lesson_transition"]);
+  });
+});
+
+describe("calendar lesson filters", () => {
+  it("filters lessons by course type", () => {
+    const vault = makeStatsVault();
+    vault.lessons = [
+      makeLesson("lesson_one_on_one", "course_active", "student_active"),
+      {
+        ...makeLesson("lesson_class", "course_transition", "student_transition"),
+        type: "class"
+      }
+    ];
+
+    expect(calendarLessonsForDateWithFilters(vault, "2026-07-15", {
+      ...defaultCalendarFilters,
+      courseTypeFilter: "class"
+    }).map((lesson) => lesson.id)).toEqual(["lesson_class"]);
   });
 });

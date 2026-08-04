@@ -28,6 +28,7 @@ import {
   compareByName,
   courseHasActiveStudent,
   courseName,
+  courseTypeOptionsForVault,
   createLessonFromCourse,
   createSubstituteClassLesson,
   findStudent,
@@ -376,6 +377,7 @@ export function ScheduleView({
   const [calendarMode, setCalendarMode] = useState<"schedule" | "view">("view");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(initialFocusedDate);
   const [calendarViewCampusFilter, setCalendarViewCampusFilter] = useState("all");
+  const [calendarViewCourseTypeFilter, setCalendarViewCourseTypeFilter] = useState<CourseTypeFilter>("all");
   const [calendarViewGradeFilter, setCalendarViewGradeFilter] = useState("all");
   const [calendarViewSubjectFilter, setCalendarViewSubjectFilter] = useState("all");
   const [calendarViewStudentFilter, setCalendarViewStudentFilter] = useState("");
@@ -488,6 +490,7 @@ export function ScheduleView({
     ? Boolean(vault.profile.aiSchedulingAdminEnabled ?? vault.profile.aiSchedulingEnabled)
     : Boolean(vault.profile.aiSchedulingEnabled);
   const calendarViewCampusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
+  const calendarViewCourseTypeOptions = courseTypeOptionsForVault(vault);
   const calendarViewGradeOptions = Array.from(
     new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))
   ).sort(compareByName);
@@ -574,13 +577,16 @@ export function ScheduleView({
     setCalendarViewCampusFilter((current) =>
       current === "all" || calendarViewCampusOptions.some((campus) => campus.id === current) ? current : "all"
     );
+    setCalendarViewCourseTypeFilter((current) =>
+      current === "all" || calendarViewCourseTypeOptions.some((type) => type.value === current) ? current : "all"
+    );
     setCalendarViewGradeFilter((current) =>
       current === "all" || calendarViewGradeOptions.some((grade) => grade === current) ? current : "all"
     );
     setCalendarViewSubjectFilter((current) =>
       current === "all" || calendarViewSubjectOptions.some((subject) => subject === current) ? current : "all"
     );
-  }, [calendarViewCampusOptions, calendarViewGradeOptions, calendarViewSubjectOptions]);
+  }, [calendarViewCampusOptions, calendarViewCourseTypeOptions, calendarViewGradeOptions, calendarViewSubjectOptions]);
 
   useEffect(() => {
     setSyncTargetDate(selectedCalendarDate);
@@ -702,6 +708,7 @@ export function ScheduleView({
 
   const calendarLessonFilters = {
     campusFilter: calendarViewCampusFilter,
+    courseTypeFilter: calendarViewCourseTypeFilter,
     gradeFilter: calendarViewGradeFilter,
     subjectFilter: calendarViewSubjectFilter,
     studentFilter: calendarViewStudentFilter,
@@ -3035,7 +3042,7 @@ export function ScheduleView({
           calendarCourseOptions={calendarCourseOptions}
           calendarCourseSearch={calendarCourseSearch}
           calendarEndTime={calendarEndTime}
-          calendarFiltersClearDisabled={calendarViewCampusFilter === "all" && calendarViewGradeFilter === "all" && calendarViewSubjectFilter === "all" && calendarViewMakeupFilter === "all" && !calendarViewStudentFilter}
+          calendarFiltersClearDisabled={calendarViewCampusFilter === "all" && calendarViewCourseTypeFilter === "all" && calendarViewGradeFilter === "all" && calendarViewSubjectFilter === "all" && calendarViewMakeupFilter === "all" && !calendarViewStudentFilter}
           calendarGridProps={{
             amountsVisible,
             calendarCourseGroupId,
@@ -3064,6 +3071,8 @@ export function ScheduleView({
           calendarSuggestedBillingHours={calendarSuggestedBillingHours}
           calendarViewCampusFilter={calendarViewCampusFilter}
           calendarViewCampusOptions={calendarViewCampusOptions}
+          calendarViewCourseTypeFilter={calendarViewCourseTypeFilter}
+          calendarViewCourseTypeOptions={calendarViewCourseTypeOptions}
           calendarViewGradeFilter={calendarViewGradeFilter}
           calendarViewGradeOptions={calendarViewGradeOptions}
           calendarViewStudentFilter={calendarViewStudentFilter}
@@ -3074,6 +3083,7 @@ export function ScheduleView({
           onCalendarModeChange={setCalendarMode}
           onClearCalendarFilters={() => {
             setCalendarViewCampusFilter("all");
+            setCalendarViewCourseTypeFilter("all");
             setCalendarViewGradeFilter("all");
             setCalendarViewSubjectFilter("all");
             setCalendarViewMakeupFilter("all");
@@ -3092,6 +3102,7 @@ export function ScheduleView({
           setCalendarEndTime={setCalendarEndTime}
           setCalendarStartTime={updateCalendarStartTime}
           setCalendarViewCampusFilter={setCalendarViewCampusFilter}
+          setCalendarViewCourseTypeFilter={setCalendarViewCourseTypeFilter}
           setCalendarViewGradeFilter={setCalendarViewGradeFilter}
           setCalendarViewStudentFilter={setCalendarViewStudentFilter}
           setCalendarViewSubjectFilter={setCalendarViewSubjectFilter}

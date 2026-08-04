@@ -141,37 +141,52 @@ export function CourseArchiveListPanel({
             placeholder="搜索课程档案名称、学科、校区、学生或班型"
           />
         </label>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <Select value={courseStatusFilter} onChange={(event) => setCourseStatusFilter(event.target.value as "active" | "paused" | "all")} className="h-10">
-            <option value="active">启用课程</option>
-            <option value="paused">结课课程</option>
-            <option value="all">全部课程</option>
-          </Select>
-          <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
-            <option value="all">全部课程类型</option>
-            {courseTypeOptions.map((type) => (
-              <option key={type.value} value={type.value}>{type.label}</option>
-            ))}
-          </Select>
-          <Select value={courseGradeFilter} onChange={(event) => setCourseGradeFilter(event.target.value)} className="h-10">
-            <option value="all">全部年级</option>
-            {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
-            {gradeFilterOptions.map((grade) => (
-              <option key={grade} value={grade}>{grade}</option>
-            ))}
-          </Select>
-          <Select value={courseSubjectFilter} onChange={(event) => setCourseSubjectFilter(event.target.value)} className="h-10">
-            <option value="all">全部科目</option>
-            {subjectFilterOptions.map((subject) => (
-              <option key={subject} value={subject}>{subject}</option>
-            ))}
-          </Select>
-          <Select value={courseCampusFilter} onChange={(event) => setCourseCampusFilter(event.target.value)} className="h-10">
-            <option value="all">全部校区</option>
-            {campusOptions.map((campus) => (
-              <option key={campus.id} value={campus.id}>{campus.name}</option>
-            ))}
-          </Select>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">课程状态</label>
+            <Select value={courseStatusFilter} onChange={(event) => setCourseStatusFilter(event.target.value as "active" | "paused" | "all")} className="h-10">
+              <option value="active">启用课程</option>
+              <option value="paused">结课课程</option>
+              <option value="all">全部课程</option>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">班型筛选</label>
+            <Select value={courseTypeFilter} onChange={(event) => setCourseTypeFilter(event.target.value as "all" | CourseType)} className="h-10">
+              <option value="all">全部班型</option>
+              {courseTypeOptions.map((type) => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">年级</label>
+            <Select value={courseGradeFilter} onChange={(event) => setCourseGradeFilter(event.target.value)} className="h-10">
+              <option value="all">全部年级</option>
+              {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
+              {gradeFilterOptions.map((grade) => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">科目</label>
+            <Select value={courseSubjectFilter} onChange={(event) => setCourseSubjectFilter(event.target.value)} className="h-10">
+              <option value="all">全部科目</option>
+              {subjectFilterOptions.map((subject) => (
+                <option key={subject} value={subject}>{subject}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">校区</label>
+            <Select value={courseCampusFilter} onChange={(event) => setCourseCampusFilter(event.target.value)} className="h-10">
+              <option value="all">全部校区</option>
+              {campusOptions.map((campus) => (
+                <option key={campus.id} value={campus.id}>{campus.name}</option>
+              ))}
+            </Select>
+          </div>
         </div>
         <div className="flex flex-col gap-2 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] p-2 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center gap-2 text-xs font-bold text-[#25324a]">

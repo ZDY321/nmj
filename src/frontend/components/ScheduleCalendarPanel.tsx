@@ -4,8 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { TimeTextInput } from "@/components/ui/time-text-input";
-import type { Campus, CourseGroup, WeekStart } from "@/shared/types";
-import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
+import type { Campus, CourseGroup, CourseType, WeekStart } from "@/shared/types";
+import type { CourseTypeFilter, MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { ScheduleCalendarGrid, type ScheduleCalendarGridProps } from "@/frontend/components/ScheduleCalendarGrid";
 import { ScheduleCalendarSyncPanel, type ScheduleCalendarSyncPanelProps } from "@/frontend/components/ScheduleCalendarSyncPanel";
 
@@ -25,6 +25,8 @@ type ScheduleCalendarPanelProps = {
   calendarSuggestedBillingHours: number;
   calendarViewCampusFilter: string;
   calendarViewCampusOptions: Campus[];
+  calendarViewCourseTypeFilter: CourseTypeFilter;
+  calendarViewCourseTypeOptions: Array<{ value: CourseType; label: string }>;
   calendarViewGradeFilter: string;
   calendarViewGradeOptions: string[];
   calendarViewStudentFilter: string;
@@ -47,6 +49,7 @@ type ScheduleCalendarPanelProps = {
   setCalendarEndTime: (value: string) => void;
   setCalendarStartTime: (value: string) => void;
   setCalendarViewCampusFilter: (value: string) => void;
+  setCalendarViewCourseTypeFilter: (value: CourseTypeFilter) => void;
   setCalendarViewGradeFilter: (value: string) => void;
   setCalendarViewStudentFilter: (value: string) => void;
   setCalendarViewSubjectFilter: (value: string) => void;
@@ -69,6 +72,8 @@ export function ScheduleCalendarPanel({
   calendarSuggestedBillingHours,
   calendarViewCampusFilter,
   calendarViewCampusOptions,
+  calendarViewCourseTypeFilter,
+  calendarViewCourseTypeOptions,
   calendarViewGradeFilter,
   calendarViewGradeOptions,
   calendarViewStudentFilter,
@@ -91,6 +96,7 @@ export function ScheduleCalendarPanel({
   setCalendarEndTime,
   setCalendarStartTime,
   setCalendarViewCampusFilter,
+  setCalendarViewCourseTypeFilter,
   setCalendarViewGradeFilter,
   setCalendarViewStudentFilter,
   setCalendarViewSubjectFilter,
@@ -208,20 +214,58 @@ export function ScheduleCalendarPanel({
             查看模式只按日期切换右侧“每日课程详情”；需要新增课时请切到“排课”模式。
           </div>
         )}
-        <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[auto_minmax(120px,0.7fr)_minmax(120px,0.7fr)_minmax(120px,0.7fr)_minmax(138px,0.8fr)_minmax(220px,1.35fr)_auto_auto] xl:items-end">
-            <div className="min-w-[116px]">
+        <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
               <div className="text-sm font-extrabold text-[#061226]">查看课程筛选</div>
               <div className="mt-0.5 text-xs font-bold text-[#64748b]">
                 当日 {selectedCalendarLessonCount} 节 · 本周 {selectedCalendarWeekLessonCount} 节
               </div>
             </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClearCalendarFilters}
+                disabled={calendarFiltersClearDisabled}
+                className="h-10 w-full sm:w-auto"
+              >
+                清除筛选
+              </Button>
+              <div className="grid w-full grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1 sm:w-auto sm:min-w-[136px]">
+                <button
+                  type="button"
+                  onClick={() => onCalendarModeChange("schedule")}
+                  className={`rounded-[9px] px-3 py-2 text-xs font-bold ${calendarMode === "schedule" ? "orange-gradient text-white" : "text-[#25324a]"}`}
+                >
+                  排课
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCalendarModeChange("view")}
+                  className={`rounded-[9px] px-3 py-2 text-xs font-bold ${calendarMode === "view" ? "bg-[#1557c2] text-white" : "text-[#25324a]"}`}
+                >
+                  查看
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             <div className="space-y-2">
               <label className="text-sm font-medium">校区</label>
               <Select value={calendarViewCampusFilter} onChange={(event) => setCalendarViewCampusFilter(event.target.value)} className="h-10 bg-white">
                 <option value="all">全部校区</option>
                 {calendarViewCampusOptions.map((campus) => (
                   <option key={campus.id} value={campus.id}>{campus.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">班型筛选</label>
+              <Select value={calendarViewCourseTypeFilter} onChange={(event) => setCalendarViewCourseTypeFilter(event.target.value as CourseTypeFilter)} className="h-10 bg-white">
+                <option value="all">全部班型</option>
+                {calendarViewCourseTypeOptions.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
                 ))}
               </Select>
             </div>
@@ -252,39 +296,17 @@ export function ScheduleCalendarPanel({
                 <option value="substitute_class">代班补课</option>
               </Select>
             </div>
-            <label className="relative block">
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-              <Input
-                value={calendarViewStudentFilter}
-                onChange={(event) => setCalendarViewStudentFilter(event.target.value)}
-                placeholder="搜索学生、课程、校区或备注"
-                className="h-10 bg-white pl-9"
-              />
-            </label>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClearCalendarFilters}
-              disabled={calendarFiltersClearDisabled}
-              className="h-10"
-            >
-              清除筛选
-            </Button>
-            <div className="grid grid-cols-2 rounded-[12px] border border-[#dbe4ef] bg-white p-1 lg:min-w-[136px]">
-              <button
-                type="button"
-                onClick={() => onCalendarModeChange("schedule")}
-                className={`rounded-[9px] px-3 py-2 text-xs font-bold ${calendarMode === "schedule" ? "orange-gradient text-white" : "text-[#25324a]"}`}
-              >
-                排课
-              </button>
-              <button
-                type="button"
-                onClick={() => onCalendarModeChange("view")}
-                className={`rounded-[9px] px-3 py-2 text-xs font-bold ${calendarMode === "view" ? "bg-[#1557c2] text-white" : "text-[#25324a]"}`}
-              >
-                查看
-              </button>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">关键词</label>
+              <label className="relative block">
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                <Input
+                  value={calendarViewStudentFilter}
+                  onChange={(event) => setCalendarViewStudentFilter(event.target.value)}
+                  placeholder="搜索学生、课程、校区或备注"
+                  className="h-10 bg-white pl-9"
+                />
+              </label>
             </div>
           </div>
         </div>

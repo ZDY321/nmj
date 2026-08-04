@@ -589,6 +589,7 @@ export function filteredStudentIdsForStats(vault: TeacherVault, lesson: Lesson, 
 
 export type CalendarLessonFilters = {
   campusFilter: string;
+  courseTypeFilter: CourseTypeFilter;
   gradeFilter: string;
   subjectFilter: string;
   studentFilter: string;
@@ -618,6 +619,7 @@ export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson
     })
   ].join(" ").toLowerCase();
   const matchesCampus = filters.campusFilter === "all" || campusId === filters.campusFilter;
+  const matchesType = filters.courseTypeFilter === "all" || lesson.type === filters.courseTypeFilter;
   const matchesGrade =
     filters.gradeFilter === "all" ||
     studentIds.some((studentId) => findStudent(vault, studentId)?.grade?.trim() === filters.gradeFilter);
@@ -625,7 +627,7 @@ export function matchesCalendarLessonFilters(vault: TeacherVault, lesson: Lesson
   const searchTerms = filters.studentFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const matchesStudent = searchTerms.length === 0 || searchTerms.every((term) => searchable.includes(term));
   const matchesMakeup = matchesMakeupLessonFilter(lesson, filters.makeupFilter);
-  return matchesCampus && matchesGrade && matchesSubject && matchesStudent && matchesMakeup;
+  return matchesCampus && matchesType && matchesGrade && matchesSubject && matchesStudent && matchesMakeup;
 }
 
 export function calendarLessonsForDateWithFilters(vault: TeacherVault, date: string, filters: CalendarLessonFilters): Lesson[] {

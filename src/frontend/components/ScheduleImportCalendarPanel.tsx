@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, MessageSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { ScheduleImportResolution, ScheduleImportResolutionMap, TeacherVault } from "@/shared/types";
 import type { ImportMatchStatus, ImportPreviewLesson } from "@/frontend/lib/scheduleImport";
@@ -55,6 +55,8 @@ export function ScheduleImportCalendarPanel({
   const selectedDateHasRows = selectedDateRows.length > 0;
   const selectedDateHasProblems = selectedDateProblemCount > 0;
   const selectedDateOnlyNotDue = selectedDateHasRows && selectedDateRows.length === selectedDateNotDueCount;
+  const dayNoteForDate = (date: string): string => vault.calendarDayNotes?.find((item) => item.date === date)?.note?.trim() ?? "";
+  const selectedDateNote = dayNoteForDate(selectedDate);
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -67,17 +69,20 @@ export function ScheduleImportCalendarPanel({
         <div className="grid grid-cols-7 gap-1 md:gap-2">
           {days.map((date) => {
             const dayRows = filteredRows.filter((row) => row.date === date);
+            const dayNote = dayNoteForDate(date);
             const isSelected = selectedDate === date;
             const isCurrentMonth = date.startsWith(displayMonth);
             const hasProblems = dayRows.some(rowHasProblem);
             const missingFeeDayCount = dayRows.filter(rowHasMissingLessonFee).length;
             const notDueDayCount = dayRows.filter((row) => resolutionExcludesImportStats(resolutions[resolutionKey(row)]?.status)).length;
             const reviewedDayCount = dayRows.filter((row) => isReviewedResolution(resolutions[resolutionKey(row)])).length;
+            const visibleDayRowLimit = dayNote ? 2 : 3;
             return (
               <button
                 key={date}
                 type="button"
                 onClick={() => onDateSelect(date)}
+                aria-label={`${date}${dayNote ? `，有当天备注：${dayNote}` : ""}`}
                 className={`min-h-[58px] rounded-[9px] border p-1.5 text-left transition-all hover:shadow-[0_10px_22px_rgba(15,35,66,0.08)] md:min-h-[108px] md:rounded-[12px] md:p-2 md:hover:-translate-y-0.5 xl:min-h-[126px] xl:rounded-[14px] ${
                   isSelected
                     ? "border-[#1557c2] bg-[#eaf2ff] shadow-[0_10px_24px_rgba(21,87,194,0.12)] ring-2 ring-[#bfdbfe]"
@@ -98,10 +103,16 @@ export function ScheduleImportCalendarPanel({
                     {reviewedDayCount > 0 && <Badge variant="sky" className="px-1.5 text-[10px] leading-4">已标 {reviewedDayCount}</Badge>}
                     {missingFeeDayCount > 0 && <Badge variant="destructive" className="px-1.5 text-[10px] leading-4">欠费 {missingFeeDayCount}</Badge>}
                     {notDueDayCount > 0 && <Badge variant="secondary" className="px-1.5 text-[10px] leading-4">未到 {notDueDayCount}</Badge>}
+                    {dayNote && <Badge variant="sky" className="px-1.5 text-[10px] leading-4">备注</Badge>}
                     {dayRows.length > 0 && <Badge variant={hasProblems ? "amber" : "sage"} className="px-1.5 text-[10px] leading-4">{dayRows.length}</Badge>}
                   </div>
                 </div>
                 <div className="mt-2 flex items-center justify-center md:hidden">
+                  {dayNote && (
+                    <span className="mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dbeafe] text-[#1557c2]" title={`备注：${dayNote}`}>
+                      <MessageSquare size={11} />
+                    </span>
+                  )}
                   {dayRows.length > 0 && (
                     <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-extrabold ring-1 ${
                       hasProblems
@@ -113,7 +124,12 @@ export function ScheduleImportCalendarPanel({
                   )}
                 </div>
                 <div className="mt-2 hidden flex-col gap-1 md:flex">
-                  {dayRows.slice(0, 3).map((row) => {
+                  {dayNote && (
+                    <span className="block truncate rounded-[8px] bg-[#eaf2ff] px-2 py-1 text-[10px] font-bold text-[#1557c2]">
+                      备注：{dayNote}
+                    </span>
+                  )}
+                  {dayRows.slice(0, visibleDayRowLimit).map((row) => {
                     const resolution = resolutions[resolutionKey(row)];
                     const rowReviewed = isReviewedResolution(resolution);
                     const rowNeedsAttention = resolutionNeedsAttention(resolution?.status);
@@ -127,8 +143,8 @@ export function ScheduleImportCalendarPanel({
                       </span>
                     );
                   })}
-                  {dayRows.length > 3 && (
-                    <span className="text-[10px] font-bold text-[#64748b]">+{dayRows.length - 3} 条</span>
+                  {dayRows.length > visibleDayRowLimit && (
+                    <span className="text-[10px] font-bold text-[#64748b]">+{dayRows.length - visibleDayRowLimit} 条</span>
                   )}
                 </div>
               </button>
@@ -155,6 +171,15 @@ export function ScheduleImportCalendarPanel({
             </div>
           </div>
         </div>
+
+        {selectedDateNote && (
+          <div className="rounded-[12px] border border-[#bfdbfe] bg-[#eaf2ff] px-3 py-2">
+            <div className="mb-1 flex items-center gap-2 text-xs font-extrabold text-[#1557c2]">
+              <MessageSquare size={14} /> 当日备注
+            </div>
+            <div className="break-words whitespace-pre-wrap text-sm font-semibold leading-6 text-[#1e3a8a]">{selectedDateNote}</div>
+          </div>
+        )}
 
         <div className="space-y-3 md:max-h-[720px] md:overflow-y-auto md:pr-1">
           {selectedDateRows.map((row) => renderRow(row))}
