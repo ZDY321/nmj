@@ -123,23 +123,23 @@ export function ScheduleImportHeaderPanel({
           <button
             type="button"
             onClick={() => setImportSetupExpanded((current) => !current)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+            className="flex min-w-0 flex-1 flex-col items-stretch gap-2 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-3"
           >
-            <span className="flex min-w-0 items-start gap-2">
+            <span className="flex min-w-0 items-start gap-2 sm:flex-1">
               <Upload size={16} className="mt-0.5 shrink-0 text-[#1557c2]" />
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="block text-sm font-extrabold text-[#061226]">教务 Excel 文件与对应校区</span>
-                <span className="mt-1.5 inline-flex max-w-full items-start gap-1.5 rounded-[8px] border border-[#d8e5f2] bg-[#f3f7fb] px-2 py-1 text-[11px] font-bold leading-4 text-[#49627d]">
+                <span className="mt-1.5 flex w-full min-w-0 items-start gap-1.5 rounded-[8px] border border-[#d8e5f2] bg-[#f3f7fb] px-2 py-1 text-[11px] font-bold leading-4 text-[#49627d] sm:inline-flex sm:w-auto">
                   <Info size={12} className="mt-0.5 shrink-0 text-[#6685a5]" />
-                  <span>新课程先做名称映射，再导入对账；已有映射可直接导入。</span>
+                  <span className="min-w-0 break-words">新课程先做名称映射，再导入对账；已有映射可直接导入。</span>
                 </span>
               </span>
             </span>
-            <span className="flex shrink-0 items-center gap-2">
+            <span className="flex w-full shrink-0 flex-wrap items-center gap-2 pl-6 sm:w-auto sm:flex-nowrap sm:pl-0">
               <Badge variant="secondary" className="text-[10px]">{fileSummaries.length} 个文件</Badge>
               {allFilesMapped && <Badge variant="sage" className="text-[10px]">校区已对应</Badge>}
               {hasUnmappedFiles && <Badge variant="amber" className="text-[10px]">待选择校区</Badge>}
-              <ChevronDown size={16} className={`text-[#64748b] transition-transform ${importSetupExpanded ? "rotate-180" : ""}`} />
+              <ChevronDown size={16} className={`ml-auto text-[#64748b] transition-transform sm:ml-0 ${importSetupExpanded ? "rotate-180" : ""}`} />
             </span>
           </button>
           <div className="flex flex-wrap gap-2 lg:shrink-0">
