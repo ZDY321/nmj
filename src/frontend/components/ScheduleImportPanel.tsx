@@ -140,7 +140,7 @@ export function ScheduleImportPanel({
   const [search, setSearch] = useState(savedWorkspace.search);
   const [openedReviewId, setOpenedReviewId] = useState("");
   const [editingReviewId, setEditingReviewId] = useState("");
-  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [calendarVisible, setCalendarVisible] = useState(savedWorkspace.rawLessons.length > 0);
   const calendarPanelRef = useRef<HTMLDivElement>(null);
   const workspaceBeforeHistoryRef = useRef<ScheduleImportWorkspaceSnapshot | null>(null);
   const { confirm, dialog } = useConfirmDialog();
@@ -493,19 +493,23 @@ export function ScheduleImportPanel({
     const nextResolutions = buildUpdatedResolutions(resolutions, key, patch);
     const nextSplitMergeExcludedLessonIds = combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, nextResolutions);
     setResolutions(nextResolutions);
-    if (patch.status && !editingReviewId) {
+    if (!editingReviewId) {
       onSaveScheduleImport?.(
         buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds),
-        { syncReviewArchive: false }
+        { syncReviewArchive: false, deferMainSave: true }
       );
-      const label = resolutionStatusLabel(patch.status);
-      setMessage(
-        resolutionExcludesImportStats(patch.status)
-          ? `已标为「${label}」，这条教务课不会计入顶部教务导入节数和小时。`
-          : resolutionMarksRowResolved(patch.status)
-          ? `已标为「${label}」，这条差异已计入已对应，顶部统计和状态筛选已更新。`
-          : `已标为「${label}」，这条差异仍保留在待核对统计中。`
-      );
+      if (patch.status) {
+        const label = resolutionStatusLabel(patch.status);
+        const statusMessage =
+          resolutionExcludesImportStats(patch.status)
+            ? `已标为「${label}」，这条教务课不会计入顶部教务导入节数和小时。`
+            : resolutionMarksRowResolved(patch.status)
+            ? `已标为「${label}」，这条差异已计入已对应，顶部统计和状态筛选已更新。`
+            : `已标为「${label}」，这条差异仍保留在待核对统计中。`;
+        setMessage(`${statusMessage} 已自动保存在当前工作区，云端会合并同步。`);
+      } else {
+        setMessage("修改已自动保存在当前工作区，云端会合并同步。");
+      }
     } else if (patch.status && editingReviewId) {
       setMessage(`历史对账已修改为「${resolutionStatusLabel(patch.status)}」，点击保存后才会更新该月历史记录。`);
     }
@@ -677,7 +681,7 @@ export function ScheduleImportPanel({
     setHistoricalRows(null);
     setOpenedReviewId("");
     setEditingReviewId("");
-    setCalendarVisible(previousSnapshot?.calendarVisible ?? false);
+    setCalendarVisible(previousSnapshot?.calendarVisible ?? previous.rawLessons.length > 0);
     workspaceBeforeHistoryRef.current = null;
     setMessage(nextMessage);
   }

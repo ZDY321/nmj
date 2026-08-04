@@ -2,6 +2,7 @@ import type { ScheduleImportVaultState } from "@/shared/types";
 
 export type ScheduleImportSaveOptions = {
   syncReviewArchive?: boolean;
+  deferMainSave?: boolean;
 };
 
 export function scheduleImportMainState(state: ScheduleImportVaultState): ScheduleImportVaultState {

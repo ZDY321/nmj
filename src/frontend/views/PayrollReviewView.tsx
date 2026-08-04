@@ -26,6 +26,7 @@ type LessonStatusFilter = "all" | Lesson["status"];
 type PayrollPanel = "review" | "reconcile" | "mapping" | "guide";
 const scheduleImportArchiveDocType = "schedule_import_reviews";
 const scheduleImportArchiveDocKey = "primary";
+const scheduleImportMainSaveDelayMs = 15_000;
 
 export function PayrollReviewView({
   vault,
@@ -72,6 +73,10 @@ export function PayrollReviewView({
   const reviewArchiveLoadSequenceRef = useRef(0);
   const reviewArchiveSaveSequenceRef = useRef(0);
   const reviewArchiveSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingScheduleImportMainStateRef = useRef<ScheduleImportVaultState | null>(null);
+  const scheduleImportMainSaveTimerRef = useRef<number | null>(null);
+  const onSaveScheduleImportRef = useRef(onSaveScheduleImport);
+  onSaveScheduleImportRef.current = onSaveScheduleImport;
 
   const {
     campusOptions,
@@ -127,6 +132,19 @@ export function PayrollReviewView({
       setDetailCourseFilter("all");
     }
   }, [courseOptions, detailCourseFilter]);
+
+  useEffect(() => {
+    const flushWhenHidden = () => {
+      if (document.hidden) flushPendingScheduleImportMainSave();
+    };
+    window.addEventListener("pagehide", flushPendingScheduleImportMainSave);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flushPendingScheduleImportMainSave);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+      flushPendingScheduleImportMainSave();
+    };
+  }, []);
 
   useEffect(() => {
     if (!token || !password) {
@@ -199,11 +217,46 @@ export function PayrollReviewView({
       });
   }
 
+  function clearPendingScheduleImportMainSave(): void {
+    if (scheduleImportMainSaveTimerRef.current !== null) {
+      window.clearTimeout(scheduleImportMainSaveTimerRef.current);
+      scheduleImportMainSaveTimerRef.current = null;
+    }
+    pendingScheduleImportMainStateRef.current = null;
+  }
+
+  function flushPendingScheduleImportMainSave(): void {
+    if (scheduleImportMainSaveTimerRef.current !== null) {
+      window.clearTimeout(scheduleImportMainSaveTimerRef.current);
+      scheduleImportMainSaveTimerRef.current = null;
+    }
+    const pendingState = pendingScheduleImportMainStateRef.current;
+    pendingScheduleImportMainStateRef.current = null;
+    if (pendingState) onSaveScheduleImportRef.current?.(pendingState);
+  }
+
+  function queueScheduleImportMainSave(state: ScheduleImportVaultState): void {
+    pendingScheduleImportMainStateRef.current = state;
+    if (scheduleImportMainSaveTimerRef.current !== null) {
+      window.clearTimeout(scheduleImportMainSaveTimerRef.current);
+    }
+    scheduleImportMainSaveTimerRef.current = window.setTimeout(
+      flushPendingScheduleImportMainSave,
+      scheduleImportMainSaveDelayMs
+    );
+  }
+
   function saveScheduleImportState(state: ScheduleImportVaultState, options: ScheduleImportSaveOptions = {}): void {
     scheduleImportEditRevisionRef.current += 1;
     if (options.syncReviewArchive !== false) reviewArchiveEditRevisionRef.current += 1;
     setScheduleImportArchive(state);
-    onSaveScheduleImport?.(token && password ? scheduleImportMainState(state) : state);
+    const mainState = token && password ? scheduleImportMainState(state) : state;
+    if (options.deferMainSave) {
+      queueScheduleImportMainSave(mainState);
+    } else {
+      clearPendingScheduleImportMainSave();
+      onSaveScheduleImport?.(mainState);
+    }
     if (options.syncReviewArchive === false) {
       return;
     }
