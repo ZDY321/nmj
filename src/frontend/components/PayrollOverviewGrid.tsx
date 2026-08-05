@@ -1,4 +1,6 @@
-import { BookOpen, MapPin } from "lucide-react";
+import { useRef, useState } from "react";
+import { Camera, LoaderCircle, BookOpen, MapPin } from "lucide-react";
+import { toPng } from "html-to-image";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatPrivateMoney } from "@/frontend/lib/helpers";
@@ -77,13 +79,40 @@ export function PayrollOverviewGrid({
   onCampusSelect: (campusId: string) => void;
 }) {
   const lessonFeeTotalAfterDeduction = lessonFeeTotal - breakdown.obligationDeduction;
+  const overviewRef = useRef<HTMLDivElement>(null);
+  const [screenshotLoading, setScreenshotLoading] = useState(false);
+
+  async function downloadOverviewScreenshot(): Promise<void> {
+    if (!overviewRef.current || screenshotLoading) return;
+    setScreenshotLoading(true);
+    try {
+      await document.fonts?.ready;
+      const dataUrl = await toPng(overviewRef.current, {
+        backgroundColor: "#f8fbff",
+        cacheBust: true,
+        pixelRatio: 2,
+        filter: (node) => !(node instanceof HTMLElement && node.dataset.screenshotExclude === "true")
+      });
+      const anchor = document.createElement("a");
+      anchor.href = dataUrl;
+      anchor.download = `${selectedMonth}-校区合并统计与本月总和-${amountsVisible ? "金额可见" : "金额隐藏"}.png`;
+      anchor.click();
+    } catch (error) {
+      console.error("工资核对截图生成失败", error);
+      window.alert("截图生成失败，请稍后重试。");
+    } finally {
+      setScreenshotLoading(false);
+    }
+  }
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+    <div ref={overviewRef} className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <Card className="overflow-hidden">
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
-            <MapPin size={14} /> 校区合并统计
+            <MapPin size={14} />
+            <span>校区合并统计</span>
+            <ScreenshotButton loading={screenshotLoading} onClick={() => void downloadOverviewScreenshot()} />
           </div>
           <CardTitle>{selectedMonth} 校区汇总</CardTitle>
           <CardDescription>按云端课表口径区分未抵扣前、已完成、未完成和义务课时抵扣后的已完成时长。</CardDescription>
@@ -142,7 +171,9 @@ export function PayrollOverviewGrid({
       <Card className="overflow-hidden">
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
-            <BookOpen size={14} /> 本月总和
+            <BookOpen size={14} />
+            <span>本月总和</span>
+            <ScreenshotButton loading={screenshotLoading} onClick={() => void downloadOverviewScreenshot()} />
           </div>
           <CardTitle>工资总览（仅统计已完成的课时费）</CardTitle>
           <CardDescription>按基本工资、课时费、补贴扣款和义务课时扣费合并，课程明细金额单独核对。</CardDescription>
@@ -224,5 +255,21 @@ export function PayrollOverviewGrid({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ScreenshotButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      data-screenshot-exclude="true"
+      onClick={onClick}
+      disabled={loading}
+      aria-label="截图校区合并统计和本月总和"
+      title="下载校区合并统计和本月总和截图"
+      className="ml-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border border-current/20 bg-white/80 text-current transition-colors hover:bg-white disabled:cursor-wait disabled:opacity-60"
+    >
+      {loading ? <LoaderCircle size={13} className="animate-spin" /> : <Camera size={13} />}
+    </button>
   );
 }

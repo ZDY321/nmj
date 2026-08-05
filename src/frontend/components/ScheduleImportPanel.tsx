@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { ScheduleImportCalendarPanel } from "@/frontend/components/ScheduleImportCalendarPanel";
 import { ScheduleImportHeaderPanel } from "@/frontend/components/ScheduleImportHeaderPanel";
+import { ScheduleImportHistoryQuickBar } from "@/frontend/components/ScheduleImportHistoryQuickBar";
 import { ScheduleImportReconciliationRow } from "@/frontend/components/ScheduleImportReconciliationRow";
 import { ScheduleImportSavedReviewsPanel } from "@/frontend/components/ScheduleImportSavedReviewsPanel";
 import { ScheduleImportStatusControls } from "@/frontend/components/ScheduleImportStatusControls";
@@ -908,6 +909,18 @@ export function ScheduleImportPanel({
               onCampusChange={setCampusFilter}
               onStatusChange={setStatusFilter}
               onSearchChange={setSearch}
+            />
+
+            <ScheduleImportHistoryQuickBar
+              reviews={savedReviews}
+              openedReviewId={openedReviewId}
+              editingReviewId={editingReviewId}
+              reviewTitle={savedReviewTitle}
+              reviewNeedsAttention={reviewNeedsAttentionForDisplay}
+              onOpenReview={openSavedReviewInCalendar}
+              onEditReview={editSavedReview}
+              onSaveReview={saveMapping}
+              onCloseReview={() => restoreWorkspaceAfterHistory()}
             />
 
             <div ref={calendarPanelRef} className="scroll-mt-4">
