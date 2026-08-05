@@ -73,6 +73,32 @@
     font: inherit;
   }
 
+  [data-payroll-screenshot="true"] [data-payroll-campus-count="true"] {
+    white-space: nowrap !important;
+  }
+
+  [data-payroll-screenshot="true"] [data-payroll-campus-details="true"] {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
+  }
+
+  [data-payroll-screenshot="true"] [data-payroll-campus-chip="true"] {
+    min-width: max-content !important;
+    max-width: none !important;
+  }
+
+  [data-payroll-screenshot="true"] [data-payroll-campus-name="true"] {
+    max-width: none !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+  }
+
+  [data-payroll-screenshot="true"] [data-payroll-campus-amount="true"] {
+    white-space: nowrap !important;
+  }
+
   input[type="date"],
   input[type="time"],
   input[type="month"],

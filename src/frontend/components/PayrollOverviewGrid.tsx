@@ -84,10 +84,13 @@ export function PayrollOverviewGrid({
 
   async function downloadOverviewScreenshot(): Promise<void> {
     if (!overviewRef.current || screenshotLoading) return;
+    const overview = overviewRef.current;
     setScreenshotLoading(true);
+    overview.dataset.payrollScreenshot = "true";
     try {
       await document.fonts?.ready;
-      const dataUrl = await toPng(overviewRef.current, {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      const dataUrl = await toPng(overview, {
         backgroundColor: "#f8fbff",
         cacheBust: true,
         pixelRatio: 2,
@@ -101,6 +104,7 @@ export function PayrollOverviewGrid({
       console.error("工资核对截图生成失败", error);
       window.alert("截图生成失败，请稍后重试。");
     } finally {
+      delete overview.dataset.payrollScreenshot;
       setScreenshotLoading(false);
     }
   }
@@ -201,21 +205,22 @@ export function PayrollOverviewGrid({
                       </div>
                     </div>
                     {details.length > 0 && (
-                      <Badge variant="secondary" className="shrink-0">
+                      <Badge data-payroll-campus-count="true" variant="secondary" className="shrink-0 whitespace-nowrap">
                         {details.length} 校区
                       </Badge>
                     )}
                   </div>
                   {details.length > 0 && (
-                    <div className="mt-3 flex max-h-[92px] flex-wrap gap-1.5 overflow-y-auto pr-1">
+                    <div data-payroll-campus-details="true" className="mt-3 flex max-h-[92px] flex-wrap gap-1.5 overflow-y-auto pr-1">
                       {details.map((detail) => (
                         <div
                           key={detail.key}
+                          data-payroll-campus-chip="true"
                           className="inline-flex min-w-0 max-w-[150px] items-center gap-1.5 rounded-[9px] border border-[#e8eef6] bg-white px-2 py-1"
                           title={`${detail.campus} · ${detail.count} 节 · ${formatPrivateMoney(detail.amount, amountsVisible)}`}
                         >
-                          <span className="max-w-[72px] truncate text-[11px] font-bold text-[#64748b]">{detail.campus}</span>
-                          <span className="shrink-0 text-[11px] font-extrabold text-[#061226]">{formatPrivateMoney(detail.amount, amountsVisible)}</span>
+                          <span data-payroll-campus-name="true" className="max-w-[72px] truncate text-[11px] font-bold text-[#64748b]">{detail.campus}</span>
+                          <span data-payroll-campus-amount="true" className="shrink-0 whitespace-nowrap text-[11px] font-extrabold text-[#061226]">{formatPrivateMoney(detail.amount, amountsVisible)}</span>
                         </div>
                       ))}
                     </div>
