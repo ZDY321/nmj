@@ -1,5 +1,6 @@
 import type {
   ScheduleImportSavedRow,
+  ScheduleImportRecheckOrigin,
   ScheduleImportResolution,
   ScheduleImportResolutionMap,
   ScheduleImportResolutionStatus,
@@ -40,6 +41,8 @@ export function buildUpdatedResolutions(
     ...patch,
     note: patch.note !== undefined ? patch.note : previous.note,
     linkedSystemLessonIds: patch.linkedSystemLessonIds !== undefined ? normalizeLinkedSystemLessonIds(patch.linkedSystemLessonIds) : previous.linkedSystemLessonIds,
+    // 一旦人工改成别的状态，复核来源就没有意义了，避免它一直挂在记录上。
+    recheckOrigin: patch.status !== undefined && patch.status !== "recheck_required" ? undefined : previous.recheckOrigin,
     updatedAt: new Date().toISOString()
   };
   if (next.status === "unreviewed" && !next.note?.trim() && !next.linkedSystemLessonIds?.length) {
@@ -48,6 +51,62 @@ export function buildUpdatedResolutions(
     return rest;
   }
   return { ...current, [key]: next };
+}
+
+const recheckNotePrefix = "当前数据与上次保存结果不同，请重新核对。";
+
+// 待复核之前的处理结果。优先用结构化字段；历史上保存的坏数据没有这个字段，
+// 就退回去解析备注文本里的「上次处理：X」，让存量记录也能一键恢复。
+export function recheckOriginForRestore(
+  resolution: ScheduleImportResolution | undefined
+): ScheduleImportRecheckOrigin | undefined {
+  if (!resolution || resolution.status !== "recheck_required") return undefined;
+  if (resolution.recheckOrigin) return resolution.recheckOrigin;
+  return parseRecheckOriginFromNote(resolution.note, resolution.linkedSystemLessonIds);
+}
+
+function parseRecheckOriginFromNote(
+  note: string | undefined,
+  linkedSystemLessonIds: string[] | undefined
+): ScheduleImportRecheckOrigin | undefined {
+  if (!note?.includes(recheckNotePrefix)) return undefined;
+  // 反复复核过的备注会层层嵌套，最靠后的一段才是最原始的处理结果。
+  const labels = Array.from(note.matchAll(/上次处理：(.+?)。/g)).map((match) => match[1].trim());
+  const originalLabel = labels.reverse().find((label) => label !== resolutionStatusLabel("recheck_required"));
+  if (!originalLabel) return undefined;
+  const status = resolutionStatuses.find((candidate) => resolutionStatusLabel(candidate) === originalLabel);
+  // 匹配不到说明上次根本没有人工处理过（备注里记的是对账状态），恢复成未处理即可。
+  if (!status || status === "recheck_required") return { status: "unreviewed", linkedSystemLessonIds };
+  const noteMatches = Array.from(note.matchAll(/上次备注：([\s\S]*?)(?=\s*上次关联 \d+ 节云端课。|\s*上次处理：|$)/g));
+  const originalNote = noteMatches
+    .map((match) => match[1].trim())
+    .reverse()
+    .find((value) => Boolean(value) && !value.includes(recheckNotePrefix));
+  return { status, note: originalNote, linkedSystemLessonIds };
+}
+
+// 把一条被误标为「历史数据有更新」的记录恢复成复核前的处理结果。
+export function restoreRecheckResolution(
+  resolutions: ScheduleImportResolutionMap,
+  key: string,
+  row: ImportPreviewLesson
+): { resolutions: ScheduleImportResolutionMap; restored: ScheduleImportRecheckOrigin } | undefined {
+  const origin = recheckOriginForRestore(resolutions[key]);
+  if (!origin) return undefined;
+  const next = { ...resolutions };
+  if (origin.status === "unreviewed" && !origin.note?.trim() && !origin.linkedSystemLessonIds?.length) {
+    delete next[key];
+    return { resolutions: next, restored: origin };
+  }
+  next[key] = {
+    status: origin.status,
+    note: origin.note,
+    linkedSystemLessonIds: normalizeLinkedSystemLessonIds(origin.linkedSystemLessonIds),
+    // 恢复即表示以当前数据为准，写入当前指纹，避免下次打开又被判为有变化。
+    dataFingerprint: rowReviewFingerprint(row),
+    updatedAt: new Date().toISOString()
+  };
+  return { resolutions: next, restored: origin };
 }
 
 export function effectiveRowStatus(row: ImportPreviewLesson, resolution?: ScheduleImportResolution, linkedSystemLessonIds: Set<string> = new Set()): ImportMatchStatus {
@@ -169,7 +228,12 @@ export function resolutionKey(row: ImportPreviewLesson): string {
   ].join("|");
 }
 
-const reviewFingerprintPrefix = "review-v1:";
+// v2 只保留会影响对账结论的字段。教师/助教/教室、云端备注、以及各类学生姓名列表
+// 都只用于展示，把它们算进指纹会让无关的云端改动频繁触发「历史数据有更新」。
+// 版本号提升后，旧的 v1 指纹会被 validReviewFingerprint 判为无效，从而自动回退到
+// 「按保存行重算」，不会因为换算法而把存量记录全部误标一次。
+const reviewFingerprintPrefix = "review-v2:";
+const reviewFingerprintPrefixPattern = /^review-v2:[0-9a-f]{16}$/;
 
 export function rowReviewFingerprint(row: ImportPreviewLesson | ScheduleImportSavedRow): string {
   const payload = JSON.stringify([
@@ -181,23 +245,16 @@ export function rowReviewFingerprint(row: ImportPreviewLesson | ScheduleImportSa
     normalizeComparisonText(row.subjectHint),
     row.courseTypeHint,
     normalizeComparisonNameList(row.studentNameHint),
-    normalizeComparisonText(row.teacher ?? ""),
-    normalizeComparisonText(row.assistant ?? ""),
-    normalizeComparisonText(row.room ?? ""),
     row.presentCount ?? null,
     row.expectedCount ?? null,
     normalizeComparisonText(row.note ?? ""),
     row.matchedCourseId ?? row.mappedCourseId ?? "",
     row.systemLessonId ?? "",
     row.systemLessonStatus ?? "",
-    normalizeComparisonText(row.systemLessonNote ?? ""),
     row.systemActualPresentCount ?? null,
     row.systemPresentCount ?? null,
     row.systemExpectedCount ?? null,
-    normalizeComparisonNameList(row.systemPresentStudentNames),
-    normalizeComparisonNameList(row.systemExpectedStudentNames),
-    row.systemMakeupCompletedCount ?? null,
-    normalizeComparisonNameList(row.systemMakeupCompletedStudentNames)
+    row.systemMakeupCompletedCount ?? null
   ]);
   return `${reviewFingerprintPrefix}${fnv1a64(payload)}`;
 }
@@ -262,19 +319,27 @@ export function mergeSavedReviewResolutions(
     }
 
     changedCount += 1;
-    const previousLabel = previousResolution
-      ? resolutionStatusLabel(previousResolution.status)
-      : statusLabel(savedRow.status as ImportMatchStatus);
+    const origin = recheckOriginFor(previousResolution, savedRow);
+    const previousLabel = origin
+      ? resolutionStatusLabel(origin.status)
+      : previousResolution
+        ? resolutionStatusLabel(previousResolution.status)
+        : statusLabel(savedRow.status as ImportMatchStatus);
     const noteParts = [
       "当前数据与上次保存结果不同，请重新核对。",
       `上次处理：${previousLabel}。`,
-      previousResolution?.note?.trim() ? `上次备注：${previousResolution.note.trim()}` : "",
-      previousResolution?.linkedSystemLessonIds?.length ? `上次关联 ${previousResolution.linkedSystemLessonIds.length} 节云端课。` : ""
+      origin?.note?.trim() ? `上次备注：${origin.note.trim()}` : "",
+      origin?.linkedSystemLessonIds?.length ? `上次关联 ${origin.linkedSystemLessonIds.length} 节云端课。` : ""
     ].filter(Boolean);
     resolutions[resolutionKey(row)] = {
       status: "recheck_required",
       note: noteParts.join(" "),
-      dataFingerprint: savedFingerprint,
+      // 关联信息保留下来，否则拆分合并标记会连带影响工资统计口径。
+      linkedSystemLessonIds: previousResolution?.linkedSystemLessonIds,
+      // 记录当前数据的指纹，表示「已就这份数据提请复核」。存旧指纹会让下次比较
+      // 必然再次判定为变化，从而永远退不出待复核状态。
+      dataFingerprint: currentFingerprint,
+      recheckOrigin: origin,
       updatedAt: new Date().toISOString()
     };
   });
@@ -286,6 +351,28 @@ export function mergeSavedReviewResolutions(
     changedCount,
     newCount,
     removedCount: Math.max(savedRows.length - usedSavedRows.size, 0)
+  };
+}
+
+// 复核前的处理结果。已经处于待复核的行要沿用它自己的 recheckOrigin，
+// 否则反复复核会把「上次处理：历史数据有更新」层层套进备注里。
+function recheckOriginFor(
+  previousResolution: ScheduleImportResolution | undefined,
+  savedRow: ScheduleImportSavedRow
+): ScheduleImportRecheckOrigin | undefined {
+  if (previousResolution?.status === "recheck_required") return previousResolution.recheckOrigin;
+  if (previousResolution) {
+    return {
+      status: previousResolution.status,
+      note: previousResolution.note,
+      linkedSystemLessonIds: previousResolution.linkedSystemLessonIds
+    };
+  }
+  if (!savedRow.resolutionStatus || savedRow.resolutionStatus === "recheck_required") return undefined;
+  return {
+    status: savedRow.resolutionStatus,
+    note: savedRow.resolutionNote,
+    linkedSystemLessonIds: savedRow.linkedSystemLessonIds
   };
 }
 
@@ -324,7 +411,7 @@ function rowIdentityKey(row: ImportPreviewLesson | ScheduleImportSavedRow): stri
 }
 
 function validReviewFingerprint(value?: string): value is string {
-  return Boolean(value && new RegExp(`^${reviewFingerprintPrefix}[0-9a-f]{16}$`).test(value));
+  return Boolean(value && reviewFingerprintPrefixPattern.test(value));
 }
 
 function normalizeComparisonText(value: string): string {

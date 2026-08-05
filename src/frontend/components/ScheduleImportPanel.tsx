@@ -25,6 +25,7 @@ import {
 import {
   buildImportPreview,
   downloadMergedScheduleWorkbook,
+  importMappingKey,
   mergeScheduleImportMappings,
   parseScheduleWorkbookFiles,
   scheduleImportMappingsForCourseIds,
@@ -59,6 +60,7 @@ import {
   resolutionMarksRowResolved,
   resolutionNeedsAttention,
   resolutionStatusLabel,
+  restoreRecheckResolution,
   rowReviewFingerprint,
   savedReviewEffectiveCounts,
   savedReviewResolutionMap,
@@ -456,7 +458,6 @@ export function ScheduleImportPanel({
     }
     setFileCampusOverrides((current) => ({ ...current, [fileName]: campusId }));
     if (editingReviewId) {
-      setHistoricalMapping(null);
       setHistoricalRows(null);
       setMessage("文件校区已修改，已根据当前云端课表重新计算本月对应结果；原逐课处理标记仍会尽量保留。");
     }
@@ -476,7 +477,6 @@ export function ScheduleImportPanel({
     });
     setResolutions((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !removedResolutionKeys.has(key))));
     if (editingReviewId) {
-      setHistoricalMapping(null);
       setHistoricalRows(null);
     }
     setMessage(`已移除「${fileName}」。`);
@@ -518,6 +518,31 @@ export function ScheduleImportPanel({
     }
   }
 
+  function restoreRecheckForRow(row: ImportPreviewLesson) {
+    if (openedReviewId && !editingReviewId) {
+      setMessage("历史对账正在以只读快照查看，不会修改当前映射或处理标记。请先退出历史查看，或点击继续编辑。");
+      return;
+    }
+    const restored = restoreRecheckResolution(resolutions, resolutionKey(row), row);
+    if (!restored) {
+      setMessage("这条记录没有可恢复的上次处理结果，请手动选择处理状态。");
+      return;
+    }
+    const nextResolutions = restored.resolutions;
+    const nextSplitMergeExcludedLessonIds = combinedSplitMergeExcludedLessonIds(vault, scheduleImportVault, rows, nextResolutions);
+    setResolutions(nextResolutions);
+    const restoredLabel = resolutionStatusLabel(restored.restored.status);
+    if (!editingReviewId) {
+      onSaveScheduleImport?.(
+        buildScheduleImportStateWithoutReview(scheduleImportVault, mapping, nextResolutions, nextSplitMergeExcludedLessonIds),
+        { syncReviewArchive: false, deferMainSave: true }
+      );
+      setMessage(`已恢复为「${restoredLabel}」。已自动保存在当前工作区，云端会合并同步。`);
+    } else {
+      setMessage(`已恢复为「${restoredLabel}」，点击保存后才会更新该月历史记录。`);
+    }
+  }
+
   function performSaveMapping(afterSave?: () => void) {
     const savedMappingOk = writeSavedMapping(storageScope, mapping);
     const savedWorkspaceOk = writeSavedWorkspace(storageScope, {
@@ -535,6 +560,7 @@ export function ScheduleImportPanel({
     const nextScheduleImport = buildNextScheduleImportState(scheduleImportVault, {
       rawLessons,
       mapping,
+      reviewMapping: previewMapping,
       resolutions,
       fileCampusOverrides,
       selectedMonth: displayMonth,
@@ -620,12 +646,17 @@ export function ScheduleImportPanel({
     const nextRawLessons = rawLessonsFromSavedReview(review);
     if (nextRawLessons.length === 0) return null;
     const nextMapping = mergeScheduleImportMappings(vault, mapping);
+    const nextPreviewMapping = mergeScheduleImportMappings(
+      vault,
+      currentMapping,
+      appliedMappingFromSavedReview(review)
+    );
     const nextFileCampusOverrides = { ...(review.fileCampusOverrides ?? {}) };
-    const nextImportedRows = buildImportPreview(vault, nextRawLessons, currentMapping, nextFileCampusOverrides);
+    const nextImportedRows = buildImportPreview(vault, nextRawLessons, nextPreviewMapping, nextFileCampusOverrides);
     const nextRows = [...nextImportedRows, ...buildLocalOnlyRows(vault, nextImportedRows, nextRawLessons)];
     const baseResolutions = resolutionsWithoutMonths(cloudResolutions, [review.month]);
     const merge = mergeSavedReviewResolutions(review, nextRows, baseResolutions);
-    return { nextRawLessons, nextMapping, nextFileCampusOverrides, nextRows, merge };
+    return { nextRawLessons, nextMapping, nextPreviewMapping, nextFileCampusOverrides, nextRows, merge };
   }
 
   function loadSavedReviewIntoWorkspace(review: ScheduleImportReviewRecord) {
@@ -697,7 +728,7 @@ export function ScheduleImportPanel({
       setMessage("这条保存的对账没有可恢复的教务 Excel 课节，无法继续编辑。");
       return;
     }
-    const { nextRawLessons, nextMapping, nextFileCampusOverrides, nextRows, merge } = comparison;
+    const { nextRawLessons, nextMapping, nextPreviewMapping, nextFileCampusOverrides, nextRows, merge } = comparison;
     if (!workspaceBeforeHistoryRef.current) {
       workspaceBeforeHistoryRef.current = {
         rawLessons: [...rawLessons],
@@ -717,7 +748,7 @@ export function ScheduleImportPanel({
     setMapping(nextMapping);
     setFileCampusOverrides(nextFileCampusOverrides);
     setResolutions(merge.resolutions);
-    setHistoricalMapping(null);
+    setHistoricalMapping(nextPreviewMapping);
     setHistoricalRows(null);
     setSelectedMonth(nextSelectedMonth);
     setSelectedDate(review.selectedDate || nextRawLessons[0]?.date || `${nextSelectedMonth}-01`);
@@ -912,6 +943,7 @@ export function ScheduleImportPanel({
                       return linkedIds.some((lessonId) => existingSystemLessonIds.has(lessonId)) ? [] : linkedIds.filter((lessonId) => !existingSystemLessonIds.has(lessonId));
                     })()}
                     onResolutionChange={(patch) => updateResolution(row, patch)}
+                    onRestoreRecheck={() => restoreRecheckForRow(row)}
                     onOpenLesson={onOpenLesson}
                     onSuggestSchedule={onSuggestSchedule}
                   />
@@ -1036,6 +1068,13 @@ function rawLessonsFromSavedReview(review: ScheduleImportReviewRecord): Imported
         warnings: row.warnings ?? []
       }];
     });
+}
+
+function appliedMappingFromSavedReview(review: ScheduleImportReviewRecord): ScheduleImportMapping {
+  return Object.fromEntries(review.rows.flatMap((row) => {
+    if (!row.mappedCourseId || row.fileName === "云端课表" || row.id.startsWith("local-only-")) return [];
+    return [[importMappingKey(row), row.mappedCourseId]];
+  }));
 }
 
 function inheritSavedReviewCampusOverrides(

@@ -15,6 +15,7 @@ import {
   isReviewedResolution,
   linkedLessonsForResolution,
   quickResolutionActionsForRow,
+  recheckOriginForRestore,
   resolutionExcludesImportStats,
   resolutionNeedsAttention,
   resolutionStatusLabel,
@@ -36,6 +37,7 @@ export function ScheduleImportReconciliationRow({
   staleLinkedByPreviousResolution,
   invalidLinkedSystemLessonIds,
   onResolutionChange,
+  onRestoreRecheck,
   onOpenLesson,
   onSuggestSchedule
 }: {
@@ -47,6 +49,7 @@ export function ScheduleImportReconciliationRow({
   staleLinkedByPreviousResolution: boolean;
   invalidLinkedSystemLessonIds: string[];
   onResolutionChange: (patch: Partial<Pick<ScheduleImportResolution, "status" | "note" | "linkedSystemLessonIds">>) => void;
+  onRestoreRecheck?: () => void;
   onOpenLesson?: (lesson: Lesson) => void;
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
 }) {
@@ -62,6 +65,7 @@ export function ScheduleImportReconciliationRow({
   const baseDisplayStatus = effectiveRowStatus(row, resolution, linkedSystemLessonIds);
   const resolvedByLinkedImport = row.status === "import_missing" && Boolean(row.systemLessonId && linkedSystemLessonIds.has(row.systemLessonId));
   const quickResolutionActions = quickResolutionActionsForRow(row);
+  const restorableOrigin = onRestoreRecheck ? recheckOriginForRestore(resolution) : undefined;
   const splitMergeCandidates = useMemo(() => splitMergeCandidateLessons(vault, row), [row, vault]);
   const linkedLessons = useMemo(
     () => linkedLessonsForResolution(vault, resolution),
@@ -266,6 +270,25 @@ export function ScheduleImportReconciliationRow({
           {resolvedAsMatched && (
             <div className="rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-xs font-bold text-[#15803d]">
               已按人工确认结果计入“已对应”；如需重新处理，可把状态改回“未处理”或“云端需修正”。
+            </div>
+          )}
+          {restorableOrigin && (
+            <div className="flex flex-col gap-2 rounded-[10px] border border-[#fdba74] bg-[#fff7ed] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 text-xs font-bold text-[#9a3412]">
+                复核前的处理结果是「{resolutionStatusLabel(restorableOrigin.status)}」
+                {restorableOrigin.linkedSystemLessonIds?.length ? `，关联 ${restorableOrigin.linkedSystemLessonIds.length} 节云端课` : ""}。
+                若核对后确认本次数据没有实质变化，可直接恢复。
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
+                onClick={onRestoreRecheck}
+                title="把这条记录恢复成被标为待复核之前的处理结果"
+              >
+                恢复上次处理
+              </Button>
             </div>
           )}
           {quickResolutionActions.length > 0 && (

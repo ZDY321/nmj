@@ -70,6 +70,7 @@ export function savedReviewResolutionMap(review: ScheduleImportReviewRecord): Sc
       status: row.resolutionStatus ?? "unreviewed",
       note: row.resolutionNote,
       linkedSystemLessonIds: row.linkedSystemLessonIds,
+      recheckOrigin: row.resolutionRecheckOrigin,
       updatedAt: row.resolutionUpdatedAt ?? review.savedAt
     } satisfies ScheduleImportResolution]];
   }));
@@ -96,6 +97,7 @@ export function buildNextScheduleImportState(
   context: {
     rawLessons: ImportedScheduleLesson[];
     mapping: ScheduleImportMapping;
+    reviewMapping?: ScheduleImportMapping;
     resolutions: ScheduleImportResolutionMap;
     fileCampusOverrides: ScheduleImportMapping;
     selectedMonth: string;
@@ -129,10 +131,14 @@ function resolutionsWithDataFingerprints(
   rows.forEach((row) => {
     const key = resolutionKey(row);
     const resolution = next[key];
-    if (!resolution || resolution.status === "unreviewed" || resolution.dataFingerprint) return;
+    if (!resolution || resolution.status === "unreviewed") return;
+    // 每次保存都按当前行重算指纹。保存本身就代表「以这份数据为准」，
+    // 沿用旧指纹会让错误的指纹永远得不到纠正，重新打开时又被判为有变化。
+    const currentFingerprint = rowReviewFingerprint(row);
+    if (resolution.dataFingerprint === currentFingerprint) return;
     next[key] = {
       ...resolution,
-      dataFingerprint: rowReviewFingerprint(row)
+      dataFingerprint: currentFingerprint
     };
   });
   return next;
@@ -143,6 +149,7 @@ function buildReviewRecord(
   context: {
     rawLessons: ImportedScheduleLesson[];
     mapping: ScheduleImportMapping;
+    reviewMapping?: ScheduleImportMapping;
     resolutions: ScheduleImportResolutionMap;
     fileCampusOverrides: ScheduleImportMapping;
     selectedMonth: string;
@@ -174,7 +181,7 @@ function buildReviewRecord(
       : monthRawLessons[0]?.date ?? `${context.selectedMonth}-01`,
     rawLessonCount: monthRawLessons.length,
     fileNames,
-    mapping: context.mapping,
+    mapping: context.reviewMapping ?? context.mapping,
     fileCampusOverrides: Object.fromEntries(fileNames.flatMap((fileName) => {
       const campusId = context.fileCampusOverrides[fileName];
       return campusId ? [[fileName, campusId]] : [];
@@ -234,6 +241,7 @@ function buildReviewRecord(
         resolutionStatus: resolution?.status,
         resolutionNote: resolution?.note,
         linkedSystemLessonIds: resolution?.linkedSystemLessonIds,
+        resolutionRecheckOrigin: resolution?.recheckOrigin,
         resolutionUpdatedAt: resolution?.updatedAt
       };
     })

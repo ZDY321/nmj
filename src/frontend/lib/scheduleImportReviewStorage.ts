@@ -1,4 +1,4 @@
-import type { ScheduleImportResolution, ScheduleImportResolutionMap, ScheduleImportResolutionStatus } from "@/shared/types";
+import type { ScheduleImportRecheckOrigin, ScheduleImportResolution, ScheduleImportResolutionMap, ScheduleImportResolutionStatus } from "@/shared/types";
 import { todayIso } from "@/frontend/lib/calculations";
 import {
   type ImportedScheduleLesson,
@@ -70,10 +70,22 @@ function normalizeResolutions(value: unknown): ScheduleImportResolutionMap {
         note: typeof rawResolution.note === "string" ? rawResolution.note : undefined,
         linkedSystemLessonIds: normalizeLinkedSystemLessonIds(rawResolution.linkedSystemLessonIds),
         dataFingerprint: typeof rawResolution.dataFingerprint === "string" ? rawResolution.dataFingerprint : undefined,
+        recheckOrigin: normalizeRecheckOrigin(rawResolution.recheckOrigin),
         updatedAt: typeof rawResolution.updatedAt === "string" ? rawResolution.updatedAt : new Date().toISOString()
       } satisfies ScheduleImportResolution]];
     })
   );
+}
+
+function normalizeRecheckOrigin(value: unknown): ScheduleImportRecheckOrigin | undefined {
+  if (!isRecord(value)) return undefined;
+  const status = value.status;
+  if (typeof status !== "string" || !resolutionStatuses.includes(status as ScheduleImportResolutionStatus)) return undefined;
+  return {
+    status: status as ScheduleImportResolutionStatus,
+    note: typeof value.note === "string" ? value.note : undefined,
+    linkedSystemLessonIds: normalizeLinkedSystemLessonIds(value.linkedSystemLessonIds)
+  };
 }
 
 function normalizeRawLessons(value: unknown): ImportedScheduleLesson[] {

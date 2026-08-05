@@ -39,6 +39,8 @@ export {
   linkedSystemLessonIdsFromSavedRows,
   linkedSystemLessonSourcesFromRows,
   quickResolutionActionsForRow,
+  recheckOriginForRestore,
+  restoreRecheckResolution,
   resolutionKey,
   rowReviewFingerprint,
   mergeSavedReviewResolutions,

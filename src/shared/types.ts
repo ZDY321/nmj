@@ -492,11 +492,19 @@ export type ScheduleImportResolutionStatus =
   | "time_variance_ok"
   | "split_merge_ok";
 
+// 被标为 recheck_required 之前的处理结果，用于「恢复上次处理」。
+export type ScheduleImportRecheckOrigin = {
+  status: ScheduleImportResolutionStatus;
+  note?: string;
+  linkedSystemLessonIds?: string[];
+};
+
 export type ScheduleImportResolution = {
   status: ScheduleImportResolutionStatus;
   note?: string;
   linkedSystemLessonIds?: string[];
   dataFingerprint?: string;
+  recheckOrigin?: ScheduleImportRecheckOrigin;
   updatedAt: string;
 };
 
@@ -555,6 +563,7 @@ export type ScheduleImportSavedRow = {
   resolutionStatus?: ScheduleImportResolutionStatus;
   resolutionNote?: string;
   linkedSystemLessonIds?: string[];
+  resolutionRecheckOrigin?: ScheduleImportRecheckOrigin;
   resolutionUpdatedAt?: string;
 };
 

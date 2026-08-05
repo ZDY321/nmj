@@ -29,7 +29,7 @@ import {
 } from "@/frontend/lib/scheduleImportReviewRecords";
 import { summarizeScheduleImportImportedLessons } from "@/frontend/lib/scheduleImportReviewLessons";
 import { buildDefaultCampusOverrides, buildLocalOnlyRows } from "@/frontend/lib/scheduleImportReviewRows";
-import { mergeSavedReviewResolutions, resolutionKey, rowReviewFingerprint } from "@/frontend/lib/scheduleImportReviewMatching";
+import { mergeSavedReviewResolutions, resolutionKey, restoreRecheckResolution, rowReviewFingerprint } from "@/frontend/lib/scheduleImportReviewMatching";
 import type {
   CourseGroup,
   CourseType,
@@ -762,7 +762,7 @@ describe("schedule import review records", () => {
         resolutionNote: "拆分合并确认",
         linkedSystemLessonIds: [linkedLesson.id]
       });
-      expect(savedReview.resolutions?.[resolutionKey(splitMergeRow)]?.dataFingerprint).toMatch(/^review-v1:[0-9a-f]{16}$/);
+      expect(savedReview.resolutions?.[resolutionKey(splitMergeRow)]?.dataFingerprint).toMatch(/^review-v2:[0-9a-f]{16}$/);
       expect(nextState.resolutions?.[resolutionKey(splitMergeRow)]?.dataFingerprint).toBe(rowReviewFingerprint(splitMergeRow));
       const immediateMerge = mergeSavedReviewResolutions(savedReview, [splitMergeRow, importMissingRow], {});
       expect(immediateMerge).toMatchObject({
@@ -872,6 +872,168 @@ describe("schedule import review records", () => {
       attendanceMismatch: 0,
       recheckRequired: 1
     });
+  });
+
+  it("keeps a re-opened review green when nothing changed, instead of self-locking on a stale fingerprint", () => {
+    // 回归：标记待复核时如果存的是旧指纹，下次比较必然又判定为「有变化」，
+    // 于是即使数据再也没变过，历史记录也永远退不出待复核。
+    const row = makePreviewRow({ id: "locked_row", date: "2026-07-05" });
+    const previousResolution = {
+      status: "accepted" as const,
+      note: "确认无误。",
+      dataFingerprint: "review-v2:1111111111111111",
+      updatedAt: "2026-07-20T08:00:00.000Z"
+    };
+    const review = makeSavedReview("july_locked", "2026-07-20T09:00:00.000Z", "2026-07");
+    review.rows = [{ ...row, resolutionStatus: previousResolution.status, resolutionNote: previousResolution.note }];
+    review.resolutions = { [resolutionKey(row)]: previousResolution };
+
+    // 第一次打开：指纹对不上，标为待复核，并记录「当前」数据的指纹
+    const firstMerge = mergeSavedReviewResolutions(review, [row], {});
+    expect(firstMerge.changedCount).toBe(1);
+    const flagged = firstMerge.resolutions[resolutionKey(row)];
+    expect(flagged.status).toBe("recheck_required");
+    expect(flagged.dataFingerprint).toBe(rowReviewFingerprint(row));
+
+    // 把这个结果保存下来，然后什么都不改再打开一次 —— 必须判定为「未变化」
+    const savedAgain: ScheduleImportReviewRecord = {
+      ...review,
+      rows: [{ ...row, resolutionStatus: flagged.status, resolutionNote: flagged.note, resolutionRecheckOrigin: flagged.recheckOrigin }],
+      resolutions: firstMerge.resolutions
+    };
+    const secondMerge = mergeSavedReviewResolutions(savedAgain, [row], {});
+    expect(secondMerge).toMatchObject({ unchangedCount: 1, changedCount: 0 });
+    expect(secondMerge.resolutions[resolutionKey(row)].status).toBe("recheck_required");
+    // 备注不再层层套娃
+    expect(secondMerge.resolutions[resolutionKey(row)].note).toBe(flagged.note);
+  });
+
+  it("saving refreshes a stale fingerprint so the next open compares against current data", () => {
+    const row = makePreviewRow({ id: "stale_fp_row", date: "2026-07-05" });
+    const state = buildNextScheduleImportState(makeVault(), {
+      rawLessons: [],
+      mapping: {},
+      resolutions: {
+        [resolutionKey(row)]: {
+          status: "accepted",
+          note: "确认无误。",
+          dataFingerprint: "review-v2:0000000000000000",
+          updatedAt: "2026-07-20T00:00:00.000Z"
+        }
+      },
+      fileCampusOverrides: {},
+      selectedMonth: "2026-07",
+      selectedDate: "2026-07-05",
+      rows: [row],
+      summary: summarizeImportPreview([row])
+    });
+
+    expect(state.resolutions?.[resolutionKey(row)]?.dataFingerprint).toBe(rowReviewFingerprint(row));
+    expect(mergeSavedReviewResolutions(state.reviews[0], [row], {})).toMatchObject({
+      unchangedCount: 1,
+      changedCount: 0
+    });
+  });
+
+  it("keeps split-merge links when a row is flagged for recheck", () => {
+    const row = makePreviewRow({ id: "linked_row", date: "2026-07-05", status: "time_mismatch" });
+    const previousResolution = {
+      status: "split_merge_ok" as const,
+      note: "拆分合并确认。",
+      linkedSystemLessonIds: ["lesson_linked_a", "lesson_linked_b"],
+      dataFingerprint: "review-v2:2222222222222222",
+      updatedAt: "2026-07-20T08:00:00.000Z"
+    };
+    const review = makeSavedReview("july_linked", "2026-07-20T09:00:00.000Z", "2026-07");
+    review.rows = [{ ...row, resolutionStatus: previousResolution.status, linkedSystemLessonIds: previousResolution.linkedSystemLessonIds }];
+    review.resolutions = { [resolutionKey(row)]: previousResolution };
+
+    const merge = mergeSavedReviewResolutions(review, [row], {});
+    expect(merge.resolutions[resolutionKey(row)]).toMatchObject({
+      status: "recheck_required",
+      linkedSystemLessonIds: ["lesson_linked_a", "lesson_linked_b"]
+    });
+  });
+
+  it("restores the pre-recheck result, including records saved before recheckOrigin existed", () => {
+    const row = makePreviewRow({ id: "restore_row", date: "2026-07-05" });
+    const key = resolutionKey(row);
+
+    // 新数据：带结构化来源
+    const structured = restoreRecheckResolution({
+      [key]: {
+        status: "recheck_required",
+        note: "当前数据与上次保存结果不同，请重新核对。 上次处理：确认无误。",
+        recheckOrigin: { status: "accepted", note: "人工确认无误。" },
+        updatedAt: "2026-07-21T00:00:00.000Z"
+      }
+    }, key, row);
+    expect(structured?.restored.status).toBe("accepted");
+    expect(structured?.resolutions[key]).toMatchObject({
+      status: "accepted",
+      note: "人工确认无误。",
+      dataFingerprint: rowReviewFingerprint(row)
+    });
+
+    // 存量坏数据：只能从备注文本里解析，且要拿到最原始那一层
+    const legacy = restoreRecheckResolution({
+      [key]: {
+        status: "recheck_required",
+        note: "当前数据与上次保存结果不同，请重新核对。 上次处理：历史数据有更新。 上次备注：当前数据与上次保存结果不同，请重新核对。 上次处理：拆分合并正常。 上次备注：教务与云端合并处理。",
+        updatedAt: "2026-07-21T00:00:00.000Z"
+      }
+    }, key, row);
+    expect(legacy?.restored.status).toBe("split_merge_ok");
+    expect(legacy?.resolutions[key]).toMatchObject({
+      status: "split_merge_ok",
+      note: "教务与云端合并处理。"
+    });
+
+    expect(restoreRecheckResolution({
+      [key]: { status: "accepted", updatedAt: "2026-07-21T00:00:00.000Z" }
+    }, key, row)).toBeUndefined();
+  });
+
+  it("treats a legacy v1 fingerprint as absent and falls back to the saved row", () => {
+    // 指纹算法升级到 v2 后，旧指纹必须被判为无效并回退到「按保存行重算」，
+    // 否则换算法当天所有历史记录都会被误标一次。
+    const row = makePreviewRow({ id: "v1_row", date: "2026-07-05" });
+    const review = makeSavedReview("july_v1", "2026-07-20T09:00:00.000Z", "2026-07");
+    review.rows = [{ ...row, resolutionStatus: "accepted", resolutionNote: "确认无误。" }];
+    review.resolutions = {
+      [resolutionKey(row)]: {
+        status: "accepted",
+        note: "确认无误。",
+        dataFingerprint: "review-v1:abcdef0123456789",
+        updatedAt: "2026-07-20T08:00:00.000Z"
+      }
+    };
+
+    const merge = mergeSavedReviewResolutions(review, [row], {});
+    expect(merge).toMatchObject({ unchangedCount: 1, changedCount: 0, inheritedCount: 1 });
+    expect(merge.resolutions[resolutionKey(row)]).toMatchObject({
+      status: "accepted",
+      dataFingerprint: rowReviewFingerprint(row)
+    });
+  });
+
+  it("ignores display-only cloud fields that do not change the reconciliation verdict", () => {
+    const base = makePreviewRow({ id: "display_row", date: "2026-07-05" });
+    const withDisplayChanges = {
+      ...base,
+      teacher: "换了个老师",
+      assistant: "换了个助教",
+      room: "换了个教室",
+      systemLessonNote: "云端补了一条备注",
+      systemPresentStudentNames: "小明（已补课）",
+      systemMakeupCompletedStudentNames: "小明"
+    };
+    expect(rowReviewFingerprint(withDisplayChanges)).toBe(rowReviewFingerprint(base));
+
+    // 但真正影响结论的字段仍然要触发复核
+    expect(rowReviewFingerprint({ ...base, presentCount: 0 })).not.toBe(rowReviewFingerprint(base));
+    expect(rowReviewFingerprint({ ...base, systemLessonStatus: "cancelled" })).not.toBe(rowReviewFingerprint(base));
+    expect(rowReviewFingerprint({ ...base, systemPresentCount: 5 })).not.toBe(rowReviewFingerprint(base));
   });
 
   it("stores only the selected month and replaces the previous record for that month", () => {
