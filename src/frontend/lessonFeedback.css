@@ -613,14 +613,18 @@ textarea.lesson-feedback-field { resize: none; overflow: hidden; }
   border-radius: 3px;
   background: transparent;
   color: var(--feedback-ink);
-  cursor: pointer;
+  cursor: grab;
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 600;
+  touch-action: none;
+  user-select: none;
 }
 
 .lesson-feedback-name-cell:hover { border-color: rgba(35, 95, 88, 0.3); background: rgba(226, 243, 237, 0.45); }
 .lesson-feedback-name-cell.is-selected { border-color: #235f58; background: rgba(35, 95, 88, 0.14); }
+.lesson-feedback-name-cell:active,
+.lesson-feedback-name-cell.is-dragging { cursor: grabbing; border-color: #235f58; background: rgba(35, 95, 88, 0.2); }
 
 .lesson-feedback-order-buttons {
   position: absolute;

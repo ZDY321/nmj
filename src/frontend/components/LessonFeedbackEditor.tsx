@@ -63,6 +63,15 @@ type BoxInteraction = {
   originalRecord: LessonFeedbackRecord;
 };
 
+type StudentDrag = {
+  studentId: string;
+  startClientX: number;
+  startClientY: number;
+  originalRecord: LessonFeedbackRecord;
+  moved: boolean;
+  reordered: boolean;
+};
+
 // 与旧项目一致的常用色，避免每次都要开色轮。
 const presetColors: Array<{ value: string; label: string }> = [
   { value: "#235f58", label: "墨绿" },
@@ -131,6 +140,7 @@ export function LessonFeedbackEditor({
   const [selectedTextBoxId, setSelectedTextBoxId] = useState("");
   const [draftStroke, setDraftStroke] = useState<LessonFeedbackStroke | null>(null);
   const [boxInteraction, setBoxInteraction] = useState<BoxInteraction | null>(null);
+  const [studentDrag, setStudentDrag] = useState<StudentDrag | null>(null);
   const [draftBox, setDraftBox] = useState<{ startX: number; startY: number; x: number; y: number; width: number; height: number } | null>(null);
   const [braceDrag, setBraceDrag] = useState<{
     id: string;
@@ -166,6 +176,7 @@ export function LessonFeedbackEditor({
   const latestRecordRef = useRef(record);
   const undoStackRef = useRef<LessonFeedbackRecord[]>([]);
   const redoStackRef = useRef<LessonFeedbackRecord[]>([]);
+  const suppressNameClickRef = useRef(false);
   const pageHeight = feedbackPageHeight(record);
   // 编辑器与导出共用同一份坐标，屏幕上的位置即导出图里的位置。
   const layout = useMemo(() => feedbackSheetLayout(record.students.length), [record.students.length]);
@@ -270,6 +281,58 @@ export function LessonFeedbackEditor({
       window.removeEventListener("pointercancel", onPointerUp);
     };
   }, [boxInteraction]);
+
+  // 姓名单元格：短点击仍然用于多人反馈选中，拖动超过阈值后才调整学生顺序。
+  useEffect(() => {
+    if (!studentDrag) return;
+    const dragThreshold = 6;
+    const onPointerMove = (event: PointerEvent) => {
+      const deltaX = event.clientX - studentDrag.startClientX;
+      const deltaY = event.clientY - studentDrag.startClientY;
+      if (!studentDrag.moved && Math.hypot(deltaX, deltaY) < dragThreshold) return;
+      studentDrag.moved = true;
+      event.preventDefault();
+
+      const paper = document.querySelector<HTMLElement>(".lesson-feedback-paper");
+      const rect = paper?.getBoundingClientRect();
+      if (!rect) return;
+      const scale = feedbackPageWidth / Math.max(rect.width, 1);
+      const y = (event.clientY - rect.top) * scale;
+      const targetIndex = Math.round(clamp(
+        (y - layout.studentStartY - layout.studentRowHeight / 2) / layout.studentRowHeight,
+        0,
+        latestRecordRef.current.students.length - 1
+      ));
+      const currentIndex = latestRecordRef.current.students.findIndex((student) => student.id === studentDrag.studentId);
+      if (currentIndex < 0 || targetIndex === currentIndex) return;
+
+      const next = cloneRecord(latestRecordRef.current);
+      const [movedStudent] = next.students.splice(currentIndex, 1);
+      next.students.splice(targetIndex, 0, movedStudent);
+      studentDrag.reordered = true;
+      emit(next, false);
+    };
+    const onPointerUp = () => {
+      if (studentDrag.reordered) {
+        undoStackRef.current.push(studentDrag.originalRecord);
+        trimHistory(undoStackRef.current);
+        redoStackRef.current = [];
+        suppressNameClickRef.current = true;
+      } else if (studentDrag.moved) {
+        suppressNameClickRef.current = true;
+      }
+      suppressDeselectRef.current = true;
+      setStudentDrag(null);
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+    window.addEventListener("pointercancel", onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [layout.studentRowHeight, layout.studentStartY, studentDrag]);
 
   // 选中的图形可整体平移，或从右下角按比例缩放。
   useEffect(() => {
@@ -434,6 +497,19 @@ export function LessonFeedbackEditor({
     setSelectedStudentIds((current) => current.includes(studentId)
       ? current.filter((id) => id !== studentId)
       : [...current, studentId]);
+  }
+
+  function beginStudentDrag(event: ReactPointerEvent<HTMLButtonElement>, studentId: string): void {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    setStudentDrag({
+      studentId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      originalRecord: cloneRecord(record),
+      moved: false,
+      reordered: false
+    });
   }
 
   function addGroupFeedback(): void {
@@ -1086,10 +1162,18 @@ export function LessonFeedbackEditor({
                 <div key={student.id}>
                   <button
                     type="button"
-                    className={cn("lesson-feedback-name-cell", selected && "is-selected")}
+                    className={cn("lesson-feedback-name-cell", selected && "is-selected", studentDrag?.studentId === student.id && "is-dragging")}
                     style={cellStyle(c[0], rowY, c[1] - c[0], layout.studentRowHeight, { align: "center" })}
-                    onClick={(event) => { event.stopPropagation(); toggleStudent(student.id); }}
-                    title="点选可加入多人反馈"
+                    onPointerDown={(event) => beginStudentDrag(event, student.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (suppressNameClickRef.current) {
+                        suppressNameClickRef.current = false;
+                        return;
+                      }
+                      toggleStudent(student.id);
+                    }}
+                    title="点击选中多人反馈；拖拽可调整顺序"
                   >
                     <span>{student.name}</span>
                   </button>
