@@ -1,9 +1,9 @@
 import {
+  BadgeJapaneseYen,
   Bell,
   BookOpen,
   CalendarCheck,
   CalendarDays,
-  FileCheck2,
   MessageSquare,
   ShieldCheck,
   Users,
@@ -51,7 +51,7 @@ export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: s
   { key: "schedule", icon: CalendarDays, label: "排课与课时" },
   { key: "students", icon: Users, label: "档案信息" },
   { key: "progress", icon: BookOpen, label: "学情与作业" },
-  { key: "payroll", icon: FileCheck2, label: "工资核对" },
+  { key: "payroll", icon: BadgeJapaneseYen, label: "工资核对" },
   { key: "salary", icon: WalletCards, label: "数据统计" }
 ];
 
