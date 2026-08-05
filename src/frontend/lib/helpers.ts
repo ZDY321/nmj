@@ -1,7 +1,7 @@
 import {
   BadgeJapaneseYen,
   Bell,
-  BookOpen,
+  BookOpenText,
   CalendarCheck,
   CalendarDays,
   ChartNoAxesCombined,
@@ -50,7 +50,7 @@ export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: s
   { key: "calendar", icon: CalendarCheck, label: "日历总览" },
   { key: "schedule", icon: CalendarDays, label: "排课与课时" },
   { key: "students", icon: Users, label: "档案信息" },
-  { key: "progress", icon: BookOpen, label: "学情与作业" },
+  { key: "progress", icon: BookOpenText, label: "学情与作业" },
   { key: "payroll", icon: BadgeJapaneseYen, label: "工资核对" },
   { key: "salary", icon: ChartNoAxesCombined, label: "数据统计" }
 ];
