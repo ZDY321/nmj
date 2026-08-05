@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, GraduationCap, ShieldCheck } from "lucide-react";
+import { ChevronLeft, ChevronRight, GraduationCap, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { navItems, type ViewKey } from "@/frontend/lib/helpers";
@@ -86,26 +86,13 @@ export function Sidebar({
               >
                 <span
                   className={cn(
-                    "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] transition-colors",
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] transition-colors",
                     isActive
                       ? "orange-gradient text-white shadow-[0_10px_20px_rgba(255,134,23,0.3)]"
                       : "text-white/72 group-hover:text-white"
                   )}
                 >
                   <Icon size={21} strokeWidth={2.2} />
-                  {item.key === "payroll" && (
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "absolute bottom-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full ring-2",
-                        isActive
-                          ? "bg-white text-[#ff8617] ring-[#ff8617]"
-                          : "bg-[#ff8617] text-white ring-[#082f57]"
-                      )}
-                    >
-                      <Check size={9} strokeWidth={3.2} />
-                    </span>
-                  )}
                 </span>
                 {!collapsed && <span className="truncate">{item.label}</span>}
               </button>

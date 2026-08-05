@@ -4,10 +4,10 @@ import {
   BookOpen,
   CalendarCheck,
   CalendarDays,
+  ChartNoAxesCombined,
   MessageSquare,
   ShieldCheck,
-  Users,
-  WalletCards
+  Users
 } from "lucide-react";
 import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
 import type {
@@ -52,7 +52,7 @@ export const navItems: Array<{ key: ViewKey; icon: typeof CalendarDays; label: s
   { key: "students", icon: Users, label: "档案信息" },
   { key: "progress", icon: BookOpen, label: "学情与作业" },
   { key: "payroll", icon: BadgeJapaneseYen, label: "工资核对" },
-  { key: "salary", icon: WalletCards, label: "数据统计" }
+  { key: "salary", icon: ChartNoAxesCombined, label: "数据统计" }
 ];
 
 export const attendanceLabels: Record<AttendanceStatus, string> = {
