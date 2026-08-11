@@ -52,6 +52,7 @@ import {
   cloneFeeRule,
   courseUpdateAffectsLessonDefaults,
   materializeStudentTrialStatusOnLessons,
+  migrateLessonsFromCourseType,
   moveLessonsToTrash,
   normalizeCourseLessonSyncScope,
   recalculateLinkedMakeupLessonFeeSnapshots,
@@ -60,7 +61,9 @@ import {
   restoreLessonsFromTrash,
   syncFutureLessonsWithStudentTrialStatus,
   syncLessonsWithCourseDefaults,
-  syncOriginalLessonFromMakeupCompletion
+  syncOriginalLessonFromMakeupCompletion,
+  type CourseTypeMigrationMode,
+  type CourseTypeMigrationResult
 } from "@/frontend/lib/vaultMutations";
 import { timesOverlap } from "@/frontend/lib/time";
 import type {
@@ -923,6 +926,18 @@ export function App() {
           syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
         });
     });
+  }
+
+  function migrateCourseTypeLessons(
+    fromType: CourseType,
+    orphanTargetType: CourseType,
+    mode: CourseTypeMigrationMode
+  ): CourseTypeMigrationResult {
+    let result: CourseTypeMigrationResult = { total: 0, byCourse: 0, substitute: 0, orphan: 0, refreshed: 0, skipped: 0 };
+    updateVault((draft) => {
+      result = migrateLessonsFromCourseType(draft, fromType, orphanTargetType, mode);
+    });
+    return result;
   }
 
   function updateAiScheduleSession(session: AiScheduleSession | null) {
@@ -2134,6 +2149,7 @@ export function App() {
                     onDeleteCourseType={deleteCourseType}
                     onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
                     onSyncCourseTypeFeeRuleToCourses={syncCourseTypeFeeRuleToCourses}
+                    onMigrateCourseTypeLessons={migrateCourseTypeLessons}
                     onAddSubject={addSubject}
                     onUpdateSubject={updateSubject}
                     onDeleteSubject={deleteSubject}

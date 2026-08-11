@@ -59,6 +59,9 @@ type CampusCourseSettingsPanelProps = {
   onDeleteSubject: (subject: string) => void;
   onRequestDeleteCourseType: (courseTypeOption: { id: CourseType; label: string }) => void;
   onRequestSyncCourseTypeFeeRuleToCourses: (type: CourseType) => void;
+  onRequestMigrateCourseTypeLessons: (type: CourseType) => void;
+  migrationOrphanTargetType: CourseType;
+  setMigrationOrphanTargetType: Dispatch<SetStateAction<CourseType>>;
   onResetCourseTypeFeeRule: (type: CourseType) => void;
   onSaveCustomCourseType: () => void;
   onSaveSubject: () => void;
@@ -123,6 +126,9 @@ export function CampusCourseSettingsPanel({
   onDeleteSubject,
   onRequestDeleteCourseType,
   onRequestSyncCourseTypeFeeRuleToCourses,
+  onRequestMigrateCourseTypeLessons,
+  migrationOrphanTargetType,
+  setMigrationOrphanTargetType,
   onResetCourseTypeFeeRule,
   onSaveCustomCourseType,
   onSaveSubject,
@@ -373,7 +379,43 @@ export function CampusCourseSettingsPanel({
                 )}
                 {!isEditingType && isCustom && used && customDeleteBlockedReason && (
                   <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">
-                    暂不能删除：{customDeleteBlockedReason}。如果课程档案已经改成新班型，但历史课节仍显示旧班型，可到“课时列表”选择对应日期后使用“刷新当天课节”。
+                    暂不能删除：{customDeleteBlockedReason}。
+                    {legacyLessonCount > 0 && "下面的「一键迁移课节」可以把这些旧课节一次性迁到新班型。"}
+                  </div>
+                )}
+                {!isEditingType && legacyLessonCount > 0 && (
+                  <div className="space-y-2 rounded-[12px] border border-[#fdba74] bg-[#fff7ed] p-3">
+                    <div className="text-sm font-extrabold text-[#9a3412]">
+                      有 {legacyLessonCount} 节旧课节仍标记为「{typeOption.label}」
+                    </div>
+                    <div className="text-xs font-semibold leading-5 text-[#9a3412]">
+                      有课程档案的课节会跟随各自档案的班型，代课课节归为小班课；找不到课程档案的课节归到下面指定的班型。迁移后就能删除这个班型。
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#9a3412]">找不到课程档案的课节归到</label>
+                        <Select
+                          value={migrationOrphanTargetType}
+                          onChange={(event) => setMigrationOrphanTargetType(event.target.value as CourseType)}
+                          className="h-9 border-[#fdba74] bg-white text-[#7c2d12]"
+                          aria-label="选择孤儿课节的目标班型"
+                        >
+                          {managedCourseTypes
+                            .filter((option) => option.value !== type)
+                            .map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => onRequestMigrateCourseTypeLessons(type)}
+                      >
+                        <RefreshCw size={14} /> 一键迁移课节
+                      </Button>
+                    </div>
                   </div>
                 )}
                 {rule.mode === "class_headcount" ? (

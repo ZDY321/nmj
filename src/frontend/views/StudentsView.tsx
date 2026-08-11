@@ -19,6 +19,7 @@ import { NewCourseFormPanel } from "@/frontend/components/NewCourseFormPanel";
 import { makeId } from "@/frontend/lib/crypto";
 import { backupFeeRuleForCourseType, billableStudentCapForCourseType, billableStudentCapForRule, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, classHeadcountFeeRuleForCourseType, classHeadcountRuleUsesClassBase, classHeadcountStageRateForRule, courseUsesClassBilling, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, isClassBillingCourseType, normalizedClassFeeTiers, obligationSummary, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeRuleById, salaryGradeRulesForVault, salaryGradeAmountForCount, salaryGradeStageForCourse, salaryGradeStageForStudentIds, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
 import { builtInCourseTypeOptions, campusName, compareByName, courseHasActiveStudent, courseRequiresSameGradeStudents, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
+import type { CourseTypeMigrationMode, CourseTypeMigrationResult } from "@/frontend/lib/vaultMutations";
 
 const fixedGradeOptions = ["初一", "初二", "初三"];
 const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
@@ -50,6 +51,7 @@ export function StudentsView({
   onDeleteCourseType,
   onUpdateCourseTypeFeeRule,
   onSyncCourseTypeFeeRuleToCourses,
+  onMigrateCourseTypeLessons,
   onAddSubject,
   onUpdateSubject,
   onDeleteSubject,
@@ -83,6 +85,11 @@ export function StudentsView({
   onDeleteCourseType: (courseType: CourseType) => void;
   onUpdateCourseTypeFeeRule: (courseType: CourseType, feeRule: FeeRule) => void;
   onSyncCourseTypeFeeRuleToCourses: (courseType: CourseType) => void;
+  onMigrateCourseTypeLessons: (
+    fromType: CourseType,
+    orphanTargetType: CourseType,
+    mode: CourseTypeMigrationMode
+  ) => CourseTypeMigrationResult;
   onAddSubject: (subject: string) => void;
   onUpdateSubject: (previousSubject: string, nextSubject: string) => void;
   onDeleteSubject: (subject: string) => void;
@@ -140,6 +147,7 @@ export function StudentsView({
   const [customCourseTypeBaseFee, setCustomCourseTypeBaseFee] = useState(0);
   const [customCourseTypePerStudentFee, setCustomCourseTypePerStudentFee] = useState(0);
   const [courseTypeMessage, setCourseTypeMessage] = useState("");
+  const [migrationOrphanTargetType, setMigrationOrphanTargetType] = useState<CourseType>("small_class");
   const [editingCustomCourseTypeId, setEditingCustomCourseTypeId] = useState<CourseType | "">("");
   const [editingCustomCourseTypeLabel, setEditingCustomCourseTypeLabel] = useState("");
   const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
@@ -1096,6 +1104,54 @@ export function StudentsView({
     });
   }
 
+  function legacyLessonCountForCourseType(type: CourseType): number {
+    const courseIds = new Set(vault.courseGroups.filter((course) => course.type === type).map((course) => course.id));
+    return vault.lessons.filter((lesson) => lesson.type === type && !courseIds.has(lesson.courseGroupId)).length;
+  }
+
+  function requestMigrateCourseTypeLessons(type: CourseType) {
+    const label = courseTypeLabel(vault, type);
+    const pendingCount = legacyLessonCountForCourseType(type);
+    if (pendingCount === 0) {
+      setCourseTypeMessage(`班型「${label}」没有需要迁移的旧课节快照。`);
+      return;
+    }
+    const orphanLabel = courseTypeLabel(vault, migrationOrphanTargetType);
+
+    function runMigration(mode: CourseTypeMigrationMode) {
+      const result = onMigrateCourseTypeLessons(type, migrationOrphanTargetType, mode);
+      if (result.total === 0) {
+        setCourseTypeMessage(
+          result.skipped > 0
+            ? `没有可迁移的课节：${result.skipped} 节课节的课程档案本身仍是「${label}」，请先在课程档案里改成新班型。`
+            : `班型「${label}」没有需要迁移的旧课节快照。`
+        );
+        return;
+      }
+      const parts = [
+        result.byCourse > 0 ? `${result.byCourse} 节跟随课程档案` : "",
+        result.substitute > 0 ? `${result.substitute} 节代课归为小班课` : "",
+        result.orphan > 0 ? `${result.orphan} 节按指定的「${orphanLabel}」` : ""
+      ].filter(Boolean);
+      const skippedText = result.skipped > 0
+        ? `另有 ${result.skipped} 节课节的课程档案仍是「${label}」，已跳过，需要先改课程档案。`
+        : `现在可以删除班型「${label}」了。`;
+      const modeText = mode === "full_refresh"
+        ? `其中 ${result.refreshed} 节已按当前课程档案完整刷新并重算金额。`
+        : "所有课节的学生名单、出勤和金额快照保持不变。";
+      setCourseTypeMessage(`同步完成：已迁移 ${result.total} 节课节（${parts.join("，")}）。${modeText}${skippedText}`);
+    }
+
+    confirm({
+      title: `迁移「${label}」的 ${pendingCount} 节旧课节？`,
+      description: `有课程档案的课节会跟随各自档案的班型，代课课节归为小班课，找不到课程档案的课节归到「${orphanLabel}」。\n\n「只改班型标记」只改班型，学生名单、出勤和金额快照都不动，历史工资不受影响（推荐）。\n「完整刷新」会按当前课程档案重写学生名单和出勤，并用最新的人头分档、计费人数上限规则重算金额，历史工资会变化。`,
+      confirmLabel: "只改班型标记",
+      secondaryLabel: "完整刷新（重算金额）",
+      onConfirm: () => runMigration("type_only"),
+      onSecondary: () => runMigration("full_refresh")
+    });
+  }
+
   function requestDeleteCourseType(courseTypeOption: { id: CourseType; label: string }) {
     const isCustom = courseTypeOption.id.startsWith("custom_");
     confirm({
@@ -1667,6 +1723,9 @@ export function StudentsView({
             onDeleteSubject={onDeleteSubject}
             onRequestDeleteCourseType={requestDeleteCourseType}
             onRequestSyncCourseTypeFeeRuleToCourses={requestSyncCourseTypeFeeRuleToCourses}
+            onRequestMigrateCourseTypeLessons={requestMigrateCourseTypeLessons}
+            migrationOrphanTargetType={migrationOrphanTargetType}
+            setMigrationOrphanTargetType={setMigrationOrphanTargetType}
             onResetCourseTypeFeeRule={resetCourseTypeFeeRule}
             onSaveCustomCourseType={saveCustomCourseType}
             onSaveSubject={saveSubject}

@@ -6,6 +6,7 @@ import { stringValue } from "@/frontend/lib/typeGuards";
 import type {
   AttendanceStatus,
   CourseGroup,
+  CourseType,
   DeletedLessonSource,
   FeeRule,
   Lesson,
@@ -149,8 +150,87 @@ export function syncLessonsWithCourseDefaults(vault: TeacherVault, course: Cours
   return changedCount;
 }
 
-export function materializeStudentTrialStatusOnLessons(vault: TeacherVault, studentId: string, currentTrial: boolean) {
+/**
+ * 把仍标记着旧班型的课节整体迁到新班型。
+ * 删除班型的判定只看 `lesson.type`，所以 "type_only" 足以解锁删除，且不动任何金额快照。
+ */
+export type CourseTypeMigrationMode = "type_only" | "full_refresh";
+
+export type CourseTypeMigrationResult = {
+  total: number;
+  byCourse: number;
+  substitute: number;
+  orphan: number;
+  refreshed: number;
+  skipped: number;
+};
+
+function migrationTargetCourseType(
+  vault: TeacherVault,
+  lesson: Lesson,
+  orphanTargetType: CourseType
+): { type: CourseType; kind: "course" | "substitute" | "orphan"; course?: CourseGroup } {
+  if (isSubstituteClassLesson(lesson)) {
+    return { type: "small_class", kind: "substitute" };
+  }
+  const course = getCourse(vault, lesson.courseGroupId);
+  if (course) {
+    return { type: course.type, kind: "course", course };
+  }
+  return { type: orphanTargetType, kind: "orphan" };
+}
+
+export function migrateLessonsFromCourseType(
+  vault: TeacherVault,
+  fromType: CourseType,
+  orphanTargetType: CourseType,
+  mode: CourseTypeMigrationMode
+): CourseTypeMigrationResult {
+  const result: CourseTypeMigrationResult = {
+    total: 0,
+    byCourse: 0,
+    substitute: 0,
+    orphan: 0,
+    refreshed: 0,
+    skipped: 0
+  };
+
   vault.lessons = vault.lessons.map((lesson) => {
+    if (lesson.type !== fromType) return lesson;
+    const target = migrationTargetCourseType(vault, lesson, orphanTargetType);
+    // 目标与来源相同说明课程档案本身还是旧班型，交给用户先改档案，这里不悄悄改档案。
+    if (target.type === fromType) {
+      result.skipped += 1;
+      return lesson;
+    }
+
+    result.total += 1;
+    if (target.kind === "course") result.byCourse += 1;
+    if (target.kind === "substitute") result.substitute += 1;
+    if (target.kind === "orphan") result.orphan += 1;
+
+    if (mode === "full_refresh" && target.kind === "course" && target.course) {
+      result.refreshed += 1;
+      const course = target.course;
+      return recalculateLessonFeeSnapshot(vault, {
+        ...lesson,
+        type: course.type,
+        campusId: course.defaultCampusId,
+        expectedStudentIds: [...activeStudentIdsForCourse(vault, course)],
+        attendance: lessonAttendanceFromCourse(vault, lesson, course),
+        trialStudentCount: isClassBillingCourseType(course.type) ? lesson.trialStudentCount ?? 0 : 0,
+        trialFee: isClassBillingCourseType(course.type) ? lesson.trialFee ?? 0 : 0
+      });
+    }
+
+    // 代课和孤儿课节没有可依据的档案，即使选了完整刷新也只改班型标记。
+    return { ...lesson, type: target.type };
+  });
+
+  return result;
+}
+
+export function materializeStudentTrialStatusOnLessons(vault: TeacherVault, studentId: string, currentTrial: boolean) {  vault.lessons = vault.lessons.map((lesson) => {
     let changed = false;
     const attendance = lesson.attendance.map((entry) => {
       if (entry.studentId !== studentId || entry.trial !== undefined) return entry;
