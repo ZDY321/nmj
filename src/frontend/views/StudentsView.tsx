@@ -1158,7 +1158,7 @@ export function StudentsView({
       title: `删除班型「${courseTypeOption.label}」？`,
       description: isCustom
         ? "自定义班型会从班型列表中直接删除；已被课程或历史课时使用的自定义班型不能直接删除。"
-        : "内置班型会从主列表、添加课程档案和筛选下拉中移除，并清理该班型的旧名称和旧计费规则配置；已有课程和历史课时仍会保留显示。",
+        : "内置班型只是从主列表、添加课程档案和筛选下拉中隐藏，并清理该班型的旧名称和旧计费规则配置；已有课程和历史课节不会被删除，仍然保留原样。",
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => {

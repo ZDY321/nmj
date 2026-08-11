@@ -1,6 +1,7 @@
+import { useState } from "react";
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { Building2, MapPin, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, MapPin, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,37 +56,48 @@ export function CampusSettingsCard({
   setEditingCampus,
   vault
 }: CampusSettingsCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <Card className="h-fit overflow-hidden">
-      <CardHeader className="gap-3">
-        <div className="flex flex-row items-center justify-between">
+      <CardHeader className={expanded ? "gap-3" : "gap-0"}>
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="flex w-full flex-row items-center justify-between gap-2 text-left"
+          aria-expanded={expanded}
+        >
           <div className="flex items-center gap-2">
+            {expanded ? <ChevronDown size={16} className="text-[#94a3b8]" /> : <ChevronRight size={16} className="text-[#94a3b8]" />}
             <Building2 size={18} className="text-[#ff8617]" />
             <CardTitle className="text-lg">校区与班型</CardTitle>
           </div>
           <Badge variant="secondary">{vault.campuses.length} 个</Badge>
-        </div>
-        <form onSubmit={onAddCampus} className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto]">
-          <Input
-            value={campusNameInput}
-            onChange={(event) => setCampusNameInput(event.target.value)}
-            placeholder="校区名称，例如：中心校区"
-          />
-          <Input
-            value={campusAddressInput}
-            onChange={(event) => setCampusAddressInput(event.target.value)}
-            placeholder="地址，例如：人民路 88 号"
-          />
-          <Input
-            value={campusNoteInput}
-            onChange={(event) => setCampusNoteInput(event.target.value)}
-            placeholder="备注，可选"
-          />
-          <Button type="submit">
-            <Plus size={15} /> 添加校区
-          </Button>
-        </form>
+        </button>
+        {expanded && (
+          <form onSubmit={onAddCampus} className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto]">
+            <Input
+              value={campusNameInput}
+              onChange={(event) => setCampusNameInput(event.target.value)}
+              placeholder="校区名称，例如：中心校区"
+            />
+            <Input
+              value={campusAddressInput}
+              onChange={(event) => setCampusAddressInput(event.target.value)}
+              placeholder="地址，例如：人民路 88 号"
+            />
+            <Input
+              value={campusNoteInput}
+              onChange={(event) => setCampusNoteInput(event.target.value)}
+              placeholder="备注，可选"
+            />
+            <Button type="submit">
+              <Plus size={15} /> 添加校区
+            </Button>
+          </form>
+        )}
       </CardHeader>
+      {expanded && (
       <CardContent className="max-h-[520px] space-y-0 overflow-y-auto pr-2">
         {campusOptions.map((campus) => {
           const isEditing = editingCampus?.id === campus.id;
@@ -199,6 +211,7 @@ export function CampusSettingsCard({
           <p className="py-8 text-center text-sm text-(--color-muted-foreground)">还没有校区</p>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }

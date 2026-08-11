@@ -1,6 +1,7 @@
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,40 +51,55 @@ export function SubjectSettingsCard({
   subjectMessage,
   subjectOptions
 }: SubjectSettingsCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <Card className="h-fit overflow-hidden">
-      <CardHeader className="gap-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <CardHeader className={expanded ? "gap-3" : "gap-0"}>
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="flex w-full flex-col gap-2 text-left sm:flex-row sm:items-start sm:justify-between"
+          aria-expanded={expanded}
+        >
           <div>
             <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+              {expanded ? <ChevronDown size={14} className="text-[#94a3b8]" /> : <ChevronRight size={14} className="text-[#94a3b8]" />}
               <BookOpen size={14} /> 科目管理
             </div>
             <CardTitle className="text-lg">科目列表</CardTitle>
-            <CardDescription>新增和编辑课程时统一从这里选择科目；修改科目名称会同步更新已有课程。</CardDescription>
+            {expanded && (
+              <CardDescription>新增和编辑课程时统一从这里选择科目；修改科目名称会同步更新已有课程。</CardDescription>
+            )}
           </div>
           <Badge variant="secondary" className="w-fit">{subjectOptions.length} 个</Badge>
-        </div>
-        <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <Input
-            value={subjectInput}
-            onChange={(event) => {
-              setSubjectInput(event.target.value);
-              if (subjectMessage) setSubjectMessage("");
-            }}
-            placeholder="新增科目，例如：英语、物理"
-            maxLength={24}
-            className="bg-white"
-          />
-          <Button type="button" onClick={onAddSubject} disabled={!subjectInput.trim()}>
-            <Plus size={14} /> 添加科目
-          </Button>
-        </div>
-        {subjectMessage && (
-          <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
-            {subjectMessage}
-          </div>
+        </button>
+        {expanded && (
+          <>
+            <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <Input
+                value={subjectInput}
+                onChange={(event) => {
+                  setSubjectInput(event.target.value);
+                  if (subjectMessage) setSubjectMessage("");
+                }}
+                placeholder="新增科目，例如：英语、物理"
+                maxLength={24}
+                className="bg-white"
+              />
+              <Button type="button" onClick={onAddSubject} disabled={!subjectInput.trim()}>
+                <Plus size={14} /> 添加科目
+              </Button>
+            </div>
+            {subjectMessage && (
+              <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">
+                {subjectMessage}
+              </div>
+            )}
+          </>
         )}
       </CardHeader>
+      {expanded && (
       <CardContent className="max-h-[360px] space-y-2 overflow-y-auto pr-2">
         {subjectOptions.map((subject) => {
           const isEditing = editingSubject === subject;
@@ -161,6 +177,7 @@ export function SubjectSettingsCard({
           );
         })}
       </CardContent>
+      )}
     </Card>
   );
 }

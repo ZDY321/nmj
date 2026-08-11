@@ -143,11 +143,12 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
         <CardDescription className="space-y-1">
           <span className="block">课程里只选择老师等级；实际课时费会按课程学生年级阶段套用该等级下对应金额，底薪仍按老师等级统一设置。</span>
           <span className="block">
-            人头加价分两档：班课第 6 人起、非班课第 2 人起按下表的「人头加价」累计，
-            <span className="font-extrabold text-[#9a3412]">第 {overflowHeadcountThreshold + 1} 人起一律按每人 ¥{overflowHeadcountFee} 计算，不随等级变化</span>。
+            人头加价分两档：班课第 6 人起、非班课第 2 人起按下表的「人头加价」累计；
+            <span className="font-extrabold text-[#9a3412]">第 {overflowHeadcountThreshold + 1} 人起改为每人 ¥{overflowHeadcountFee}，不随等级变化</span>
+            （只对计费人数上限超过 {overflowHeadcountThreshold} 人的班型生效，例如大班课）。
           </span>
           <span className="block">
-            每个班型还有「计费人数上限」：超出上限的学生仍可以加进课程，但不产生课时费。上限在「校区与班型」里按班型设置。
+            每个班型都有「计费人数上限」：超出上限的学生仍可以加进课程，但不产生课时费。例如小班课上限 10 人，第 11 人起既不计人头加价也不计课时费。上限在「校区与班型」里按班型设置。
           </span>
         </CardDescription>
       </CardHeader>
@@ -240,7 +241,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
                   <div>一对一基础费</div>
                   <div>班课底费</div>
                   <div>人头加价（第 {overflowHeadcountThreshold} 人以内）</div>
-                  <div>第 {overflowHeadcountThreshold + 1} 人起（固定）</div>
+                  <div>第 {overflowHeadcountThreshold + 1} 人起（固定，仅大班课等高上限班型）</div>
                 </div>
                 <div className="divide-y divide-[#eef3f8]">
                   {salaryGradeStageOrder.map((stage) => (

@@ -9,7 +9,7 @@ import { CampusSettingsCard } from "@/frontend/components/CampusSettingsCard";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import { SubjectSettingsCard } from "@/frontend/components/SubjectSettingsCard";
 import type { Campus, ClassFeeTier, CourseType, SalaryGradeStage, SalaryGradeStageRateConfig, TeacherVault } from "@/shared/types";
-import { backupFeeRuleForCourseType, billableStudentCapForRule, classHeadcountStageRateForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, overflowHeadcountFee, overflowHeadcountThreshold, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
+import { backupFeeRuleForCourseType, billableStudentCapForCourseType, billableStudentCapForRule, classHeadcountStageRateForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, overflowHeadcountFee, overflowHeadcountThreshold, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
 
 type ConfirmRequest = {
   title: string;
@@ -162,8 +162,8 @@ export function CampusCourseSettingsPanel({
 }: CampusCourseSettingsPanelProps) {
   const customTemplateIsClass = customCourseTypeTemplate === "class";
   const customTemplateHint = customTemplateIsClass
-    ? `班课规则：按教师课时费等级里的班课底费计算，默认 5 人，第 6 人起加人头费，第 ${overflowHeadcountThreshold + 1} 人起统一 ¥${overflowHeadcountFee}。`
-    : `非班课规则：按教师课时费等级里的一对一基础费计算，默认 1 人，第 2 人起加人头费，第 ${overflowHeadcountThreshold + 1} 人起统一 ¥${overflowHeadcountFee}。`;
+    ? `班课规则：按教师课时费等级里的班课底费计算，默认 5 人起算，第 6 人起加人头费，默认计费人数上限 ${billableStudentCapForCourseType("small_class")} 人（可在下面每个班型里单独调整）。`
+    : "非班课规则：按教师课时费等级里的一对一基础费计算，默认 1 人，第 2 人起加人头费。";
   const today = todayIso();
   const courseTypeMessageIsSuccess = courseTypeMessage.startsWith("同步完成：");
 
@@ -285,10 +285,8 @@ export function CampusCourseSettingsPanel({
             const isClassType = tier.minStudents > 1;
             const backupMinStudentsLabel = isClassType ? "班课起算人数" : "非班课起算人数";
             const backupBaseFeeLabel = isClassType ? "班课底费" : "一对一基础费";
-            const backupHint = isClassType
-              ? `班课：班课底费 + 第 6~${overflowHeadcountThreshold} 人 × 人头加价 + 第 ${overflowHeadcountThreshold + 1} 人起 × ¥${overflowHeadcountFee}。`
-              : `非班课：一对一基础费 + 第 2~${overflowHeadcountThreshold} 人 × 人头加价 + 第 ${overflowHeadcountThreshold + 1} 人起 × ¥${overflowHeadcountFee}。`;
             const billableStudentCap = billableStudentCapForRule(type, rule);
+            const backupHint = classBillingHintText(isClassType, billableStudentCap);
             const juniorStageRate = classHeadcountStageRateForRule(rule, type, "junior_3");
             const juniorBaseValue = isClassType ? juniorStageRate.classBaseFee : juniorStageRate.oneOnOneFee;
             const linkedCourseIds = new Set(vault.courseGroups.filter((course) => course.type === type).map((course) => course.id));
@@ -301,11 +299,16 @@ export function CampusCourseSettingsPanel({
               (lesson.status === "scheduled" || lesson.status === "draft") &&
               lesson.date >= today
             ).length;
-            const customDeleteBlockedReason = linkedCourseCount > 0
+            const deleteBlockedReason = linkedCourseCount > 0
               ? `还有 ${linkedCourseCount} 个课程档案引用这个班型`
               : linkedLessonCount > 0
                 ? `还有 ${linkedLessonCount} 节历史课节引用这个班型${legacyLessonCount > 0 ? `，其中 ${legacyLessonCount} 节是旧课节快照` : ""}`
                 : "";
+            const deleteBlockedHint = linkedCourseCount > 0
+              ? "请先到“课程档案”把这些课程改成新班型，改完后这里的历史课节可以用下面的“一键迁移课节”一次性处理。"
+              : legacyLessonCount > 0
+                ? "可以用下面的“一键迁移课节”把这些旧课节一次性迁到新班型，不需要逐天刷新。"
+                : "这些课节的班型跟随各自课程档案，请先调整对应课程档案的班型。";
             return (
               <div key={type} className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -356,9 +359,9 @@ export function CampusCourseSettingsPanel({
                         type="button"
                         size="sm"
                         variant="destructive"
-                        disabled={isCustom && used}
+                        disabled={Boolean(deleteBlockedReason)}
                         onClick={() => onRequestDeleteCourseType({ id: type, label: typeOption.label })}
-                        title={isCustom && used ? `${customDeleteBlockedReason}，不能直接删除` : isCustom ? "直接删除自定义班型" : "内置班型会从主列表和添加课程档案中移除"}
+                        title={deleteBlockedReason ? `${deleteBlockedReason}，不能删除` : isCustom ? "直接删除自定义班型" : "内置班型会从主列表和添加课程档案中移除"}
                       >
                         <Trash2 size={14} /> 删除
                       </Button>
@@ -377,10 +380,9 @@ export function CampusCourseSettingsPanel({
                     <span className="flex items-center text-[#64748b]">同步不会改已完成历史课节金额快照</span>
                   </div>
                 )}
-                {!isEditingType && isCustom && used && customDeleteBlockedReason && (
+                {!isEditingType && deleteBlockedReason && (
                   <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">
-                    暂不能删除：{customDeleteBlockedReason}。
-                    {legacyLessonCount > 0 && "下面的「一键迁移课节」可以把这些旧课节一次性迁到新班型。"}
+                    暂不能删除：{deleteBlockedReason}。{deleteBlockedHint}
                   </div>
                 )}
                 {!isEditingType && legacyLessonCount > 0 && (
@@ -507,4 +509,31 @@ export function CampusCourseSettingsPanel({
 
 function usesSalaryGradeByDefault(type: CourseType): boolean {
   return type !== "trial";
+}
+
+/**
+ * 计费说明按该班型的计费人数上限生成：
+ * 上限不超过溢出阈值时（例如小班课 10 人），根本走不到固定溢出档，就不要印出来误导。
+ */
+function classBillingHintText(isClassType: boolean, billableStudentCap?: number): string {
+  const baseLabel = isClassType ? "班课底费" : "一对一基础费";
+  const firstIncrementStudent = isClassType ? 6 : 2;
+  const prefix = isClassType ? "班课" : "非班课";
+  const gradedEnd = billableStudentCap === undefined
+    ? overflowHeadcountThreshold
+    : Math.min(overflowHeadcountThreshold, billableStudentCap);
+
+  if (gradedEnd < firstIncrementStudent) {
+    return `${prefix}：${baseLabel}（含 ${billableStudentCap} 人），超过 ${billableStudentCap} 人不计课时费。`;
+  }
+
+  const parts = [`${baseLabel} + 第 ${firstIncrementStudent}~${gradedEnd} 人 × 人头加价`];
+  if (billableStudentCap === undefined) {
+    parts.push(`第 ${overflowHeadcountThreshold + 1} 人起 × ¥${overflowHeadcountFee}`);
+  } else if (billableStudentCap > overflowHeadcountThreshold) {
+    parts.push(`第 ${overflowHeadcountThreshold + 1}~${billableStudentCap} 人 × ¥${overflowHeadcountFee}`);
+  }
+
+  const capText = billableStudentCap === undefined ? "" : `，超过 ${billableStudentCap} 人不计课时费`;
+  return `${prefix}：${parts.join(" + ")}${capText}。`;
 }
