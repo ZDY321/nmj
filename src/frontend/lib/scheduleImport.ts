@@ -752,8 +752,11 @@ function inferCourseTypeHint(title: string, expectedCount?: number): CourseType 
   if (title.includes("试听")) return "trial";
   if (/一对二|1对2|1V2/i.test(title)) return "one_on_two";
   if (/1V1|一对一|1对1/i.test(title)) return "one_on_one";
-  if (title.includes("班")) return "class";
-  if ((expectedCount ?? 0) > 2) return "class";
+  if (/大班/.test(title)) return "big_class";
+  if (/小班/.test(title)) return "small_class";
+  if ((expectedCount ?? 0) > 10) return "big_class";
+  if (title.includes("班")) return "small_class";
+  if ((expectedCount ?? 0) > 2) return "small_class";
   return "unknown";
 }
 

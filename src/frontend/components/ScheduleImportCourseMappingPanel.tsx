@@ -7,7 +7,7 @@ import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { CourseGroup, CourseType, ScheduleImportVaultState, TeacherVault } from "@/shared/types";
-import { campusName, compareByName, courseHasActiveStudent, courseName, courseTypeLabel, sortCoursesByName, studentNames } from "@/frontend/lib/helpers";
+import { campusName, compareByName, courseHasActiveStudent, courseName, courseTypeLabel, isBuiltInCourseType, sortCoursesByName, studentNames } from "@/frontend/lib/helpers";
 import {
   buildImportPreview,
   canonicalImportCampusName,
@@ -552,7 +552,7 @@ function buildSavedMappingRules(vault: TeacherVault, mapping: ScheduleImportMapp
 }
 
 function mappingRuleCourseType(value: string): CourseType | "unknown" {
-  if (value === "one_on_one" || value === "one_on_two" || value === "class" || value === "trial" || value.startsWith("custom_")) {
+  if (isBuiltInCourseType(value) || value.startsWith("custom_")) {
     return value as CourseType;
   }
   return "unknown";

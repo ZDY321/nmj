@@ -16,7 +16,7 @@ import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
 import { SubstituteClassLessonPanel } from "@/frontend/components/SubstituteClassLessonPanel";
 import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
 import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, LessonStatus, ProgressChecklistCompletion, ProgressChecklistTemplate, SalaryGradeStage, StudentProgressRecord, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, substituteClassPresentCount, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForCourseLesson, billableStudentCapForRule, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isClassBillingCourseType, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, substituteClassPresentCount, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
 import {
@@ -825,6 +825,7 @@ export function ScheduleView({
   const selectedRecalculatedLesson = selected ? recalculateLessonFee(selected) : undefined;
   const selectedCalculatedAmount = selectedRecalculatedLesson?.feeSnapshot.amount ?? selected?.feeSnapshot.amount ?? 0;
   const selectedCalculatedPresentCount = selectedRecalculatedLesson?.feeSnapshot.presentStudentCount ?? (selected ? presentCount(selected) : 0);
+  const selectedCalculatedBillableCount = selectedRecalculatedLesson?.feeSnapshot.billableStudentCount;
   const selectedActualHours = selected ? hoursBetween(selected.startTime, selected.endTime) : 0;
   const selectedSuggestedBillingHours = selected ? suggestedLessonBillableHoursForVault(vault, selected) : 0;
   const selectedBillingHours = selected?.feeSnapshot.hours ?? selectedSuggestedBillingHours;
@@ -1061,7 +1062,7 @@ export function ScheduleView({
     endTime: substituteEndTime,
     courseGroupId: SUBSTITUTE_CLASS_COURSE_GROUP_ID,
     campusId: substituteCampusId || undefined,
-    type: "class",
+    type: "small_class",
     status: substituteStatus,
     lessonSource: "substitute_class",
     substituteClass: {
@@ -1728,7 +1729,7 @@ export function ScheduleView({
     if (isSubstituteClassLesson(lesson)) {
       return {
         ...lesson,
-        type: "class",
+        type: "small_class",
         feeSnapshot: buildSubstituteClassFeeSnapshot(vault, lesson)
       };
     }
@@ -1776,8 +1777,8 @@ export function ScheduleView({
       type: course.type,
       expectedStudentIds: [...course.studentIds],
       attendance: attendanceFromCurrentCourse(lesson, course),
-      trialStudentCount: course.type === "class" ? lesson.trialStudentCount ?? 0 : 0,
-      trialFee: course.type === "class" ? lesson.trialFee ?? 0 : 0
+      trialStudentCount: isClassBillingCourseType(course.type) ? lesson.trialStudentCount ?? 0 : 0,
+      trialFee: isClassBillingCourseType(course.type) ? lesson.trialFee ?? 0 : 0
     });
   }
 
@@ -1867,8 +1868,8 @@ export function ScheduleView({
         status: "attended",
         trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
       })),
-      trialStudentCount: course.type === "class" ? selected.trialStudentCount ?? 0 : 0,
-      trialFee: course.type === "class" ? selected.trialFee ?? 0 : 0,
+      trialStudentCount: isClassBillingCourseType(course.type) ? selected.trialStudentCount ?? 0 : 0,
+      trialFee: isClassBillingCourseType(course.type) ? selected.trialFee ?? 0 : 0,
       feeSnapshot: { ...selected.feeSnapshot, amount: 0 }
     };
     onUpdateLesson(recalculateLessonFee(next));
@@ -2200,8 +2201,10 @@ export function ScheduleView({
     if (course.feeRule.mode === "salary_grade") {
       const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
       if (!gradeRule) return undefined;
-      const baseStudentCount = classHeadcountBaseStudentCountForRule(course.type, feeRuleForCourseType(vault, course.type));
-      return Math.round((salaryGradeAmountForCount(gradeRule, course.type, presentStudentCount, stage, baseStudentCount) - salaryGradeAmountForCount(gradeRule, course.type, countWithoutEntry, stage, baseStudentCount)) * multiplier);
+      const courseTypeRule = feeRuleForCourseType(vault, course.type);
+      const baseStudentCount = classHeadcountBaseStudentCountForRule(course.type, courseTypeRule);
+      const billableStudentCap = billableStudentCapForRule(course.type, courseTypeRule);
+      return Math.round((salaryGradeAmountForCount(gradeRule, course.type, presentStudentCount, stage, baseStudentCount, billableStudentCap) - salaryGradeAmountForCount(gradeRule, course.type, countWithoutEntry, stage, baseStudentCount, billableStudentCap)) * multiplier);
     }
     if (course.feeRule.mode !== "class_headcount") return undefined;
     return Math.round((calculateClassHeadcountFee(course.feeRule, presentStudentCount, course.type, stage) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry, course.type, stage)) * multiplier);
@@ -3428,6 +3431,7 @@ export function ScheduleView({
             selectedBillingHours={selectedBillingHours}
             selectedCalculatedAmount={selectedCalculatedAmount}
             selectedCalculatedPresentCount={selectedCalculatedPresentCount}
+            selectedCalculatedBillableCount={selectedCalculatedBillableCount}
             selectedCourse={selectedCourse}
             selectedDetailMakeupStudentIds={selectedDetailMakeupStudentIds}
             selectedExpectedStudentCount={selectedExpectedStudentCount}

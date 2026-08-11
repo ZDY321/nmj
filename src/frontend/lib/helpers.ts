@@ -28,7 +28,7 @@ import type {
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, classHeadcountBaseStudentCountForRule, courseUsesStandardBillingHours, feeRuleForCourseType, getCourse, isSubstituteClassLesson, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
+import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, classHeadcountBaseStudentCountForRule, courseUsesStandardBillingHours, feeRuleForCourseType, getCourse, isClassBillingCourseType, isSubstituteClassLesson, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
 import { durationHours, timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
@@ -117,9 +117,14 @@ export function makeupNeededStudentIds(lesson: Pick<Lesson, "status" | "expected
 export const courseTypeLabels: Record<BuiltInCourseType, string> = {
   one_on_one: "一对一",
   one_on_two: "一对二",
-  class: "班课",
+  small_class: "小班课",
+  big_class: "大班课",
+  class: "班课（旧）",
   trial: "试听"
 };
+
+/** 已被小班课/大班课取代的内置班型：只有旧数据仍在引用时才出现在班型下拉框里。 */
+export const legacyBuiltInCourseTypes: BuiltInCourseType[] = ["class"];
 
 export const builtInCourseTypeOptions: Array<{ value: BuiltInCourseType; label: string }> = (
   Object.keys(courseTypeLabels) as BuiltInCourseType[]
@@ -139,8 +144,11 @@ export function courseTypeLabel(vault: TeacherVault, type: CourseType): string {
 export function courseTypeOptionsForVault(vault: TeacherVault): Array<{ value: CourseType; label: string }> {
   const customCourseTypes = normalizedCustomCourseTypes(vault.preferences?.customCourseTypes ?? []);
   const disabledCourseTypes = new Set(vault.preferences?.disabledCourseTypes ?? []);
+  const dataCourseTypes = [...vault.courseGroups.map((course) => course.type), ...vault.lessons.map((lesson) => lesson.type)];
+  const referencedCourseTypes = new Set<string>(dataCourseTypes);
   const activeBuiltInOptions = builtInCourseTypeOptions
     .filter((option) => !disabledCourseTypes.has(option.value))
+    .filter((option) => !legacyBuiltInCourseTypes.includes(option.value) || referencedCourseTypes.has(option.value))
     .map((option) => ({ value: option.value as CourseType, label: courseTypeLabel(vault, option.value) }));
   const activeCustomOptions = customCourseTypes
     .filter((option) => !disabledCourseTypes.has(option.id))
@@ -149,8 +157,7 @@ export function courseTypeOptionsForVault(vault: TeacherVault): Array<{ value: C
     ...builtInCourseTypeOptions.map((option) => option.value),
     ...customCourseTypes.map((option) => option.id)
   ]);
-  const dataCourseTypes = [...vault.courseGroups.map((course) => course.type), ...vault.lessons.map((lesson) => lesson.type)];
-  const unknownCourseTypes = Array.from(new Set(dataCourseTypes)).filter((type) => !knownValues.has(type));
+  const unknownCourseTypes = Array.from(referencedCourseTypes).filter((type) => !knownValues.has(type)) as CourseType[];
 
   return sortCourseTypeOptions([
     ...activeBuiltInOptions,
@@ -455,7 +462,7 @@ export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "
   const attendedCount = attendedIds.length;
   const attendedNames = studentNames(vault, attendedIds);
 
-  if (lesson.type === "class" && expectedStudentCount > 10) {
+  if (isClassBillingCourseType(lesson.type) && expectedStudentCount > 10) {
     return `${attendedCount}/${expectedStudentCount} 人`;
   }
 
@@ -463,7 +470,7 @@ export function lessonStudentDisplay(vault: TeacherVault, lesson: Pick<Lesson, "
     return `「${attendedNames}」`;
   }
 
-  if (lesson.type === "class") {
+  if (isClassBillingCourseType(lesson.type)) {
     return `${attendedCount}/${expectedStudentCount} 人`;
   }
 
@@ -531,7 +538,7 @@ export function courseStatsStatusLabel(vault: TeacherVault, course: CourseGroup)
 
 export function courseRequiresSameGradeStudents(vault: TeacherVault, type: CourseType, feeRule?: FeeRule): boolean {
   if (type === "one_on_one" || type === "trial") return false;
-  if (type === "class" || type === "one_on_two") return true;
+  if (isClassBillingCourseType(type) || type === "one_on_two") return true;
   const rule = feeRule?.mode === "class_headcount" ? feeRule : feeRuleForCourseType(vault, type);
   return rule.mode === "class_headcount" && classHeadcountBaseStudentCountForRule(type, rule) > 1;
 }
@@ -613,7 +620,7 @@ export function createSubstituteClassLesson(
     endTime: values.endTime,
     courseGroupId: SUBSTITUTE_CLASS_COURSE_GROUP_ID,
     campusId: values.campusId,
-    type: "class",
+    type: "small_class",
     status: values.status ?? "completed",
     lessonSource: "substitute_class",
     substituteClass: {

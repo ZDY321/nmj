@@ -110,6 +110,7 @@ type ScheduleLessonDetailPanelProps = {
   selectedBillingHours: number;
   selectedCalculatedAmount: number;
   selectedCalculatedPresentCount: number;
+  selectedCalculatedBillableCount?: number;
   selectedCourse: CourseGroup | undefined;
   selectedDetailMakeupStudentIds: string[];
   selectedExpectedStudentCount: number;
@@ -194,6 +195,7 @@ export function ScheduleLessonDetailPanel({
   selectedBillingHours,
   selectedCalculatedAmount,
   selectedCalculatedPresentCount,
+  selectedCalculatedBillableCount,
   selectedCourse,
   selectedDetailMakeupStudentIds,
   selectedExpectedStudentCount,
@@ -467,7 +469,11 @@ export function ScheduleLessonDetailPanel({
               )}
               <div className="flex flex-col gap-2 rounded-[10px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-xs font-semibold leading-5 text-[#64748b]">
-                  {isSubstituteClass ? "到课" : "实到"} {selectedCalculatedPresentCount} 人 · 重算 {formatPrivateMoney(selectedCalculatedAmount, amountsVisible)}
+                  {isSubstituteClass ? "到课" : "实到"} {selectedCalculatedPresentCount} 人
+                  {selectedCalculatedBillableCount !== undefined && selectedCalculatedBillableCount < selectedCalculatedPresentCount && (
+                    <span className="font-extrabold text-[#9a3412]"> / 计费 {selectedCalculatedBillableCount} 人（超上限不计费）</span>
+                  )}
+                  {" · 重算 "}{formatPrivateMoney(selectedCalculatedAmount, amountsVisible)}
                 </div>
                 <Button type="button" variant="outline" size="sm" className="h-8 w-fit bg-white text-xs" onClick={onRecalculateSelectedFee}>
                   <Calculator size={14} /> 按实到重算

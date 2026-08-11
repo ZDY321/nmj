@@ -90,7 +90,13 @@ export type UserStatus =
   | "delete_scheduled"
   | "deleted";
 
-export type BuiltInCourseType = "one_on_one" | "one_on_two" | "class" | "trial";
+export type BuiltInCourseType =
+  | "one_on_one"
+  | "one_on_two"
+  | "small_class"
+  | "big_class"
+  | "class"
+  | "trial";
 
 export type CustomCourseType = `custom_${string}`;
 
@@ -204,6 +210,7 @@ export type FeeRule = {
   baseFee?: number;
   perPresentStudentFee?: number;
   classFeeTiers?: ClassFeeTier[];
+  billableStudentCap?: number;
   stageRates?: Partial<Record<SalaryGradeStage, SalaryGradeStageRateConfig>>;
   salaryGradeSource?: "teacher_default" | "specific";
   salaryGradeId?: SalaryGradeId;
@@ -266,6 +273,10 @@ export type FeeSnapshot = {
   salaryGradeStageLabel?: string;
   headcountBaseStudentCount?: number;
   headcountIncrementFee?: number;
+  billableStudentCount?: number;
+  billableStudentCap?: number;
+  overflowStudentCount?: number;
+  overflowHeadcountFee?: number;
   lessonUnitHours?: number;
   durationMultiplier?: number;
   unitAmount?: number;

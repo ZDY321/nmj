@@ -95,6 +95,8 @@ describe("course student grade restrictions", () => {
   it("requires same-grade students for built-in grouped course types", () => {
     const vault = createEmptyVault("tester");
 
+    expect(courseRequiresSameGradeStudents(vault, "small_class", { mode: "salary_grade" })).toBe(true);
+    expect(courseRequiresSameGradeStudents(vault, "big_class", { mode: "salary_grade" })).toBe(true);
     expect(courseRequiresSameGradeStudents(vault, "class", { mode: "salary_grade" })).toBe(true);
     expect(courseRequiresSameGradeStudents(vault, "one_on_two", { mode: "salary_grade" })).toBe(true);
     expect(courseRequiresSameGradeStudents(vault, "one_on_one", { mode: "salary_grade" })).toBe(false);

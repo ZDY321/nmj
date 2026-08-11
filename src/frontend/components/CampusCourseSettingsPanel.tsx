@@ -9,7 +9,7 @@ import { CampusSettingsCard } from "@/frontend/components/CampusSettingsCard";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import { SubjectSettingsCard } from "@/frontend/components/SubjectSettingsCard";
 import type { Campus, ClassFeeTier, CourseType, SalaryGradeStage, SalaryGradeStageRateConfig, TeacherVault } from "@/shared/types";
-import { backupFeeRuleForCourseType, classHeadcountStageRateForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
+import { backupFeeRuleForCourseType, billableStudentCapForRule, classHeadcountStageRateForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, overflowHeadcountFee, overflowHeadcountThreshold, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
 
 type ConfirmRequest = {
   title: string;
@@ -66,6 +66,7 @@ type CampusCourseSettingsPanelProps = {
   onStartEditSubject: (subject: string) => void;
   onUpdateCampus: (campus: Campus) => void;
   onUpdateCourseTypeClassFeeTier: (type: CourseType, tierId: string, patch: Partial<ClassFeeTier>) => void;
+  onUpdateCourseTypeBillableCap: (type: CourseType, cap: number | undefined) => void;
   onUpdateCourseTypeStageRate: (type: CourseType, stage: SalaryGradeStage, patch: Partial<SalaryGradeStageRateConfig>) => void;
   onUpdateCourseTypeFixedRule: (type: CourseType, fixedFee: number) => void;
   onUpdateCourseTypeHourlyRule: (type: CourseType, hourlyRate: number) => void;
@@ -129,6 +130,7 @@ export function CampusCourseSettingsPanel({
   onStartEditSubject,
   onUpdateCampus,
   onUpdateCourseTypeClassFeeTier,
+  onUpdateCourseTypeBillableCap,
   onUpdateCourseTypeStageRate,
   onUpdateCourseTypeFixedRule,
   onUpdateCourseTypeHourlyRule,
@@ -154,8 +156,8 @@ export function CampusCourseSettingsPanel({
 }: CampusCourseSettingsPanelProps) {
   const customTemplateIsClass = customCourseTypeTemplate === "class";
   const customTemplateHint = customTemplateIsClass
-    ? "班课规则：按教师课时费等级里的班课底费计算，默认 5 人，从第 6 人开始加人头费。"
-    : "非班课规则：按教师课时费等级里的一对一基础费计算，默认 1 人，从第 2 人开始加人头费。";
+    ? `班课规则：按教师课时费等级里的班课底费计算，默认 5 人，第 6 人起加人头费，第 ${overflowHeadcountThreshold + 1} 人起统一 ¥${overflowHeadcountFee}。`
+    : `非班课规则：按教师课时费等级里的一对一基础费计算，默认 1 人，第 2 人起加人头费，第 ${overflowHeadcountThreshold + 1} 人起统一 ¥${overflowHeadcountFee}。`;
   const today = todayIso();
   const courseTypeMessageIsSuccess = courseTypeMessage.startsWith("同步完成：");
 
@@ -278,8 +280,9 @@ export function CampusCourseSettingsPanel({
             const backupMinStudentsLabel = isClassType ? "班课起算人数" : "非班课起算人数";
             const backupBaseFeeLabel = isClassType ? "班课底费" : "一对一基础费";
             const backupHint = isClassType
-              ? "班课按「班课底费 + max(到课人数 - 5, 0) * 人头加价」计算。"
-              : "非班课按「一对一基础费 + max(到课人数 - 1, 0) * 人头加价」计算。";
+              ? `班课：班课底费 + 第 6~${overflowHeadcountThreshold} 人 × 人头加价 + 第 ${overflowHeadcountThreshold + 1} 人起 × ¥${overflowHeadcountFee}。`
+              : `非班课：一对一基础费 + 第 2~${overflowHeadcountThreshold} 人 × 人头加价 + 第 ${overflowHeadcountThreshold + 1} 人起 × ¥${overflowHeadcountFee}。`;
+            const billableStudentCap = billableStudentCapForRule(type, rule);
             const juniorStageRate = classHeadcountStageRateForRule(rule, type, "junior_3");
             const juniorBaseValue = isClassType ? juniorStageRate.classBaseFee : juniorStageRate.oneOnOneFee;
             const linkedCourseIds = new Set(vault.courseGroups.filter((course) => course.type === type).map((course) => course.id));
@@ -391,6 +394,25 @@ export function CampusCourseSettingsPanel({
                       </Select>
                       <div className="rounded-[10px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-semibold leading-5 text-[#64748b]">
                         所有班型都可以手动选择班课或非班课规则。金额统一从“教师课时费等级”读取，课程学生年级会自动对应小学、初中、高中阶段；自定义等级也会被识别。
+                      </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-[#64748b]">计费人数上限（留空不封顶）</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={billableStudentCap ?? ""}
+                          placeholder="不封顶"
+                          onChange={(event) => {
+                            const raw = event.target.value.trim();
+                            onUpdateCourseTypeBillableCap(type, raw === "" ? undefined : Math.max(Number(raw), 0));
+                          }}
+                          className="h-9 bg-white"
+                        />
+                      </div>
+                      <div className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-bold leading-5 text-[#9a3412]">
+                        超出上限的学生仍然可以加进课程和课节，但<span className="underline">不产生课时费</span>。小班课通常填 10，大班课填 20。
                       </div>
                     </div>
                   </div>

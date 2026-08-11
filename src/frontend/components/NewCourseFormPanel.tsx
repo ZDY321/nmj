@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
-import { calculateClassHeadcountFee, courseTypeUsesStandardBillingHours, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
+import { billableStudentCapForRule, calculateClassHeadcountFee, courseTypeUsesStandardBillingHours, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
 import { campusName, courseRequiresSameGradeStudents, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
@@ -101,6 +101,8 @@ export function NewCourseFormPanel({
       ? "按标准课时统计；例：10:10-12:00 实际 110 分钟，默认计费 2 小时，可在课节详情手动改为 1 小时等拆课课时。"
       : "按实际上课时长折算。";
   const requiresSameGradeStudents = courseRequiresSameGradeStudents(vault, courseType, courseFeeRule);
+  const billableStudentCap = billableStudentCapForRule(courseType, feeRuleForCourseType(vault, courseType));
+  const overflowStudentCount = billableStudentCap === undefined ? 0 : Math.max(courseStudentIds.length - billableStudentCap, 0);
   const selectedCourseStudentGrade = requiresSameGradeStudents ? firstCourseStudentGrade(courseStudentIds) : undefined;
   const selectedCourseStudentGradeLabel = selectedCourseStudentGrade || "未设置年级";
   const visibleAddCourseStudentOptions = addCourseStudentOptions.filter((student) => {
@@ -181,7 +183,7 @@ export function NewCourseFormPanel({
                         if (!rule) return "";
                         const stage = salaryGradeStageForStudentIds(vault, courseStudentIds);
                         const rate = salaryGradeRateForStage(rule, stage);
-                        return `跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。`
+                        return `跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。${billableStudentCap !== undefined ? `计费人数上限 ${billableStudentCap} 人。` : ""}`
                       })()
                     : "还没有设置老师默认课时费等级，请先在老师个人信息里设置。"}
                 </div>
@@ -290,6 +292,12 @@ export function NewCourseFormPanel({
                     最多选择 {studentLimitForCourseType(courseType)} 人
                   </span>
                 )}
+                {billableStudentCap !== undefined && (
+                  <span className={`ml-2 text-xs font-bold ${overflowStudentCount > 0 ? "text-[#9a3412]" : "text-[#64748b]"}`}>
+                    计费人数上限 {billableStudentCap} 人
+                    {overflowStudentCount > 0 && `，其中 ${overflowStudentCount} 人不产生课时费`}
+                  </span>
+                )}
               </div>
               <span className="text-xs font-bold text-[#64748b]">
                 {courseCampusCustomized ? "已手动选择校区" : "默认校区跟随所选学生档案"}
@@ -308,17 +316,23 @@ export function NewCourseFormPanel({
             {courseStudentIds.length > 0 && (
               <div className="max-h-20 overflow-y-auto pr-1">
                 <div className="flex flex-wrap gap-2">
-                  {courseStudentIds.map((studentId) => {
+                  {courseStudentIds.map((studentId, index) => {
                     const student = vault.students.find((item) => item.id === studentId);
+                    const isOverCap = billableStudentCap !== undefined && index >= billableStudentCap;
                     return (
                       <button
                         type="button"
                         key={studentId}
                         onClick={() => onToggleCourseStudent(studentId)}
-                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2.5 py-1 text-xs font-bold text-[#9a3412]"
-                        title="点击取消关联"
+                        className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold ${
+                          isOverCap
+                            ? "border-dashed border-[#cbd6e3] bg-[#f1f5f9] text-[#94a3b8]"
+                            : "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
+                        }`}
+                        title={isOverCap ? "超出计费人数上限，不计课时费；点击取消关联" : "点击取消关联"}
                       >
                         <span className="truncate">{student?.name ?? "未知学生"}</span>
+                        {isOverCap && <span className="shrink-0">· 不计费</span>}
                         <X size={12} />
                       </button>
                     );
@@ -334,24 +348,27 @@ export function NewCourseFormPanel({
                   const selectedGradeLabel = selectedGrade || "未设置年级";
                   const isDifferentGrade = requiresSameGradeStudents && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
                   const isAtStudentLimit = !isSelected && Boolean(studentLimitForCourseType(courseType)) && courseStudentIds.length >= (studentLimitForCourseType(courseType) ?? 0);
+                  const wouldExceedCap = !isSelected && billableStudentCap !== undefined && courseStudentIds.length >= billableStudentCap;
                   return (
                     <button
                       type="button"
                       key={student.id}
                       onClick={() => onToggleCourseStudent(student.id)}
                       disabled={isDifferentGrade || isAtStudentLimit}
-                      title={isDifferentGrade ? `只能选择 ${selectedGradeLabel} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(courseType)} 人` : undefined}
+                      title={isDifferentGrade ? `只能选择 ${selectedGradeLabel} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(courseType)} 人` : wouldExceedCap ? `已达计费人数上限 ${billableStudentCap} 人，再添加的学生不产生课时费` : undefined}
                       className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
                         isSelected
                           ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
                           : isDifferentGrade || isAtStudentLimit
                             ? "cursor-not-allowed border-[#e2e8f0] bg-white text-[#94a3b8]"
-                            : student.temporaryTrial
-                              ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
-                              : "border-[#dbe4ef] bg-white text-[#25324a]"
+                            : wouldExceedCap
+                              ? "border-dashed border-[#fdba74] bg-[#fffbeb] text-[#b45309]"
+                              : student.temporaryTrial
+                                ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
+                                : "border-[#dbe4ef] bg-white text-[#25324a]"
                       }`}
                     >
-                      {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}{student.status === "transition" ? " · 过渡期" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                      {student.name} · {student.grade || "未设置年级"} · {campusName(vault, student.defaultCampusId)}{student.status === "transition" ? " · 过渡期" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}{wouldExceedCap ? " · 超上限不计费" : ""}
                     </button>
                   );
                 })}

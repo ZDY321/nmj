@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
 import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
-import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isPayrollExcludedSplitMergeLesson, isSubstituteClassLesson, lessonBillableHoursForVault, obligationCampusDeductions, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
+import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isClassBillingCourseType, isPayrollExcludedSplitMergeLesson, isSubstituteClassLesson, lessonBillableHoursForVault, obligationCampusDeductions, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
 import { matchesMakeupLessonFilter } from "@/frontend/lib/scheduleViewHelpers";
 import {
   campusName,
@@ -198,7 +198,7 @@ export function usePayrollReviewData({
         addDetail("substituteClass", campusId, amount);
       } else if (lesson.status === "makeup_completed") {
         addDetail("makeup", campusId, amount);
-      } else if (course ? courseUsesClassBilling(course, vault) : lesson.type === "class") {
+      } else if (course ? courseUsesClassBilling(course, vault) : isClassBillingCourseType(lesson.type)) {
         addDetail("classLessons", campusId, amount);
       } else {
         addDetail("oneOnOne", campusId, amount);

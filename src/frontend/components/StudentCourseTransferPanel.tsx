@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { Campus, CourseGroup, CourseType, Student, TeacherVault } from "@/shared/types";
 import { courseTypeLabel, studentNames } from "@/frontend/lib/helpers";
+import { isClassBillingCourseType } from "@/frontend/lib/calculations";
 
 type CourseTypeOption = {
   value: CourseType;
@@ -200,7 +201,7 @@ export function StudentCourseTransferPanel({
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {transferCurrentCourses.length > 0 ? transferCurrentCourses.map((course) => (
-                    <Badge key={course.id} variant={course.type === "class" ? "sky" : course.type === "trial" ? "plum" : "sage"}>
+                    <Badge key={course.id} variant={isClassBillingCourseType(course.type) ? "sky" : course.type === "trial" ? "plum" : "sage"}>
                       {course.name} · {courseTypeLabel(vault, course.type)}
                     </Badge>
                   )) : (

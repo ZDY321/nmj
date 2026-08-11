@@ -1,4 +1,4 @@
-import { buildFeeSnapshot, buildSubstituteClassFeeSnapshot, getCourse, isSubstituteClassLesson, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, buildSubstituteClassFeeSnapshot, getCourse, isClassBillingCourseType, isSubstituteClassLesson, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import { activeStudentIdsForCourse, lessonStudentIds, makeupNeededStudentIds, studentLimitForCourseType } from "@/frontend/lib/helpers";
 import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
@@ -18,7 +18,7 @@ export function recalculateLessonFeeSnapshot(vault: TeacherVault, lesson: Lesson
   if (isSubstituteClassLesson(lesson)) {
     return {
       ...lesson,
-      type: "class",
+      type: "small_class",
       feeSnapshot: buildSubstituteClassFeeSnapshot(vault, lesson)
     };
   }
@@ -142,8 +142,8 @@ export function syncLessonsWithCourseDefaults(vault: TeacherVault, course: Cours
       campusId: course.defaultCampusId,
       expectedStudentIds: [...activeStudentIds],
       attendance: lessonAttendanceFromCourse(vault, lesson, course),
-      trialStudentCount: course.type === "class" ? lesson.trialStudentCount ?? 0 : 0,
-      trialFee: course.type === "class" ? lesson.trialFee ?? 0 : 0
+      trialStudentCount: isClassBillingCourseType(course.type) ? lesson.trialStudentCount ?? 0 : 0,
+      trialFee: isClassBillingCourseType(course.type) ? lesson.trialFee ?? 0 : 0
     });
   });
   return changedCount;

@@ -3,6 +3,7 @@ import {
   buildFeeSnapshot,
   buildSubstituteClassFeeSnapshot,
   completedAmount,
+  headcountAmountBreakdown,
   obligationCampusDeductions,
   obligationSummary,
   payrollExcludedSplitMergeLessonIds,
@@ -20,7 +21,7 @@ import type {
 
 const campus = { id: "campus_1", name: "Main Campus" };
 
-const students = Array.from({ length: 9 }, (_, index) => ({
+const students = Array.from({ length: 24 }, (_, index) => ({
   id: `student_${index + 1}`,
   name: `Student ${index + 1}`,
   status: "active" as const
@@ -53,6 +54,38 @@ const classCourse: CourseGroup = {
   status: "active"
 };
 
+const smallClassCourse: CourseGroup = {
+  id: "course_small_class",
+  name: "Small class",
+  type: "small_class",
+  subject: "Math",
+  defaultCampusId: campus.id,
+  studentIds: students.slice(0, 12).map((student) => student.id),
+  feeRule: {
+    mode: "class_headcount",
+    baseFee: 65,
+    perPresentStudentFee: 12,
+    classFeeTiers: [{ id: "tier_5_plus", minStudents: 5, baseFee: 65, perStudentFee: 12 }]
+  },
+  status: "active"
+};
+
+const bigClassCourse: CourseGroup = {
+  id: "course_big_class",
+  name: "Big class",
+  type: "big_class",
+  subject: "Math",
+  defaultCampusId: campus.id,
+  studentIds: students.slice(0, 23).map((student) => student.id),
+  feeRule: {
+    mode: "class_headcount",
+    baseFee: 65,
+    perPresentStudentFee: 12,
+    classFeeTiers: [{ id: "tier_5_plus", minStudents: 5, baseFee: 65, perStudentFee: 12 }]
+  },
+  status: "active"
+};
+
 const trialCourse: CourseGroup = {
   id: "course_trial",
   name: "Trial course",
@@ -76,7 +109,7 @@ function makeVault(patch: Partial<TeacherVault> = {}): TeacherVault {
     preferences: { weekStartsOn: 1 },
     campuses: [campus],
     students,
-    courseGroups: [oneOnOneCourse, classCourse, trialCourse],
+    courseGroups: [oneOnOneCourse, classCourse, smallClassCourse, bigClassCourse, trialCourse],
     scheduleRules: [],
     lessons: [],
     salaryAdjustments: [],
@@ -214,6 +247,94 @@ describe("salary calculations", () => {
     expect(breakdown.substituteClass).toBe(90);
     expect(breakdown.classLessons).toBe(0);
     expect(breakdown.total).toBe(3090);
+  });
+
+  describe("headcount tiers and billable caps", () => {
+    function classLessonFor(course: CourseGroup, presentStudentCount: number): Lesson {
+      const attendingStudentIds = students.slice(0, presentStudentCount).map((student) => student.id);
+      return makeLesson({
+        id: `lesson_${course.id}_${presentStudentCount}`,
+        courseGroupId: course.id,
+        type: course.type,
+        expectedStudentIds: attendingStudentIds,
+        attendance: attendingStudentIds.map((studentId) => attended(studentId))
+      });
+    }
+
+    it("charges the graded increment for students 6 through 10", () => {
+      const snapshot = buildFeeSnapshot(makeVault(), smallClassCourse, classLessonFor(smallClassCourse, 8));
+
+      // 65 + 3 * 12
+      expect(snapshot.amount).toBe(101);
+      expect(snapshot.billableStudentCount).toBe(8);
+      expect(snapshot.overflowStudentCount).toBe(0);
+    });
+
+    it("charges a flat overflow fee from the 11th student regardless of teacher grade", () => {
+      const snapshot = buildFeeSnapshot(makeVault(), bigClassCourse, classLessonFor(bigClassCourse, 13));
+
+      // 65 + 5 * 12 + 3 * 10
+      expect(snapshot.amount).toBe(155);
+      expect(snapshot.billableStudentCount).toBe(13);
+      expect(snapshot.overflowStudentCount).toBe(3);
+      expect(snapshot.overflowHeadcountFee).toBe(10);
+    });
+
+    it("stops billing small class students beyond the 10 person cap", () => {
+      const snapshot = buildFeeSnapshot(makeVault(), smallClassCourse, classLessonFor(smallClassCourse, 12));
+
+      // capped at 10 -> 65 + 5 * 12, the 11th and 12th students add nothing
+      expect(snapshot.amount).toBe(125);
+      expect(snapshot.presentStudentCount).toBe(12);
+      expect(snapshot.billableStudentCount).toBe(10);
+      expect(snapshot.billableStudentCap).toBe(10);
+      expect(snapshot.overflowStudentCount).toBe(0);
+    });
+
+    it("stops billing big class students beyond the 20 person cap", () => {
+      const snapshot = buildFeeSnapshot(makeVault(), bigClassCourse, classLessonFor(bigClassCourse, 23));
+
+      // capped at 20 -> 65 + 5 * 12 + 10 * 10
+      expect(snapshot.amount).toBe(225);
+      expect(snapshot.presentStudentCount).toBe(23);
+      expect(snapshot.billableStudentCount).toBe(20);
+      expect(snapshot.overflowStudentCount).toBe(10);
+    });
+
+    it("gives an over-cap student a zero marginal increment", () => {
+      const atCap = buildFeeSnapshot(makeVault(), smallClassCourse, classLessonFor(smallClassCourse, 10));
+      const overCap = buildFeeSnapshot(makeVault(), smallClassCourse, classLessonFor(smallClassCourse, 11));
+
+      expect(overCap.amount - atCap.amount).toBe(0);
+    });
+
+    it("honours an explicit cap override on the fee rule", () => {
+      const cappedCourse: CourseGroup = {
+        ...smallClassCourse,
+        feeRule: { ...smallClassCourse.feeRule, billableStudentCap: 7 }
+      };
+      const snapshot = buildFeeSnapshot(makeVault(), cappedCourse, classLessonFor(cappedCourse, 12));
+
+      // capped at 7 -> 65 + 2 * 12
+      expect(snapshot.amount).toBe(89);
+      expect(snapshot.billableStudentCount).toBe(7);
+      expect(snapshot.billableStudentCap).toBe(7);
+    });
+
+    it("keeps the uncapped non-class formula on the same two tiers", () => {
+      // base 1 person, increment from the 2nd, flat overflow from the 11th
+      expect(headcountAmountBreakdown({
+        baseFee: 80,
+        incrementFee: 12,
+        baseStudentCount: 1,
+        presentStudentCount: 13
+      })).toEqual({
+        amount: 80 + 9 * 12 + 3 * 10,
+        billableStudentCount: 13,
+        gradedStudentCount: 9,
+        overflowStudentCount: 3
+      });
+    });
   });
 
   it("does not count trial students as class headcount but keeps explicit trial income", () => {

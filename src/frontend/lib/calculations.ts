@@ -95,7 +95,7 @@ export function normalizedClassHoursBetween(startTime: string, endTime: string):
 }
 
 export function usesClassBillingHours(type: CourseType, rule?: FeeRule): boolean {
-  return type === "class" || classHeadcountBaseStudentCountForRule(type, rule) > 1;
+  return isClassBillingCourseType(type) || classHeadcountBaseStudentCountForRule(type, rule) > 1;
 }
 
 export function usesStandardBillingHours(type: CourseType): boolean {
@@ -472,13 +472,92 @@ export function salaryGradeRateForStage(rule: SalaryGradeRule, stage?: SalaryGra
   };
 }
 
-export function salaryGradeAmountForCount(rule: SalaryGradeRule, courseType: CourseType, presentStudentCount: number, stage?: SalaryGradeStage, baseStudentCount = classHeadcountBaseStudentCountForCourseType(courseType)): number {
-  const count = nonNegativeInteger(presentStudentCount);
-  const rate = salaryGradeRateForStage(rule, stage);
-  if (baseStudentCount > 1) {
-    return rate.classBaseFee + Math.max(count - baseStudentCount, 0) * rate.headcountIncrementFee;
-  }
-  return rate.oneOnOneFee + Math.max(count - 1, 0) * rate.headcountIncrementFee;
+/**
+ * 第 10 人之后的人头加价不再跟随教师等级，统一按固定单价累计。
+ * 两个常量都不开放给用户编辑，界面只做只读展示。
+ */
+export const overflowHeadcountThreshold = 10;
+export const overflowHeadcountFee = 10;
+
+export type HeadcountAmountInput = {
+  baseFee: number;
+  incrementFee: number;
+  baseStudentCount: number;
+  presentStudentCount: number;
+  billableStudentCap?: number;
+};
+
+export type HeadcountAmountBreakdown = {
+  amount: number;
+  billableStudentCount: number;
+  gradedStudentCount: number;
+  overflowStudentCount: number;
+};
+
+/**
+ * 所有人头计费的唯一公式：
+ *   计费人数 = min(到课人数, 计费人数上限)
+ *   金额     = 底费
+ *            + max(min(计费人数, 10) - 起算人数, 0) * 等级人头加价
+ *            + max(计费人数 - 10, 0) * 固定溢出人头费
+ */
+export function headcountAmountBreakdown(input: HeadcountAmountInput): HeadcountAmountBreakdown {
+  const presentStudentCount = nonNegativeInteger(input.presentStudentCount);
+  const cap = Number.isFinite(input.billableStudentCap) ? nonNegativeInteger(input.billableStudentCap) : undefined;
+  const billableStudentCount = cap === undefined ? presentStudentCount : Math.min(presentStudentCount, cap);
+  const baseStudentCount = nonNegativeInteger(input.baseStudentCount);
+  const gradedStudentCount = Math.max(Math.min(billableStudentCount, overflowHeadcountThreshold) - baseStudentCount, 0);
+  const overflowStudentCount = Math.max(billableStudentCount - Math.max(overflowHeadcountThreshold, baseStudentCount), 0);
+  const amount =
+    nonNegativeNumber(input.baseFee) +
+    gradedStudentCount * nonNegativeNumber(input.incrementFee) +
+    overflowStudentCount * overflowHeadcountFee;
+  return { amount, billableStudentCount, gradedStudentCount, overflowStudentCount };
+}
+
+export function headcountAmount(input: HeadcountAmountInput): number {
+  return headcountAmountBreakdown(input).amount;
+}
+
+function headcountInputForRate(
+  rate: SalaryGradeStageRateConfig,
+  baseStudentCount: number,
+  presentStudentCount: number,
+  billableStudentCap?: number
+): HeadcountAmountInput {
+  return {
+    baseFee: baseStudentCount > 1 ? rate.classBaseFee : rate.oneOnOneFee,
+    incrementFee: rate.headcountIncrementFee,
+    baseStudentCount: Math.max(baseStudentCount, 1),
+    presentStudentCount,
+    billableStudentCap
+  };
+}
+
+export function salaryGradeAmountForCount(
+  rule: SalaryGradeRule,
+  courseType: CourseType,
+  presentStudentCount: number,
+  stage?: SalaryGradeStage,
+  baseStudentCount = classHeadcountBaseStudentCountForCourseType(courseType),
+  billableStudentCap = billableStudentCapForCourseType(courseType)
+): number {
+  return headcountAmount(
+    headcountInputForRate(salaryGradeRateForStage(rule, stage), baseStudentCount, presentStudentCount, billableStudentCap)
+  );
+}
+
+export function salaryGradeAmountBreakdownForCount(
+  rule: SalaryGradeRule,
+  courseType: CourseType,
+  presentStudentCount: number,
+  stage?: SalaryGradeStage,
+  baseStudentCount = classHeadcountBaseStudentCountForCourseType(courseType),
+  billableStudentCap = billableStudentCapForCourseType(courseType)
+): HeadcountAmountBreakdown {
+  return headcountAmountBreakdown(
+    headcountInputForRate(salaryGradeRateForStage(rule, stage), baseStudentCount, presentStudentCount, billableStudentCap)
+  );
 }
 
 export const lessonFeeUnitHours = 2;
@@ -544,8 +623,25 @@ export function proratedLessonUnitAmount(unitAmount: number, lesson: Pick<Lesson
   return nonNegativeNumber(unitAmount) * lessonDurationMultiplier(lesson, rule);
 }
 
+export function isClassBillingCourseType(type: CourseType): boolean {
+  return type === "small_class" || type === "big_class" || type === "class";
+}
+
 export function classHeadcountBaseStudentCountForCourseType(type: CourseType): number {
-  return type === "class" ? 5 : 1;
+  return isClassBillingCourseType(type) ? 5 : 1;
+}
+
+/** 班型自带的默认计费人数上限；undefined 表示不封顶。 */
+export function billableStudentCapForCourseType(type: CourseType): number | undefined {
+  if (type === "big_class") return 20;
+  if (type === "small_class" || type === "class") return 10;
+  return undefined;
+}
+
+export function billableStudentCapForRule(type: CourseType, rule?: FeeRule): number | undefined {
+  return Number.isFinite(rule?.billableStudentCap)
+    ? nonNegativeInteger(rule?.billableStudentCap)
+    : billableStudentCapForCourseType(type);
 }
 
 export function classHeadcountBaseStudentCountForRule(type: CourseType, rule?: FeeRule): number {
@@ -569,12 +665,24 @@ export function classHeadcountStageRateForRule(rule: FeeRule, type: CourseType, 
   return normalizeStageRate(rule.stageRates?.[stage ?? "junior_3"], fallbackRates?.[stage ?? "junior_3"] ?? fallbackRates?.junior_3 ?? baseRate);
 }
 
-export function classHeadcountAmountForRate(rate: SalaryGradeStageRateConfig, type: CourseType, presentStudentCount: number, baseStudentCount = classHeadcountBaseStudentCountForCourseType(type)): number {
-  const count = nonNegativeInteger(presentStudentCount);
-  if (baseStudentCount > 1) {
-    return rate.classBaseFee + Math.max(count - baseStudentCount, 0) * rate.headcountIncrementFee;
-  }
-  return rate.oneOnOneFee + Math.max(count - 1, 0) * rate.headcountIncrementFee;
+export function classHeadcountAmountForRate(
+  rate: SalaryGradeStageRateConfig,
+  type: CourseType,
+  presentStudentCount: number,
+  baseStudentCount = classHeadcountBaseStudentCountForCourseType(type),
+  billableStudentCap = billableStudentCapForCourseType(type)
+): number {
+  return headcountAmount(headcountInputForRate(rate, baseStudentCount, presentStudentCount, billableStudentCap));
+}
+
+export function classHeadcountAmountBreakdownForRate(
+  rate: SalaryGradeStageRateConfig,
+  type: CourseType,
+  presentStudentCount: number,
+  baseStudentCount = classHeadcountBaseStudentCountForCourseType(type),
+  billableStudentCap = billableStudentCapForCourseType(type)
+): HeadcountAmountBreakdown {
+  return headcountAmountBreakdown(headcountInputForRate(rate, baseStudentCount, presentStudentCount, billableStudentCap));
 }
 
 export function classHeadcountFeeRuleForCourseType(
@@ -583,7 +691,8 @@ export function classHeadcountFeeRuleForCourseType(
   perStudentFee = 0,
   minStudents = classHeadcountBaseStudentCountForCourseType(type),
   makeupFeeMode: FeeRule["makeupFeeMode"] = "perStudentFee",
-  stageRates?: Partial<Record<SalaryGradeStage, SalaryGradeStageRateConfig>>
+  stageRates?: Partial<Record<SalaryGradeStage, SalaryGradeStageRateConfig>>,
+  billableStudentCap = billableStudentCapForCourseType(type)
 ): FeeRule {
   const tier = {
     id: "tier_1_plus",
@@ -602,6 +711,7 @@ export function classHeadcountFeeRuleForCourseType(
     baseFee: tier.baseFee,
     perPresentStudentFee: tier.perStudentFee,
     classFeeTiers: [tier],
+    billableStudentCap: Number.isFinite(billableStudentCap) ? nonNegativeInteger(billableStudentCap) : undefined,
     stageRates: normalizeStageRates(fallbackRate, stageRates),
     makeupFeeMode
   };
@@ -645,7 +755,8 @@ function salaryGradeTemporaryFeeOverrideDelta(
   lesson: Lesson,
   stage?: SalaryGradeStage,
   baseStudentCount = classHeadcountBaseStudentCountForCourseType(lesson.type),
-  durationMultiplier = lessonDurationMultiplier(lesson)
+  durationMultiplier = lessonDurationMultiplier(lesson),
+  billableStudentCap = billableStudentCapForCourseType(lesson.type)
 ): number {
   const presentStudentCount = presentCount(lesson);
   return lesson.attendance.reduce((sum, entry) => {
@@ -657,8 +768,8 @@ function salaryGradeTemporaryFeeOverrideDelta(
     const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
     const defaultIncrement =
       (
-        salaryGradeAmountForCount(rule, lesson.type, presentStudentCount, stage, baseStudentCount) -
-        salaryGradeAmountForCount(rule, lesson.type, countWithoutEntry, stage, baseStudentCount)
+        salaryGradeAmountForCount(rule, lesson.type, presentStudentCount, stage, baseStudentCount, billableStudentCap) -
+        salaryGradeAmountForCount(rule, lesson.type, countWithoutEntry, stage, baseStudentCount, billableStudentCap)
       ) * durationMultiplier;
     return sum + customFee - defaultIncrement;
   }, 0);
@@ -674,12 +785,14 @@ export function temporaryFeeTotal(lesson: Lesson, rule?: FeeRule, vault?: Teache
   if (rule?.mode === "salary_grade" && vault) {
     const gradeRule = resolveSalaryGradeRule(vault, rule);
     if (gradeRule) {
+      const courseTypeRule = feeRuleForCourseType(vault, billingLesson.type);
       return salaryGradeTemporaryFeeOverrideDelta(
         gradeRule,
         billingLesson,
         salaryGradeStageForLesson(vault, course, lesson),
-        classHeadcountBaseStudentCountForRule(billingLesson.type, feeRuleForCourseType(vault, billingLesson.type)),
-        durationMultiplier
+        classHeadcountBaseStudentCountForRule(billingLesson.type, courseTypeRule),
+        durationMultiplier,
+        billableStudentCapForRule(billingLesson.type, courseTypeRule)
       );
     }
   }
@@ -726,17 +839,32 @@ export function classFeeTierForCount(rule: FeeRule, studentCount: number): Class
 }
 
 export function calculateClassHeadcountFee(rule: FeeRule, studentCount: number, type?: CourseType, stage?: SalaryGradeStage): number {
+  return calculateClassHeadcountBreakdown(rule, studentCount, type, stage).amount;
+}
+
+export function calculateClassHeadcountBreakdown(
+  rule: FeeRule,
+  studentCount: number,
+  type?: CourseType,
+  stage?: SalaryGradeStage
+): HeadcountAmountBreakdown {
   if (type && rule.stageRates) {
-    return classHeadcountAmountForRate(classHeadcountStageRateForRule(rule, type, stage), type, studentCount, classHeadcountBaseStudentCountForRule(type, rule));
+    return classHeadcountAmountBreakdownForRate(
+      classHeadcountStageRateForRule(rule, type, stage),
+      type,
+      studentCount,
+      classHeadcountBaseStudentCountForRule(type, rule),
+      billableStudentCapForRule(type, rule)
+    );
   }
-  const count = nonNegativeInteger(studentCount);
-  const tier = classFeeTierForCount(rule, count) ?? normalizedClassFeeTiers(rule)[0];
-  if (tier) {
-    const includedStudents = nonNegativeInteger(tier.minStudents);
-    const extraStudents = Math.max(count - includedStudents, 0);
-    return nonNegativeNumber(tier.baseFee) + extraStudents * nonNegativeNumber(tier.perStudentFee);
-  }
-  return nonNegativeNumber(rule.baseFee) + count * nonNegativeNumber(rule.perPresentStudentFee);
+  const tier = classFeeTierForCount(rule, nonNegativeInteger(studentCount)) ?? normalizedClassFeeTiers(rule)[0];
+  return headcountAmountBreakdown({
+    baseFee: nonNegativeNumber(tier ? tier.baseFee : rule.baseFee),
+    incrementFee: nonNegativeNumber(tier ? tier.perStudentFee : rule.perPresentStudentFee),
+    baseStudentCount: tier ? nonNegativeInteger(tier.minStudents) : 0,
+    presentStudentCount: studentCount,
+    billableStudentCap: type ? billableStudentCapForRule(type, rule) : rule.billableStudentCap
+  });
 }
 
 export function calculateFee(rule: FeeRule, lesson: Lesson): number {
@@ -778,8 +906,10 @@ export function calculateFeeWithVault(vault: TeacherVault | undefined, rule: Fee
     const gradeRule = vault ? resolveSalaryGradeRule(vault, rule) : salaryGradeRuleById(rule.salaryGradeId);
     if (!gradeRule) return Math.round(extraFee);
     const salaryStage = vault ? salaryGradeStageForLesson(vault, billingCourse, lesson) : undefined;
-    const baseStudentCount = vault ? classHeadcountBaseStudentCountForRule(billingLesson.type, feeRuleForCourseType(vault, billingLesson.type)) : classHeadcountBaseStudentCountForCourseType(billingLesson.type);
-    const unitAmount = salaryGradeAmountForCount(gradeRule, billingLesson.type, presentCount(lesson), salaryStage, baseStudentCount);
+    const courseTypeRule = vault ? feeRuleForCourseType(vault, billingLesson.type) : undefined;
+    const baseStudentCount = vault ? classHeadcountBaseStudentCountForRule(billingLesson.type, courseTypeRule) : classHeadcountBaseStudentCountForCourseType(billingLesson.type);
+    const billableStudentCap = billableStudentCapForRule(billingLesson.type, courseTypeRule);
+    const unitAmount = salaryGradeAmountForCount(gradeRule, billingLesson.type, presentCount(lesson), salaryStage, baseStudentCount, billableStudentCap);
     return Math.round(nonNegativeNumber(unitAmount) * durationMultiplier + extraFee);
   }
 
@@ -815,7 +945,8 @@ export function backupFeeRuleForCourseType(type: CourseType, feeRule?: FeeRule):
       tier ? tier.perStudentFee : sourceRule.perPresentStudentFee,
       minStudents,
       sourceRule.makeupFeeMode ?? "perStudentFee",
-      sourceRule.stageRates
+      sourceRule.stageRates,
+      billableStudentCapForRule(type, sourceRule)
     );
   }
   const baseFee = sourceRule.mode === "hourly"
@@ -823,7 +954,15 @@ export function backupFeeRuleForCourseType(type: CourseType, feeRule?: FeeRule):
     : sourceRule.mode === "fixed"
       ? fixedFeeForRule(sourceRule)
       : 0;
-  return classHeadcountFeeRuleForCourseType(type, baseFee, 0, classHeadcountBaseStudentCountForCourseType(type), "perStudentFee", sourceRule.stageRates);
+  return classHeadcountFeeRuleForCourseType(
+    type,
+    baseFee,
+    0,
+    classHeadcountBaseStudentCountForCourseType(type),
+    "perStudentFee",
+    sourceRule.stageRates,
+    billableStudentCapForRule(type, sourceRule)
+  );
 }
 
 export function feeRuleForCourseType(vault: TeacherVault, type: CourseType): FeeRule {
@@ -889,9 +1028,11 @@ function studentMakeupOriginalClassFeeAllocation(
   if (originalRule.mode === "salary_grade") {
     const gradeRule = resolveSalaryGradeRule(vault, originalRule);
     if (!gradeRule) return undefined;
-    headcountBaseStudentCount = classHeadcountBaseStudentCountForRule(originalCourse.type, feeRuleForCourseType(vault, originalCourse.type));
+    const courseTypeRule = feeRuleForCourseType(vault, originalCourse.type);
+    headcountBaseStudentCount = classHeadcountBaseStudentCountForRule(originalCourse.type, courseTypeRule);
+    const billableStudentCap = billableStudentCapForRule(originalCourse.type, courseTypeRule);
     unitAmountForCount = (studentCount) =>
-      salaryGradeAmountForCount(gradeRule, originalCourse.type, studentCount, stage, headcountBaseStudentCount);
+      salaryGradeAmountForCount(gradeRule, originalCourse.type, studentCount, stage, headcountBaseStudentCount, billableStudentCap);
   } else if (originalRule.mode === "class_headcount") {
     headcountBaseStudentCount = classHeadcountBaseStudentCountForRule(originalCourse.type, originalRule);
     unitAmountForCount = (studentCount) =>
@@ -946,8 +1087,12 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
     const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
     const salaryStage = salaryGradeStageForLesson(vault, course, lesson);
     const salaryStageRate = gradeRule ? salaryGradeRateForStage(gradeRule, salaryStage) : undefined;
-    const salaryHeadcountBaseStudentCount = classHeadcountBaseStudentCountForRule(course.type, feeRuleForCourseType(vault, course.type));
-    const unitAmount = gradeRule ? salaryGradeAmountForCount(gradeRule, course.type, presentStudentCount, salaryStage, salaryHeadcountBaseStudentCount) : undefined;
+    const courseTypeRule = feeRuleForCourseType(vault, course.type);
+    const salaryHeadcountBaseStudentCount = classHeadcountBaseStudentCountForRule(course.type, courseTypeRule);
+    const salaryBillableStudentCap = billableStudentCapForRule(course.type, courseTypeRule);
+    const breakdown = gradeRule
+      ? salaryGradeAmountBreakdownForCount(gradeRule, course.type, presentStudentCount, salaryStage, salaryHeadcountBaseStudentCount, salaryBillableStudentCap)
+      : undefined;
     return {
       ...lesson.feeSnapshot,
       ...common,
@@ -960,9 +1105,13 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
       salaryGradeStageLabel: salaryStage ? salaryGradeStageLabels[salaryStage] : undefined,
       headcountBaseStudentCount: studentMakeupAllocation?.headcountBaseStudentCount ?? salaryHeadcountBaseStudentCount,
       headcountIncrementFee: salaryStageRate?.headcountIncrementFee,
+      billableStudentCount: breakdown?.billableStudentCount,
+      billableStudentCap: salaryBillableStudentCap,
+      overflowStudentCount: breakdown?.overflowStudentCount,
+      overflowHeadcountFee: breakdown && breakdown.overflowStudentCount > 0 ? overflowHeadcountFee : undefined,
       lessonUnitHours: lessonFeeUnitHours,
       durationMultiplier,
-      unitAmount: studentMakeupAllocation?.unitAmount ?? unitAmount,
+      unitAmount: studentMakeupAllocation?.unitAmount ?? breakdown?.amount,
       amount: studentMakeupAllocation?.amount ?? calculateFeeWithVault(vault, course.feeRule, lessonForCalculation, course)
     };
   }
@@ -979,8 +1128,8 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
   const classHeadcountBaseStudentCount = course.feeRule.mode === "class_headcount"
     ? classHeadcountBaseStudentCountForRule(course.type, course.feeRule)
     : undefined;
-  const unitAmount = course.feeRule.mode === "class_headcount"
-    ? calculateClassHeadcountFee(course.feeRule, presentStudentCount, course.type, classHeadcountStage)
+  const classHeadcountBreakdown = course.feeRule.mode === "class_headcount"
+    ? calculateClassHeadcountBreakdown(course.feeRule, presentStudentCount, course.type, classHeadcountStage)
     : undefined;
   return {
     ...lesson.feeSnapshot,
@@ -994,9 +1143,13 @@ export function buildFeeSnapshot(vault: TeacherVault, course: CourseGroup, lesso
     salaryGradeStageLabel: classHeadcountStage ? salaryGradeStageLabels[classHeadcountStage] : undefined,
     headcountBaseStudentCount: classHeadcountBaseStudentCount,
     headcountIncrementFee: classHeadcountStageRate?.headcountIncrementFee,
+    billableStudentCount: classHeadcountBreakdown?.billableStudentCount,
+    billableStudentCap: course.feeRule.mode === "class_headcount" ? billableStudentCapForRule(course.type, course.feeRule) : undefined,
+    overflowStudentCount: classHeadcountBreakdown?.overflowStudentCount,
+    overflowHeadcountFee: classHeadcountBreakdown && classHeadcountBreakdown.overflowStudentCount > 0 ? overflowHeadcountFee : undefined,
     lessonUnitHours: course.feeRule.mode === "class_headcount" ? lessonFeeUnitHours : undefined,
     durationMultiplier: course.feeRule.mode === "class_headcount" ? durationMultiplier : undefined,
-    unitAmount: studentMakeupAllocation?.unitAmount ?? unitAmount,
+    unitAmount: studentMakeupAllocation?.unitAmount ?? classHeadcountBreakdown?.amount,
     amount: studentMakeupAllocation?.amount ?? calculateFeeWithVault(vault, course.feeRule, lessonForCalculation, course)
   };
 }
@@ -1328,7 +1481,7 @@ export function salaryBreakdown(vault: TeacherVault, month: string): SalaryBreak
         totals.substituteClass += amount;
       } else if (lesson.status === "makeup_completed") {
         totals.makeup += amount;
-      } else if (course ? courseUsesClassBilling(course, vault) : lesson.type === "class") {
+      } else if (course ? courseUsesClassBilling(course, vault) : isClassBillingCourseType(lesson.type)) {
         totals.classLessons += amount;
       } else {
         totals.oneOnOne += amount;

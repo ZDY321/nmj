@@ -22,7 +22,7 @@ import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { OnboardingGuide } from "@/frontend/components/OnboardingGuide";
 import { Sidebar } from "@/frontend/components/Sidebar";
 import { applyAiScheduleDraftToVault } from "@/frontend/lib/aiScheduleDraftApply";
-import { currentAppHour, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { currentAppHour, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, isClassBillingCourseType, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
 import {
   cloneVault,
@@ -2244,7 +2244,8 @@ function courseHasActiveStudentLocal(vault: TeacherVault, course: CourseGroup): 
 }
 function shouldPauseSupersededClassCourse(vault: TeacherVault, existingCourse: CourseGroup, newCourse: CourseGroup): boolean {
   if (existingCourse.status !== "active") return false;
-  if (existingCourse.type !== "class" || newCourse.type !== "class") return false;
+  if (existingCourse.type !== newCourse.type) return false;
+  if (!isClassBillingCourseType(existingCourse.type)) return false;
   if (existingCourse.subject.trim() !== newCourse.subject.trim()) return false;
   if ((existingCourse.defaultCampusId ?? "") !== (newCourse.defaultCampusId ?? "")) return false;
 

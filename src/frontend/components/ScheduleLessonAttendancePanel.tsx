@@ -17,6 +17,7 @@ import {
   studentNames
 } from "@/frontend/lib/helpers";
 import { attendanceSurfaceClass } from "@/frontend/lib/scheduleViewHelpers";
+import { isClassBillingCourseType } from "@/frontend/lib/calculations";
 
 type ScheduleLessonAttendancePanelProps = {
   amountsVisible: boolean;
@@ -295,7 +296,7 @@ export function ScheduleLessonAttendancePanel({
                 placeholder="搜索姓名、年级、校区、备注、试听或到课状态"
               />
             </label>
-            {selected.type === "class" && (
+            {isClassBillingCourseType(selected.type) && (
               <div className="mt-3 grid grid-cols-1 gap-2 rounded-[12px] border border-[#c7d2fe] bg-[#eef0ff] p-3 sm:grid-cols-[1fr_150px_180px] sm:items-end">
                 <div className="text-xs font-semibold leading-5 text-[#5161d6]">
                   <span className="font-extrabold text-[#25324a]">试听统计</span>
@@ -423,7 +424,7 @@ export function ScheduleLessonAttendancePanel({
                         试听学生不计入班课新增人头费；本节总试听费用 {formatPrivateMoney(selected.trialFee ?? 0, amountsVisible)}。
                       </div>
                     )}
-                    {selected.type === "class" && (
+                    {isClassBillingCourseType(selected.type) && (
                       <div className="mt-3">
                         <Input
                           className="bg-white"
@@ -433,7 +434,7 @@ export function ScheduleLessonAttendancePanel({
                         />
                       </div>
                     )}
-                    {selected.type !== "class" && (
+                    {!isClassBillingCourseType(selected.type) && (
                       <Input
                         className="mt-3 bg-white"
                         value={entry.note ?? ""}

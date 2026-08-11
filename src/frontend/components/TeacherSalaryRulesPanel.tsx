@@ -7,7 +7,11 @@ import { Input } from "@/components/ui/input";
 import type { CustomSalaryGradeId, SalaryGradeRuleConfig, SalaryGradeStage, SalaryGradeStageRateConfig, TeacherProfile, TeacherVault } from "@/shared/types";
 import { makeId } from "@/frontend/lib/crypto";
 import {
+  billableStudentCapForRule,
   defaultSalaryGradeRules,
+  feeRuleForCourseType,
+  overflowHeadcountFee,
+  overflowHeadcountThreshold,
   salaryGradeStageLabels,
   salaryGradeStageOrder,
   salaryGradeLabel,
@@ -15,7 +19,7 @@ import {
   salaryGradeRulesForVault,
   type SalaryGradeRule
 } from "@/frontend/lib/calculations";
-import { formatPrivateMoney } from "@/frontend/lib/helpers";
+import { courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney } from "@/frontend/lib/helpers";
 
 type TeacherSalaryRulesPanelProps = {
   amountsVisible: boolean;
@@ -34,6 +38,14 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
       .map((course) => course.feeRule.salaryGradeId)
   ].filter(Boolean));
   const [customLabel, setCustomLabel] = useState("");
+  const capSummaries = courseTypeOptionsForVault(vault)
+    .filter((option) => option.value !== "trial")
+    .map((option) => ({
+      value: option.value,
+      label: courseTypeLabel(vault, option.value),
+      cap: billableStudentCapForRule(option.value, feeRuleForCourseType(vault, option.value))
+    }))
+    .filter((item) => item.cap !== undefined);
   const [customBaseSalary, setCustomBaseSalary] = useState(0);
   const [customOneOnOneFee, setCustomOneOnOneFee] = useState(0);
   const [customClassBaseFee, setCustomClassBaseFee] = useState(0);
@@ -130,7 +142,13 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
         <CardTitle>教师课时费等级</CardTitle>
         <CardDescription className="space-y-1">
           <span className="block">课程里只选择老师等级；实际课时费会按课程学生年级阶段套用该等级下对应金额，底薪仍按老师等级统一设置。</span>
-          <span className="block">班课的班型按「班课底费 + max(到课人数 - 5, 0) * 人头加价」计算；非班课的班型按「一对一基础费 + max(到课人数 - 1, 0) * 人头加价」计算。</span>
+          <span className="block">
+            人头加价分两档：班课第 6 人起、非班课第 2 人起按下表的「人头加价」累计，
+            <span className="font-extrabold text-[#9a3412]">第 {overflowHeadcountThreshold + 1} 人起一律按每人 ¥{overflowHeadcountFee} 计算，不随等级变化</span>。
+          </span>
+          <span className="block">
+            每个班型还有「计费人数上限」：超出上限的学生仍可以加进课程，但不产生课时费。上限在「校区与班型」里按班型设置。
+          </span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -148,6 +166,26 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
           ))}
         </div>
 
+        {capSummaries.length > 0 && (
+          <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+            <div className="text-sm font-extrabold text-[#061226]">各班型计费人数上限</div>
+            <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
+              超出上限的学生仍可以关联进课程和课节，但不计入课时费。要调整上限请到「校区与班型」。
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {capSummaries.map((item) => (
+                <span
+                  key={item.value}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#dbe4ef] bg-white px-3 py-1 text-xs font-bold text-[#25324a]"
+                >
+                  {item.label}
+                  <span className="text-[#1557c2]">{item.cap === undefined ? "不封顶" : `上限 ${item.cap} 人`}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {legacyDefaultRule && (
           <div className="rounded-[14px] border border-[#facc15] bg-[#fefce8] px-3 py-2 text-xs font-semibold leading-5 text-[#854d0e]">
             当前默认等级仍是旧规则「{salaryGradeLabel(legacyDefaultRule)}」。旧规则会继续被识别，建议在“老师个人信息”里切换为新的通用等级。
@@ -164,7 +202,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
                     {vault.profile.defaultSalaryGradeId === rule.id && <Badge variant="sky">默认</Badge>}
                     {rule.custom && <Badge variant="plum">自定义</Badge>}
                   </div>
-                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节；非试听课默认按标准课时统计，拆课时可在课节详情手动调整计费课时；班课人头加价从第 6 人开始，非班课从第 2 人开始。</div>
+                  <div className="mt-1 text-xs font-semibold text-[#94a3b8]">2 小时为 1 节；非试听课默认按标准课时统计，拆课时可在课节详情手动调整计费课时；班课人头加价从第 6 人开始，非班课从第 2 人开始，第 {overflowHeadcountThreshold + 1} 人起统一 ¥{overflowHeadcountFee}。</div>
                 </div>
                 <div className="grid grid-cols-[minmax(160px,220px)_auto] gap-2">
                   <div>
@@ -197,15 +235,16 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
               </div>
 
               <div className="mt-3 overflow-x-auto rounded-[12px] border border-[#e8eef6]">
-                <div className="grid min-w-[680px] grid-cols-[110px_repeat(3,minmax(130px,1fr))] gap-2 border-b border-[#eef3f8] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#64748b]">
+                <div className="grid min-w-[820px] grid-cols-[110px_repeat(4,minmax(130px,1fr))] gap-2 border-b border-[#eef3f8] bg-[#f8fbff] px-3 py-2 text-xs font-bold text-[#64748b]">
                   <div>年级阶段</div>
                   <div>一对一基础费</div>
                   <div>班课底费</div>
-                  <div>人头加价</div>
+                  <div>人头加价（第 {overflowHeadcountThreshold} 人以内）</div>
+                  <div>第 {overflowHeadcountThreshold + 1} 人起（固定）</div>
                 </div>
                 <div className="divide-y divide-[#eef3f8]">
                   {salaryGradeStageOrder.map((stage) => (
-                    <div key={stage} className="grid min-w-[680px] grid-cols-[110px_repeat(3,minmax(130px,1fr))] items-center gap-2 px-3 py-2">
+                    <div key={stage} className="grid min-w-[820px] grid-cols-[110px_repeat(4,minmax(130px,1fr))] items-center gap-2 px-3 py-2">
                       <div className="text-sm font-extrabold text-[#061226]">{salaryGradeStageLabels[stage]}</div>
                       <AmountInput
                         amountsVisible={amountsVisible}
@@ -222,6 +261,12 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
                         value={rule.stageRates[stage].headcountIncrementFee}
                         onChange={(headcountIncrementFee) => updateRuleStageRate(rule, stage, { headcountIncrementFee })}
                       />
+                      <div
+                        className="flex h-10 items-center rounded-[10px] border border-dashed border-[#dbe4ef] bg-[#f8fbff] px-3 text-sm font-extrabold text-[#64748b]"
+                        title="全局固定单价，不随教师等级和年级阶段变化"
+                      >
+                        ¥{overflowHeadcountFee}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -238,7 +283,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
             </div>
             <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
               下面填写的「一对一基础费 / 班课底费 / 人头加价」是同一等级在所有年级阶段的初始值；新增后可以在上方表格里再按小学 / 初中 / 高中分别微调。
-              <span className="block">一对一基础费用于「非班课」班型（含 1 人，第 2 人起按人头加价累计）；班课底费用于「班课」班型（含 5 人，第 6 人起按人头加价累计）。</span>
+              <span className="block">一对一基础费用于「非班课」班型（含 1 人，第 2 人起按人头加价累计）；班课底费用于「班课」班型（含 5 人，第 6 人起按人头加价累计）。第 {overflowHeadcountThreshold + 1} 人起统一按 ¥{overflowHeadcountFee} / 人，不受这里填写的人头加价影响。</span>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1.4fr_repeat(4,minmax(120px,1fr))_112px]">

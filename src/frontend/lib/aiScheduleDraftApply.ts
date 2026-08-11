@@ -1,4 +1,5 @@
 import {
+  billableStudentCapForCourseType,
   defaultFeeRuleForCourseType,
   defaultSalaryGradeRule,
   feeRuleForCourseType,
@@ -997,6 +998,7 @@ function defaultFeeRuleForCustomTemplate(
     baseFee: tier.baseFee,
     perPresentStudentFee: tier.perStudentFee,
     classFeeTiers: [tier],
+    billableStudentCap: template === "class" ? billableStudentCapForCourseType("small_class") : undefined,
     stageRates: defaultGradeRule.stageRates,
     makeupFeeMode: "perStudentFee"
   };
@@ -1081,9 +1083,11 @@ function normalizeAiCourseType(value: unknown, vault: TeacherVault | null = null
   const normalized = stringValue(value).toLowerCase();
   if (normalized === "one_on_one" || normalized === "一对一") return "one_on_one";
   if (normalized === "one_on_two" || normalized === "一对二") return "one_on_two";
-  if (normalized === "class" || normalized === "班课" || normalized === "多人班课") return "class";
+  if (normalized === "small_class" || normalized === "小班课" || normalized === "小班") return "small_class";
+  if (normalized === "big_class" || normalized === "大班课" || normalized === "大班") return "big_class";
+  if (normalized === "class" || normalized === "班课" || normalized === "多人班课") return "small_class";
   if (normalized === "trial" || normalized === "试听") return "trial";
-  if (normalized === "full_time" || normalized === "全职" || normalized === "全日制") return "class";
+  if (normalized === "full_time" || normalized === "全职" || normalized === "全日制") return "small_class";
   const matchedCustomType = vault?.preferences?.customCourseTypes?.find((item) =>
     item.id.toLowerCase() === normalized || item.label.trim().toLowerCase() === normalized
   );
@@ -1093,6 +1097,6 @@ function normalizeAiCourseType(value: unknown, vault: TeacherVault | null = null
         .find((type) => type.toLowerCase() === normalized || courseTypeLabel(vault, type).trim().toLowerCase() === normalized)
     : undefined;
   if (matchedKnownType) return matchedKnownType;
-  return "class";
+  return "small_class";
 }
 

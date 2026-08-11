@@ -307,7 +307,7 @@ describe("schedule import parsing and matching", () => {
       warnings: []
     });
     expect(lessons[1]).toMatchObject({
-      courseTypeHint: "class",
+      courseTypeHint: "small_class",
       presentCount: 0,
       expectedCount: 3,
       warnings: ["未全员到课", "未开课/取消"]

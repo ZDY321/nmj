@@ -98,7 +98,7 @@ export function createSampleVault(): TeacherVault {
       {
         id: "course_class_math",
         name: "初中数学班课",
-        type: "class",
+        type: "small_class",
         subject: "数学",
         defaultCampusId: "campus_west",
         studentIds: ["student_b", "student_c", "student_d"],
@@ -144,7 +144,7 @@ export function createSampleVault(): TeacherVault {
         endTime: "11:00",
         courseGroupId: "course_class_math",
         campusId: "campus_west",
-        type: "class",
+        type: "small_class",
         status: "makeup_pending",
         expectedStudentIds: ["student_b", "student_c", "student_d"],
         attendance: [

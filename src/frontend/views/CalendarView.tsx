@@ -37,7 +37,7 @@ import {
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
+import { buildFeeSnapshot, getCourse, isClassBillingCourseType, todayIso } from "@/frontend/lib/calculations";
 import { attendanceStatusForLessonStatus, matchesCalendarLessonFilters } from "@/frontend/lib/scheduleViewHelpers";
 import type { CourseTypeFilter, MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { timeToMinutes } from "@/frontend/lib/time";
@@ -272,8 +272,8 @@ export function CalendarView({
       type: course.type,
       expectedStudentIds: [...course.studentIds],
       attendance: attendanceFromCurrentCourse(lesson, course),
-      trialStudentCount: course.type === "class" ? lesson.trialStudentCount ?? 0 : 0,
-      trialFee: course.type === "class" ? lesson.trialFee ?? 0 : 0
+      trialStudentCount: isClassBillingCourseType(course.type) ? lesson.trialStudentCount ?? 0 : 0,
+      trialFee: isClassBillingCourseType(course.type) ? lesson.trialFee ?? 0 : 0
     };
     return {
       ...refreshedLesson,

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, ClassFeeTier, CourseGroup, CourseType, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
-import { calculateClassHeadcountFee, courseUsesStandardBillingHours, defaultSalaryGradeRule, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
+import { billableStudentCapForRule, calculateClassHeadcountFee, courseUsesStandardBillingHours, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
 import { courseRequiresSameGradeStudents, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
@@ -88,6 +88,12 @@ export function CourseEditDialog({
   const requiresSameGradeStudents = editingCourse ? courseRequiresSameGradeStudents(vault, editingCourse.type, editingCourse.feeRule) : false;
   const selectedCourseStudentGrade = editingCourse && requiresSameGradeStudents ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
   const selectedCourseStudentGradeLabel = selectedCourseStudentGrade || "未设置年级";
+  const billableStudentCap = editingCourse
+    ? billableStudentCapForRule(editingCourse.type, feeRuleForCourseType(vault, editingCourse.type))
+    : undefined;
+  const overflowStudentCount = editingCourse && billableStudentCap !== undefined
+    ? Math.max(editingCourse.studentIds.length - billableStudentCap, 0)
+    : 0;
 
   return (
     <AnimatePresence>
@@ -281,6 +287,12 @@ export function CourseEditDialog({
                         最多选择 {studentLimitForCourseType(editingCourse.type)} 人
                       </span>
                     )}
+                    {billableStudentCap !== undefined && (
+                      <span className={`ml-2 text-xs font-bold ${overflowStudentCount > 0 ? "text-[#9a3412]" : "text-[#64748b]"}`}>
+                        计费人数上限 {billableStudentCap} 人
+                        {overflowStudentCount > 0 && `，其中 ${overflowStudentCount} 人不产生课时费`}
+                      </span>
+                    )}
                   </div>
                   <span className="text-xs font-bold text-[#64748b]">当前显示 {editingCourseStudentOptions.length} 人</span>
                 </div>
@@ -363,24 +375,32 @@ export function CourseEditDialog({
                         const selectedGradeLabel = selectedGrade || "未设置年级";
                         const isDifferentGrade = requiresSameGradeStudents && selectedGrade !== undefined && !isSelected && (student.grade ?? "") !== selectedGrade;
                         const isAtStudentLimit = !isSelected && Boolean(studentLimitForCourseType(editingCourse.type)) && editingCourse.studentIds.length >= (studentLimitForCourseType(editingCourse.type) ?? 0);
+                        const selectedIndex = editingCourse.studentIds.indexOf(student.id);
+                        const isOverCap = billableStudentCap !== undefined && (
+                          isSelected ? selectedIndex >= billableStudentCap : editingCourse.studentIds.length >= billableStudentCap
+                        );
                         return (
                           <button
                             type="button"
                             key={student.id}
                             onClick={() => onToggleCourseStudent(student.id)}
                             disabled={isDifferentGrade || isAtStudentLimit}
-                            title={isDifferentGrade ? `只能选择 ${selectedGradeLabel} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(editingCourse.type)} 人` : undefined}
+                            title={isDifferentGrade ? `只能选择 ${selectedGradeLabel} 学生` : isAtStudentLimit ? `最多选择 ${studentLimitForCourseType(editingCourse.type)} 人` : isOverCap ? `超出计费人数上限 ${billableStudentCap} 人，不产生课时费` : undefined}
                             className={`rounded-[10px] border px-3 py-2 text-left text-xs font-bold ${
                               isSelected
-                                ? "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
+                                ? isOverCap
+                                  ? "border-dashed border-[#fdba74] bg-[#fffbeb] text-[#b45309]"
+                                  : "border-[#ff8617] bg-[#fff7ed] text-[#9a3412]"
                                 : isDifferentGrade || isAtStudentLimit
                                   ? "cursor-not-allowed border-[#e2e8f0] bg-white text-[#94a3b8]"
-                                  : student.temporaryTrial
-                                    ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
-                                    : "border-[#dbe4ef] bg-white text-[#25324a]"
+                                  : isOverCap
+                                    ? "border-dashed border-[#fdba74] bg-[#fffbeb] text-[#b45309]"
+                                    : student.temporaryTrial
+                                      ? "border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6]"
+                                      : "border-[#dbe4ef] bg-white text-[#25324a]"
                             }`}
                           >
-                            {student.name} · {student.grade || "未设置年级"}{student.status === "paused" ? " · 已归档" : student.status === "transition" ? " · 过渡期" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}
+                            {student.name} · {student.grade || "未设置年级"}{student.status === "paused" ? " · 已归档" : student.status === "transition" ? " · 过渡期" : ""}{student.temporaryTrial ? " · 试听" : ""}{isDifferentGrade ? " · 年级不符" : ""}{isOverCap ? " · 超上限不计费" : ""}
                           </button>
                         );
                       })}
