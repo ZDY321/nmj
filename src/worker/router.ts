@@ -8,6 +8,10 @@ export type AdminRouteHandlers<Env, AuthContext> = {
   runDueDeletions: (env: Env) => Promise<Response>;
   adminSummary: (env: Env) => Promise<Response>;
   listUsers: (env: Env) => Promise<Response>;
+  listUserNotes: (env: Env) => Promise<Response>;
+  createUserNote: (request: Request, env: Env, actor: AuthContext, userId: string) => Promise<Response>;
+  updateUserNote: (request: Request, env: Env, actor: AuthContext, noteId: string) => Promise<Response>;
+  deleteUserNote: (env: Env, actor: AuthContext, noteId: string) => Promise<Response>;
   listLoginNotices: (env: Env) => Promise<Response>;
   createLoginNotice: (request: Request, env: Env) => Promise<Response>;
   updateLoginNoticeRecord: (request: Request, env: Env, noticeId: string) => Promise<Response>;
@@ -80,6 +84,28 @@ export async function handleAdminRoutes<Env, AuthContext extends { user: { id: s
 
   if (request.method === "GET" && pathname === "/api/admin/users") {
     return handlers.listUsers(env);
+  }
+
+  if (request.method === "GET" && pathname === "/api/admin/user-notes") {
+    return handlers.listUserNotes(env);
+  }
+
+  const userNotesForUserMatch = /^\/api\/admin\/users\/([^/]+)\/notes$/.exec(pathname);
+  if (userNotesForUserMatch) {
+    if (request.method !== "POST") return handlers.notFound();
+    return handlers.createUserNote(request, env, context, decodeURIComponent(userNotesForUserMatch[1]));
+  }
+
+  const userNoteMatch = /^\/api\/admin\/user-notes\/([^/]+)$/.exec(pathname);
+  if (userNoteMatch) {
+    const noteId = decodeURIComponent(userNoteMatch[1]);
+    if (request.method === "PATCH") {
+      return handlers.updateUserNote(request, env, context, noteId);
+    }
+    if (request.method === "DELETE") {
+      return handlers.deleteUserNote(env, context, noteId);
+    }
+    return handlers.notFound();
   }
 
   if (request.method === "PUT" && pathname === "/api/admin/login-notice") {

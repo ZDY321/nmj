@@ -11,6 +11,10 @@ function makeHandlers(overrides: Partial<TestHandlers> = {}): TestHandlers {
     isAuthorizedLegacyAdminRequest: vi.fn(() => false),
     requireAuth: vi.fn(async () => ({ user: { id: "admin_1" } })),
     requireAdmin: vi.fn(() => null),
+    listUserNotes: vi.fn(async () => Response.json([])),
+    createUserNote: vi.fn(async () => Response.json({ id: "note_1" }, { status: 201 })),
+    updateUserNote: vi.fn(async () => Response.json({ id: "note_1" })),
+    deleteUserNote: vi.fn(async () => Response.json({ ok: true })),
     getSchoolPalExportScript: vi.fn(async () => Response.json({ content: "script", updatedAt: null })),
     updateSchoolPalExportScript: vi.fn(async () => Response.json({ content: "updated", updatedAt: "2026-08-04T00:00:00.000Z" })),
     ...overrides
@@ -57,5 +61,52 @@ describe("schoolpal export script routes", () => {
 
     expect(response.status).toBe(200);
     expect(handlers.updateSchoolPalExportScript).toHaveBeenCalledOnce();
+  });
+});
+
+describe("admin user note routes", () => {
+  it("lists notes for admins", async () => {
+    const handlers = makeHandlers();
+    const response = await handleApiRoutes(
+      new Request("https://example.com/api/admin/user-notes"),
+      {},
+      handlers
+    );
+
+    expect(response.status).toBe(200);
+    expect(handlers.listUserNotes).toHaveBeenCalledOnce();
+  });
+
+  it("routes note creation to the target user", async () => {
+    const handlers = makeHandlers();
+    const response = await handleApiRoutes(
+      new Request("https://example.com/api/admin/users/user%2F1/notes", { method: "POST" }),
+      {},
+      handlers
+    );
+
+    expect(response.status).toBe(201);
+    expect(handlers.createUserNote).toHaveBeenCalledWith(
+      expect.any(Request),
+      {},
+      expect.objectContaining({ user: { id: "admin_1" } }),
+      "user/1"
+    );
+  });
+
+  it("routes note deletion by note id", async () => {
+    const handlers = makeHandlers();
+    const response = await handleApiRoutes(
+      new Request("https://example.com/api/admin/user-notes/note-1", { method: "DELETE" }),
+      {},
+      handlers
+    );
+
+    expect(response.status).toBe(200);
+    expect(handlers.deleteUserNote).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ user: { id: "admin_1" } }),
+      "note-1"
+    );
   });
 });

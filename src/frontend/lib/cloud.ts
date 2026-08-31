@@ -1,6 +1,7 @@
 import type {
   AdminSummary,
   AdminUser,
+  AdminUserNote,
   AiProviderConfig,
   AiProviderInput,
   AiScheduleDraftRequest,
@@ -83,7 +84,7 @@ function translateApiError(error: string): string {
     "Document version conflict": "这份加密文档已在其他页面或设备更新，请重新读取后再保存。",
     "Password confirmation required": "请先输入当前管理员密码。",
     "Password confirmation failed": "管理员密码确认失败。",
-    "Target password confirmation failed": "被删除账号密码验证失败。",
+    "User note fields required": "请填写备注名称和备注信息。",
     "Database migration required": "云端 D1 表结构不是最新。请在 Cloudflare D1 按顺序执行 migrations 目录下尚未执行的 SQL，然后刷新页面。",
     "Feedback content required": "请先填写反馈内容。",
     "Invalid feedback status": "反馈处理状态不正确。",
@@ -124,6 +125,33 @@ export async function getAdminSummary(token: string): Promise<AdminSummary> {
 
 export async function getAdminUsers(token: string): Promise<AdminUser[]> {
   return apiRequest<AdminUser[]>("/api/admin/users", { token });
+}
+
+export async function getAdminUserNotes(token: string): Promise<AdminUserNote[]> {
+  return apiRequest<AdminUserNote[]>("/api/admin/user-notes", { token });
+}
+
+export async function createAdminUserNote(token: string, userId: string, name: string, content: string): Promise<AdminUserNote> {
+  return apiRequest<AdminUserNote>(`/api/admin/users/${encodeURIComponent(userId)}/notes`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ name, content })
+  });
+}
+
+export async function updateAdminUserNote(token: string, noteId: string, name: string, content: string): Promise<AdminUserNote> {
+  return apiRequest<AdminUserNote>(`/api/admin/user-notes/${encodeURIComponent(noteId)}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify({ name, content })
+  });
+}
+
+export async function deleteAdminUserNote(token: string, noteId: string): Promise<{ ok: true }> {
+  return apiRequest<{ ok: true }>(`/api/admin/user-notes/${encodeURIComponent(noteId)}`, {
+    method: "DELETE",
+    token
+  });
 }
 
 export async function updateAdminNotice(token: string, notice: Notice): Promise<Notice> {
@@ -170,11 +198,11 @@ export async function updateRegistrationEnabled(token: string, enabled: boolean)
   });
 }
 
-export async function requestUserDeletion(token: string, userId: string, reason: string, targetPasswordVerifier?: string): Promise<AdminUser> {
+export async function requestUserDeletion(token: string, userId: string, reason: string): Promise<AdminUser> {
   return apiRequest<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/delete-request`, {
     method: "POST",
     token,
-    body: JSON.stringify({ reason, targetPasswordVerifier })
+    body: JSON.stringify({ reason })
   });
 }
 

@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Bell, Bot, CheckCircle2, Database, KeyRound, Lock, MessageSquare, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Trash2, Users } from "lucide-react";
+import { AlertTriangle, Bell, Bot, CheckCircle2, Database, KeyRound, Lock, MessageSquare, Pencil, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { AdminSummary, AdminUser, AiProviderConfig, AiProviderInput, AiProviderKind, FeedbackStatus, Notice, NoticeRecord, TeacherProfile, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
+import type { AdminSummary, AdminUser, AdminUserNote, AiProviderConfig, AiProviderInput, AiProviderKind, FeedbackStatus, Notice, NoticeRecord, TeacherProfile, TeacherVault, UserFeedback, UserStatus } from "@/shared/types";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { MetricCard } from "@/frontend/components/MetricCard";
 import { StorageManagementCard } from "@/frontend/components/StorageManagementCard";
@@ -16,6 +16,8 @@ import {
   confirmUserDeletion,
   createAdminNotice,
   createAiProvider,
+  createAdminUserNote,
+  deleteAdminUserNote,
   deleteAiProvider,
   getAdminFeedback,
   getAdminNotices,
@@ -27,6 +29,7 @@ import {
   runDueDeletions,
   testAiProvider,
   updateAiProvider,
+  updateAdminUserNote,
   updateAdminFeedback,
   updateAdminNoticeRecord,
   updateRegistrationEnabled
@@ -182,11 +185,16 @@ export function AdminView({
   const [adminSection, setAdminSection] = useState<AdminSection>("settings");
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [deleteReasons, setDeleteReasons] = useState<Record<string, string>>({});
-  const [deletePasswords, setDeletePasswords] = useState<Record<string, string>>({});
   const [confirmingDeleteUser, setConfirmingDeleteUser] = useState<AdminUser | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmError, setConfirmError] = useState("");
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [notesUser, setNotesUser] = useState<AdminUser | null>(null);
+  const [noteName, setNoteName] = useState("");
+  const [noteContent, setNoteContent] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteError, setNoteError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
@@ -519,52 +527,33 @@ export function AdminView({
     }
   }
 
-  async function submitVerifiedDeleteRequest(user: AdminUser) {
-    const targetPassword = deletePasswords[user.id] ?? "";
-    if (!targetPassword) {
-      setMessage(`请先输入账号「${user.username}」的登录密码。`);
-      return;
-    }
-
+  async function submitDeleteRequest(user: AdminUser) {
     setBusy(true);
     setMessage("");
     try {
-      const lookup = await lookupPasswordSalt(user.username);
-      const targetPasswordVerifier = await derivePasswordVerifier(targetPassword, lookup.passwordSalt);
-      const updated = await requestUserDeletion(token, user.id, deleteReasons[user.id] ?? "", targetPasswordVerifier);
+      const updated = await requestUserDeletion(token, user.id, deleteReasons[user.id] ?? "");
       setUsers((current) => current.map((currentUser) => (currentUser.id === updated.id ? updated : currentUser)));
       setDeleteReasons((current) => {
         const next = { ...current };
         delete next[user.id];
         return next;
       });
-      setDeletePasswords((current) => {
-        const next = { ...current };
-        delete next[user.id];
-        return next;
-      });
       await refresh();
-      setMessage(`账号「${user.username}」已通过密码验证并进入删除计划。`);
+      setMessage(`账号「${user.username}」已发起删除申请，请输入当前管理员密码完成二次确认。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "删除申请验证失败。");
+      setMessage(error instanceof Error ? error.message : "删除申请提交失败。");
     } finally {
       setBusy(false);
     }
   }
 
-  function askVerifiedDeleteRequest(user: AdminUser) {
-    const targetPassword = deletePasswords[user.id] ?? "";
-    if (!targetPassword) {
-      setMessage(`请先输入账号「${user.username}」的登录密码。`);
-      return;
-    }
-
+  function askDeleteRequest(user: AdminUser) {
     confirm({
-      title: `验证删除账号「${user.username}」？`,
-      description: "验证通过后账号会进入删除计划。到期执行前仍可在用户列表撤销。",
-      confirmLabel: "验证删除",
+      title: `发起删除账号「${user.username}」？`,
+      description: "不会立即删除账号。发起申请后，可撤销；输入当前管理员密码完成二次确认后，才开始 10 天删除倒计时。",
+      confirmLabel: "发起申请",
       tone: "danger",
-      onConfirm: () => void submitVerifiedDeleteRequest(user)
+      onConfirm: () => void submitDeleteRequest(user)
     });
   }
 
@@ -601,11 +590,99 @@ export function AdminView({
       setConfirmingDeleteUser(null);
       setConfirmPassword("");
       await refresh();
+      setMessage(`账号「${confirmingDeleteUser.username}」已进入 10 天删除计划。`);
     } catch (error) {
       setConfirmError(error instanceof Error ? error.message : "删除确认失败。");
     } finally {
       setConfirmBusy(false);
       setBusy(false);
+    }
+  }
+
+  function openUserNotes(user: AdminUser) {
+    setNotesUser(user);
+    setNoteName("");
+    setNoteContent("");
+    setEditingNoteId(null);
+    setNoteError("");
+  }
+
+  function closeUserNotes() {
+    if (noteBusy) return;
+    setNotesUser(null);
+    setNoteName("");
+    setNoteContent("");
+    setEditingNoteId(null);
+    setNoteError("");
+  }
+
+  function editUserNote(note: AdminUserNote) {
+    setEditingNoteId(note.id);
+    setNoteName(note.name);
+    setNoteContent(note.content);
+    setNoteError("");
+  }
+
+  async function saveUserNote() {
+    if (!notesUser) return;
+    if (!noteName.trim() || !noteContent.trim()) {
+      setNoteError("请填写备注名称和备注信息。");
+      return;
+    }
+    setNoteBusy(true);
+    setNoteError("");
+    try {
+      const saved = editingNoteId
+        ? await updateAdminUserNote(token, editingNoteId, noteName, noteContent)
+        : await createAdminUserNote(token, notesUser.id, noteName, noteContent);
+      setUsers((current) => current.map((user) => user.id === notesUser.id
+        ? { ...user, notes: editingNoteId ? user.notes.map((note) => note.id === saved.id ? saved : note) : [saved, ...user.notes] }
+        : user));
+      setNotesUser((current) => current ? {
+        ...current,
+        notes: editingNoteId ? current.notes.map((note) => note.id === saved.id ? saved : note) : [saved, ...current.notes]
+      } : current);
+      setNoteName("");
+      setNoteContent("");
+      setEditingNoteId(null);
+      setMessage(editingNoteId ? "用户备注已更新。" : "用户备注已添加。");
+    } catch (error) {
+      setNoteError(error instanceof Error ? error.message : "用户备注保存失败。");
+    } finally {
+      setNoteBusy(false);
+    }
+  }
+
+  function askDeleteUserNote(note: AdminUserNote) {
+    confirm({
+      title: `删除备注「${note.name}」？`,
+      description: "删除后这条管理员备注将无法恢复。",
+      confirmLabel: "删除备注",
+      tone: "danger",
+      onConfirm: () => void removeUserNote(note)
+    });
+  }
+
+  async function removeUserNote(note: AdminUserNote) {
+    if (!notesUser) return;
+    setNoteBusy(true);
+    setNoteError("");
+    try {
+      await deleteAdminUserNote(token, note.id);
+      setUsers((current) => current.map((user) => user.id === notesUser.id
+        ? { ...user, notes: user.notes.filter((item) => item.id !== note.id) }
+        : user));
+      setNotesUser((current) => current ? { ...current, notes: current.notes.filter((item) => item.id !== note.id) } : current);
+      if (editingNoteId === note.id) {
+        setEditingNoteId(null);
+        setNoteName("");
+        setNoteContent("");
+      }
+      setMessage("用户备注已删除。");
+    } catch (error) {
+      setNoteError(error instanceof Error ? error.message : "用户备注删除失败。");
+    } finally {
+      setNoteBusy(false);
     }
   }
 
@@ -1264,6 +1341,7 @@ export function AdminView({
                   <th className="px-3 py-2">状态</th>
                   <th className="px-3 py-2">最近登录</th>
                   <th className="px-3 py-2">删除计划</th>
+                  <th className="px-3 py-2">管理员备注</th>
                   <th className="px-3 py-2">操作</th>
                 </tr>
               </thead>
@@ -1285,7 +1363,7 @@ export function AdminView({
                     <td className="px-3 py-3 text-[#475569]">
                       {user.deletion ? (
                         <div className="space-y-1">
-                          <div>{formatAppDateTime(user.deletion.scheduledAt)}</div>
+                          <div>{user.deletion.scheduledAt ? formatAppDateTime(user.deletion.scheduledAt) : "等待二次确认"}</div>
                           {user.deletion.noticeCount > 0 && !user.deletion.cancelledAt && (
                             <div className="text-xs font-semibold text-[#9a3412]">
                               已提醒 {user.deletion.noticeCount} 次
@@ -1294,66 +1372,71 @@ export function AdminView({
                         </div>
                       ) : "无"}
                     </td>
+                    <td className="px-3 py-3 text-[#475569]">
+                      {user.notes.length > 0 ? (
+                        <div className="max-w-[220px] space-y-1">
+                          {user.notes.slice(0, 2).map((note) => (
+                            <div key={note.id} className="truncate" title={`${note.name}：${note.content}`}>
+                              <span className="font-extrabold text-[#25324a]">{note.name}</span>：{note.content}
+                            </div>
+                          ))}
+                          {user.notes.length > 2 && <div className="text-xs font-semibold text-[#64748b]">还有 {user.notes.length - 2} 条</div>}
+                        </div>
+                      ) : <span className="text-[#94a3b8]">暂无</span>}
+                    </td>
                     <td className="rounded-r-[12px] px-3 py-3">
-                      {user.status === "active" && (
-                        <div className="flex w-[300px] max-w-full flex-col gap-2 2xl:w-[380px] 2xl:flex-row 2xl:items-center">
+                      <div className="flex w-[300px] max-w-full flex-col gap-2 2xl:w-[440px] 2xl:flex-row 2xl:items-center">
+                        <Button size="sm" variant="outline" disabled={busy} onClick={() => openUserNotes(user)}>
+                          <MessageSquare size={14} /> 备注{user.notes.length > 0 ? ` (${user.notes.length})` : ""}
+                        </Button>
+                        {user.status === "active" && (
                           <Input
                             value={deleteReasons[user.id] ?? ""}
                             onChange={(event) =>
                               setDeleteReasons((current) => ({ ...current, [user.id]: event.target.value }))
                             }
                             placeholder="删除原因"
-                            className="h-9 min-w-0 2xl:w-[126px] 2xl:flex-none"
+                            className="h-9 min-w-0 2xl:w-[180px] 2xl:flex-none"
                           />
-                          <Input
-                            type="password"
-                            value={deletePasswords[user.id] ?? ""}
-                            onChange={(event) =>
-                              setDeletePasswords((current) => ({ ...current, [user.id]: event.target.value }))
-                            }
-                            placeholder="被删除账号密码"
-                            autoComplete="new-password"
-                            className="h-9 min-w-0 2xl:w-[142px] 2xl:flex-none"
-                          />
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={busy}
-                            className="shrink-0"
-                            onClick={() => askVerifiedDeleteRequest(user)}
-                          >
-                            <Trash2 size={14} /> 验证删除
-                          </Button>
-                        </div>
-                      )}
-                      {(user.status === "delete_requested" || user.status === "delete_scheduled") && (
-                        <div className="flex flex-wrap gap-2">
-                          {user.status === "delete_requested" && (
+                        )}
+                        {user.status === "active" && <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={busy}
+                          className="shrink-0"
+                          onClick={() => askDeleteRequest(user)}
+                        >
+                          <Trash2 size={14} /> 申请删除
+                        </Button>}
+                        {(user.status === "delete_requested" || user.status === "delete_scheduled") && (
+                          <div className="flex flex-wrap gap-2">
+                            {user.status === "delete_requested" && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={busy}
+                                onClick={() => openDeleteConfirm(user)}
+                              >
+                                二次确认
+                              </Button>
+                            )}
                             <Button
                               size="sm"
-                              variant="destructive"
+                              variant="outline"
                               disabled={busy}
-                              onClick={() => openDeleteConfirm(user)}
+                              onClick={() => updateUser(cancelUserDeletion(token, user.id))}
                             >
-                              二次确认
+                              撤销
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() => updateUser(cancelUserDeletion(token, user.id))}
-                          >
-                            撤销
-                          </Button>
-                        </div>
-                      )}
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="rounded-[14px] bg-[#f8fbff] px-4 py-8 text-center font-semibold text-[#64748b]">
+                    <td colSpan={7} className="rounded-[14px] bg-[#f8fbff] px-4 py-8 text-center font-semibold text-[#64748b]">
                       暂无用户
                     </td>
                   </tr>
@@ -1410,6 +1493,61 @@ export function AdminView({
                 <Button type="button" variant="destructive" disabled={confirmBusy} onClick={submitDeleteConfirm}>
                   <Trash2 size={15} /> 确认删除
                 </Button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {notesUser && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#061226]/40 p-4 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            className="w-full max-w-[620px] overflow-hidden rounded-[20px] border border-[#dbe4ef] bg-white shadow-[0_30px_80px_rgba(6,18,38,0.24)]"
+          >
+            <div className="border-b border-[#e8eef6] bg-[#f8fbff] p-5">
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
+                <MessageSquare size={14} /> 管理员备注
+              </div>
+              <div className="text-xl font-extrabold text-[#061226]">账号「{notesUser.username}」</div>
+              <div className="mt-2 text-sm font-semibold leading-6 text-[#64748b]">仅管理员可见，用于记录联系方式、跟进状态或其他账号信息。</div>
+            </div>
+            <div className="space-y-4 p-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_minmax(0,1fr)_auto]">
+                <Input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="备注名称，如：联系方式" disabled={noteBusy} />
+                <Textarea value={noteContent} onChange={(event) => setNoteContent(event.target.value)} placeholder="备注信息" rows={2} disabled={noteBusy} className="min-h-[42px]" />
+                <Button type="button" disabled={noteBusy} onClick={() => void saveUserNote()}>
+                  {editingNoteId ? <Pencil size={14} /> : <Plus size={14} />} {editingNoteId ? "保存" : "添加"}
+                </Button>
+              </div>
+              {noteError && <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">{noteError}</div>}
+              <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
+                {notesUser.notes.map((note) => (
+                  <div key={note.id} className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-extrabold text-[#061226]">{note.name}</div>
+                        <div className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#25324a]">{note.content}</div>
+                        <div className="mt-2 text-xs font-semibold text-[#94a3b8]">更新于 {formatAppDateTime(note.updatedAt)}</div>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <Button type="button" size="sm" variant="outline" disabled={noteBusy} onClick={() => editUserNote(note)} aria-label={`编辑备注 ${note.name}`} title="编辑备注"><Pencil size={14} /></Button>
+                        <Button type="button" size="sm" variant="destructive" disabled={noteBusy} onClick={() => askDeleteUserNote(note)} aria-label={`删除备注 ${note.name}`} title="删除备注"><Trash2 size={14} /></Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {notesUser.notes.length === 0 && <div className="rounded-[12px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-6 text-center text-sm font-semibold text-[#64748b]">还没有管理员备注。</div>}
+              </div>
+              <div className="flex justify-end border-t border-[#e8eef6] pt-4">
+                <Button type="button" variant="outline" disabled={noteBusy} onClick={closeUserNotes}>关闭</Button>
               </div>
             </div>
           </motion.div>

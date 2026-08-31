@@ -1906,7 +1906,9 @@ export function App() {
               <div className="min-w-0">
                 <div className="font-extrabold">账号删除申请待处理</div>
                 <div className="mt-1 text-sm font-semibold leading-6">
-                  删除计划时间：{formatAppDateTime(deletion.scheduledAt)}。在此之前可撤销申请。
+                  {deletion.scheduledAt
+                    ? `删除计划时间：${formatAppDateTime(deletion.scheduledAt)}。在此之前可撤销申请。`
+                    : "管理员已发起删除申请，正在等待二次确认。在此之前可撤销申请。"}
                 </div>
               </div>
             </div>

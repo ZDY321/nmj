@@ -647,7 +647,7 @@ export type UserDeletionState = {
   requestedBy: string | null;
   noticeCount: number;
   secondConfirmedAt: string | null;
-  scheduledAt: string;
+  scheduledAt: string | null;
   cancelledAt: string | null;
   reason: string | null;
 };
@@ -666,6 +666,18 @@ export type AdminUser = {
   updatedAt: string;
   lastLoginAt: string | null;
   deletion: UserDeletionState | null;
+  notes: AdminUserNote[];
+};
+
+export type AdminUserNote = {
+  id: string;
+  userId: string;
+  name: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  updatedBy: string | null;
 };
 
 export type AdminSummary = {

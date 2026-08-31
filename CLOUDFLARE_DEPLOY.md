@@ -197,6 +197,10 @@ database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 migrations/0001_initial.sql
 migrations/0002_cloud_multi_user.sql
 migrations/0003_user_feedback.sql
+migrations/0004_ai_provider_configs.sql
+migrations/0005_ai_provider_latency.sql
+migrations/0006_ai_usage_daily_index.sql
+migrations/0007_admin_user_notes.sql
 ```
 
 新数据库按顺序执行：
@@ -205,6 +209,10 @@ migrations/0003_user_feedback.sql
 npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0001_initial.sql
 npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0002_cloud_multi_user.sql
 npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0003_user_feedback.sql
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0004_ai_provider_configs.sql
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0005_ai_provider_latency.sql
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0006_ai_usage_daily_index.sql
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0007_admin_user_notes.sql
 ```
 
 这会创建：
@@ -216,6 +224,9 @@ app_settings
 user_sessions
 user_deletion_events
 user_feedback
+ai_provider_configs
+ai_usage_logs
+admin_user_notes
 ```
 
 同时会写入默认设置：
@@ -234,9 +245,10 @@ registration_enabled = true
 如果线上库已经执行过旧迁移，只需要按缺失的文件继续补执行，例如：
 
 ```bash
-npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0002_cloud_multi_user.sql
-npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0003_user_feedback.sql
+npx wrangler d1 execute teacher_salary_tracker --remote --file=./migrations/0007_admin_user_notes.sql
 ```
+
+上面的示例适用于 `0001` 至 `0006` 已经执行完成的数据库；如果中间迁移尚未执行，请先按编号顺序补齐。
 
 ## 7. 设置后台 API Secret
 

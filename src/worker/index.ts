@@ -7,6 +7,7 @@ import type {
   AiScheduleDraftResponse,
   AdminSummary,
   AdminUser,
+  AdminUserNote,
   FeedbackStatus,
   Notice,
   NoticeRecord,
@@ -153,6 +154,17 @@ type FeedbackRow = {
   handled_by: string | null;
 };
 
+type AdminUserNoteRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
 const jsonHeaders = {
   "content-type": "application/json; charset=utf-8"
 };
@@ -265,7 +277,10 @@ function daysFromNow(days: number): string {
 }
 
 function deletionState(row: UserRow): UserDeletionState | null {
-  if (!row.delete_requested_at || row.status === "deleted") {
+  if (
+    !row.delete_requested_at ||
+    (row.status !== "delete_requested" && row.status !== "delete_scheduled")
+  ) {
     return null;
   }
 
@@ -274,7 +289,7 @@ function deletionState(row: UserRow): UserDeletionState | null {
     requestedBy: row.delete_requested_by,
     noticeCount: row.delete_notice_count ?? 0,
     secondConfirmedAt: row.delete_second_confirmed_at,
-    scheduledAt: row.delete_scheduled_at ?? daysFrom(row.delete_requested_at, deletionGraceDays),
+    scheduledAt: row.status === "delete_scheduled" ? row.delete_scheduled_at : null,
     cancelledAt: row.delete_cancelled_at,
     reason: row.delete_reason
   };
@@ -297,7 +312,7 @@ function sessionUser(row: UserRow): SessionUser {
   };
 }
 
-function adminUser(row: UserRow): AdminUser {
+function adminUser(row: UserRow, notes: AdminUserNote[] = []): AdminUser {
   return {
     id: row.id,
     username: row.username,
@@ -306,7 +321,21 @@ function adminUser(row: UserRow): AdminUser {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastLoginAt: row.last_login_at,
-    deletion: deletionState(row)
+    deletion: deletionState(row),
+    notes
+  };
+}
+
+function adminUserNote(row: AdminUserNoteRow): AdminUserNote {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    content: row.content,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by
   };
 }
 
@@ -382,7 +411,7 @@ function isMigrationError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return /no such table: user_sessions|no such table: user_deletion_events|no such table: user_feedback|no such table: ai_provider_configs|no such table: ai_usage_logs|no such column: .*delete_|no such column: deleted_at|no such column: last_latency_ms/i.test(
+  return /no such table: user_sessions|no such table: user_deletion_events|no such table: user_feedback|no such table: admin_user_notes|no such table: ai_provider_configs|no such table: ai_usage_logs|no such column: .*delete_|no such column: deleted_at|no such column: last_latency_ms/i.test(
     error.message
   );
 }
@@ -778,7 +807,77 @@ async function listUsers(env: Env): Promise<Response> {
      ORDER BY created_at DESC`
   ).all<UserRow>();
 
-  return json((result.results ?? []).map(adminUser));
+  const notesResult = await env.DB.prepare(
+    `SELECT id, user_id, name, content, created_at, updated_at, created_by, updated_by
+     FROM admin_user_notes
+     ORDER BY updated_at DESC`
+  ).all<AdminUserNoteRow>();
+  const notesByUser = new Map<string, AdminUserNote[]>();
+  for (const row of notesResult.results ?? []) {
+    const notes = notesByUser.get(row.user_id) ?? [];
+    notes.push(adminUserNote(row));
+    notesByUser.set(row.user_id, notes);
+  }
+
+  return json((result.results ?? []).map((row) => adminUser(row, notesByUser.get(row.id) ?? [])));
+}
+
+async function listUserNotes(env: Env): Promise<Response> {
+  const result = await env.DB.prepare(
+    `SELECT id, user_id, name, content, created_at, updated_at, created_by, updated_by
+     FROM admin_user_notes
+     ORDER BY updated_at DESC`
+  ).all<AdminUserNoteRow>();
+  return json((result.results ?? []).map(adminUserNote));
+}
+
+type AdminUserNoteRequest = { name?: unknown; content?: unknown };
+
+function readAdminUserNote(body: AdminUserNoteRequest): { name: string; content: string } {
+  return {
+    name: String(body.name ?? "").trim().slice(0, 120),
+    content: String(body.content ?? "").trim().slice(0, 4000)
+  };
+}
+
+async function createUserNote(request: Request, env: Env, actor: AuthContext, userId: string): Promise<Response> {
+  const target = await getUserById(env, userId);
+  if (!target || target.status === "deleted") return notFound();
+  const body = await readJson<AdminUserNoteRequest>(request).catch((): AdminUserNoteRequest => ({}));
+  const { name, content } = readAdminUserNote(body);
+  if (!name || !content) return json({ error: "User note fields required" }, 400);
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO admin_user_notes (id, user_id, name, content, created_at, updated_at, created_by, updated_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, userId, name, content, now, now, actor.user.id, actor.user.id).run();
+  const created = await env.DB.prepare(
+    `SELECT id, user_id, name, content, created_at, updated_at, created_by, updated_by
+     FROM admin_user_notes WHERE id = ?`
+  ).bind(id).first<AdminUserNoteRow>();
+  return created ? json(adminUserNote(created), 201) : notFound();
+}
+
+async function updateUserNote(request: Request, env: Env, actor: AuthContext, noteId: string): Promise<Response> {
+  const body = await readJson<AdminUserNoteRequest>(request).catch((): AdminUserNoteRequest => ({}));
+  const { name, content } = readAdminUserNote(body);
+  if (!name || !content) return json({ error: "User note fields required" }, 400);
+  const now = new Date().toISOString();
+  const result = await env.DB.prepare(
+    `UPDATE admin_user_notes SET name = ?, content = ?, updated_at = ?, updated_by = ? WHERE id = ?`
+  ).bind(name, content, now, actor.user.id, noteId).run();
+  if (!result.meta.changes) return notFound();
+  const updated = await env.DB.prepare(
+    `SELECT id, user_id, name, content, created_at, updated_at, created_by, updated_by
+     FROM admin_user_notes WHERE id = ?`
+  ).bind(noteId).first<AdminUserNoteRow>();
+  return updated ? json(adminUserNote(updated)) : notFound();
+}
+
+async function deleteUserNote(env: Env, _actor: AuthContext, noteId: string): Promise<Response> {
+  const result = await env.DB.prepare("DELETE FROM admin_user_notes WHERE id = ?").bind(noteId).run();
+  return result.meta.changes ? json({ ok: true }) : notFound();
 }
 
 async function authLookup(request: Request, env: Env): Promise<Response> {
@@ -2005,9 +2104,7 @@ async function upsertEncryptedPayload(
 }
 
 async function requestDeleteUser(request: Request, env: Env, actor: AuthContext, targetUserId: string): Promise<Response> {
-  const body = await readJson<{ reason?: unknown; targetPasswordVerifier?: unknown }>(request).catch(
-    (): { reason?: unknown; targetPasswordVerifier?: unknown } => ({ reason: "" })
-  );
+  const body = await readJson<{ reason?: unknown }>(request).catch((): { reason?: unknown } => ({ reason: "" }));
   const target = await getUserById(env, targetUserId);
   if (!target || target.status === "deleted") {
     return notFound();
@@ -2017,14 +2114,7 @@ async function requestDeleteUser(request: Request, env: Env, actor: AuthContext,
   }
 
   const now = new Date().toISOString();
-  const scheduledAt = daysFrom(now, deletionGraceDays);
   const reason = String(body.reason ?? "").slice(0, 500);
-  const targetPasswordVerifier = typeof body.targetPasswordVerifier === "string" ? body.targetPasswordVerifier : "";
-  const targetPasswordConfirmed = Boolean(targetPasswordVerifier);
-
-  if (targetPasswordConfirmed && targetPasswordVerifier !== target.password_verifier) {
-    return json({ error: "Target password confirmation failed" }, 401);
-  }
 
   await env.DB.prepare(
     `UPDATE users SET
@@ -2038,13 +2128,13 @@ async function requestDeleteUser(request: Request, env: Env, actor: AuthContext,
       delete_reason = ?,
       updated_at = ?
      WHERE id = ?`
-  )
+    )
     .bind(
-      targetPasswordConfirmed ? "delete_scheduled" : "delete_requested",
+      "delete_requested",
       now,
       actor.user.id,
-      targetPasswordConfirmed ? now : null,
-      scheduledAt,
+      null,
+      null,
       reason,
       now,
       targetUserId
@@ -2052,9 +2142,6 @@ async function requestDeleteUser(request: Request, env: Env, actor: AuthContext,
     .run();
 
   await addDeletionEvent(env, targetUserId, actor.user.id, "request", reason);
-  if (targetPasswordConfirmed) {
-    await addDeletionEvent(env, targetUserId, actor.user.id, "confirm", null);
-  }
   const updated = await getUserById(env, targetUserId);
   return json(adminUser(updated!));
 }
@@ -2073,7 +2160,7 @@ async function confirmDeleteUser(request: Request, env: Env, actor: AuthContext,
   if (!target || target.status === "deleted") {
     return notFound();
   }
-  if (target.status !== "delete_requested" && target.status !== "delete_scheduled") {
+  if (target.status !== "delete_requested") {
     return json({ error: "Deletion has not been requested" }, 400);
   }
 
@@ -2082,7 +2169,7 @@ async function confirmDeleteUser(request: Request, env: Env, actor: AuthContext,
     `UPDATE users SET
       status = 'delete_scheduled',
       delete_second_confirmed_at = ?,
-      delete_scheduled_at = COALESCE(delete_scheduled_at, ?),
+      delete_scheduled_at = ?,
       updated_at = ?
      WHERE id = ?`
   )
@@ -2148,7 +2235,7 @@ async function runDueDeletions(env: Env): Promise<Response> {
       delete_reason,
       deleted_at
      FROM users
-     WHERE status IN ('delete_requested', 'delete_scheduled')
+     WHERE status = 'delete_scheduled'
        AND delete_scheduled_at IS NOT NULL
        AND delete_scheduled_at <= ?`
   )
@@ -2166,6 +2253,7 @@ async function runDueDeletions(env: Env): Promise<Response> {
 async function deleteUserData(env: Env, userId: string, action: string): Promise<void> {
   const now = new Date().toISOString();
   await env.DB.prepare("DELETE FROM encrypted_documents WHERE user_id = ?").bind(userId).run();
+  await env.DB.prepare("DELETE FROM admin_user_notes WHERE user_id = ?").bind(userId).run();
   await env.DB.prepare("DELETE FROM user_sessions WHERE user_id = ?").bind(userId).run();
   await env.DB.prepare(
     `UPDATE users SET
@@ -2214,6 +2302,10 @@ const apiRouteHandlers = {
   runDueDeletions,
   adminSummary,
   listUsers,
+  listUserNotes,
+  createUserNote,
+  updateUserNote,
+  deleteUserNote,
   listLoginNotices,
   createLoginNotice,
   updateLoginNoticeRecord,
