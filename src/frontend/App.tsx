@@ -21,7 +21,6 @@ import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { OnboardingGuide } from "@/frontend/components/OnboardingGuide";
 import { Sidebar } from "@/frontend/components/Sidebar";
-import { CursorEffects } from "@/frontend/components/CursorEffects";
 import { applyAiScheduleDraftToVault } from "@/frontend/lib/aiScheduleDraftApply";
 import { currentAppHour, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, isClassBillingCourseType, todayIso } from "@/frontend/lib/calculations";
 import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
@@ -1666,9 +1665,7 @@ export function App() {
   }
 
   return (
-    <>
-      <CursorEffects enabled={vault.profile.cursorEffectsEnabled !== false} />
-      <div className="dashboard-shell flex min-h-screen">
+    <div className="dashboard-shell flex min-h-screen">
       {dialog}
       <Sidebar
         view={view}
@@ -2216,8 +2213,7 @@ export function App() {
         </div>
         </div>
       </main>
-      </div>
-    </>
+    </div>
   );
 }
 

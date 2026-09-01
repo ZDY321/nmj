@@ -53,21 +53,6 @@ export function TeacherProfilePanel({
             <label className="text-sm font-medium">显示姓名</label>
             <Input value={vault.profile.displayName} onChange={(event) => onUpdateProfile({ displayName: event.target.value })} />
           </div>
-          <div className="space-y-2 lg:col-span-2">
-            <label className="text-sm font-medium">鼠标交互效果</label>
-            <label className="flex min-h-11 cursor-pointer items-center justify-between gap-4 rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2.5">
-              <span className="min-w-0 text-sm font-semibold leading-5 text-[#475569]">
-                桌面端启用自定义光标、移动拖尾和点击粒子效果；手机和平板会自动忽略。
-              </span>
-              <input
-                type="checkbox"
-                checked={vault.profile.cursorEffectsEnabled !== false}
-                onChange={(event) => onUpdateProfile({ cursorEffectsEnabled: event.target.checked })}
-                className="h-5 w-5 shrink-0 accent-[#ff8617]"
-                aria-label="启用桌面端鼠标交互效果"
-              />
-            </label>
-          </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">所在校区</label>
             <Select value={vault.profile.homeCampusId ?? ""} onChange={(event) => onUpdateHomeCampus(event.target.value)}>

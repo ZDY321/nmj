@@ -368,8 +368,6 @@ export type TeacherProfile = {
   displayName: string;
   baseSalary: number;
   currency: "CNY";
-  /** Enable the desktop-only custom cursor and click feedback layer. */
-  cursorEffectsEnabled?: boolean;
   defaultSalaryGradeId?: SalaryGradeId;
   salaryGradeRules?: SalaryGradeRuleConfig[];
   phone?: string;
