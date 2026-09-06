@@ -34,6 +34,10 @@ type NewCourseFormPanelProps = {
   feeModeValue: (rule: FeeRule) => CourseFeeMode;
   firstCourseStudentGrade: (studentIds: string[]) => string | undefined;
   newCourseStudentSearch: string;
+  newCourseStudentGradeFilter: string;
+  newCourseStudentCampusFilter: string;
+  gradeFilterOptions: string[];
+  hasUnsetGradeFilterOption: boolean;
   onChangeCourseCampus: (campusId: string) => void;
   onChangeCourseFeeMode: (mode: CourseFeeMode) => void;
   onChangeCourseSalaryGrade: (salaryGradeId: string) => void;
@@ -50,6 +54,8 @@ type NewCourseFormPanelProps = {
   setCourseStatusInput: Dispatch<SetStateAction<CourseGroup["status"]>>;
   setCourseSubjectInput: Dispatch<SetStateAction<string>>;
   setNewCourseStudentSearch: Dispatch<SetStateAction<string>>;
+  setNewCourseStudentGradeFilter: Dispatch<SetStateAction<string>>;
+  setNewCourseStudentCampusFilter: Dispatch<SetStateAction<string>>;
   subjectOptions: string[];
   suggestedCourseName: string;
   supportsSalaryGradeFee: (type: CourseType) => boolean;
@@ -73,6 +79,10 @@ export function NewCourseFormPanel({
   feeModeValue,
   firstCourseStudentGrade,
   newCourseStudentSearch,
+  newCourseStudentGradeFilter,
+  newCourseStudentCampusFilter,
+  gradeFilterOptions,
+  hasUnsetGradeFilterOption,
   onChangeCourseCampus,
   onChangeCourseFeeMode,
   onChangeCourseSalaryGrade,
@@ -89,6 +99,8 @@ export function NewCourseFormPanel({
   setCourseStatusInput,
   setCourseSubjectInput,
   setNewCourseStudentSearch,
+  setNewCourseStudentGradeFilter,
+  setNewCourseStudentCampusFilter,
   subjectOptions,
   suggestedCourseName,
   supportsSalaryGradeFee,
@@ -313,6 +325,17 @@ export function NewCourseFormPanel({
                 placeholder="搜索学生姓名、学科、校区、年级、学校或备注"
               />
             </label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Select value={newCourseStudentGradeFilter} onChange={(event) => setNewCourseStudentGradeFilter(event.target.value)} className="h-10 bg-white">
+                <option value="all">全部年级</option>
+                {hasUnsetGradeFilterOption && <option value="__unset">未设置年级</option>}
+                {gradeFilterOptions.map((grade) => <option key={grade} value={grade}>{grade}</option>)}
+              </Select>
+              <Select value={newCourseStudentCampusFilter} onChange={(event) => setNewCourseStudentCampusFilter(event.target.value)} className="h-10 bg-white">
+                <option value="all">全部校区</option>
+                {campusOptions.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}
+              </Select>
+            </div>
             {courseStudentIds.length > 0 && (
               <div className="max-h-20 overflow-y-auto pr-1">
                 <div className="flex flex-wrap gap-2">
@@ -391,4 +414,3 @@ export function NewCourseFormPanel({
     </Card>
   );
 }
-

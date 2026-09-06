@@ -21,8 +21,7 @@ import { backupFeeRuleForCourseType, billableStudentCapForCourseType, billableSt
 import { builtInCourseTypeOptions, campusName, compareByName, courseHasActiveStudent, courseRequiresSameGradeStudents, courseTypeLabel, courseTypeOptionsForVault, formatPrivateMoney, sortCampusesForProfile, sortCoursesByName, sortStudentsByName, studentLimitForCourseType, studentNames, subjectOptionsForVault } from "@/frontend/lib/helpers";
 import type { CourseTypeMigrationMode, CourseTypeMigrationResult } from "@/frontend/lib/vaultMutations";
 
-const fixedGradeOptions = ["初一", "初二", "初三"];
-const gradeOptions = ["未设置年级", ...fixedGradeOptions, "自定义"];
+const defaultGradeOptions = ["初一", "初二", "初三"];
 type ArchivePanel = "profile" | "salaryRules" | "campuses" | "students" | "courses";
 type StudentStatusFilter = "active" | "transition" | "archived" | "all";
 type CustomCourseTypeTemplate = "class" | "non_class";
@@ -39,6 +38,9 @@ export function StudentsView({
   onDeleteStudent,
   onDeleteStudents,
   onUpdateProfile,
+  onAddGrade,
+  onUpdateGrade,
+  onDeleteGrade,
   onAddCourse,
   onUpdateCourse,
   onUpdateCourses,
@@ -73,6 +75,9 @@ export function StudentsView({
   onDeleteStudent: (studentId: string) => void;
   onDeleteStudents: (studentIds: string[]) => void;
   onUpdateProfile: (profile: TeacherProfile) => void;
+  onAddGrade: (grade: string) => void;
+  onUpdateGrade: (previousGrade: string, nextGrade: string) => void;
+  onDeleteGrade: (grade: string) => void;
   onAddCourse: (course: CourseGroup) => void;
   onUpdateCourse: (course: CourseGroup) => void;
   onUpdateCourses: (courses: CourseGroup[]) => void;
@@ -116,6 +121,8 @@ export function StudentsView({
   ].sort((a, b) => compareByName(a.label, b.label) || a.value.localeCompare(b.value));
   const managedCourseTypes = allManagedCourseTypes.filter((item) => !disabledCourseTypes.has(item.value));
   const preferredCampusId = campusOptions[0]?.id ?? "";
+  const configuredGradeOptions = Array.from(new Set(vault.preferences?.grades?.map((grade) => grade.trim()).filter(Boolean) ?? defaultGradeOptions));
+  const gradeOptions = ["未设置年级", ...configuredGradeOptions, "自定义"];
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
   const [campusNoteInput, setCampusNoteInput] = useState("");
@@ -140,6 +147,10 @@ export function StudentsView({
   const [subjectInput, setSubjectInput] = useState("");
   const [editingSubject, setEditingSubject] = useState("");
   const [editingSubjectInput, setEditingSubjectInput] = useState("");
+  const [gradeInput, setGradeInput] = useState("");
+  const [editingGrade, setEditingGrade] = useState("");
+  const [editingGradeInput, setEditingGradeInput] = useState("");
+  const [gradeMessage, setGradeMessage] = useState("");
   const [subjectMessage, setSubjectMessage] = useState("");
   const [customCourseTypeInput, setCustomCourseTypeInput] = useState("");
   const [customCourseTypeTemplate, setCustomCourseTypeTemplate] = useState<CustomCourseTypeTemplate>("class");
@@ -179,6 +190,8 @@ export function StudentsView({
   const [courseStudentScope, setCourseStudentScope] = useState<"all" | "selected" | "available">("all");
   const [courseStudentGradeFilter, setCourseStudentGradeFilter] = useState("all");
   const [courseStudentCampusFilter, setCourseStudentCampusFilter] = useState("all");
+  const [newCourseStudentGradeFilter, setNewCourseStudentGradeFilter] = useState("all");
+  const [newCourseStudentCampusFilter, setNewCourseStudentCampusFilter] = useState("all");
   const [transferPanelOpen, setTransferPanelOpen] = useState(false);
   const [transferStudentId, setTransferStudentId] = useState(activeStudentOptions[0]?.id ?? "");
   const [transferCourseType, setTransferCourseType] = useState<CourseType>("trial");
@@ -199,13 +212,21 @@ export function StudentsView({
   const normalizedCourseSearch = courseSearch.trim().toLowerCase();
   const gradeFilterOptions = Array.from(new Set(vault.students.map((student) => student.grade).filter(Boolean) as string[]))
     .sort(compareByName);
+  const addCourseGradeFilterOptions = Array.from(new Set(courseSelectableStudentOptions.map((student) => student.grade).filter(Boolean) as string[]))
+    .sort(compareByName);
+  const addCourseHasUnsetGradeFilterOption = courseSelectableStudentOptions.some((student) => !student.grade);
+  const courseGradeFilterOptions = Array.from(new Set(vault.courseGroups.flatMap((course) =>
+    course.studentIds.map((studentId) => vault.students.find((student) => student.id === studentId)?.grade).filter(Boolean) as string[]
+  ))).sort(compareByName);
   const hasStudentsWithoutGrade = vault.students.some((student) => !student.grade);
   const hasUnsetGradeFilterOption = hasStudentsWithoutGrade || vault.courseGroups.some((course) => course.studentIds.length === 0);
   const subjectFilterOptions = subjectOptions;
   const suggestedCourseName = buildSuggestedCourseName(courseType, courseStudentIds);
   const addCourseStudentOptions = courseSelectableStudentOptions.filter((student) => {
     const searchable = studentCourseSearchText(vault, student);
-    return matchesKeywordSearch(searchable, normalizedNewCourseStudentSearch);
+    return matchesKeywordSearch(searchable, normalizedNewCourseStudentSearch) &&
+      matchesGradeFilter(student.grade, newCourseStudentGradeFilter) &&
+      (newCourseStudentCampusFilter === "all" || student.defaultCampusId === newCourseStudentCampusFilter);
   });
   const visibleStudents = vault.students
     .filter((student) => {
@@ -611,6 +632,45 @@ export function StudentsView({
     onAddSubject(subject);
     setSubjectInput("");
     setSubjectMessage("");
+  }
+
+  function addGrade() {
+    const grade = gradeInput.trim();
+    if (!grade) return;
+    if (configuredGradeOptions.some((item) => item === grade)) {
+      setGradeMessage(`已存在年级「${grade}」。`);
+      return;
+    }
+    onAddGrade(grade);
+    setGradeInput("");
+    setGradeMessage("");
+  }
+
+  function startEditGrade(grade: string) {
+    setEditingGrade(grade);
+    setEditingGradeInput(grade);
+    setGradeMessage("");
+  }
+
+  function cancelEditGrade() {
+    setEditingGrade("");
+    setEditingGradeInput("");
+    setGradeMessage("");
+  }
+
+  function saveGrade() {
+    const next = editingGradeInput.trim();
+    if (!editingGrade || !next) return;
+    if (next !== editingGrade && configuredGradeOptions.includes(next)) {
+      setGradeMessage(`已存在年级「${next}」。`);
+      return;
+    }
+    onUpdateGrade(editingGrade, next);
+    cancelEditGrade();
+  }
+
+  function gradeInUse(grade: string): boolean {
+    return vault.students.some((student) => student.grade === grade);
   }
 
   function startEditSubject(subject: string) {
@@ -1380,6 +1440,25 @@ export function StudentsView({
     apply();
   }
 
+  function upgradeSelectedStudents() {
+    const selectedStudents = visibleStudents.filter((student) => selectedStudentIds.includes(student.id));
+    if (selectedStudents.length === 0) return;
+    const gradeIndex = new Map(configuredGradeOptions.map((grade, index) => [grade, index]));
+    const updates: Student[] = selectedStudents
+      .map((student): Student | null => {
+        const index = student.grade ? gradeIndex.get(student.grade) : undefined;
+        if (index === undefined || index >= configuredGradeOptions.length - 1) return null;
+        return { ...student, grade: configuredGradeOptions[index + 1] };
+      })
+      .filter((student): student is Student => student !== null);
+    if (updates.length === 0) {
+      setGradeMessage("选中的学生没有可提升的已配置年级，或已经是最后一个年级。");
+      return;
+    }
+    onUpdateStudents(updates);
+    setSelectedStudentIds((current) => current.filter((id) => !updates.some((student) => student.id === id)));
+  }
+
   function deleteSelectedArchivedStudents() {
     const selectedArchivedStudents = visibleStudents.filter((student) => selectedStudentIds.includes(student.id) && student.status === "paused");
     const deletableStudents = selectedArchivedStudents.filter((student) => !studentInUse(student.id));
@@ -1465,7 +1544,7 @@ export function StudentsView({
   function gradeSelectValue(grade?: string): string {
     if (!grade) return "";
     if (grade === "__custom__") return "自定义";
-    return fixedGradeOptions.includes(grade) ? grade : "自定义";
+    return configuredGradeOptions.includes(grade) ? grade : "自定义";
   }
 
   function toggleCourseStudent(studentId: string) {
@@ -1702,6 +1781,17 @@ export function StudentsView({
             confirm={confirm}
             courseTypeInUse={courseTypeInUse}
             courseTypeMessage={courseTypeMessage}
+            gradeOptions={configuredGradeOptions}
+            gradeInput={gradeInput}
+            editingGrade={editingGrade}
+            editingGradeInput={editingGradeInput}
+            gradeMessage={gradeMessage}
+            gradeInUse={gradeInUse}
+            onAddGrade={addGrade}
+            onStartEditGrade={startEditGrade}
+            onCancelEditGrade={cancelEditGrade}
+            onSaveGrade={saveGrade}
+            onDeleteGrade={onDeleteGrade}
             customCourseTypeBaseFee={customCourseTypeBaseFee}
             customCourseTypeInput={customCourseTypeInput}
             customCourseTypeMinStudents={customCourseTypeMinStudents}
@@ -1741,6 +1831,8 @@ export function StudentsView({
             setCampusNameInput={setCampusNameInput}
             setCampusNoteInput={setCampusNoteInput}
             setCourseTypeMessage={setCourseTypeMessage}
+            setGradeInput={setGradeInput}
+            setEditingGradeInput={setEditingGradeInput}
             setCustomCourseTypeBaseFee={setCustomCourseTypeBaseFee}
             setCustomCourseTypeInput={setCustomCourseTypeInput}
             setCustomCourseTypeMinStudents={setCustomCourseTypeMinStudents}
@@ -1815,6 +1907,7 @@ export function StudentsView({
             onToggleStudentSelection={toggleStudentSelection}
             onToggleVisibleStudentSelection={toggleVisibleStudentSelection}
             onUpdateSelectedStudentsStatus={updateSelectedStudentsStatus}
+            onUpgradeSelectedStudents={upgradeSelectedStudents}
           />
         )}
 
@@ -1837,6 +1930,10 @@ export function StudentsView({
           feeModeValue={feeModeValue}
           firstCourseStudentGrade={firstCourseStudentGrade}
           newCourseStudentSearch={newCourseStudentSearch}
+          newCourseStudentGradeFilter={newCourseStudentGradeFilter}
+          newCourseStudentCampusFilter={newCourseStudentCampusFilter}
+          gradeFilterOptions={addCourseGradeFilterOptions}
+          hasUnsetGradeFilterOption={addCourseHasUnsetGradeFilterOption}
           onChangeCourseCampus={changeNewCourseCampus}
           onChangeCourseFeeMode={changeNewCourseFeeMode}
           onChangeCourseSalaryGrade={changeNewCourseSalaryGrade}
@@ -1853,6 +1950,8 @@ export function StudentsView({
           setCourseStatusInput={setCourseStatusInput}
           setCourseSubjectInput={setCourseSubjectInput}
           setNewCourseStudentSearch={setNewCourseStudentSearch}
+          setNewCourseStudentGradeFilter={setNewCourseStudentGradeFilter}
+          setNewCourseStudentCampusFilter={setNewCourseStudentCampusFilter}
           subjectOptions={subjectOptions}
           suggestedCourseName={suggestedCourseName}
           supportsSalaryGradeFee={supportsSalaryGradeFee}
@@ -1873,8 +1972,8 @@ export function StudentsView({
           courseSubjectFilter={courseSubjectFilter}
           courseTypeFilter={courseTypeFilter}
           courseTypeOptions={courseTypeOptions}
-          gradeFilterOptions={gradeFilterOptions}
-          hasUnsetGradeFilterOption={hasUnsetGradeFilterOption}
+          gradeFilterOptions={courseGradeFilterOptions}
+          hasUnsetGradeFilterOption={vault.courseGroups.some((course) => course.studentIds.length === 0 || course.studentIds.some((studentId) => !vault.students.find((student) => student.id === studentId)?.grade))}
           onDeleteCourse={onDeleteCourse}
           onOpenCourseEditor={openCourseEditor}
           onRequestSyncVisibleCourses={requestSyncVisibleCoursesToLessons}
@@ -1919,8 +2018,10 @@ export function StudentsView({
         courseFeeSummary={courseFeeSummary}
         feeModeValue={feeModeValue}
         firstCourseStudentGrade={firstCourseStudentGrade}
-        gradeFilterOptions={gradeFilterOptions}
-        hasUnsetGradeFilterOption={hasUnsetGradeFilterOption}
+        gradeFilterOptions={editingCourse
+          ? Array.from(new Set(studentOptions.filter((student) => editingCourse.studentIds.includes(student.id) || student.status === "active").map((student) => student.grade).filter(Boolean) as string[])).sort(compareByName)
+          : []}
+        hasUnsetGradeFilterOption={Boolean(editingCourse && studentOptions.some((student) => (editingCourse.studentIds.includes(student.id) || student.status === "active") && !student.grade))}
         onCancel={cancelCourseDraft}
         onChangeCourseType={changeEditingCourseType}
         onChangeFeeMode={changeEditingCourseFeeMode}

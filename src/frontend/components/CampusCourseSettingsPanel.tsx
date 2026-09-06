@@ -53,6 +53,17 @@ type CampusCourseSettingsPanelProps = {
   onAddCampus: (event: FormEvent) => void;
   onAddCustomCourseType: () => void;
   onAddSubject: () => void;
+  gradeOptions: string[];
+  gradeInput: string;
+  editingGrade: string;
+  editingGradeInput: string;
+  gradeMessage: string;
+  gradeInUse: (grade: string) => boolean;
+  onAddGrade: () => void;
+  onStartEditGrade: (grade: string) => void;
+  onCancelEditGrade: () => void;
+  onSaveGrade: () => void;
+  onDeleteGrade: (grade: string) => void;
   onCancelCustomCourseTypeEdit: () => void;
   onCancelEditSubject: () => void;
   onDeleteCampus: (campusId: string) => void;
@@ -87,6 +98,8 @@ type CampusCourseSettingsPanelProps = {
   setEditingSubjectInput: Dispatch<SetStateAction<string>>;
   setSubjectInput: Dispatch<SetStateAction<string>>;
   setSubjectMessage: Dispatch<SetStateAction<string>>;
+  setGradeInput: Dispatch<SetStateAction<string>>;
+  setEditingGradeInput: Dispatch<SetStateAction<string>>;
   subjectInUse: (subject: string) => boolean;
   subjectInput: string;
   subjectMessage: string;
@@ -120,6 +133,17 @@ export function CampusCourseSettingsPanel({
   onAddCampus,
   onAddCustomCourseType,
   onAddSubject,
+  gradeOptions,
+  gradeInput,
+  editingGrade,
+  editingGradeInput,
+  gradeMessage,
+  gradeInUse,
+  onAddGrade,
+  onStartEditGrade,
+  onCancelEditGrade,
+  onSaveGrade,
+  onDeleteGrade,
   onCancelCustomCourseTypeEdit,
   onCancelEditSubject,
   onDeleteCampus,
@@ -154,6 +178,8 @@ export function CampusCourseSettingsPanel({
   setEditingSubjectInput,
   setSubjectInput,
   setSubjectMessage,
+  setGradeInput,
+  setEditingGradeInput,
   subjectInUse,
   subjectInput,
   subjectMessage,
@@ -206,6 +232,40 @@ export function CampusCourseSettingsPanel({
         subjectMessage={subjectMessage}
         subjectOptions={subjectOptions}
       />
+
+      <Card className="h-fit overflow-hidden">
+        <CardHeader className="gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]"><GraduationCap size={14} /> 年级管理</div>
+              <CardTitle className="text-lg">学生年级设置</CardTitle>
+              <CardDescription>这里的顺序用于学生档案选择、筛选和“升一年级”；修改名称会同步已有学生。</CardDescription>
+            </div>
+            <Badge variant="secondary">{gradeOptions.length} 个</Badge>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Input value={gradeInput} onChange={(event) => setGradeInput(event.target.value)} placeholder="新增年级，例如：小一、高一" className="bg-white" />
+            <Button type="button" onClick={onAddGrade} disabled={!gradeInput.trim()}><Plus size={14} /> 添加年级</Button>
+          </div>
+          {gradeMessage && <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">{gradeMessage}</div>}
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {gradeOptions.map((grade) => editingGrade === grade ? (
+            <div key={grade} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <Input value={editingGradeInput} onChange={(event) => setEditingGradeInput(event.target.value)} className="bg-white" />
+              <Button type="button" size="sm" onClick={onSaveGrade} disabled={!editingGradeInput.trim()}><Save size={14} /> 保存</Button>
+              <Button type="button" size="sm" variant="outline" onClick={onCancelEditGrade}><X size={14} /> 取消</Button>
+            </div>
+          ) : (
+            <div key={grade} className="flex items-center gap-3 rounded-[12px] border border-[#dbe4ef] bg-white p-3">
+              <span className="flex-1 text-sm font-extrabold text-[#061226]">{grade}</span>
+              <span className="text-xs font-semibold text-[#64748b]">{gradeInUse(grade) ? "已有学生使用" : "暂无学生使用"}</span>
+              <Button type="button" size="sm" variant="outline" className="h-8 w-8 rounded-[9px] p-0" onClick={() => onStartEditGrade(grade)} title="编辑年级"><Pencil size={13} /></Button>
+              <Button type="button" size="sm" variant="destructive" className="h-8 w-8 rounded-[9px] p-0" disabled={gradeInUse(grade)} onClick={() => onDeleteGrade(grade)} title={gradeInUse(grade) ? "已有学生使用，不能删除" : "删除年级"}><Trash2 size={13} /></Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <Card className="h-fit overflow-hidden">
         <CardHeader className="gap-3">

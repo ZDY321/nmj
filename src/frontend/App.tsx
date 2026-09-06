@@ -532,6 +532,38 @@ export function App() {
     });
   }
 
+  function addGrade(grade: string) {
+    const normalized = grade.trim();
+    if (!normalized) return;
+    updateVault((draft) => {
+      const current = draft.preferences?.grades ?? ["初一", "初二", "初三"];
+      if (current.includes(normalized)) return;
+      draft.preferences = { ...(draft.preferences ?? { weekStartsOn: 0 }), grades: [...current, normalized] };
+    });
+  }
+
+  function updateGrade(previousGrade: string, nextGrade: string) {
+    const previous = previousGrade.trim();
+    const next = nextGrade.trim();
+    if (!previous || !next || previous === next) return;
+    updateVault((draft) => {
+      const current = draft.preferences?.grades ?? ["初一", "初二", "初三"];
+      if (current.some((grade) => grade !== previous && grade === next)) return;
+      draft.preferences = { ...(draft.preferences ?? { weekStartsOn: 0 }), grades: current.map((grade) => grade === previous ? next : grade) };
+      draft.students = draft.students.map((student) => student.grade === previous ? { ...student, grade: next } : student);
+    });
+  }
+
+  function deleteGrade(grade: string) {
+    const normalized = grade.trim();
+    if (!normalized) return;
+    updateVault((draft) => {
+      if (draft.students.some((student) => student.grade === normalized)) return;
+      const current = draft.preferences?.grades ?? ["初一", "初二", "初三"];
+      draft.preferences = { ...(draft.preferences ?? { weekStartsOn: 0 }), grades: current.filter((item) => item !== normalized) };
+    });
+  }
+
   function addLesson(lesson: Lesson) {
     updateVault((draft) => {
       draft.lessons.push(lesson);
@@ -1201,8 +1233,11 @@ export function App() {
     let createdCount = 0;
     let conflictCount = 0;
     updateVault((draft) => {
+      // Check only the timetable that existed before this batch. Newly created
+      // lessons must never be treated as conflicts for the same batch.
+      const existingLessons = [...draft.lessons];
       dates.forEach((date) => {
-        const exists = draft.lessons.some(
+        const exists = existingLessons.some(
           (lesson) =>
             lesson.date === date &&
             lesson.status !== "cancelled" &&
@@ -2138,6 +2173,9 @@ export function App() {
                     onDeleteStudent={deleteStudent}
                     onDeleteStudents={deleteStudents}
                     onUpdateProfile={updateProfile}
+                    onAddGrade={addGrade}
+                    onUpdateGrade={updateGrade}
+                    onDeleteGrade={deleteGrade}
                     onAddCourse={addCourse}
 
                     onUpdateCourse={updateCourse}

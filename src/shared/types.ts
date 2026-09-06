@@ -602,6 +602,8 @@ export type ScheduleImportVaultState = {
 
 export type AppPreferences = {
   weekStartsOn: WeekStart;
+  /** Configurable student grade labels, kept in display order. */
+  grades?: string[];
   customTimePresets?: TimePreset[];
   subjects?: string[];
   customCourseTypes?: CustomCourseTypeOption[];

@@ -1,6 +1,6 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { Archive, FileText, Hourglass, MapPin, Pencil, Plus, RotateCcw, Search, Trash2, UserCheck, Users } from "lucide-react";
+import { Archive, FileText, GraduationCap, Hourglass, MapPin, Pencil, Plus, RotateCcw, Search, Trash2, UserCheck, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +50,7 @@ type StudentArchivePanelProps = {
   onToggleStudentSelection: (studentId: string) => void;
   onToggleVisibleStudentSelection: (checked: boolean) => void;
   onUpdateSelectedStudentsStatus: (status: Student["status"]) => void;
+  onUpgradeSelectedStudents: () => void;
   selectedStudentIds: string[];
   setArchiveSearch: Dispatch<SetStateAction<string>>;
   setBatchStudentText: Dispatch<SetStateAction<string>>;
@@ -107,6 +108,7 @@ export function StudentArchivePanel({
   onToggleStudentSelection,
   onToggleVisibleStudentSelection,
   onUpdateSelectedStudentsStatus,
+  onUpgradeSelectedStudents,
   selectedStudentIds,
   setArchiveSearch,
   setBatchStudentText,
@@ -291,6 +293,7 @@ export function StudentArchivePanel({
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("active")}>设为在读</Button>
             <Button type="button" size="sm" variant="outline" className="h-8 border-[#c7d2fe] bg-[#eef0ff] text-[#5161d6] hover:bg-[#e0e7ff] hover:text-[#4338ca]" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("transition")}>设为过渡期</Button>
+            <Button type="button" size="sm" variant="outline" className="h-8 border-[#bfdbfe] bg-[#eaf2ff] text-[#1557c2] hover:bg-[#dbeafe]" disabled={selectedVisibleCount === 0} onClick={onUpgradeSelectedStudents} title="按年级设置中的顺序提升一年级"><GraduationCap size={14} /> 升一年级</Button>
             <Button type="button" size="sm" variant="destructive" className="h-8" disabled={selectedVisibleCount === 0} onClick={() => onUpdateSelectedStudentsStatus("paused")}>归档</Button>
             <Button
               type="button"
@@ -505,4 +508,3 @@ function studentStatusBadgeVariant(status: Student["status"]): "secondary" | "sa
   if (status === "transition") return "plum";
   return "sage";
 }
-
