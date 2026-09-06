@@ -284,7 +284,7 @@
   overflow-y: auto;
 }
 
-.lesson-feedback-history-list > button {
+.lesson-feedback-history-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px 8px;
@@ -297,42 +297,80 @@
   text-align: left;
 }
 
-.lesson-feedback-history-list > button:hover,
-.lesson-feedback-history-list > button.is-active {
+.lesson-feedback-history-item:hover,
+.lesson-feedback-history-item.is-active {
   border-color: #ff9a3d;
   box-shadow: inset 3px 0 0 #ff8617;
 }
 
-.lesson-feedback-history-list > button span,
-.lesson-feedback-history-list > button strong,
-.lesson-feedback-history-list > button small,
-.lesson-feedback-history-list > button em {
+.lesson-feedback-history-open {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  padding: 0;
+  border: 0;
+  color: #25324a;
+  background: transparent;
+  text-align: left;
+}
+
+.lesson-feedback-history-open:focus-visible,
+.lesson-feedback-history-lesson:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.lesson-feedback-history-open span,
+.lesson-feedback-history-open strong,
+.lesson-feedback-history-open small,
+.lesson-feedback-history-open em {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.lesson-feedback-history-list > button span {
+.lesson-feedback-history-open span {
   display: flex;
   flex-direction: column;
 }
 
-.lesson-feedback-history-list > button strong {
+.lesson-feedback-history-open strong {
   color: #102a43;
   font-size: 12px;
 }
 
-.lesson-feedback-history-list > button small,
-.lesson-feedback-history-list > button time,
-.lesson-feedback-history-list > button em {
+.lesson-feedback-history-open small,
+.lesson-feedback-history-open time,
+.lesson-feedback-history-open em {
   color: #718096;
   font-size: 10px;
   font-style: normal;
 }
 
-.lesson-feedback-history-list > button em {
+.lesson-feedback-history-open em {
   grid-column: 1 / -1;
+}
+
+.lesson-feedback-history-lesson {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+  padding: 0;
+  border: 1px solid #dbe4ef;
+  border-radius: 7px;
+  color: #52667a;
+  background: #f8fbff;
+}
+
+.lesson-feedback-history-lesson:hover {
+  border-color: #93c5fd;
+  color: #1557c2;
+  background: #eff6ff;
 }
 
 .lesson-feedback-history-empty {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, BookOpenCheck, ChevronLeft, ChevronRight, Clock3, Download, FilePlus2, History, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, BookOpenCheck, ChevronLeft, ChevronRight, Clock3, Download, ExternalLink, FilePlus2, History, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -342,6 +342,21 @@ export function LessonFeedbackWorkspace({
     if (activeRecordRef.current?.id === item.id) return;
     if (!(await flushActiveRecord())) return;
     await loadRecord(item.id);
+  }
+
+  async function openHistoryLessonDetails(item: LessonFeedbackIndexItem): Promise<void> {
+    const lesson = item.lessonId ? vault.lessons.find((candidate) => candidate.id === item.lessonId) : undefined;
+    if (!lesson || !onOpenLessonDetails) return;
+    if (!(await flushActiveRecord())) return;
+    if (lessonContentSyncTimerRef.current !== null) {
+      window.clearTimeout(lessonContentSyncTimerRef.current);
+      lessonContentSyncTimerRef.current = null;
+    }
+    const current = activeRecordRef.current;
+    if (current?.lessonId && onUpdateLessonContent) {
+      onUpdateLessonContent(current.lessonId, { taught: current.content, homework: current.homework });
+    }
+    onOpenLessonDetails(lesson);
   }
 
   async function createOrOpenFeedback(): Promise<void> {
@@ -711,6 +726,8 @@ export function LessonFeedbackWorkspace({
             <div className="lesson-feedback-modal-foot">
               <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>取消</Button>
               <Button
+                variant="outline"
+                className="border-[#1557c2] bg-[#1557c2] text-white shadow-[0_10px_18px_rgba(21,87,194,0.18)] hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white"
                 disabled={!selectedCourse || !selectedLessonId}
                 onClick={() => {
                   setCreateDialogOpen(false);
@@ -794,7 +811,13 @@ export function LessonFeedbackWorkspace({
             <Button size="sm" variant="outline" onClick={() => legacyFileInputRef.current?.click()}>
               <Download size={14} /> 导入旧 JSON
             </Button>
-            <Button size="sm" onClick={() => setCreateDialogOpen(true)} disabled={courses.length === 0}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-[#1557c2] bg-[#1557c2] text-white shadow-[0_10px_18px_rgba(21,87,194,0.18)] hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white"
+              onClick={() => setCreateDialogOpen(true)}
+              disabled={courses.length === 0}
+            >
               <FilePlus2 size={15} /> 新建反馈
             </Button>
           </div>
@@ -808,11 +831,27 @@ export function LessonFeedbackWorkspace({
           </label>
           <div className="lesson-feedback-history-list">
             {historyItems.map((item) => (
-              <button type="button" key={item.id} className={activeRecord?.id === item.id ? "is-active" : ""} onClick={() => void openHistoryItem(item)}>
-                <span><strong>{item.className}</strong><small>{item.subject} · {item.periodLabel}</small></span>
-                <time>{item.date}</time>
-                <em>{item.studentNames.join("、") || "未记录学生"}</em>
-              </button>
+              <div key={item.id} className={`lesson-feedback-history-item${activeRecord?.id === item.id ? " is-active" : ""}`}>
+                <button type="button" className="lesson-feedback-history-open" onClick={() => void openHistoryItem(item)}>
+                  <span><strong>{item.className}</strong><small>{item.subject} · {item.periodLabel}</small></span>
+                  <time>{item.date}</time>
+                  <em>{item.studentNames.join("、") || "未记录学生"}</em>
+                </button>
+                {onOpenLessonDetails && item.lessonId && vault.lessons.some((lesson) => lesson.id === item.lessonId) && (
+                  <button
+                    type="button"
+                    className="lesson-feedback-history-lesson"
+                    title="打开课程详情"
+                    aria-label="打开课程详情"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void openHistoryLessonDetails(item);
+                    }}
+                  >
+                    <ExternalLink size={13} />
+                  </button>
+                )}
+              </div>
             ))}
             {saveState === "loading" && <div className="lesson-feedback-history-empty">正在读取加密反馈...</div>}
             {saveState !== "loading" && historyItems.length === 0 && <div className="lesson-feedback-history-empty">暂无符合条件的反馈</div>}

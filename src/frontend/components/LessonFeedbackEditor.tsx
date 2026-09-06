@@ -924,7 +924,13 @@ export function LessonFeedbackEditor({
     <section className="lesson-feedback-editor" aria-label="课后反馈编辑器">
       <div className="lesson-feedback-actionbar">
         <div className="lesson-feedback-actiongroup">
-          <Button type="button" size="sm" onClick={applyExcellentDefaults}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="border-[#86efac] bg-[#f0fdf4] text-[#166534] shadow-none hover:border-[#4ade80] hover:bg-[#dcfce7] hover:text-[#14532d]"
+            onClick={applyExcellentDefaults}
+          >
             <CheckCheck size={15} /> 一键全勤 + 作业 A + 表现 A
           </Button>
           <Button type="button" size="sm" variant="outline" onClick={clearMarks}>清空评分</Button>
