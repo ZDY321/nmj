@@ -31,7 +31,7 @@ import {
   loadEncryptedDocumentWithVersion,
   saveEncryptedDocument
 } from "@/frontend/lib/storage";
-import type { CourseGroup, TeacherVault } from "@/shared/types";
+import type { CourseGroup, Lesson, TeacherVault } from "@/shared/types";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error" | "conflict";
 
@@ -40,13 +40,17 @@ export function LessonFeedbackWorkspace({
   token,
   password,
   focusRequest,
-  syncNonce = 0
+  syncNonce = 0,
+  onUpdateLessonContent,
+  onOpenLessonDetails
 }: {
   vault: TeacherVault;
   token: string;
   password: string;
   focusRequest?: { lessonId: string; nonce: number } | null;
   syncNonce?: number;
+  onUpdateLessonContent?: (lessonId: string, patch: Pick<Lesson["content"], "taught" | "homework">) => void;
+  onOpenLessonDetails?: (lesson: Lesson) => void;
 }) {
   // 课程下拉只列在读课程：口径与课程档案一致（手动结课，或已无在读学生）。
   // 结课课程的历史反馈仍从左侧列表打开，只是不能再新建。
@@ -79,6 +83,7 @@ export function LessonFeedbackWorkspace({
   const activeRecordRef = useRef(activeRecord);
   const recordVersionsRef = useRef(new Map<string, string>());
   const savedSignaturesRef = useRef(new Map<string, string>());
+  const lessonContentSyncTimerRef = useRef<number | null>(null);
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const syncingRef = useRef(false);
   const saveStateRef = useRef<SaveState>(saveState);
@@ -103,12 +108,17 @@ export function LessonFeedbackWorkspace({
   useEffect(() => {
     if (!courses.length) {
       setSelectedCourseId("");
+      setSelectedLessonId("");
       return;
     }
     if (!courses.some((course) => course.id === selectedCourseId)) {
       setSelectedCourseId(courses.find((course) => course.status === "active")?.id ?? courses[0].id);
     }
   }, [courses, selectedCourseId]);
+
+  useEffect(() => {
+    setSelectedLessonId((current) => lessons.some((lesson) => lesson.id === current) ? current : lessons[0]?.id ?? "");
+  }, [selectedCourseId, lessons]);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,6 +193,20 @@ export function LessonFeedbackWorkspace({
     }, 850);
     return () => window.clearTimeout(timer);
   }, [activeRecord]);
+
+  useEffect(() => () => {
+    if (lessonContentSyncTimerRef.current !== null) window.clearTimeout(lessonContentSyncTimerRef.current);
+  }, []);
+
+  function handleRecordChange(next: LessonFeedbackRecord): void {
+    setActiveRecord(next);
+    if (!next.lessonId || !onUpdateLessonContent) return;
+    if (lessonContentSyncTimerRef.current !== null) window.clearTimeout(lessonContentSyncTimerRef.current);
+    lessonContentSyncTimerRef.current = window.setTimeout(() => {
+      onUpdateLessonContent(next.lessonId!, { taught: next.content, homework: next.homework });
+      lessonContentSyncTimerRef.current = null;
+    }, 350);
+  }
 
   useEffect(() => {
     if (!indexLoaded || !syncNonce) return;
@@ -323,6 +347,10 @@ export function LessonFeedbackWorkspace({
   async function createOrOpenFeedback(): Promise<void> {
     if (!selectedCourse) return;
     const lesson = lessons.find((item) => item.id === selectedLessonId);
+    if (!lesson) {
+      setMessage("请先选择具体课次，再建立课后反馈。" );
+      return;
+    }
     const existing = selectedLessonId
       ? indexRef.current.items.find((item) => item.lessonId === selectedLessonId)
       : undefined;
@@ -338,6 +366,20 @@ export function LessonFeedbackWorkspace({
     setActiveRecord(next);
     setSaveState("idle");
     setMessage(lesson ? "已带入本课次的学生、到课状态、课堂内容与作业。" : "已按当前课程名单创建反馈。" );
+  }
+
+  async function openLinkedLessonDetails(): Promise<void> {
+    const lesson = activeRecord?.lessonId ? vault.lessons.find((item) => item.id === activeRecord.lessonId) : undefined;
+    if (!lesson || !onOpenLessonDetails) return;
+    if (!(await flushActiveRecord())) return;
+    if (lessonContentSyncTimerRef.current !== null) {
+      window.clearTimeout(lessonContentSyncTimerRef.current);
+      lessonContentSyncTimerRef.current = null;
+    }
+    if (activeRecord?.lessonId && onUpdateLessonContent) {
+      onUpdateLessonContent(activeRecord.lessonId, { taught: activeRecord.content, homework: activeRecord.homework });
+    }
+    onOpenLessonDetails(lesson);
   }
 
   async function syncFromCloud(): Promise<void> {
@@ -626,30 +668,6 @@ export function LessonFeedbackWorkspace({
 
   return (
     <div className="lesson-feedback-view">
-      <section className="lesson-feedback-create-panel is-compact">
-        <div className="lesson-feedback-panel-heading">
-          <div>
-            <div className="lesson-feedback-eyebrow"><BookOpenCheck size={15} /> 课程与课次</div>
-            <h2>建立课后反馈</h2>
-          </div>
-          <div className="lesson-feedback-heading-actions">
-            <input
-              ref={legacyFileInputRef}
-              type="file"
-              accept="application/json,.json"
-              hidden
-              onChange={(event) => void chooseLegacyFile(event.target.files?.[0])}
-            />
-            <Button size="sm" variant="outline" onClick={() => legacyFileInputRef.current?.click()}>
-              <Download size={14} /> 导入旧 JSON
-            </Button>
-            <Button size="sm" onClick={() => setCreateDialogOpen(true)} disabled={courses.length === 0}>
-              <FilePlus2 size={15} /> 新建反馈
-            </Button>
-          </div>
-        </div>
-      </section>
-
       {createDialogOpen && (
         <div className="lesson-feedback-modal-backdrop" onClick={() => setCreateDialogOpen(false)}>
           <div
@@ -673,7 +691,6 @@ export function LessonFeedbackWorkspace({
                 <span>课程</span>
                 <Select value={selectedCourseId} onChange={(event) => {
                   setSelectedCourseId(event.target.value);
-                  setSelectedLessonId("");
                 }}>
                   {courses.length === 0 && <option value="">暂无课程</option>}
                   {courses.map((course) => <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>)}
@@ -682,7 +699,7 @@ export function LessonFeedbackWorkspace({
               <label>
                 <span>对应课次</span>
                 <Select value={selectedLessonId} onChange={(event) => setSelectedLessonId(event.target.value)} disabled={!selectedCourse}>
-                  <option value="">不关联具体课次，按课程名单创建</option>
+                  <option value="">请选择具体课次</option>
                   {lessons.map((lesson) => (
                     <option key={lesson.id} value={lesson.id}>
                       {lesson.date} {lesson.startTime}-{lesson.endTime}{lesson.status === "cancelled" ? "（已取消）" : ""}
@@ -694,7 +711,7 @@ export function LessonFeedbackWorkspace({
             <div className="lesson-feedback-modal-foot">
               <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>取消</Button>
               <Button
-                disabled={!selectedCourse}
+                disabled={!selectedCourse || !selectedLessonId}
                 onClick={() => {
                   setCreateDialogOpen(false);
                   void createOrOpenFeedback();
@@ -766,6 +783,21 @@ export function LessonFeedbackWorkspace({
             <strong>{indexDocument.items.length}</strong>
             {historyCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
           </button>
+          <div className="lesson-feedback-history-actions">
+            <input
+              ref={legacyFileInputRef}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(event) => void chooseLegacyFile(event.target.files?.[0])}
+            />
+            <Button size="sm" variant="outline" onClick={() => legacyFileInputRef.current?.click()}>
+              <Download size={14} /> 导入旧 JSON
+            </Button>
+            <Button size="sm" onClick={() => setCreateDialogOpen(true)} disabled={courses.length === 0}>
+              <FilePlus2 size={15} /> 新建反馈
+            </Button>
+          </div>
           <Select value={historyCourseId} onChange={(event) => setHistoryCourseId(event.target.value)}>
             <option value="all">全部课程</option>
             {allCourses.map((course) => <option key={course.id} value={course.id}>{course.name}{isEndedCourse(course) ? "（结课）" : ""}</option>)}
@@ -794,12 +826,25 @@ export function LessonFeedbackWorkspace({
                 <div><strong>{activeRecord.className}</strong><span>{activeRecord.date} · {activeRecord.periodLabel}{courses.find((course) => course.id === activeRecord.courseGroupId)?.status === "paused" ? " · 结课" : ""}</span></div>
                 <Button size="sm" variant="destructive" onClick={requestDeleteActiveRecord}><Trash2 size={15} /> 删除反馈</Button>
               </div>
-              <LessonFeedbackEditor record={activeRecord} onChange={setActiveRecord} saveState={saveState} />
+              {(() => {
+                const linkedLesson = activeRecord.lessonId ? vault.lessons.find((lesson) => lesson.id === activeRecord.lessonId) : undefined;
+                const missingTaught = Boolean(linkedLesson && !linkedLesson.content.taught.trim());
+                const missingHomework = Boolean(linkedLesson && !linkedLesson.content.homework.trim());
+                return activeRecord.lessonId && (missingTaught || missingHomework) ? (
+                <div className="lesson-feedback-course-content-notice">
+                  <span>
+                    当前课程信息未填写：{missingTaught ? "上课内容" : ""}{missingTaught && missingHomework ? "、" : ""}{missingHomework ? "课后作业" : ""}。可前往当前课程详情填写，也可直接在下方表格填写，内容会同步回课程。
+                  </span>
+                  {onOpenLessonDetails && <Button size="sm" variant="outline" onClick={() => void openLinkedLessonDetails()}>前往课程详情</Button>}
+                </div>
+                ) : null;
+              })()}
+              <LessonFeedbackEditor record={activeRecord} onChange={handleRecordChange} saveState={saveState} />
             </>
           ) : (
             <div className="lesson-feedback-empty-editor">
               <BookOpenCheck size={34} />
-              <strong>选择历史反馈，或从上方课程与课次新建</strong>
+              <strong>选择历史反馈，或从左侧新建反馈</strong>
               <span>反馈中的学生姓名、班级与课次信息会保存为当时的快照。</span>
             </div>
           )}

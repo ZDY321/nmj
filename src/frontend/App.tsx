@@ -2144,6 +2144,10 @@ export function App() {
                     onAddGradeRecord={addGradeRecord}
                     onDeleteGradeRecord={deleteGradeRecord}
                     onOpenLessonInRecords={openProgressLessonInScheduleRecords}
+                    onUpdateLessonContent={(lessonId, patch) => {
+                      const lesson = vault.lessons.find((item) => item.id === lessonId);
+                      if (lesson) updateLesson({ ...lesson, content: { ...lesson.content, ...patch } });
+                    }}
                   />
                 )}
                 {view === "students" && (

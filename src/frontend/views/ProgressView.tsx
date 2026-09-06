@@ -170,7 +170,8 @@ export function ProgressView({
   onSaveExternalPromptTemplate,
   onAddGradeRecord,
   onDeleteGradeRecord,
-  onOpenLessonInRecords
+  onOpenLessonInRecords,
+  onUpdateLessonContent
 }: {
   vault: TeacherVault;
   token?: string;
@@ -193,6 +194,7 @@ export function ProgressView({
   onAddGradeRecord: (record: GradeRecord) => void;
   onDeleteGradeRecord: (recordId: string) => void;
   onOpenLessonInRecords?: (lesson: Lesson) => void;
+  onUpdateLessonContent: (lessonId: string, patch: Pick<Lesson["content"], "taught" | "homework">) => void;
 }) {
   const [query, setQuery] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
@@ -457,13 +459,15 @@ export function ProgressView({
         {dialog}
         {sectionSwitcher}
         {/* 与台账/清单子页同宽：不做负 margin 溢出，避免比上方切换条更宽。 */}
-        <div style={{ ["--feedback-chrome" as string]: "252px" }}>
+        <div style={{ ["--feedback-chrome" as string]: "184px" }}>
           <LessonFeedbackWorkspace
             vault={vault}
             token={token ?? ""}
             password={password ?? ""}
             focusRequest={lessonFeedbackFocus}
             syncNonce={lessonFeedbackSyncNonce}
+            onUpdateLessonContent={onUpdateLessonContent}
+            onOpenLessonDetails={onOpenLessonInRecords}
           />
         </div>
       </div>

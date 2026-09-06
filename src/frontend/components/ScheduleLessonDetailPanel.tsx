@@ -251,7 +251,7 @@ export function ScheduleLessonDetailPanel({
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}>
       <Card className="overflow-hidden">
-        <CardHeader className="flex flex-col gap-3 border-b border-[#e8eef6] bg-white sm:flex-row sm:items-start sm:justify-between">
+        <CardHeader className="lesson-detail-header flex flex-col gap-3 border-b border-[#e8eef6] bg-white sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle>{isSubstituteClass ? "代班补课详情" : "课程详情"}</CardTitle>
             <CardDescription className="space-y-1 leading-5">
@@ -260,7 +260,7 @@ export function ScheduleLessonDetailPanel({
               <span className="block">实际时长 {selectedActualHours.toFixed(2)}h · {selected.feeSnapshot.manualHours ? "手动计费课时" : "计费课时"} {selectedBillingHours.toFixed(1)}h</span>
             </CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="lesson-detail-actions flex flex-wrap gap-2">
             {lessonReturnTarget && (
               <Button
                 type="button"

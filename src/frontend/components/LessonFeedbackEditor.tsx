@@ -1121,6 +1121,7 @@ export function LessonFeedbackEditor({
                     : { boxId: "field:content", start: target.selectionStart, end: target.selectionEnd }
                 );
               }}
+              placeholder={record.lessonId && !record.content.trim() ? "当前课程信息未填写，请前往当前课程详情页面填写，也可直接在此填写（会同步回课程详情）" : "例如：本节讲了什么知识点、重点方法、课堂例题、常见错误和掌握情况。"}
               aria-label="上课内容"
             />
             <textarea
@@ -1144,6 +1145,7 @@ export function LessonFeedbackEditor({
                     : { boxId: "field:homework", start: target.selectionStart, end: target.selectionEnd }
                 );
               }}
+              placeholder={record.lessonId && !record.homework.trim() ? "当前课程信息未填写，请前往当前课程详情页面填写，也可直接在此填写（会同步回课程详情）" : "例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。"}
               aria-label="今日作业"
             />
 
