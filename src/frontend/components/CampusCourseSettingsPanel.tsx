@@ -1,4 +1,4 @@
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { GraduationCap, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -192,6 +192,7 @@ export function CampusCourseSettingsPanel({
     : "非班课规则：按教师课时费等级里的一对一基础费计算，默认 1 人，第 2 人起加人头费。";
   const today = todayIso();
   const courseTypeMessageIsSuccess = courseTypeMessage.startsWith("同步完成：");
+  const [gradesExpanded, setGradesExpanded] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -234,22 +235,24 @@ export function CampusCourseSettingsPanel({
       />
 
       <Card className="h-fit overflow-hidden">
-        <CardHeader className="gap-3">
-          <div className="flex items-center justify-between gap-3">
+        <CardHeader className={gradesExpanded ? "gap-3" : "gap-0"}>
+          <button type="button" onClick={() => setGradesExpanded((current) => !current)} aria-expanded={gradesExpanded} className="flex w-full items-center justify-between gap-3 text-left">
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]"><GraduationCap size={14} /> 年级管理</div>
               <CardTitle className="text-lg">学生年级设置</CardTitle>
-              <CardDescription>这里的顺序用于学生档案选择、筛选和“升一年级”；修改名称会同步已有学生。</CardDescription>
+              {gradesExpanded && <CardDescription>这里的顺序用于学生档案选择、筛选和“升一年级”；修改名称会同步已有学生。</CardDescription>}
             </div>
             <Badge variant="secondary">{gradeOptions.length} 个</Badge>
-          </div>
+          </button>
+          {gradesExpanded && <>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <Input value={gradeInput} onChange={(event) => setGradeInput(event.target.value)} placeholder="新增年级，例如：小一、高一" className="bg-white" />
             <Button type="button" onClick={onAddGrade} disabled={!gradeInput.trim()}><Plus size={14} /> 添加年级</Button>
           </div>
           {gradeMessage && <div className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm font-bold text-[#b91c1c]">{gradeMessage}</div>}
+          </>}
         </CardHeader>
-        <CardContent className="space-y-2">
+        {gradesExpanded && <CardContent className="space-y-2">
           {gradeOptions.map((grade) => editingGrade === grade ? (
             <div key={grade} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
               <Input value={editingGradeInput} onChange={(event) => setEditingGradeInput(event.target.value)} className="bg-white" />
@@ -264,7 +267,7 @@ export function CampusCourseSettingsPanel({
               <Button type="button" size="sm" variant="destructive" className="h-8 w-8 rounded-[9px] p-0" disabled={gradeInUse(grade)} onClick={() => onDeleteGrade(grade)} title={gradeInUse(grade) ? "已有学生使用，不能删除" : "删除年级"}><Trash2 size={13} /></Button>
             </div>
           ))}
-        </CardContent>
+        </CardContent>}
       </Card>
 
       <Card className="h-fit overflow-hidden">

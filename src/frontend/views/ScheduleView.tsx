@@ -273,9 +273,7 @@ function endDateForLessonCount(startDate: string, weekdays: Weekday[], lessonCou
 
 function endDateForRepeatWeeks(startDate: string, weekCount: number): string {
   if (!startDate || weekCount <= 0) return "";
-  // A repeated week is a full seven-day interval from the chosen start date.
-  // For example, Sunday + one week ends on the following Sunday, not Saturday.
-  return addDays(startDate, weekCount * 7);
+  return addDays(startDate, weekCount * 7 - 1);
 }
 
 export function ScheduleView({

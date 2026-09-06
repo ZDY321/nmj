@@ -171,13 +171,6 @@ export function StudentArchivePanel({
               <option key={grade} value={grade === "未设置年级" ? "" : grade}>{grade}</option>
             ))}
           </Select>
-          {studentGradeInput === "自定义" && (
-            <Input
-              value={customGradeInput}
-              onChange={(event) => setCustomGradeInput(event.target.value)}
-              placeholder="输入自定义年级"
-            />
-          )}
           <Input
             value={studentSchoolInput}
             onChange={(event) => setStudentSchoolInput(event.target.value)}

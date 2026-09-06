@@ -121,8 +121,11 @@ export function StudentsView({
   ].sort((a, b) => compareByName(a.label, b.label) || a.value.localeCompare(b.value));
   const managedCourseTypes = allManagedCourseTypes.filter((item) => !disabledCourseTypes.has(item.value));
   const preferredCampusId = campusOptions[0]?.id ?? "";
-  const configuredGradeOptions = Array.from(new Set(vault.preferences?.grades?.map((grade) => grade.trim()).filter(Boolean) ?? defaultGradeOptions));
-  const gradeOptions = ["未设置年级", ...configuredGradeOptions, "自定义"];
+  const configuredGradeOptions = Array.from(new Set([
+    ...(vault.preferences?.grades?.map((grade) => grade.trim()).filter(Boolean) ?? defaultGradeOptions),
+    ...vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade))
+  ]));
+  const gradeOptions = ["未设置年级", ...configuredGradeOptions];
   const [campusNameInput, setCampusNameInput] = useState("");
   const [campusAddressInput, setCampusAddressInput] = useState("");
   const [campusNoteInput, setCampusNoteInput] = useState("");
@@ -396,7 +399,7 @@ export function StudentsView({
 
   function submitStudent(forceDuplicate = false, forceMissingGrade = false) {
     if (!studentNameInput.trim()) return;
-    const resolvedGrade = studentGradeInput === "自定义" ? customGradeInput.trim() : studentGradeInput;
+    const resolvedGrade = studentGradeInput;
     const resolvedCampusId = studentCampusInput || preferredCampusId;
     if (!resolvedGrade && !forceMissingGrade) {
       confirm({
@@ -450,7 +453,7 @@ export function StudentsView({
       return;
     }
 
-    const defaultGrade = studentGradeInput === "自定义" ? customGradeInput.trim() : studentGradeInput;
+    const defaultGrade = studentGradeInput;
     const hasMissingGrade = rows.some((row) => !normalizeStudentGradeValue(row.grade) && !defaultGrade);
     if (hasMissingGrade && !forceMissingGrade) {
       confirm({
@@ -1543,8 +1546,7 @@ export function StudentsView({
 
   function gradeSelectValue(grade?: string): string {
     if (!grade) return "";
-    if (grade === "__custom__") return "自定义";
-    return configuredGradeOptions.includes(grade) ? grade : "自定义";
+    return configuredGradeOptions.includes(grade) ? grade : "";
   }
 
   function toggleCourseStudent(studentId: string) {

@@ -62,19 +62,12 @@ export function StudentEditDialog({
               />
               <Select
                 value={gradeSelectValue(editingStudent.grade)}
-                onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value === "自定义" ? "__custom__" : event.target.value || undefined })}
+                onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value || undefined })}
               >
                 {gradeOptions.map((grade) => (
                   <option key={grade} value={grade === "未设置年级" ? "" : grade}>{grade}</option>
                 ))}
               </Select>
-              {gradeSelectValue(editingStudent.grade) === "自定义" && (
-                <Input
-                  value={editingStudent.grade === "__custom__" ? "" : editingStudent.grade ?? ""}
-                  onChange={(event) => setEditingStudent({ ...editingStudent, grade: event.target.value })}
-                  placeholder="输入自定义年级"
-                />
-              )}
               <Input
                 value={editingStudent.school ?? ""}
                 onChange={(event) => setEditingStudent({ ...editingStudent, school: event.target.value || undefined })}
