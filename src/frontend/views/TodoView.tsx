@@ -408,7 +408,7 @@ export function TodoView({
               <Badge variant={openTodos.length ? "amber" : "secondary"} className="w-fit">
                 {openTodos.length ? `${openTodos.length} 条未完成` : "已清空"}
               </Badge>
-              <Button type="button" size="sm" variant={selectionMode ? "default" : "outline"} onClick={toggleSelectionMode}>
+              <Button type="button" size="sm" variant="outline" onClick={toggleSelectionMode}>
                 {selectionMode ? <X size={14} /> : <Archive size={14} />}
                 {selectionMode ? "退出整理" : "批量整理"}
               </Button>
@@ -419,7 +419,13 @@ export function TodoView({
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_auto]">
             <Input value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} placeholder="例如：联系家长确认补课时间" aria-label="新待办内容" />
             <Input type="date" value={todoDueDate} onChange={(event) => setTodoDueDate(event.target.value)} aria-label="新待办截止日期" />
-            <Button type="button" onClick={addTodo} disabled={!todoTitle.trim()}>
+            <Button
+              type="button"
+              variant={selectionMode ? "secondary" : "default"}
+              className={selectionMode ? "bg-[#eaf2ff] text-[#1557c2] hover:bg-[#dbeafe] focus-visible:ring-[#1557c2]" : undefined}
+              onClick={addTodo}
+              disabled={!todoTitle.trim()}
+            >
               <Plus size={15} /> 添加待办
             </Button>
           </div>
