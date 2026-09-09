@@ -22,9 +22,19 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { TodoCalendar } from "@/frontend/components/TodoCalendar";
 import { todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
-import { groupOpenTodos, sortArchivedTodos, sortCompletedTodos } from "@/frontend/lib/todos";
+import { weekStartsOn } from "@/frontend/lib/helpers";
+import {
+  formatTodoDueDate,
+  groupOpenTodos,
+  sortArchivedTodos,
+  sortCompletedTodos,
+  todoCalendarDateRange,
+  todosInDateRange,
+  type TodoCalendarSelection
+} from "@/frontend/lib/todos";
 import type { MemoItem, TeacherVault, TodoItem } from "@/shared/types";
 
 type TodoStatusFilter = "open" | "overdue" | "upcoming" | "undated" | "all" | "done" | "archived";
@@ -44,9 +54,11 @@ export function TodoView({
   onDeleteTodo: (todoId: string) => void;
   onMergeTodosToMemo: (todoIds: string[], memo: MemoItem) => void;
 }) {
+  const today = todayIso();
   const [todoTitle, setTodoTitle] = useState("");
   const [todoDueDate, setTodoDueDate] = useState(selectedDate);
   const [statusFilter, setStatusFilter] = useState<TodoStatusFilter>("open");
+  const [calendarSelection, setCalendarSelection] = useState<TodoCalendarSelection>({ month: today.slice(0, 7), date: null, scope: "week" });
   const [search, setSearch] = useState("");
   const [editingTodoId, setEditingTodoId] = useState("");
   const [editingTodoTitle, setEditingTodoTitle] = useState("");
@@ -57,7 +69,6 @@ export function TodoView({
   const [mergeTitle, setMergeTitle] = useState("");
   const [mergeContent, setMergeContent] = useState("");
   const { confirm, dialog } = useConfirmDialog();
-  const today = todayIso();
   const todoGroups = groupOpenTodos(vault.todoItems ?? [], today);
   const openTodos = [...todoGroups.overdue, ...todoGroups.upcoming, ...todoGroups.undated];
   const doneTodos = sortCompletedTodos(vault.todoItems ?? []);
@@ -75,6 +86,8 @@ export function TodoView({
       (todo.note ?? "").toLowerCase().includes(normalizedSearch) ||
       (todo.dueDate ?? "").includes(normalizedSearch) ||
       (todo.archivedMemoId ? (memoTitleById.get(todo.archivedMemoId) ?? "").toLowerCase().includes(normalizedSearch) : false);
+  const calendarTodos = (vault.todoItems ?? []).filter(matchesSearch);
+  const visibleCalendarTodos = todosInDateRange(calendarTodos, todoCalendarDateRange(today, calendarSelection));
   const allSections = [
     {
       key: "overdue" as const,
@@ -86,9 +99,9 @@ export function TodoView({
     {
       key: "upcoming" as const,
       title: "今天及未来",
-      description: "按最近截止日期优先",
+      description: "点击日历查看当天事项，默认关注未来 7 天（含今天）",
       badgeVariant: "sky" as const,
-      todos: todoGroups.upcoming
+      todos: visibleCalendarTodos
     },
     {
       key: "undated" as const,
@@ -119,11 +132,10 @@ export function TodoView({
       return section.key === statusFilter;
     })
     .map((section) => ({ ...section, todos: section.todos.filter(matchesSearch) }))
-    .filter((section) => section.todos.length > 0);
-  const visibleTodoCount = visibleSections.reduce((sum, section) => sum + section.todos.length, 0);
-  const visibleOpenTodoIds = visibleSections.flatMap((section) =>
+    .filter((section) => section.key === "upcoming" || section.todos.length > 0);
+  const visibleOpenTodoIds = [...new Set(visibleSections.flatMap((section) =>
     section.todos.filter((todo) => todo.status === "open").map((todo) => todo.id)
-  );
+  ))];
   const selectedTodoIdSet = new Set(selectedTodoIds);
   const selectedTodos = openTodos.filter((todo) => selectedTodoIdSet.has(todo.id));
   const allVisibleOpenSelected = visibleOpenTodoIds.length > 0 && visibleOpenTodoIds.every((id) => selectedTodoIdSet.has(id));
@@ -168,7 +180,7 @@ export function TodoView({
   function askDeleteTodo(todo: TodoItem) {
     confirm({
       title: `删除待办「${todo.title}」？`,
-      description: todo.dueDate ? `截止日期：${todo.dueDate}` : "删除后这条待办不会再显示。",
+      description: todo.dueDate ? `截止日期：${formatTodoDueDate(todo.dueDate)}` : "删除后这条待办不会再显示。",
       confirmLabel: "删除",
       tone: "danger",
       onConfirm: () => {
@@ -232,6 +244,121 @@ export function TodoView({
     onUpdateTodo({ ...restoredTodo, status: "open" });
   }
 
+  function renderTodo(todo: TodoItem, index: number) {
+    const isEditingTodo = editingTodoId === todo.id;
+    const isOverdue = todo.status === "open" && Boolean(todo.dueDate) && todo.dueDate! < today;
+    const isDueToday = todo.status === "open" && todo.dueDate === today;
+    const isArchived = todo.status === "archived";
+    const isSelected = selectedTodoIdSet.has(todo.id);
+    const linkedMemoTitle = todo.archivedMemoId ? memoTitleById.get(todo.archivedMemoId) : undefined;
+    return (
+      <motion.div
+        key={todo.id}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.18, delay: Math.min(index, 5) * 0.02 }}
+        className={`flex flex-col gap-3 rounded-[14px] border p-3 @min-[480px]:flex-row @min-[480px]:items-center @min-[480px]:justify-between ${
+          isArchived
+            ? "border-[#cbd5e1] bg-[#f8fafc]"
+            : todo.status === "done"
+              ? "border-[#dbe4ef] bg-[#f8fbff] opacity-75"
+              : isSelected
+                ? "border-[#60a5fa] bg-[#eff6ff] ring-2 ring-[#bfdbfe]"
+                : isOverdue
+                  ? "border-[#fecaca] bg-[#fff1f2]"
+                  : isDueToday
+                    ? "border-[#bfdbfe] bg-[#eff6ff]"
+                    : "border-[#fed7aa] bg-[#fff7ed]"
+        }`}
+      >
+        {isEditingTodo ? (
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 @min-[560px]:grid-cols-[minmax(0,1fr)_160px]">
+            <Input
+              value={editingTodoTitle}
+              onChange={(event) => setEditingTodoTitle(event.target.value)}
+              placeholder="待办内容"
+              aria-label="编辑待办内容"
+              className="bg-white"
+            />
+            <Input
+              type="date"
+              value={editingTodoDueDate}
+              aria-label="编辑待办截止日期"
+              onChange={(event) => setEditingTodoDueDate(event.target.value)}
+              className="bg-white"
+            />
+          </div>
+        ) : (
+          <label className={`flex min-w-0 flex-1 items-start gap-3 ${selectionMode && todo.status === "open" ? "cursor-pointer" : ""}`}>
+            {selectionMode && todo.status === "open" ? (
+              <input
+                type="checkbox"
+                checked={isSelected}
+                aria-label={`选择待办：${todo.title}`}
+                onChange={() => toggleTodoSelection(todo.id)}
+                className="mt-1 h-4 w-4 accent-[#1557c2]"
+              />
+            ) : isArchived ? (
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-[#64748b]">
+                <Archive size={16} />
+              </span>
+            ) : (
+              <input
+                type="checkbox"
+                checked={todo.status === "done"}
+                aria-label={`${todo.status === "done" ? "标记未完成" : "完成待办"}：${todo.title}`}
+                onChange={(event) => onUpdateTodo({ ...todo, status: event.target.checked ? "done" : "open" })}
+                className="mt-1 h-4 w-4 accent-[#ff8617]"
+              />
+            )}
+            <span className="min-w-0">
+              <span className={`block break-words text-sm font-extrabold [overflow-wrap:anywhere] ${todo.status === "done" ? "text-[#64748b] line-through" : "text-[#061226]"}`}>
+                {todo.title}
+              </span>
+              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-[#64748b]">
+                <span>{todo.dueDate ? `截止：${formatTodoDueDate(todo.dueDate)}` : "未设置截止日期"}</span>
+                {isDueToday && <Badge variant="sky" className="text-[10px]">今日截止</Badge>}
+                {isOverdue && <Badge variant="destructive" className="text-[10px]">已逾期</Badge>}
+                {isArchived && <Badge variant="secondary" className="text-[10px]">已归档</Badge>}
+                {linkedMemoTitle && <span className="truncate">备忘录：{linkedMemoTitle}</span>}
+              </span>
+            </span>
+          </label>
+        )}
+        <div className="grid grid-cols-2 gap-2 @min-[480px]:flex @min-[480px]:shrink-0">
+          {isEditingTodo ? (
+            <>
+              <Button type="button" size="sm" onClick={() => saveTodo(todo)} disabled={!editingTodoTitle.trim()}>
+                <Save size={14} /> 保存
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={cancelEditTodo}>
+                <X size={14} /> 取消
+              </Button>
+            </>
+          ) : isArchived ? (
+            <>
+              <Button type="button" size="sm" variant="outline" onClick={() => restoreTodo(todo)}>
+                <RotateCcw size={14} /> 恢复待办
+              </Button>
+              <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)} aria-label={`删除待办：${todo.title}`}>
+                <Trash2 size={14} /> 删除
+              </Button>
+            </>
+          ) : selectionMode && todo.status === "open" ? null : (
+            <>
+              <Button type="button" size="sm" variant="outline" onClick={() => startEditTodo(todo)} aria-label={`编辑待办：${todo.title}`}>
+                <Pencil size={14} /> 编辑
+              </Button>
+              <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)} aria-label={`删除待办：${todo.title}`}>
+                <Trash2 size={14} /> 删除
+              </Button>
+            </>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {dialog}
@@ -290,8 +417,8 @@ export function TodoView({
         </CardHeader>
         <CardContent className="space-y-5 p-4 sm:p-6">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_180px_auto]">
-            <Input value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} placeholder="例如：联系家长确认补课时间" />
-            <Input type="date" value={todoDueDate} onChange={(event) => setTodoDueDate(event.target.value)} />
+            <Input value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} placeholder="例如：联系家长确认补课时间" aria-label="新待办内容" />
+            <Input type="date" value={todoDueDate} onChange={(event) => setTodoDueDate(event.target.value)} aria-label="新待办截止日期" />
             <Button type="button" onClick={addTodo} disabled={!todoTitle.trim()}>
               <Plus size={15} /> 添加待办
             </Button>
@@ -303,9 +430,9 @@ export function TodoView({
               <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索待办内容、截止日期或关联备忘录" />
             </div>
             <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TodoStatusFilter)}>
-              <option value="open">未完成（分组）</option>
+              <option value="open">待办概览</option>
               <option value="overdue">仅看已逾期</option>
-              <option value="upcoming">仅看今天及未来</option>
+              <option value="upcoming">日历（今天及未来）</option>
               <option value="undated">仅看未设日期</option>
               <option value="archived">仅看已归档</option>
               <option value="all">全部状态</option>
@@ -321,7 +448,7 @@ export function TodoView({
               </div>
               <div className="flex flex-wrap gap-2 sm:shrink-0">
                 <Button type="button" size="sm" variant="outline" onClick={toggleVisibleSelection} disabled={visibleOpenTodoIds.length === 0}>
-                  {allVisibleOpenSelected ? "取消当前页选择" : "选择当前页"}
+                  {allVisibleOpenSelected ? "取消当前显示选择" : "选择当前显示"}
                 </Button>
                 <Button type="button" size="sm" onClick={openMergeDialog} disabled={selectedTodos.length === 0}>
                   <FileText size={14} /> 合并为备忘录
@@ -330,129 +457,33 @@ export function TodoView({
             </div>
           )}
 
-          <div className="space-y-3">
-            {visibleSections.map((section, sectionIndex) => (
+          <div className="@container space-y-3">
+            {visibleSections.map((section) => (
               <section key={section.key} className="space-y-3">
                 <div className="flex flex-col gap-2 rounded-[12px] bg-[#f8fbff] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">{section.title}</div>
                     <div className="mt-0.5 text-xs font-semibold text-[#64748b]">{section.description}</div>
                   </div>
-                  <Badge variant={section.badgeVariant} className="w-fit">{section.todos.length} 条</Badge>
+                  <Badge variant={section.badgeVariant} className="w-fit">
+                    {section.key === "upcoming" ? `${todoGroups.upcoming.filter(matchesSearch).length} 条未来待办` : `${section.todos.length} 条`}
+                  </Badge>
                 </div>
-                {section.todos.map((todo, index) => {
-                  const isEditingTodo = editingTodoId === todo.id;
-                  const isOverdue = todo.status === "open" && Boolean(todo.dueDate) && todo.dueDate! < today;
-                  const isDueToday = todo.status === "open" && todo.dueDate === today;
-                  const isArchived = todo.status === "archived";
-                  const isSelected = selectedTodoIdSet.has(todo.id);
-                  const linkedMemoTitle = todo.archivedMemoId ? memoTitleById.get(todo.archivedMemoId) : undefined;
-                  return (
-                    <motion.div
-                      key={todo.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: sectionIndex * 0.03 + index * 0.02 }}
-                      className={`flex flex-col gap-3 rounded-[14px] border p-3 sm:flex-row sm:items-center sm:justify-between ${
-                        isArchived
-                          ? "border-[#cbd5e1] bg-[#f8fafc]"
-                          : todo.status === "done"
-                            ? "border-[#dbe4ef] bg-[#f8fbff] opacity-75"
-                            : isSelected
-                              ? "border-[#60a5fa] bg-[#eff6ff] ring-2 ring-[#bfdbfe]"
-                              : isOverdue
-                                ? "border-[#fecaca] bg-[#fff1f2]"
-                                : isDueToday
-                                  ? "border-[#bfdbfe] bg-[#eff6ff]"
-                                  : "border-[#fed7aa] bg-[#fff7ed]"
-                      }`}
-                    >
-                      {isEditingTodo ? (
-                        <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_180px]">
-                          <Input
-                            value={editingTodoTitle}
-                            onChange={(event) => setEditingTodoTitle(event.target.value)}
-                            placeholder="待办内容"
-                            className="bg-white"
-                          />
-                          <Input
-                            type="date"
-                            value={editingTodoDueDate}
-                            onChange={(event) => setEditingTodoDueDate(event.target.value)}
-                            className="bg-white"
-                          />
-                        </div>
-                      ) : (
-                        <label className={`flex min-w-0 flex-1 items-start gap-3 ${selectionMode && todo.status === "open" ? "cursor-pointer" : ""}`}>
-                          {selectionMode && todo.status === "open" ? (
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleTodoSelection(todo.id)}
-                              className="mt-1 h-4 w-4 accent-[#1557c2]"
-                            />
-                          ) : isArchived ? (
-                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-[#64748b]">
-                              <Archive size={16} />
-                            </span>
-                          ) : (
-                            <input
-                              type="checkbox"
-                              checked={todo.status === "done"}
-                              onChange={(event) => onUpdateTodo({ ...todo, status: event.target.checked ? "done" : "open" })}
-                              className="mt-1 h-4 w-4 accent-[#ff8617]"
-                            />
-                          )}
-                          <span className="min-w-0">
-                            <span className={`block text-sm font-extrabold ${todo.status === "done" ? "text-[#64748b] line-through" : "text-[#061226]"}`}>
-                              {todo.title}
-                            </span>
-                            <span className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-[#64748b]">
-                              <span>{todo.dueDate ? `截止：${todo.dueDate}` : "未设置截止日期"}</span>
-                              {isDueToday && <Badge variant="sky" className="text-[10px]">今日截止</Badge>}
-                              {isOverdue && <Badge variant="destructive" className="text-[10px]">已逾期</Badge>}
-                              {isArchived && <Badge variant="secondary" className="text-[10px]">已归档</Badge>}
-                              {linkedMemoTitle && <span className="truncate">备忘录：{linkedMemoTitle}</span>}
-                            </span>
-                          </span>
-                        </label>
-                      )}
-                      <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
-                        {isEditingTodo ? (
-                          <>
-                            <Button type="button" size="sm" onClick={() => saveTodo(todo)} disabled={!editingTodoTitle.trim()}>
-                              <Save size={14} /> 保存
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={cancelEditTodo}>
-                              <X size={14} /> 取消
-                            </Button>
-                          </>
-                        ) : isArchived ? (
-                          <>
-                            <Button type="button" size="sm" variant="outline" onClick={() => restoreTodo(todo)}>
-                              <RotateCcw size={14} /> 恢复待办
-                            </Button>
-                            <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)}>
-                              <Trash2 size={14} /> 删除
-                            </Button>
-                          </>
-                        ) : selectionMode && todo.status === "open" ? null : (
-                          <>
-                            <Button type="button" size="sm" variant="outline" onClick={() => startEditTodo(todo)}>
-                              <Pencil size={14} /> 编辑
-                            </Button>
-                            <Button type="button" size="sm" variant="destructive" onClick={() => askDeleteTodo(todo)}>
-                              <Trash2 size={14} /> 删除
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                {section.key === "upcoming" ? (
+                  <TodoCalendar
+                    today={today}
+                    weekStart={weekStartsOn(vault)}
+                    todos={calendarTodos}
+                    visibleTodos={section.todos}
+                    selection={calendarSelection}
+                    onSelectionChange={setCalendarSelection}
+                    searching={Boolean(normalizedSearch)}
+                    renderTodo={renderTodo}
+                  />
+                ) : section.todos.map(renderTodo)}
               </section>
             ))}
-            {visibleTodoCount === 0 && (
+            {visibleSections.length === 0 && (
               <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-8 text-center text-sm font-semibold text-[#64748b]">
                 当前筛选下没有待办事项
               </div>
@@ -508,7 +539,7 @@ export function TodoView({
 
 function buildMemoContent(todos: TodoItem[], createdDate: string): string {
   const lines = todos.map((todo) => {
-    const dueDate = todo.dueDate ? `截止：${todo.dueDate}` : "未设置截止日期";
+    const dueDate = todo.dueDate ? `截止：${formatTodoDueDate(todo.dueDate)}` : "未设置截止日期";
     const note = todo.note?.trim() ? `\n  - 原备注：${todo.note.trim()}` : "";
     return `- [ ] ${todo.title}（${dueDate}）${note}`;
   });

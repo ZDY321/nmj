@@ -19,7 +19,7 @@ import type { Lesson, MemoItem, TeacherVault, TodoItem } from "@/shared/types";
 import { MemoView } from "@/frontend/views/MemoView";
 import { TodoView } from "@/frontend/views/TodoView";
 import { formatAppDateLabel, getCourse, todayIso } from "@/frontend/lib/calculations";
-import { groupOpenTodos } from "@/frontend/lib/todos";
+import { formatTodoDueDate, groupOpenTodos } from "@/frontend/lib/todos";
 import {
   attendanceLabels,
   attendedStudentNamesForLesson,
@@ -233,7 +233,7 @@ export function TodayView({
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-extrabold text-[#061226]">{todo.title}</span>
-                    <span className="mt-0.5 block text-xs font-semibold text-[#b91c1c]">截止：{todo.dueDate}</span>
+                    <span className="mt-0.5 block text-xs font-semibold text-[#b91c1c]">截止：{formatTodoDueDate(todo.dueDate!)}</span>
                   </span>
                 </label>
               ))}
@@ -257,7 +257,7 @@ export function TodayView({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-extrabold text-[#061226]">{todo.title}</span>
                     <span className="mt-0.5 block text-xs font-semibold text-[#1557c2]">
-                      {todo.dueDate === today ? "今天截止" : `截止：${todo.dueDate}`}
+                      截止：{formatTodoDueDate(todo.dueDate!)}{todo.dueDate === today ? " · 今天截止" : ""}
                     </span>
                   </span>
                 </label>
