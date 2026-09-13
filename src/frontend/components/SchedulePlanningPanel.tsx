@@ -28,8 +28,6 @@ export type BatchTimeGroup = {
   endTime: string;
   billingHours: string;
   weekdays: Weekday[];
-  rangeStart?: string;
-  rangeEnd?: string;
 };
 
 export type BatchRepeatMode = "end_date" | "weeks";
@@ -37,10 +35,14 @@ export type BatchRepeatMode = "end_date" | "weeks";
 type SchedulePlanningPanelProps = {
   batchCandidateCount: number;
   batchConflictCount: number;
+  batchConflictDetails: string[];
+  batchExistingCount: number;
   batchEffectiveRangeEnd: string;
   batchLessonTargetCount: string;
   batchPerDayConflictCount: number;
-  batchPerDayGroupCounts: Array<{ groupId: string; count: number; conflictCount: number }>;
+  batchPerDayExistingCount: number;
+  batchPerDayDuplicateCount: number;
+  batchPerDayGroupCounts: Array<{ groupId: string; count: number; conflictCount: number; existingCount: number; duplicateCount: number }>;
   batchPerDayMode: boolean;
   batchPerDayTotalCount: number;
   batchPerDayUnassignedWeekdays: Weekday[];
@@ -110,18 +112,37 @@ type SchedulePlanningPanelProps = {
   visibleWeekdays: Weekday[];
   weeklyPatternCandidateCount: number;
   weeklyPatternConflictCount: number;
+  weeklyPatternConflictDetails: string[];
+  weeklyPatternExistingCount: number;
+  weeklyPatternDuplicateCount: number;
   weeklyPatternCourseOptions: CourseGroup[];
   weeklyPatternCreatableCount: number;
   weeklyPatternInvalidSlotCount: number;
   weeklyPatternSlots: WeeklySchedulePatternSlot[];
 };
 
+function BatchConflictList({ details }: { details: string[] }) {
+  if (details.length === 0) return null;
+  return (
+    <details className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-xs font-semibold text-[#9a3412]">
+      <summary className="cursor-pointer">查看 {details.length} 节时间冲突的日期与课程</summary>
+      <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+        {details.map((detail, index) => <li key={index}>{detail}</li>)}
+      </ul>
+    </details>
+  );
+}
+
 export function SchedulePlanningPanel({
   batchCandidateCount,
   batchConflictCount,
+  batchConflictDetails,
+  batchExistingCount,
   batchEffectiveRangeEnd,
   batchLessonTargetCount,
   batchPerDayConflictCount,
+  batchPerDayExistingCount,
+  batchPerDayDuplicateCount,
   batchPerDayGroupCounts,
   batchPerDayMode,
   batchPerDayTotalCount,
@@ -192,6 +213,9 @@ export function SchedulePlanningPanel({
   visibleWeekdays,
   weeklyPatternCandidateCount,
   weeklyPatternConflictCount,
+  weeklyPatternConflictDetails,
+  weeklyPatternExistingCount,
+  weeklyPatternDuplicateCount,
   weeklyPatternCourseOptions,
   weeklyPatternCreatableCount,
   weeklyPatternInvalidSlotCount,
@@ -201,32 +225,18 @@ export function SchedulePlanningPanel({
   const currentRuleCanJoinWeeklyPattern = Boolean(ruleCourseGroupId && selectedWeekdays.length > 0 && isBatchTimeValid);
   const selectedControlClass = "border-[#1557c2] bg-[#eaf2ff] text-[#1557c2] shadow-[0_8px_18px_rgba(21,87,194,0.12)] hover:bg-[#dbeafe] hover:text-[#0f3f8f]";
   const primaryActionClass = "border-[#1557c2] bg-[#1557c2] text-white shadow-[0_12px_22px_rgba(21,87,194,0.18)] hover:border-[#0f49aa] hover:bg-[#0f49aa] hover:text-white";
+  const batchRangeDates = isBatchDateRangeValid ? datesBetweenLocal(rangeStart, batchEffectiveRangeEnd) : [];
 
   function compactDateLabel(date: string): string {
     const [, month = "", day = ""] = date.split("-");
     return `${Number(month)}月${Number(day)}日`;
   }
 
-  function batchTimeGroupRangeStart(group: BatchTimeGroup): string {
-    return group.rangeStart || rangeStart;
-  }
-
-  function batchTimeGroupRangeEnd(group: BatchTimeGroup): string {
-    return group.rangeEnd || batchEffectiveRangeEnd;
-  }
-
-  function batchTimeGroupRangeLabel(group: BatchTimeGroup): string {
-    const start = batchTimeGroupRangeStart(group);
-    const end = batchTimeGroupRangeEnd(group);
-    return start && end ? `${start} 至 ${end}` : "未设置日期范围";
-  }
-
   function batchTimeGroupDateRows(group: BatchTimeGroup): string[] {
-    const groupRangeDates = datesBetweenLocal(batchTimeGroupRangeStart(group), batchTimeGroupRangeEnd(group));
     return visibleWeekdays
       .filter((day) => group.weekdays.includes(day))
       .map((day) => {
-        const dates = groupRangeDates.filter((date) => weekdayOfDateIso(date) === day);
+        const dates = batchRangeDates.filter((date) => weekdayOfDateIso(date) === day);
         if (dates.length === 0) return `${weekdayLabels[day]} 当前范围内无日期`;
         const visibleDates = dates.slice(0, 8).map(compactDateLabel);
         return `${weekdayLabels[day]} ${visibleDates.join("、")}${dates.length > visibleDates.length ? ` 等 ${dates.length} 天` : ""}`;
@@ -417,7 +427,7 @@ export function SchedulePlanningPanel({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-xs font-semibold text-[#64748b]">
-            批量排课可按结束日期生成，也可按重复周数向后循环生成；只会生成范围内匹配星期的日期。
+            批量排课可按结束日期生成，也可按重复周数向后循环生成；只会生成范围内匹配星期的日期。同一课程已排好的时段会自动跳过，只补齐未排课日期。
           </div>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -477,6 +487,8 @@ export function SchedulePlanningPanel({
                           {groupCount && (
                             <span className="text-xs font-semibold text-[#64748b]">
                               {groupCount.count} 节{groupCount.conflictCount > 0 ? `（${groupCount.conflictCount} 冲突）` : ""}
+                              {groupCount.existingCount > 0 ? `，${groupCount.existingCount} 已排课` : ""}
+                              {groupCount.duplicateCount > 0 ? `，${groupCount.duplicateCount} 重复` : ""}
                             </span>
                           )}
                         </div>
@@ -496,7 +508,7 @@ export function SchedulePlanningPanel({
                       {groupWeekdayLabels.length > 0 && (
                         <div className="rounded-[8px] border border-[#dbe4ef] bg-[#f8fbff] px-2 py-1.5 text-xs font-semibold text-[#64748b]">
                           <div>已选: {groupWeekdayLabels.join("、")}</div>
-                          <div className="mt-1">范围: {batchTimeGroupRangeLabel(group)}</div>
+                          <div className="mt-1">范围: {isBatchDateRangeValid ? `${rangeStart} 至 ${batchEffectiveRangeEnd}` : "未设置有效日期范围"}</div>
                           <div className="mt-1 leading-5">日期: {groupDateRows.join("；")}</div>
                         </div>
                       )}
@@ -656,9 +668,10 @@ export function SchedulePlanningPanel({
 
           <div className="rounded-[12px] border border-[#dbe4ef] bg-[#f8fbff] px-3 py-2 text-sm font-extrabold text-[#25324a]">
             {batchPerDayMode
-              ? `分时共 ${batchPerDayTotalCount} 节${batchPerDayConflictCount > 0 ? `，其中 ${batchPerDayConflictCount} 节会因时间冲突跳过` : ""}。`
-              : `当前条件共 ${batchCandidateCount} 节${batchConflictCount > 0 ? `，其中 ${batchConflictCount} 节会因时间冲突跳过` : ""}。`}
+              ? `分时共 ${batchPerDayTotalCount} 节，可新增 ${batchPerDayTotalCount - batchPerDayExistingCount - batchPerDayDuplicateCount - batchPerDayConflictCount} 节${batchPerDayExistingCount > 0 ? `，${batchPerDayExistingCount} 节已排课，将自动跳过` : ""}${batchPerDayDuplicateCount > 0 ? `，${batchPerDayDuplicateCount} 节批次内重复课节将合并` : ""}${batchPerDayConflictCount > 0 ? `，${batchPerDayConflictCount} 节会因时间冲突跳过` : ""}。`
+              : `当前条件共 ${batchCandidateCount} 节，可新增 ${batchCandidateCount - batchExistingCount - batchConflictCount} 节${batchExistingCount > 0 ? `，${batchExistingCount} 节已排课，将自动跳过` : ""}${batchConflictCount > 0 ? `，${batchConflictCount} 节会因时间冲突跳过` : ""}。`}
           </div>
+          <BatchConflictList details={batchConflictDetails} />
 
           {batchPerDayMode && (
             <Button
@@ -753,10 +766,13 @@ export function SchedulePlanningPanel({
             {weeklyPatternSlots.length > 0 && (
               <div className="mt-3 rounded-[12px] border border-[#dbe4ef] bg-white px-3 py-2 text-sm font-extrabold text-[#25324a]">
                 模板范围内共 {weeklyPatternCandidateCount} 节，可生成 {weeklyPatternCreatableCount} 节
+                {weeklyPatternExistingCount > 0 ? `，${weeklyPatternExistingCount} 节已排课，将自动跳过` : ""}
+                {weeklyPatternDuplicateCount > 0 ? `，${weeklyPatternDuplicateCount} 节重复课节将合并` : ""}
                 {weeklyPatternConflictCount > 0 ? `，${weeklyPatternConflictCount} 节冲突会跳过` : ""}
                 {weeklyPatternInvalidSlotCount > 0 ? `，${weeklyPatternInvalidSlotCount} 条模板需调整` : ""}。
               </div>
             )}
+            <BatchConflictList details={weeklyPatternConflictDetails} />
 
             <Button
               type="button"

@@ -28,11 +28,9 @@ import {
   cloneVault,
   type ViewKey,
   viewTitles,
-  datesBetween,
-  createLessonFromCourse,
-  navItems,
-  weekdayOfDateIso
+  navItems
 } from "@/frontend/lib/helpers";
+import { generateBatchLessonsInVault, type BatchLessonGenerationResult } from "@/frontend/lib/scheduleBatch";
 import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { clearStoredSession, clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
@@ -65,7 +63,6 @@ import {
   type CourseTypeMigrationMode,
   type CourseTypeMigrationResult
 } from "@/frontend/lib/vaultMutations";
-import { timesOverlap } from "@/frontend/lib/time";
 import type {
   CalendarDayNote,
   Campus,
@@ -90,7 +87,8 @@ import type {
   TodoItem,
   UserDeletionState,
   UserRole,
-  WeekStart
+  WeekStart,
+  Weekday
 } from "@/shared/types";
 
 const AdminView = lazy(() => import("@/frontend/views/AdminView").then((module) => ({ default: module.AdminView })));
@@ -1218,49 +1216,25 @@ export function App() {
   function generateDrafts(
     startDate: string,
     endDate: string,
-    weekdays: number[],
+    weekdays: Weekday[],
     courseGroupId: string,
     startTime: string,
     endTime: string,
     manualBillingHours?: number
-  ): { candidateCount: number; createdCount: number; conflictCount: number } {
-    if (!vault) return { candidateCount: 0, createdCount: 0, conflictCount: 0 };
-    const course = getCourse(vault, courseGroupId);
-    if (!course || course.status !== "active") return { candidateCount: 0, createdCount: 0, conflictCount: 0 };
-    const dates = datesBetween(startDate, endDate).filter((date) =>
-      weekdays.includes(weekdayOfDateIso(date))
-    );
-    let createdCount = 0;
-    let conflictCount = 0;
+  ): BatchLessonGenerationResult {
+    let result: BatchLessonGenerationResult = { candidateCount: 0, createdCount: 0, conflictCount: 0, existingCount: 0 };
     updateVault((draft) => {
-      // Check only the timetable that existed before this batch. Newly created
-      // lessons must never be treated as conflicts for the same batch.
-      const existingLessons = [...draft.lessons];
-      dates.forEach((date) => {
-        const exists = existingLessons.some(
-          (lesson) =>
-            lesson.date === date &&
-            lesson.status !== "cancelled" &&
-            timesOverlap(lesson.startTime, lesson.endTime, startTime, endTime)
-        );
-        if (!exists) {
-          draft.lessons.push(
-            createLessonFromCourse(draft, course, {
-              date,
-              startTime,
-              endTime,
-              campusId: course.defaultCampusId,
-              manualBillingHours,
-              status: "scheduled"
-            })
-          );
-          createdCount += 1;
-        } else {
-          conflictCount += 1;
-        }
+      result = generateBatchLessonsInVault(draft, {
+        startDate,
+        endDate,
+        weekdays,
+        courseGroupId,
+        startTime,
+        endTime,
+        manualBillingHours
       });
     });
-    return { candidateCount: dates.length, createdCount, conflictCount };
+    return result;
   }
 
   useEffect(() => {

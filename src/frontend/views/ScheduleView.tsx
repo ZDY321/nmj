@@ -87,6 +87,7 @@ import {
 } from "@/frontend/lib/scheduleViewHelpers";
 import { checklistCompletionAppliesToSource } from "@/frontend/lib/progressChecklist";
 import { filterCoursesWithScopedLessons } from "@/frontend/lib/salaryDetailScope";
+import { buildBatchLessonPreview, buildBatchSchedulePreview, endDateForRepeatWeeks, type BatchLessonGenerationResult, type BatchLessonTime, type BatchScheduleConflict } from "@/frontend/lib/scheduleBatch";
 import type { CalendarFocus, CourseTypeFilter, ExternalLessonReturnTarget, InternalLessonReturnTarget, LessonReturnTarget, LessonScope, MakeupLessonFilter, SchedulePanel, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
 
 function dateWithWeekday(date: string): string {
@@ -97,15 +98,17 @@ function optionalDateWithWeekday(date: string | null | undefined): string {
   return date ? dateWithWeekday(date) : "未知";
 }
 
-type WeeklyPatternCreatableItem = {
+type WeeklyPatternCreatableItem = BatchLessonTime & {
   slot: WeeklySchedulePatternSlot;
-  date: string;
   course: CourseGroup;
 };
 
 type WeeklyPatternPreview = {
   candidateCount: number;
   conflictCount: number;
+  existingCount: number;
+  duplicateCount: number;
+  conflicts: BatchScheduleConflict[];
   invalidSlotCount: number;
   creatableItems: WeeklyPatternCreatableItem[];
 };
@@ -113,11 +116,14 @@ type WeeklyPatternPreview = {
 type BatchPerDayPreview = {
   totalCount: number;
   conflictCount: number;
+  existingCount: number;
+  duplicateCount: number;
   existingConflictCount: number;
   internalConflictCount: number;
+  conflicts: BatchScheduleConflict[];
   unassignedWeekdays: Weekday[];
-  groupCounts: Array<{ groupId: string; count: number; conflictCount: number; existingConflictCount: number; internalConflictCount: number }>;
-  creatableItems: Array<{ group: BatchTimeGroup; date: string }>;
+  groupCounts: Array<{ groupId: string; count: number; conflictCount: number; existingCount: number; duplicateCount: number }>;
+  creatableItems: Array<BatchLessonTime & { group: BatchTimeGroup }>;
 };
 
 function timeTwoHoursLater(time: string): string {
@@ -271,11 +277,6 @@ function endDateForLessonCount(startDate: string, weekdays: Weekday[], lessonCou
   return "";
 }
 
-function endDateForRepeatWeeks(startDate: string, weekCount: number): string {
-  if (!startDate || weekCount <= 0) return "";
-  return addDays(startDate, weekCount * 7 - 1);
-}
-
 export function ScheduleView({
   vault,
   amountsVisible,
@@ -324,7 +325,7 @@ export function ScheduleView({
     startTime: string,
     endTime: string,
     manualBillingHours?: number
-  ) => { candidateCount: number; createdCount: number; conflictCount: number };
+  ) => BatchLessonGenerationResult;
   onWeekStartChange: (weekStart: WeekStart) => void;
   role: UserRole;
   token: string;
@@ -510,12 +511,15 @@ export function ScheduleView({
   const isBatchRepeatWeeksValid = batchRepeatMode !== "weeks" || batchRepeatWeekCount > 0;
   const batchEffectiveRangeEnd = batchRepeatMode === "weeks" ? endDateForRepeatWeeks(rangeStart, batchRepeatWeekCount) : rangeEnd;
   const isBatchDateRangeValid = isBatchRepeatWeeksValid && isOrderedDateRange(rangeStart, batchEffectiveRangeEnd);
-  const batchCandidateDates = isBatchRepeatWeeksValid && isOrderedDateRange(rangeStart, batchEffectiveRangeEnd)
-    ? datesBetweenLocal(rangeStart, batchEffectiveRangeEnd).filter((date) => selectedWeekdays.includes(weekdayOfDateIso(date)))
-    : [];
-  const batchConflictCount = isOrderedTimeRange(ruleStartTime, ruleEndTime)
-    ? batchCandidateDates.filter((date) => findTimeConflict(date, ruleStartTime, ruleEndTime)).length
-    : 0;
+  const batchPreview = buildBatchLessonPreview(vault.lessons, {
+    startDate: rangeStart,
+    endDate: isBatchDateRangeValid ? batchEffectiveRangeEnd : "",
+    weekdays: selectedWeekdays,
+    courseGroupId: ruleCourseGroupId,
+    startTime: ruleStartTime,
+    endTime: ruleEndTime
+  });
+  const batchConflictCount = batchPreview.conflicts.length;
   const weeklyPatternPreview = buildWeeklyPatternPreview();
   const weeklyPatternCandidateCount = weeklyPatternPreview.candidateCount;
   const weeklyPatternConflictCount = weeklyPatternPreview.conflictCount;
@@ -1659,9 +1663,7 @@ export function ScheduleView({
           startTime: ruleStartTime,
           endTime: ruleEndTime,
           billingHours: ruleBillingHours,
-          weekdays: [...selectedWeekdays],
-          rangeStart,
-          rangeEnd: batchEffectiveRangeEnd
+          weekdays: [...selectedWeekdays]
         }
       ]);
     } else if (!value && batchPerDayMode) {
@@ -1684,9 +1686,7 @@ export function ScheduleView({
         startTime: ruleStartTime,
         endTime: ruleEndTime,
         billingHours: ruleBillingHours,
-        weekdays: Array.from(new Set(selectedWeekdays)).sort((a, b) => a - b),
-        rangeStart,
-        rangeEnd: batchEffectiveRangeEnd
+        weekdays: Array.from(new Set(selectedWeekdays)).sort((a, b) => a - b)
       }
     ]);
   }
@@ -2458,13 +2458,16 @@ export function ScheduleView({
     const preview: WeeklyPatternPreview = {
       candidateCount: 0,
       conflictCount: 0,
+      existingCount: 0,
+      duplicateCount: 0,
+      conflicts: [],
       invalidSlotCount: 0,
       creatableItems: []
     };
     if (!isBatchDateRangeValid) return preview;
 
     const rangeDates = datesBetweenLocal(rangeStart, batchEffectiveRangeEnd);
-    const plannedLessons: Array<Pick<Lesson, "date" | "startTime" | "endTime">> = [];
+    const candidates: WeeklyPatternCreatableItem[] = [];
 
     for (const slot of weeklyPatternSlots) {
       const course = getCourse(vault, slot.courseGroupId);
@@ -2480,21 +2483,10 @@ export function ScheduleView({
 
       const slotDates = rangeDates.filter((date) => slot.weekdays.includes(weekdayOfDateIso(date)));
       for (const date of slotDates) {
-        preview.candidateCount += 1;
-        const existingConflict = findTimeConflict(date, slot.startTime, slot.endTime);
-        const plannedConflict = plannedLessons.some(
-          (lesson) =>
-            lesson.date === date &&
-            timesOverlap(lesson.startTime, lesson.endTime, slot.startTime, slot.endTime)
-        );
-
-        if (existingConflict || plannedConflict) {
-          preview.conflictCount += 1;
-          continue;
-        }
-
-        preview.creatableItems.push({ slot, date, course });
-        plannedLessons.push({
+        candidates.push({
+          slot,
+          course,
+          courseGroupId: course.id,
           date,
           startTime: slot.startTime,
           endTime: slot.endTime
@@ -2502,6 +2494,13 @@ export function ScheduleView({
       }
     }
 
+    const batch = buildBatchSchedulePreview(vault.lessons, candidates);
+    preview.candidateCount = batch.candidateCount;
+    preview.conflictCount = batch.conflicts.length;
+    preview.existingCount = batch.existingItems.length;
+    preview.duplicateCount = batch.duplicateItems.length;
+    preview.conflicts = batch.conflicts;
+    preview.creatableItems = batch.creatableItems;
     return preview;
   }
 
@@ -2509,69 +2508,70 @@ export function ScheduleView({
     const preview: BatchPerDayPreview = {
       totalCount: 0,
       conflictCount: 0,
+      existingCount: 0,
+      duplicateCount: 0,
       existingConflictCount: 0,
       internalConflictCount: 0,
+      conflicts: [],
       unassignedWeekdays: [],
       groupCounts: [],
       creatableItems: []
     };
-    if (!batchPerDayMode || batchTimeGroups.length === 0) return preview;
+    if (!batchPerDayMode || !isBatchDateRangeValid || batchTimeGroups.length === 0) return preview;
 
-    const plannedLessons: Array<Pick<Lesson, "date" | "startTime" | "endTime">> = [];
+    const rangeDates = datesBetweenLocal(rangeStart, batchEffectiveRangeEnd);
+    const candidates: Array<BatchLessonTime & { group: BatchTimeGroup }> = [];
 
     // Find weekdays selected globally but not assigned to any group
     const assignedWeekdays = new Set(batchTimeGroups.flatMap((g) => g.weekdays));
     preview.unassignedWeekdays = selectedWeekdays.filter((d) => !assignedWeekdays.has(d));
 
     for (const group of batchTimeGroups) {
-      const groupCount = { groupId: group.id, count: 0, conflictCount: 0, existingConflictCount: 0, internalConflictCount: 0 };
-      const groupRangeStart = group.rangeStart || rangeStart;
-      const groupRangeEnd = group.rangeEnd || batchEffectiveRangeEnd;
-      const groupValid = group.weekdays.length > 0 && isOrderedTimeRange(group.startTime, group.endTime) && isOrderedDateRange(groupRangeStart, groupRangeEnd);
+      if (group.weekdays.length === 0 || !isOrderedTimeRange(group.startTime, group.endTime)) continue;
 
-      if (!groupValid) {
-        preview.groupCounts.push(groupCount);
-        continue;
-      }
-
-      const groupDates = datesBetweenLocal(groupRangeStart, groupRangeEnd).filter((d) => group.weekdays.includes(weekdayOfDateIso(d)));
+      const groupDates = rangeDates.filter((date) => group.weekdays.includes(weekdayOfDateIso(date)));
       for (const date of groupDates) {
-        preview.totalCount += 1;
-        groupCount.count += 1;
-
-        const existingConflict = findTimeConflict(date, group.startTime, group.endTime);
-        const plannedConflict = plannedLessons.some(
-          (lesson) =>
-            lesson.date === date &&
-            timesOverlap(lesson.startTime, lesson.endTime, group.startTime, group.endTime)
-        );
-
-        if (existingConflict || plannedConflict) {
-          preview.conflictCount += 1;
-          groupCount.conflictCount += 1;
-          if (existingConflict) {
-            preview.existingConflictCount += 1;
-            groupCount.existingConflictCount += 1;
-          } else {
-            preview.internalConflictCount += 1;
-            groupCount.internalConflictCount += 1;
-          }
-          continue;
-        }
-
-        preview.creatableItems.push({ group, date });
-        plannedLessons.push({ date, startTime: group.startTime, endTime: group.endTime });
+        candidates.push({ group, date, courseGroupId: ruleCourseGroupId, startTime: group.startTime, endTime: group.endTime });
       }
-      preview.groupCounts.push(groupCount);
     }
 
+    const batch = buildBatchSchedulePreview(vault.lessons, candidates);
+    preview.totalCount = batch.candidateCount;
+    preview.conflictCount = batch.conflicts.length;
+    preview.existingCount = batch.existingItems.length;
+    preview.duplicateCount = batch.duplicateItems.length;
+    preview.existingConflictCount = batch.conflicts.filter((conflict) => conflict.source === "existing").length;
+    preview.internalConflictCount = batch.conflicts.filter((conflict) => conflict.source === "batch").length;
+    preview.conflicts = batch.conflicts;
+    preview.creatableItems = batch.creatableItems;
+    preview.groupCounts = batchTimeGroups.map((group) => ({
+      groupId: group.id,
+      count: candidates.filter((item) => item.group.id === group.id).length,
+      conflictCount: batch.conflicts.filter((conflict) => conflict.candidate.group.id === group.id).length,
+      existingCount: batch.existingItems.filter((item) => item.group.id === group.id).length,
+      duplicateCount: batch.duplicateItems.filter((item) => item.group.id === group.id).length
+    }));
     return preview;
+  }
+
+  function batchConflictDetails(conflicts: BatchScheduleConflict[]): string[] {
+    return conflicts.map(({ candidate, conflictingLesson, source }) =>
+      `${dateWithWeekday(candidate.date)} ${candidate.startTime}-${candidate.endTime} 与${source === "batch" ? "本次排课中的" : "已有的"}「${courseName(vault, conflictingLesson.courseGroupId)} ${conflictingLesson.startTime}-${conflictingLesson.endTime}」重叠`
+    );
+  }
+
+  function describeBatchSkippedItems(existingCount: number, duplicateCount: number, conflictCount: number): string {
+    const parts: string[] = [];
+    if (existingCount > 0) parts.push(`${existingCount} 节已排课，已自动跳过`);
+    if (duplicateCount > 0) parts.push(`${duplicateCount} 节批次内重复课节已合并`);
+    if (conflictCount > 0) parts.push(`${conflictCount} 节因时间冲突已跳过`);
+    return parts.join("，");
   }
 
   function describeBatchPerDayConflicts(preview: BatchPerDayPreview): string {
     const parts: string[] = [];
     if (preview.existingConflictCount > 0) parts.push(`${preview.existingConflictCount} 节与日历已有课程重叠`);
-    if (preview.internalConflictCount > 0) parts.push(`${preview.internalConflictCount} 节是本次时间组之间重复或重叠`);
+    if (preview.internalConflictCount > 0) parts.push(`${preview.internalConflictCount} 节是本次时间组之间重叠`);
     return parts.join("，");
   }
 
@@ -2593,16 +2593,17 @@ export function ScheduleView({
     if (!validateDateRange(rangeStart, batchEffectiveRangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
       return;
     }
-    if (batchCandidateDates.length === 0) {
+    if (batchPreview.candidateCount === 0) {
       showScheduleError("当前日期范围和星期没有匹配课节。");
       return;
     }
     const manualBillingHours = parseOptionalBillingHours(ruleBillingHours);
     const result = onGenerateDrafts(rangeStart, batchEffectiveRangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime, manualBillingHours);
+    const skippedDescription = describeBatchSkippedItems(result.existingCount, 0, result.conflictCount);
     showScheduleNotice(
       result.createdCount > 0
-        ? `已生成 ${result.createdCount} 节待上课${result.conflictCount > 0 ? `，${result.conflictCount} 节因时间冲突已跳过` : ""}。`
-        : `没有新增课节，${result.conflictCount > 0 ? `${result.conflictCount} 节均与已有课程冲突。` : "当前条件没有可生成课节。"}`
+        ? `已生成 ${result.createdCount} 节待上课${skippedDescription ? `，${skippedDescription}` : ""}。`
+        : `没有新增课节，${skippedDescription || "当前条件没有可生成课节"}。`
     );
   }
 
@@ -2612,15 +2613,16 @@ export function ScheduleView({
   }
 
   function generateBatchPerDayLessons() {
+    if (!isBatchRepeatWeeksValid) {
+      showScheduleError("重复周数至少为 1。");
+      return;
+    }
+    if (!validateDateRange(rangeStart, batchEffectiveRangeEnd)) return;
     if (batchTimeGroups.length === 0) {
       showScheduleError("请添加至少一个时间分组。");
       return;
     }
-    const invalidGroup = batchTimeGroups.find((g) => {
-      const groupRangeStart = g.rangeStart || rangeStart;
-      const groupRangeEnd = g.rangeEnd || batchEffectiveRangeEnd;
-      return g.weekdays.length === 0 || !isOrderedTimeRange(g.startTime, g.endTime) || !isOrderedDateRange(groupRangeStart, groupRangeEnd);
-    });
+    const invalidGroup = batchTimeGroups.find((g) => g.weekdays.length === 0 || !isOrderedTimeRange(g.startTime, g.endTime));
     if (invalidGroup) {
       showScheduleError("时间分组中有未选星期、日期范围或时间无效的条目，请调整后再生成。");
       return;
@@ -2638,12 +2640,8 @@ export function ScheduleView({
       return;
     }
     if (preview.creatableItems.length === 0) {
-      const conflictDescription = describeBatchPerDayConflicts(preview);
-      showScheduleError(
-        preview.conflictCount > 0
-          ? `${preview.conflictCount} 节均存在时间冲突${conflictDescription ? `（${conflictDescription}）` : ""}，没有新增课节。`
-          : "当前分时条件没有可生成课节。"
-      );
+      const showMessage = preview.conflictCount > 0 ? showScheduleError : showScheduleNotice;
+      showMessage(`没有新增课节，${describeBatchSkippedItems(preview.existingCount, preview.duplicateCount, preview.conflictCount)}。`);
       return;
     }
 
@@ -2664,9 +2662,9 @@ export function ScheduleView({
       })
     );
     onAddLessons(lessonsToAdd);
-    const conflictDescription = describeBatchPerDayConflicts(preview);
+    const skippedDescription = describeBatchSkippedItems(preview.existingCount, preview.duplicateCount, preview.conflictCount);
     showScheduleNotice(
-      `已按分时生成 ${lessonsToAdd.length} 节待上课${preview.conflictCount > 0 ? `，跳过 ${preview.conflictCount} 节时间冲突${conflictDescription ? `（${conflictDescription}）` : ""}` : ""}。`
+      `已按分时生成 ${lessonsToAdd.length} 节待上课${skippedDescription ? `，${skippedDescription}` : ""}。`
     );
   }
 
@@ -2704,11 +2702,8 @@ export function ScheduleView({
       return;
     }
     if (preview.creatableItems.length === 0) {
-      showScheduleError(
-        preview.conflictCount > 0
-          ? `${preview.conflictCount} 节均与已有课程或模板内时段冲突，没有新增课节。`
-          : "当前周循环模板没有可生成课节。"
-      );
+      const showMessage = preview.conflictCount > 0 ? showScheduleError : showScheduleNotice;
+      showMessage(`没有新增课节，${describeBatchSkippedItems(preview.existingCount, preview.duplicateCount, preview.conflictCount)}。`);
       return;
     }
 
@@ -2723,8 +2718,9 @@ export function ScheduleView({
       })
     );
     onAddLessons(lessonsToAdd);
+    const skippedDescription = describeBatchSkippedItems(preview.existingCount, preview.duplicateCount, preview.conflictCount);
     showScheduleNotice(
-      `已按周循环模板生成 ${lessonsToAdd.length} 节待上课${preview.conflictCount > 0 ? `，${preview.conflictCount} 节因时间冲突已跳过` : ""}。`
+      `已按周循环模板生成 ${lessonsToAdd.length} 节待上课${skippedDescription ? `，${skippedDescription}` : ""}。`
     );
   }
 
@@ -2852,11 +2848,15 @@ export function ScheduleView({
       )}
       {schedulePanel === "schedule" && (
         <SchedulePlanningPanel
-          batchCandidateCount={batchCandidateDates.length}
+          batchCandidateCount={batchPreview.candidateCount}
           batchConflictCount={batchConflictCount}
+          batchConflictDetails={batchConflictDetails(batchPerDayMode ? batchPerDayPreview.conflicts : batchPreview.conflicts)}
+          batchExistingCount={batchPreview.existingItems.length}
           batchEffectiveRangeEnd={batchEffectiveRangeEnd}
           batchLessonTargetCount={batchLessonTargetCount}
           batchPerDayConflictCount={batchPerDayPreview.conflictCount}
+          batchPerDayExistingCount={batchPerDayPreview.existingCount}
+          batchPerDayDuplicateCount={batchPerDayPreview.duplicateCount}
           batchPerDayGroupCounts={batchPerDayPreview.groupCounts}
           batchPerDayMode={batchPerDayMode}
           batchPerDayTotalCount={batchPerDayPreview.totalCount}
@@ -2881,11 +2881,16 @@ export function ScheduleView({
           onAddWeeklyPatternSlot={addWeeklyPatternSlot}
           onApplyWeeklyPatternSlot={applyWeeklyPatternSlot}
           onBatchGenerate={() => {
+            if (!isBatchRepeatWeeksValid) {
+              showScheduleError("重复周数至少为 1。");
+              return;
+            }
+            if (!validateDateRange(rangeStart, batchEffectiveRangeEnd)) return;
             if (batchPerDayMode) {
               const conflictDescription = describeBatchPerDayConflicts(batchPerDayPreview);
               const conflictText = batchPerDayPreview.conflictCount > 0
                 ? `系统会跳过 ${batchPerDayPreview.conflictCount} 节时间段${conflictDescription ? `（${conflictDescription}）` : ""}，只生成没有冲突的课程。`
-                : `系统将按当前 ${batchTimeGroups.length} 个时间组生成 ${batchPerDayPreview.totalCount} 节待上课课节。`;
+                : `系统将按当前 ${batchTimeGroups.length} 个时间组生成 ${batchPerDayPreview.creatableItems.length} 节待上课课节，已排课和批次内重复的课节会自动跳过。`;
               confirm({
                 title: batchPerDayPreview.conflictCount > 0
                   ? batchPerDayPreview.existingConflictCount > 0 ? "按日分时排课中存在时间冲突" : "按日分时时间组有重叠"
@@ -2896,17 +2901,13 @@ export function ScheduleView({
               });
               return;
             }
-            if (!isBatchRepeatWeeksValid) {
-              showScheduleError("重复周数至少为 1。");
-              return;
-            }
-            if (!validateDateRange(rangeStart, batchEffectiveRangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
+            if (!validateTimeRange(ruleStartTime, ruleEndTime)) {
               return;
             }
             if (hasBatchConflicts()) {
               confirm({
                 title: "批量排课中存在时间冲突",
-                description: `系统会跳过 ${batchConflictCount} 节已经有课的时间段，只生成没有冲突的课程。`,
+                description: `系统会跳过 ${batchConflictCount} 节时间冲突，生成 ${batchPreview.creatableItems.length} 节待上课。${batchPreview.existingItems.length > 0 ? `另有 ${batchPreview.existingItems.length} 节已排课，会自动跳过。` : ""}${batchConflictDetails(batchPreview.conflicts).slice(0, 3).join("；")}。`,
                 confirmLabel: "跳过冲突并生成",
                 onConfirm: generateBatchLessons
               });
@@ -2980,6 +2981,9 @@ export function ScheduleView({
           visibleWeekdays={visibleWeekdays}
           weeklyPatternCandidateCount={weeklyPatternCandidateCount}
           weeklyPatternConflictCount={weeklyPatternConflictCount}
+          weeklyPatternConflictDetails={batchConflictDetails(weeklyPatternPreview.conflicts)}
+          weeklyPatternExistingCount={weeklyPatternPreview.existingCount}
+          weeklyPatternDuplicateCount={weeklyPatternPreview.duplicateCount}
           weeklyPatternCourseOptions={vault.courseGroups}
           weeklyPatternCreatableCount={weeklyPatternCreatableCount}
           weeklyPatternInvalidSlotCount={weeklyPatternInvalidSlotCount}
