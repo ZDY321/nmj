@@ -357,7 +357,7 @@ export function ScheduleView({
   const [singleBillingHours, setSingleBillingHours] = useState("");
   const [ruleCourseGroupId, setRuleCourseGroupId] = useState(firstCourseId);
   const [ruleCourseSearch, setRuleCourseSearch] = useState("");
-  const [selectedWeekdays, setSelectedWeekdays] = useState<Weekday[]>([3]);
+  const [selectedWeekdays, setSelectedWeekdays] = useState<Weekday[]>([]);
   const [ruleStartTime, setRuleStartTime] = useState("19:00");
   const [ruleEndTime, setRuleEndTime] = useState("21:00");
   const [ruleBillingHours, setRuleBillingHours] = useState("");
@@ -2562,7 +2562,7 @@ export function ScheduleView({
 
   function describeBatchSkippedItems(existingCount: number, duplicateCount: number, conflictCount: number): string {
     const parts: string[] = [];
-    if (existingCount > 0) parts.push(`${existingCount} 节已排课，已自动跳过`);
+    if (existingCount > 0) parts.push(`${existingCount} 节已排课`);
     if (duplicateCount > 0) parts.push(`${duplicateCount} 节批次内重复课节已合并`);
     if (conflictCount > 0) parts.push(`${conflictCount} 节因时间冲突已跳过`);
     return parts.join("，");
