@@ -1564,11 +1564,15 @@ export function App() {
   }
 
   function openLessonInScheduleRecords(lesson: Lesson, returnTarget?: ScheduleCalendarFocus["returnTarget"]) {
+    openDateInScheduleRecords(lesson.date, returnTarget, lesson.id);
+  }
+
+  function openDateInScheduleRecords(date: string, returnTarget?: ScheduleCalendarFocus["returnTarget"], lessonId?: string) {
     setNoticeModalOpen(false);
     setFeedbackModalOpen(false);
     setMobileNavOpen(false);
     setOnboardingVisible(false);
-    setScheduleCalendarFocus({ date: lesson.date, lessonId: lesson.id, targetPanel: "records", returnTarget: returnTarget ?? null, nonce: Date.now() });
+    setScheduleCalendarFocus({ date, lessonId, targetPanel: "records", returnTarget: returnTarget ?? null, nonce: Date.now() });
     setView("schedule");
   }
 
@@ -1578,6 +1582,15 @@ export function App() {
 
   function openCalendarLessonInScheduleRecords(lesson: Lesson, calendarFocus: CalendarOverviewFocusState) {
     openLessonInScheduleRecords(lesson, {
+      kind: "view",
+      view: "calendar",
+      label: "返回日历总览",
+      calendarFocus
+    });
+  }
+
+  function openCalendarDateInScheduleRecords(date: string, calendarFocus: CalendarOverviewFocusState) {
+    openDateInScheduleRecords(date, {
       kind: "view",
       view: "calendar",
       label: "返回日历总览",
@@ -2063,6 +2076,7 @@ export function App() {
                     onUpdateLessons={updateLessons}
                     onWeekStartChange={updateWeekStart}
                     onOpenLessonInRecords={openCalendarLessonInScheduleRecords}
+                    onOpenDateInRecords={openCalendarDateInScheduleRecords}
                     focusRequest={calendarOverviewFocus}
                   />
                 )}

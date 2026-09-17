@@ -341,7 +341,11 @@ export function ScheduleView({
   const initialFocusedDate = calendarFocus?.date ?? todayIso();
   const initialFocusedMonth = initialFocusedDate.slice(0, 7);
   const initialTargetPanel = calendarFocus?.targetPanel ?? "calendar";
-  const initialSelectedLessonId = calendarFocus?.lessonId ?? vault.lessons[0]?.id ?? "";
+  const initialSelectedLessonId = calendarFocus?.lessonId ?? (
+    initialTargetPanel === "records"
+      ? vault.lessons.filter((lesson) => lesson.date === initialFocusedDate).sort(sortLessons)[0]?.id
+      : vault.lessons[0]?.id
+  ) ?? "";
   const weekStartPreference = weekStartsOn(vault);
   const initialWeekDates = weekDatesFor(initialFocusedDate, weekStartPreference);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
@@ -670,6 +674,8 @@ export function ScheduleView({
         setLessonReturnTarget(calendarFocus.returnTarget ?? null);
         setSelectedId(calendarFocus.lessonId);
       }
+    } else if (calendarFocus.targetPanel === "records") {
+      openDateInRecords(calendarFocus.date, { returnTarget: calendarFocus.returnTarget ?? null });
     }
   }, [calendarFocus?.nonce]);
 
@@ -2094,6 +2100,27 @@ export function ScheduleView({
     }
   }
 
+  function openDateInRecords(date: string, options: { returnTarget?: LessonReturnTarget | null } = {}) {
+    const firstLesson = vault.lessons.filter((lesson) => lesson.date === date).sort(sortLessons)[0];
+    setLessonReturnTarget(Object.prototype.hasOwnProperty.call(options, "returnTarget")
+      ? options.returnTarget ?? null
+      : buildPanelReturnTarget(schedulePanel));
+    setLessonHistory([]);
+    setCampusFilter("all");
+    setCourseTypeFilter("all");
+    setStudentFilter("");
+    setShowOnlyMakeup(false);
+    setSelectedId(firstLesson?.id ?? "");
+    setSelectedCalendarDate(date);
+    setCalendarMonth(date.slice(0, 7));
+    setLessonDay(date);
+    setLessonMonth(date.slice(0, 7));
+    setLessonScope("day");
+    setSyncRecordsWithCalendarDate(true);
+    setCalendarDetailDate(null);
+    setSchedulePanel("records");
+  }
+
   function openLessonInRecords(
     lesson: Lesson,
     options: { pushHistory?: boolean; preserveReturnTarget?: boolean; returnTarget?: LessonReturnTarget | null } = {}
@@ -2770,6 +2797,7 @@ export function ScheduleView({
         makeupMarkerForLesson={makeupMarkerForLesson}
         onClose={() => setCalendarDetailDate(null)}
         onDeleteLesson={askDeleteLesson}
+        onOpenDate={openDateInRecords}
         onOpenLesson={(lesson) => {
           setCalendarDetailDate(null);
           openLessonInRecords(lesson);
@@ -3159,6 +3187,7 @@ export function ScheduleView({
           makeupOriginalDateFilter={makeupOriginalDateFilter}
           onDeleteLesson={askDeleteLesson}
           onMakeupOriginalDateFilterChange={setMakeupOriginalDateFilter}
+          onOpenDate={openDateInRecords}
           onOpenLesson={openLessonInRecords}
           optionalDateWithWeekday={optionalDateWithWeekday}
           pendingCount={selectedCalendarPendingCount}
@@ -3203,6 +3232,7 @@ export function ScheduleView({
               onDeleteLesson={askDeleteLesson}
               onMakeupOriginalDateFilterChange={setMakeupOriginalDateFilter}
               onMarkOriginalStudentsMadeUp={markOriginalStudentsMadeUp}
+              onOpenDate={openDateInRecords}
               onOpenLesson={openLessonInRecords}
               onUpdateOriginalAttendance={updateMakeupManagementAttendance}
               onUpdateOriginalMakeupExempt={updateMakeupManagementExempt}
@@ -3336,6 +3366,13 @@ export function ScheduleView({
 
       {schedulePanel === "records" && (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
+        {!selected && lessonReturnTarget && (
+          <div className="xl:col-span-2">
+            <Button type="button" variant="outline" size="sm" onClick={goBackToLessonSource}>
+              <CornerUpLeft size={15} /> {lessonReturnTarget.label}
+            </Button>
+          </div>
+        )}
         <ScheduleRecordsListCard
           amountsVisible={amountsVisible}
           campusFilter={campusFilter}

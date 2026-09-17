@@ -36,6 +36,7 @@ import {
   weekdayOfDateIso
 } from "@/frontend/lib/helpers";
 import { MetricCard } from "@/frontend/components/MetricCard";
+import { CalendarDateDetailsButton } from "@/frontend/components/CalendarDateDetailsButton";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { buildFeeSnapshot, getCourse, isClassBillingCourseType, todayIso } from "@/frontend/lib/calculations";
 import { attendanceStatusForLessonStatus, matchesCalendarLessonFilters } from "@/frontend/lib/scheduleViewHelpers";
@@ -138,6 +139,7 @@ export function CalendarView({
   onUpdateLessons,
   onWeekStartChange,
   onOpenLessonInRecords,
+  onOpenDateInRecords,
   focusRequest
 }: {
   vault: TeacherVault;
@@ -145,6 +147,7 @@ export function CalendarView({
   onUpdateLessons: (lessons: Lesson[]) => void;
   onWeekStartChange: (weekStart: WeekStart) => void;
   onOpenLessonInRecords?: (lesson: Lesson, returnFocus: CalendarOverviewFocusState) => void;
+  onOpenDateInRecords: (date: string, returnFocus: CalendarOverviewFocusState) => void;
   focusRequest?: CalendarOverviewFocusRequest | null;
 }) {
   const [month, setMonth] = useState(() => focusRequest?.month ?? todayIso().slice(0, 7));
@@ -769,7 +772,12 @@ export function CalendarView({
         {overviewPage === "month" && (
         <Card className="h-fit overflow-hidden">
           <CardHeader>
-            <CardTitle>{dateWithWeekday(selectedDate)} 明细</CardTitle>
+            <CardTitle>
+              <CalendarDateDetailsButton
+                dateLabel={dateWithWeekday(selectedDate)}
+                onClick={() => onOpenDateInRecords(selectedDate, buildReturnFocus())}
+              />
+            </CardTitle>
             <CardDescription>仅统计课程课时金额，不等同于工资总额。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

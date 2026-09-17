@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CalendarDays, MessageSquare, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CalendarDateDetailsButton } from "@/frontend/components/CalendarDateDetailsButton";
 import type { Lesson, TeacherVault } from "@/shared/types";
 import { formatPrivateMoney } from "@/frontend/lib/helpers";
 import {
@@ -27,6 +28,7 @@ type ScheduleCalendarDetailDialogProps = {
   makeupMarkerForLesson: (lesson: Lesson) => string | null;
   onClose: () => void;
   onDeleteLesson: (lesson: Lesson) => void;
+  onOpenDate: (date: string) => void;
   onOpenLesson: (lesson: Lesson) => void;
   pendingCount: number;
   cancelledCount: number;
@@ -44,6 +46,7 @@ export function ScheduleCalendarDetailDialog({
   makeupMarkerForLesson,
   onClose,
   onDeleteLesson,
+  onOpenDate,
   onOpenLesson,
   pendingCount,
   cancelledCount,
@@ -70,7 +73,9 @@ export function ScheduleCalendarDetailDialog({
                 <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
                   <CalendarDays size={14} /> 当日课程
                 </div>
-                <h2 className="text-2xl font-extrabold leading-tight text-[#061226]">{dateWithWeekday(date)}</h2>
+                <h2 className="text-2xl font-extrabold leading-tight text-[#061226]">
+                  <CalendarDateDetailsButton dateLabel={dateWithWeekday(date)} onClick={() => onOpenDate(date)} />
+                </h2>
                 <p className="mt-1 text-sm font-semibold text-[#64748b]">点击课程可跳转到课程记录详情。</p>
               </div>
               <Button type="button" variant="ghost" size="icon" onClick={onClose} className="shrink-0 rounded-full">

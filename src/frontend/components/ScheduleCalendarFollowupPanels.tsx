@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { CalendarDateDetailsButton } from "@/frontend/components/CalendarDateDetailsButton";
 import type { AttendanceStatus, Lesson, TeacherVault } from "@/shared/types";
 import {
   attendanceLabels,
@@ -50,6 +51,7 @@ type ScheduleCalendarFollowupPanelsProps = {
   onUpdateOriginalAttendance?: (lesson: Lesson, studentId: string, status: AttendanceStatus) => void;
   onUpdateOriginalMakeupExempt?: (lesson: Lesson, studentId: string, makeupExempt: boolean) => void;
   onOpenLesson: (lesson: Lesson) => void;
+  onOpenDate: (date: string) => void;
   optionalDateWithWeekday: (date: string | null | undefined) => string;
   pendingCount: number;
   cancelledCount: number;
@@ -74,6 +76,7 @@ export function ScheduleCalendarFollowupPanels({
   onMakeupOriginalDateFilterChange,
   onMarkOriginalStudentsMadeUp,
   onOpenLesson,
+  onOpenDate,
   onUpdateOriginalAttendance,
   onUpdateOriginalMakeupExempt,
   optionalDateWithWeekday,
@@ -98,7 +101,9 @@ export function ScheduleCalendarFollowupPanels({
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <Clock size={14} /> 每日课程详情
           </div>
-          <CardTitle>{dateWithWeekday(selectedCalendarDate)} 课程</CardTitle>
+          <CardTitle>
+            <CalendarDateDetailsButton dateLabel={dateWithWeekday(selectedCalendarDate)} onClick={() => onOpenDate(selectedCalendarDate)} />
+          </CardTitle>
           <CardDescription>状态与课时记录同步，点击课程可跳转到课程记录详情。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
