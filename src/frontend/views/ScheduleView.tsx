@@ -7,6 +7,7 @@ import { ScheduleAiPanel } from "@/frontend/components/ScheduleAiPanel";
 import { ScheduleCalendarDetailDialog } from "@/frontend/components/ScheduleCalendarDetailDialog";
 import { ScheduleCalendarFollowupPanels } from "@/frontend/components/ScheduleCalendarFollowupPanels";
 import { ScheduleCalendarPanel } from "@/frontend/components/ScheduleCalendarPanel";
+import { ScheduleDayReusePanel } from "@/frontend/components/ScheduleDayReusePanel";
 import { ScheduleLessonDetailPanel } from "@/frontend/components/ScheduleLessonDetailPanel";
 import { SchedulePanelTabs } from "@/frontend/components/SchedulePanelTabs";
 import { SchedulePlanningPanel, type BatchRepeatMode, type BatchTimeGroup, type WeeklySchedulePatternSlot } from "@/frontend/components/SchedulePlanningPanel";
@@ -19,6 +20,7 @@ import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiSc
 import { billableHoursForCourseLesson, billableStudentCapForRule, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isClassBillingCourseType, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, substituteClassPresentCount, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
+import { buildScheduleDayReusePreview } from "@/frontend/lib/scheduleDayReuse";
 import {
   attendanceLabels,
   addDays,
@@ -704,7 +706,16 @@ export function ScheduleView({
     groups[originalId] = [...(groups[originalId] ?? []), lesson];
     return groups;
   }, {});
-  const selectedSyncLessons = syncSourceLessons.filter((lesson) => selectedSyncLessonIds.includes(lesson.id));
+  const selectedSyncLessons = useMemo(
+    () => vault.lessons
+      .filter((lesson) => lesson.date === syncSourceDate && selectedSyncLessonIds.includes(lesson.id))
+      .sort(sortLessons),
+    [vault.lessons, selectedSyncLessonIds, syncSourceDate]
+  );
+  const dayReusePreview = useMemo(
+    () => buildScheduleDayReusePreview(vault, selectedSyncLessons, syncTargetDate),
+    [vault, selectedSyncLessons, syncTargetDate]
+  );
   const syncRangeSourceDates = datesBetweenLocal(syncRangeSourceStart, syncRangeSourceEnd);
   const syncRangeTargetDates = datesBetweenLocal(syncRangeTargetStart, syncRangeTargetEnd);
   const syncRangeSourceLessons = vault.lessons.filter((lesson) => syncRangeSourceDates.includes(lesson.date));
@@ -1496,6 +1507,7 @@ export function ScheduleView({
     onAddLessons(lessonsToAdd, { replaceLessonIds });
     options.afterSync();
     setScheduleError("");
+    showScheduleNotice(`已同步 ${lessonsToAdd.length} 节课程。`);
     if (skippedCount > 0 || conflictSkippedCount > 0) {
       const messages = [
         skippedCount > 0 ? `${skippedCount} 节来源课程已暂停，未同步` : "",
@@ -2872,6 +2884,25 @@ export function ScheduleView({
           selectedAiEndpoint={selectedAiEndpoint}
           selectedAiProvider={selectedAiProvider}
           selectedAiUsage={selectedAiUsage}
+        />
+      )}
+      {schedulePanel === "schedule" && (
+        <ScheduleDayReusePanel
+          onApply={() => copySelectedLessonsToDate()}
+          onClearLessons={() => setAllSyncLessons(false)}
+          onSelectAllLessons={() => setAllSyncLessons(true)}
+          onToggleLesson={toggleSyncLesson}
+          onUsePreviousWeek={() => setSyncSourceDate(addDays(syncTargetDate, -7))}
+          preview={dayReusePreview}
+          selectableLessons={selectableSyncLessons}
+          selectedLessonIds={selectedSyncLessonIds}
+          selectedLessons={selectedSyncLessons}
+          setSourceDate={setSyncSourceDate}
+          setTargetDate={setSyncTargetDate}
+          sourceDate={syncSourceDate}
+          sourceLessons={syncSourceLessons}
+          targetDate={syncTargetDate}
+          vault={vault}
         />
       )}
       {schedulePanel === "schedule" && (
