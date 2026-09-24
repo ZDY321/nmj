@@ -81,11 +81,19 @@ export function ScheduleCalendarSyncPanel({
   vault
 }: ScheduleCalendarSyncPanelProps) {
   return (
-    <div className="space-y-3 rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+    <div className="space-y-3 rounded-[14px] border-2 border-[#93c5fd] bg-[#eff6ff] p-3 shadow-[0_12px_28px_rgba(21,87,194,0.1)]">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="text-sm font-extrabold text-[#061226]">同步课程</div>
-          <div className="mt-1 text-xs font-semibold text-[#64748b]">支持单日勾选同步，也支持日期段一一对应同步；同步后按目标时间线自动衔接上一节内容和作业。</div>
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[9px] bg-[#1557c2] text-white shadow-[0_8px_18px_rgba(21,87,194,0.24)]">
+            <Copy size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-sm font-extrabold text-[#061226]">同步课程</div>
+              <Badge variant="amber" className="w-fit">排课工具</Badge>
+            </div>
+            <div className="mt-1 text-xs font-semibold text-[#64748b]">支持单日勾选同步，也支持日期段一一对应同步；同步后按目标时间线自动衔接上一节内容和作业。</div>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="w-fit">{selectedSyncLessons.length} / {syncSourceLessons.length} 节</Badge>
@@ -101,7 +109,7 @@ export function ScheduleCalendarSyncPanel({
             }`}
           >
             {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            {isOpen ? "折叠" : "展开"}
+            {isOpen ? "折叠" : "展开同步工具"}
           </Button>
         </div>
       </div>

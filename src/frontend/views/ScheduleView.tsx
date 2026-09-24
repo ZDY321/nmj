@@ -20,7 +20,7 @@ import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiSc
 import { billableHoursForCourseLesson, billableStudentCapForRule, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isClassBillingCourseType, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, substituteClassPresentCount, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
 import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
 import { makeId } from "@/frontend/lib/crypto";
-import { buildScheduleDayReusePreview } from "@/frontend/lib/scheduleDayReuse";
+import { buildScheduleDayReusePreview, buildScheduleRangeReusePreview } from "@/frontend/lib/scheduleDayReuse";
 import {
   attendanceLabels,
   addDays,
@@ -718,6 +718,10 @@ export function ScheduleView({
   );
   const syncRangeSourceDates = datesBetweenLocal(syncRangeSourceStart, syncRangeSourceEnd);
   const syncRangeTargetDates = datesBetweenLocal(syncRangeTargetStart, syncRangeTargetEnd);
+  const rangeReusePreview = useMemo(
+    () => buildScheduleRangeReusePreview(vault, syncRangeSourceDates, syncRangeTargetDates),
+    [vault, syncRangeSourceStart, syncRangeSourceEnd, syncRangeTargetStart, syncRangeTargetEnd]
+  );
   const syncRangeSourceLessons = vault.lessons.filter((lesson) => syncRangeSourceDates.includes(lesson.date));
   const syncRangeActiveLessons = syncRangeSourceLessons.filter((lesson) => {
     const course = getCourse(vault, lesson.courseGroupId);
@@ -2889,16 +2893,32 @@ export function ScheduleView({
       {schedulePanel === "schedule" && (
         <ScheduleDayReusePanel
           onApply={() => copySelectedLessonsToDate()}
+          onApplyRange={() => copyLessonRangeToDateRange()}
           onClearLessons={() => setAllSyncLessons(false)}
           onSelectAllLessons={() => setAllSyncLessons(true)}
           onToggleLesson={toggleSyncLesson}
           onUsePreviousWeek={() => setSyncSourceDate(addDays(syncTargetDate, -7))}
+          onUsePreviousWeekRange={() => {
+            setSyncRangeSourceStart(addDays(syncRangeTargetStart, -7));
+            setSyncRangeSourceEnd(addDays(syncRangeTargetEnd, -7));
+          }}
           preview={dayReusePreview}
+          rangePreview={rangeReusePreview}
+          rangeSourceDates={syncRangeSourceDates}
+          rangeSourceEnd={syncRangeSourceEnd}
+          rangeSourceStart={syncRangeSourceStart}
+          rangeTargetDates={syncRangeTargetDates}
+          rangeTargetEnd={syncRangeTargetEnd}
+          rangeTargetStart={syncRangeTargetStart}
           selectableLessons={selectableSyncLessons}
           selectedLessonIds={selectedSyncLessonIds}
           selectedLessons={selectedSyncLessons}
           setSourceDate={setSyncSourceDate}
           setTargetDate={setSyncTargetDate}
+          setRangeSourceEnd={setSyncRangeSourceEnd}
+          setRangeSourceStart={setSyncRangeSourceStart}
+          setRangeTargetEnd={setSyncRangeTargetEnd}
+          setRangeTargetStart={setSyncRangeTargetStart}
           sourceDate={syncSourceDate}
           sourceLessons={syncSourceLessons}
           targetDate={syncTargetDate}

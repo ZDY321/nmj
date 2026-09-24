@@ -30,6 +30,24 @@ export type ScheduleDayReusePreview = {
   keepCount: number;
 };
 
+export type ScheduleRangeReusePreviewDay = {
+  sourceDate: string;
+  targetDate: string;
+  sourceLessonCount: number;
+  preview: ScheduleDayReusePreview;
+};
+
+export type ScheduleRangeReusePreview = {
+  days: ScheduleRangeReusePreviewDay[];
+  sourceLessonCount: number;
+  createCount: number;
+  replaceCount: number;
+  keepCount: number;
+  skippedCount: number;
+  unavailableCount: number;
+  conflictSkippedCount: number;
+};
+
 export function buildScheduleDayReusePreview(
   vault: TeacherVault,
   sourceLessons: Lesson[],
@@ -90,5 +108,35 @@ export function buildScheduleDayReusePreview(
     createCount: addedEntries.filter((entry) => entry.outcome === "create").length,
     replaceCount: addedEntries.filter((entry) => entry.outcome === "replace").length,
     keepCount: keptEntries.length
+  };
+}
+
+export function buildScheduleRangeReusePreview(
+  vault: TeacherVault,
+  sourceDates: string[],
+  targetDates: string[]
+): ScheduleRangeReusePreview {
+  const days = sourceDates.length > 0 && sourceDates.length === targetDates.length
+    ? sourceDates.map((sourceDate, index) => {
+        const sourceLessons = vault.lessons.filter((lesson) => lesson.date === sourceDate).sort(sortLessons);
+        return {
+          sourceDate,
+          targetDate: targetDates[index],
+          sourceLessonCount: sourceLessons.length,
+          preview: buildScheduleDayReusePreview(vault, sourceLessons, targetDates[index])
+        };
+      })
+    : [];
+  const skippedEntries = days.flatMap((day) => day.preview.skippedEntries);
+
+  return {
+    days,
+    sourceLessonCount: days.reduce((sum, day) => sum + day.sourceLessonCount, 0),
+    createCount: days.reduce((sum, day) => sum + day.preview.createCount, 0),
+    replaceCount: days.reduce((sum, day) => sum + day.preview.replaceCount, 0),
+    keepCount: days.reduce((sum, day) => sum + day.preview.keepCount, 0),
+    skippedCount: skippedEntries.length,
+    unavailableCount: skippedEntries.filter((entry) => entry.reason === "course_unavailable").length,
+    conflictSkippedCount: skippedEntries.filter((entry) => entry.reason === "time_conflict").length
   };
 }
