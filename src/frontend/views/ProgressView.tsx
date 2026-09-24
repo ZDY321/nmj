@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { getCourse, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
+import { defaultProgressDateRange } from "@/frontend/lib/progressDateRange";
 import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
 import {
   campusName,
@@ -196,6 +197,7 @@ export function ProgressView({
   onOpenLessonInRecords?: (lesson: Lesson) => void;
   onUpdateLessonContent: (lessonId: string, patch: Pick<Lesson["content"], "taught" | "homework">) => void;
 }) {
+  const initialDateRange = useMemo(() => defaultProgressDateRange(todayIso()), []);
   const [query, setQuery] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
   const [gradeFilter, setGradeFilter] = useState("all");
@@ -205,8 +207,8 @@ export function ProgressView({
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>("all");
   const [studentStatusScope, setStudentStatusScope] = useState<ProgressStudentStatusScope>("active");
   const [sortOption, setSortOption] = useState<ProgressSortOption>("smart");
-  const [dateStart, setDateStart] = useState("");
-  const [dateEnd, setDateEnd] = useState("");
+  const [dateStart, setDateStart] = useState(initialDateRange.start);
+  const [dateEnd, setDateEnd] = useState(initialDateRange.end);
   const [onlyFollowUp, setOnlyFollowUp] = useState(false);
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedLessonId, setSelectedLessonId] = useState("");
@@ -552,7 +554,7 @@ export function ProgressView({
           </div>
           <CardTitle>课程进度与作业总览</CardTitle>
           <CardDescription>
-            以课程为主视角，读取每节课的共同内容和课后作业；点击课节后再查看本节学生和个人差异。
+            以课程为主视角，默认显示当前在读课程最近 30 天的内容和作业；点击课节后再查看本节学生和个人差异。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

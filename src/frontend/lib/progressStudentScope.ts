@@ -11,5 +11,5 @@ export function progressCourseMatchesStudentStatusScope(
 ): boolean {
   if (scope === "all") return true;
   if (scope === "archived") return relatedStudents.some((student) => student.status === "paused");
-  return courseHasActiveStudent(vault, course);
+  return course.status === "active" && courseHasActiveStudent(vault, course);
 }

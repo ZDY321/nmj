@@ -16,14 +16,23 @@ function makeCourse(status: CourseGroup["status"], studentIds: string[]): Course
 }
 
 describe("progress student status scope", () => {
-  it("keeps an ended course visible when it is still linked to an active student", () => {
+  it("hides an ended course from the active-student scope", () => {
     const vault = createEmptyVault("tester");
     const activeStudent = { id: "student_active", name: "Active", status: "active" as const };
     vault.students = [activeStudent];
     const endedCourse = makeCourse("paused", [activeStudent.id]);
 
-    expect(progressCourseMatchesStudentStatusScope(vault, endedCourse, [activeStudent], "active")).toBe(true);
+    expect(progressCourseMatchesStudentStatusScope(vault, endedCourse, [activeStudent], "active")).toBe(false);
     expect(progressCourseMatchesStudentStatusScope(vault, endedCourse, [activeStudent], "archived")).toBe(false);
+  });
+
+  it("shows a current course linked to an active student", () => {
+    const vault = createEmptyVault("tester");
+    const activeStudent = { id: "student_active", name: "Active", status: "active" as const };
+    vault.students = [activeStudent];
+    const currentCourse = makeCourse("active", [activeStudent.id]);
+
+    expect(progressCourseMatchesStudentStatusScope(vault, currentCourse, [activeStudent], "active")).toBe(true);
   });
 
   it("uses the student's archived status independently from the course status", () => {

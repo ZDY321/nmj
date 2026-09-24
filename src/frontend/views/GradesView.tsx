@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { BarChart3, CalendarDays, GraduationCap, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { makeId } from "@/frontend/lib/crypto";
+import { gradeEntryStudentOptions, gradeEntrySubjectOptions } from "@/frontend/lib/gradeEntryOptions";
 import { compareByName, findStudent, sortStudentsByName } from "@/frontend/lib/helpers";
 import { todayIso } from "@/frontend/lib/calculations";
 import type { GradeRecord, TeacherVault } from "@/shared/types";
@@ -22,8 +23,9 @@ export function GradesView({
   onAddGradeRecord: (record: GradeRecord) => void;
   onDeleteGradeRecord: (recordId: string) => void;
 }) {
-  const studentOptions = sortStudentsByName(vault.students);
-  const [studentId, setStudentId] = useState(studentOptions[0]?.id ?? "");
+  const allStudentOptions = sortStudentsByName(vault.students);
+  const entryStudentOptions = useMemo(() => gradeEntryStudentOptions(vault), [vault.students]);
+  const [studentId, setStudentId] = useState(entryStudentOptions[0]?.id ?? "");
   const [subject, setSubject] = useState("");
   const [examName, setExamName] = useState("");
   const [date, setDate] = useState(todayIso());
@@ -37,6 +39,19 @@ export function GradesView({
   const [activeTrendRecordId, setActiveTrendRecordId] = useState("");
   const trendCardRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog } = useConfirmDialog();
+  const entrySubjectOptions = useMemo(
+    () => gradeEntrySubjectOptions(vault, studentId),
+    [studentId, vault.courseGroups, vault.students]
+  );
+
+  useEffect(() => {
+    if (entryStudentOptions.some((student) => student.id === studentId)) return;
+    setStudentId(entryStudentOptions[0]?.id ?? "");
+  }, [entryStudentOptions, studentId]);
+
+  useEffect(() => {
+    setSubject((current) => entrySubjectOptions.includes(current) ? current : entrySubjectOptions[0] ?? "");
+  }, [entrySubjectOptions]);
 
   const records = [...(vault.gradeRecords ?? [])].sort((a, b) => `${b.date} ${b.examName}`.localeCompare(`${a.date} ${a.examName}`));
   const filteredRecords = records.filter((record) => {
@@ -74,7 +89,7 @@ export function GradesView({
     event.preventDefault();
     const numericScore = Number(score);
     const numericFullScore = Number(fullScore);
-    if (!studentId || !subject.trim() || !examName.trim() || !Number.isFinite(numericScore)) return;
+    if (!studentId || !entrySubjectOptions.includes(subject) || !examName.trim() || !Number.isFinite(numericScore)) return;
     onAddGradeRecord({
       id: makeId("grade"),
       studentId,
@@ -93,7 +108,6 @@ export function GradesView({
   }
 
   function focusGradeRecord(record: GradeRecord) {
-    setStudentId(record.studentId);
     setStudentFilter(record.studentId);
     if (subjectFilter !== "all" && subjectFilter !== record.subject) {
       setSubjectFilter(record.subject);
@@ -118,17 +132,23 @@ export function GradesView({
               <Plus size={14} /> 成绩录入
             </div>
             <CardTitle>新增成绩记录</CardTitle>
-            <CardDescription>记录考试、测验、满分、排名和备注，后续可按学生查看变化。</CardDescription>
+            <CardDescription>只为在读学生录入；科目来自该学生当前关联的课程档案。</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={addRecord} className="space-y-3">
               <Select value={studentId} onChange={(event) => setStudentId(event.target.value)}>
-                {studentOptions.map((student) => (
+                {entryStudentOptions.length === 0 && <option value="">暂无在读学生</option>}
+                {entryStudentOptions.map((student) => (
                   <option key={student.id} value={student.id}>{student.name}</option>
                 ))}
               </Select>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="科目" />
+                <Select value={subject} onChange={(event) => setSubject(event.target.value)} disabled={!studentId || entrySubjectOptions.length === 0}>
+                  {entrySubjectOptions.length === 0 && <option value="">该学生暂无在读课程科目</option>}
+                  {entrySubjectOptions.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </Select>
                 <Input value={examName} onChange={(event) => setExamName(event.target.value)} placeholder="考试/测验名称" />
                 <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
                 <Input type="number" value={score} onChange={(event) => setScore(event.target.value)} placeholder="得分" />
@@ -136,7 +156,7 @@ export function GradesView({
                 <Input value={rank} onChange={(event) => setRank(event.target.value)} placeholder="排名，可选" />
               </div>
               <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="错题、知识点、家长反馈等备注" />
-              <Button type="submit" className="w-full" disabled={!studentId || !examName.trim() || !score}>
+              <Button type="submit" className="w-full" disabled={!studentId || !entrySubjectOptions.includes(subject) || !examName.trim() || !score}>
                 <Plus size={15} /> 添加成绩
               </Button>
             </form>
@@ -156,7 +176,7 @@ export function GradesView({
               <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:w-[420px]">
                 <Select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)}>
                   <option value="all">全部学生</option>
-                  {studentOptions.map((student) => (
+                  {allStudentOptions.map((student) => (
                     <option key={student.id} value={student.id}>{student.name}</option>
                   ))}
                 </Select>
