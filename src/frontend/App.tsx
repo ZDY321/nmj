@@ -577,7 +577,7 @@ export function App() {
           draft,
           draft.lessons.filter((lesson) => replaceLessonIds.has(lesson.id)),
           "sync_overwrite",
-          "同步排课覆盖旧课节"
+          "复用排课覆盖旧课节"
         );
       }
       draft.lessons.push(...lessons);

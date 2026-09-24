@@ -329,7 +329,7 @@ export function canRestoreDeletedLesson(
 
 export function deletedLessonSourceLabel(source: DeletedLesson["source"]): string {
   if (source === "ai") return "AI 删除";
-  if (source === "sync_overwrite") return "同步覆盖";
+  if (source === "sync_overwrite") return "复用覆盖";
   return "手动删除";
 }
 

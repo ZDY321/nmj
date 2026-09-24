@@ -87,7 +87,7 @@ export function ScheduleTrashPanel({
               <Trash2 size={14} /> 课节回收站
             </div>
             <CardTitle>误删课节恢复</CardTitle>
-            <CardDescription>手动删除、AI 删除和同步覆盖移除的课节会先保存在这里，可筛选后单个或批量恢复。</CardDescription>
+            <CardDescription>手动删除、AI 删除和复用覆盖移除的课节会先保存在这里，可筛选后单个或批量恢复。</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">{deletedLessonCount} 条回收记录</Badge>
@@ -120,7 +120,7 @@ export function ScheduleTrashPanel({
                 <option value="all">全部来源</option>
                 <option value="manual">手动删除</option>
                 <option value="ai">AI 删除</option>
-                <option value="sync_overwrite">同步覆盖</option>
+                <option value="sync_overwrite">复用覆盖</option>
               </Select>
             </div>
             <div className="space-y-2 xl:col-span-2">

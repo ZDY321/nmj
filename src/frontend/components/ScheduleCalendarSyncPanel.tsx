@@ -89,10 +89,10 @@ export function ScheduleCalendarSyncPanel({
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-sm font-extrabold text-[#061226]">同步课程</div>
+              <div className="text-sm font-extrabold text-[#061226]">复用课程</div>
               <Badge variant="amber" className="w-fit">排课工具</Badge>
             </div>
-            <div className="mt-1 text-xs font-semibold text-[#64748b]">支持单日勾选同步，也支持日期段一一对应同步；同步后按目标时间线自动衔接上一节内容和作业。</div>
+            <div className="mt-1 text-xs font-semibold text-[#64748b]">支持单日勾选复用，也支持日期范围一一对应复用；复用后按目标时间线自动衔接上一节内容和作业。</div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -109,7 +109,7 @@ export function ScheduleCalendarSyncPanel({
             }`}
           >
             {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            {isOpen ? "折叠" : "展开同步工具"}
+            {isOpen ? "折叠" : "展开复用工具"}
           </Button>
         </div>
       </div>
@@ -131,8 +131,8 @@ export function ScheduleCalendarSyncPanel({
                       <CalendarDays size={18} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[11px] font-extrabold text-[#c2410c]">单日同步</div>
-                      <div className="mt-0.5 text-sm font-extrabold text-[#061226]">同步某一天课程</div>
+                      <div className="text-[11px] font-extrabold text-[#c2410c]">单日复用</div>
+                      <div className="mt-0.5 text-sm font-extrabold text-[#061226]">复用某一天课程</div>
                       <div className="mt-1 text-xs font-semibold text-[#7c2d12]">从来源日期勾选课节，复制到目标日期。</div>
                     </div>
                   </div>
@@ -149,7 +149,7 @@ export function ScheduleCalendarSyncPanel({
                       <Input type="date" value={syncTargetDate} onChange={(event) => setSyncTargetDate(event.target.value)} className="h-10 bg-white" />
                     </div>
                     <Button type="button" className="self-end" onClick={onCopySelectedLessonsToDate} disabled={selectedSyncLessons.length === 0 || syncSourceDate === syncTargetDate}>
-                      <Copy size={15} /> 同步单日
+                      <Copy size={15} /> 复用单日
                     </Button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -206,7 +206,7 @@ export function ScheduleCalendarSyncPanel({
                     })}
                     {syncSourceLessons.length === 0 && (
                       <div className="rounded-[12px] border border-dashed border-[#fdba74] bg-[#fffaf5] p-5 text-center text-sm font-semibold text-[#9a3412]">
-                        来源日期没有可同步课节
+                        来源日期没有可复用课节
                       </div>
                     )}
                   </div>
@@ -220,9 +220,9 @@ export function ScheduleCalendarSyncPanel({
                       <CalendarRange size={18} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[11px] font-extrabold text-[#1557c2]">日期段同步</div>
-                      <div className="mt-0.5 text-sm font-extrabold text-[#061226]">同步某段时间课程</div>
-                      <div className="mt-1 text-xs font-semibold text-[#1e3a8a]">来源日期段与目标日期段按天一一对应同步。</div>
+                      <div className="text-[11px] font-extrabold text-[#1557c2]">日期范围复用</div>
+                      <div className="mt-0.5 text-sm font-extrabold text-[#061226]">复用某段时间课程</div>
+                      <div className="mt-1 text-xs font-semibold text-[#1e3a8a]">来源日期范围与目标日期范围按天一一对应复用。</div>
                     </div>
                   </div>
                   <Badge variant="sky" className="w-fit">{syncRangeActiveLessons.length} / {syncRangeSourceLessons.length} 节</Badge>
@@ -263,7 +263,7 @@ export function ScheduleCalendarSyncPanel({
                         syncRangeSourceDates.length !== syncRangeTargetDates.length
                       }
                     >
-                      <Copy size={15} /> 同步日期段
+                      <Copy size={15} /> 复用日期范围
                     </Button>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">

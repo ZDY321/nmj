@@ -1491,7 +1491,7 @@ export function ScheduleView({
       confirm({
         title: "目标日期已有同课程课节",
         description: options.conflictDescription(replaceLessonIds.length),
-        confirmLabel: "覆盖并同步",
+        confirmLabel: "覆盖并复用",
         onConfirm: options.onConfirm
       });
       return;
@@ -1500,10 +1500,10 @@ export function ScheduleView({
     if (lessonsToAdd.length === 0) {
       showScheduleError(
         conflictSkippedCount > 0
-          ? "目标时间已有其他课程，已跳过同步，未覆盖原有手动排课。"
+          ? "目标时间已有其他课程，已跳过复用，未覆盖原有手动排课。"
           : skippedCount > 0
-            ? "可同步课程已暂停，未同步。"
-            : "没有可同步的来源课节。"
+            ? "可复用课程已暂停，未复用。"
+            : "没有可复用的来源课节。"
       );
       return;
     }
@@ -1511,23 +1511,23 @@ export function ScheduleView({
     onAddLessons(lessonsToAdd, { replaceLessonIds });
     options.afterSync();
     setScheduleError("");
-    showScheduleNotice(`已同步 ${lessonsToAdd.length} 节课程。`);
+    showScheduleNotice(`已复用 ${lessonsToAdd.length} 节课程。`);
     if (skippedCount > 0 || conflictSkippedCount > 0) {
       const messages = [
-        skippedCount > 0 ? `${skippedCount} 节来源课程已暂停，未同步` : "",
+        skippedCount > 0 ? `${skippedCount} 节来源课程已暂停，未复用` : "",
         conflictSkippedCount > 0 ? `${conflictSkippedCount} 节目标时间已有其他课程，已跳过` : ""
       ].filter(Boolean);
       showScheduleError(
         skippedCount > 0 && conflictSkippedCount === 0 && options.skippedMessage
           ? options.skippedMessage(lessonsToAdd.length, skippedCount)
-          : `已同步 ${lessonsToAdd.length} 节；${messages.join("；")}。`
+          : `已复用 ${lessonsToAdd.length} 节；${messages.join("；")}。`
       );
     }
   }
 
   function copySelectedLessonsToDate(force = false) {
     if (!syncSourceDate || !syncTargetDate) {
-      showScheduleError("请选择要同步的来源日期和目标日期。");
+      showScheduleError("请选择要复用的来源日期和目标日期。");
       return;
     }
     if (syncSourceDate === syncTargetDate) {
@@ -1535,7 +1535,7 @@ export function ScheduleView({
       return;
     }
     if (selectedSyncLessons.length === 0) {
-      showScheduleError("请至少勾选一节要同步的课程。");
+      showScheduleError("请至少勾选一节要复用的课程。");
       return;
     }
 
@@ -1545,10 +1545,12 @@ export function ScheduleView({
         force,
         onConfirm: () => copySelectedLessonsToDate(true),
         afterSync: () => {
-          setSelectedCalendarDate(syncTargetDate);
-          setCalendarMonth(syncTargetDate.slice(0, 7));
+          if (schedulePanel === "calendar") {
+            setSelectedCalendarDate(syncTargetDate);
+            setCalendarMonth(syncTargetDate.slice(0, 7));
+          }
         },
-        conflictDescription: (replaceCount) => `${syncTargetDate} 有 ${replaceCount} 节课会被覆盖。已取消的来源课节也会同步为待上课。`
+        conflictDescription: (replaceCount) => `${syncTargetDate} 有 ${replaceCount} 节课会被覆盖。已取消的来源课节也会复用为待上课。`
       }
     );
   }
@@ -1578,7 +1580,7 @@ export function ScheduleView({
       targetStartDate: syncRangeTargetDates[0]
     }));
     if (!batches.some((batch) => batch.sourceLessons.length > 0)) {
-      showScheduleError("来源日期段没有可同步课节。");
+      showScheduleError("来源日期范围没有可复用课节。");
       return;
     }
 
@@ -1586,11 +1588,13 @@ export function ScheduleView({
       force,
       onConfirm: () => copyLessonRangeToDateRange(true),
       afterSync: () => {
-        setSelectedCalendarDate(syncRangeTargetStart);
-        setCalendarMonth(syncRangeTargetStart.slice(0, 7));
+        if (schedulePanel === "calendar") {
+          setSelectedCalendarDate(syncRangeTargetStart);
+          setCalendarMonth(syncRangeTargetStart.slice(0, 7));
+        }
       },
-      conflictDescription: (replaceCount) => `${syncRangeTargetStart} 至 ${syncRangeTargetEnd} 有 ${replaceCount} 节同时间课节会被覆盖。已取消的来源课节也会同步为待上课。`,
-      skippedMessage: (syncedCount, skippedCount) => `已同步 ${syncedCount} 节；${skippedCount} 节来源课程已暂停，未同步。`
+      conflictDescription: (replaceCount) => `${syncRangeTargetStart} 至 ${syncRangeTargetEnd} 有 ${replaceCount} 节同时间课节会被覆盖。已取消的来源课节也会复用为待上课。`,
+      skippedMessage: (reusedCount, skippedCount) => `已复用 ${reusedCount} 节；${skippedCount} 节来源课程已暂停，未复用。`
     });
   }
 
