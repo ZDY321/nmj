@@ -79,6 +79,9 @@ export function PayrollOverviewGrid({
   onCampusSelect: (campusId: string) => void;
 }) {
   const lessonFeeTotalAfterDeduction = lessonFeeTotal - breakdown.obligationDeduction;
+  const selectedCampusName = campusFilter === "all"
+    ? "全部校区"
+    : campusSummaries.find((item) => item.campus.id === campusFilter)?.campus.name ?? "当前校区";
   const overviewRef = useRef<HTMLDivElement>(null);
   const [screenshotLoading, setScreenshotLoading] = useState(false);
 
@@ -242,9 +245,20 @@ export function PayrollOverviewGrid({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="col-span-2 rounded-[12px] border border-[#fed7aa] bg-[#fffaf3] px-3 py-2 text-left sm:col-span-4">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="text-[11px] font-extrabold tracking-wide text-[#9a3412]">当前校区明细</div>
+                <div className="rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-[#7c2d12] ring-1 ring-[#fed7aa]">
+                  {selectedCampusName}
+                </div>
+              </div>
+              <div className="mt-1 text-[11px] leading-4 text-[#9a3412]">
+                以下金额和课节数跟随左侧“校区合并统计”的选择，仅统计已完成课时；切换左侧校区后会同步更新。
+              </div>
+            </div>
             <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] p-3 text-center">
-              <div className="whitespace-nowrap text-[10px] font-extrabold leading-4 text-[#c2410c] sm:text-[11px]" title="已完成的扣前总课时费">
-                已完成的扣前总课时费
+              <div className="text-[10px] font-extrabold leading-4 text-[#c2410c] sm:text-[11px]" title="当前校区已完成的扣前总课时费">
+                当前校区 · 已完成扣前课时费
               </div>
               <div className="mt-1 break-words text-xl font-extrabold text-[#9a3412]">
                 {formatPrivateMoney(campusCompletedFeeBeforeDeduction, amountsVisible)}
