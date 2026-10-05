@@ -197,9 +197,7 @@ export function PayrollOverviewGrid({
               { label: "其他加减项", value: breakdown.adjustments },
               { label: "义务课时扣费", value: -breakdown.obligationDeduction }
             ].map((item) => {
-              const details = "details" in item
-                ? (item.details ?? []).filter((detail) => detail.amount !== 0)
-                : [];
+              const details = "details" in item ? item.details ?? [] : [];
               return (
                 <div key={item.label} className="min-h-[112px] rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -266,7 +264,7 @@ export function PayrollOverviewGrid({
                 {formatPrivateMoney(campusCompletedFeeBeforeDeduction, amountsVisible)}
               </div>
             </div>
-            {typeCountCards.map((type) => (
+            {typeCountCards.filter((type) => type.count > 0).map((type) => (
               <div key={type.value} className="rounded-[12px] border border-[#dbe4ef] bg-white p-3 text-center">
                 <div className="whitespace-nowrap text-xs font-bold text-[#475569]">{type.label}课节数</div>
                 <div className="mt-1 text-xl font-extrabold text-[#061226]">{type.count}</div>
