@@ -197,7 +197,9 @@ export function PayrollOverviewGrid({
               { label: "其他加减项", value: breakdown.adjustments },
               { label: "义务课时扣费", value: -breakdown.obligationDeduction }
             ].map((item) => {
-              const details = "details" in item ? item.details ?? [] : [];
+              const details = "details" in item
+                ? (item.details ?? []).filter((detail) => detail.amount !== 0)
+                : [];
               return (
                 <div key={item.label} className="min-h-[112px] rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -257,8 +259,8 @@ export function PayrollOverviewGrid({
               </div>
             </div>
             <div className="rounded-[12px] border border-[#fed7aa] bg-[#fff7ed] p-3 text-center">
-              <div className="text-[10px] font-extrabold leading-4 text-[#c2410c] sm:text-[11px]" title="当前校区已完成的扣前总课时费">
-                当前校区 · 已完成扣前课时费
+              <div className="text-[10px] font-extrabold leading-4 text-[#c2410c] sm:text-[11px]" title="已完成的扣前总课时费">
+                已完成的扣前总课时费
               </div>
               <div className="mt-1 break-words text-xl font-extrabold text-[#9a3412]">
                 {formatPrivateMoney(campusCompletedFeeBeforeDeduction, amountsVisible)}
