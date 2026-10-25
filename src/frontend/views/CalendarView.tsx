@@ -140,6 +140,7 @@ export function CalendarView({
   onWeekStartChange,
   onOpenLessonInRecords,
   onOpenDateInRecords,
+  onSelectDate,
   focusRequest
 }: {
   vault: TeacherVault;
@@ -148,6 +149,7 @@ export function CalendarView({
   onWeekStartChange: (weekStart: WeekStart) => void;
   onOpenLessonInRecords?: (lesson: Lesson, returnFocus: CalendarOverviewFocusState) => void;
   onOpenDateInRecords: (date: string, returnFocus: CalendarOverviewFocusState) => void;
+  onSelectDate?: (date: string) => void;
   focusRequest?: CalendarOverviewFocusRequest | null;
 }) {
   const [month, setMonth] = useState(() => focusRequest?.month ?? todayIso().slice(0, 7));
@@ -222,6 +224,7 @@ export function CalendarView({
   function selectCalendarDate(date: string) {
     setSelectedDate(date);
     setMonth(date.slice(0, 7));
+    onSelectDate?.(date);
   }
 
   function buildReturnFocus(overrides: Partial<CalendarOverviewFocusState> = {}): CalendarOverviewFocusState {
@@ -539,7 +542,7 @@ export function CalendarView({
               </div>
             </div>
             {overviewPage === "month" ? (
-              <div className="grid grid-cols-7 gap-1 sm:gap-2">
+              <div data-onboarding="calendar-overview-grid" className="grid grid-cols-7 gap-1 sm:gap-2">
                 {weekdayLabels.map((d) => (
                   <div key={d} className="text-center text-xs font-bold text-(--color-muted-foreground) py-2">{d}</div>
                 ))}
@@ -560,6 +563,7 @@ export function CalendarView({
                   return (
                     <motion.button
                       key={date}
+                      aria-label={`查看 ${date} 的课程`}
                       whileHover={{ scale: 1.03, y: -2 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => selectCalendarDate(date)}
@@ -770,7 +774,7 @@ export function CalendarView({
         </Card>
 
         {overviewPage === "month" && (
-        <Card className="h-fit overflow-hidden">
+        <Card data-onboarding="calendar-overview-details" className="h-fit overflow-hidden">
           <CardHeader>
             <CardTitle>
               <CalendarDateDetailsButton

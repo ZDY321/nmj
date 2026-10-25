@@ -31,7 +31,7 @@ import {
   navItems
 } from "@/frontend/lib/helpers";
 import { generateBatchLessonsInVault, type BatchLessonGenerationResult } from "@/frontend/lib/scheduleBatch";
-import { getOnboardingTourStartIndex, isOnboardingSetupComplete, normalizeOnboardingStepKeys, onboardingTourSteps, type OnboardingStepKey } from "@/frontend/lib/onboarding";
+import { getOnboardingTourStartIndex, getOnboardingTourStep, isOnboardingSetupComplete, normalizeOnboardingStepKeys, onboardingTourSteps, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { clearStoredSession, clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
 import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
@@ -159,6 +159,7 @@ export function App() {
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [onboardingStepIndex, setOnboardingStepIndex] = useState(0);
+  const [onboardingCalendarDateSelected, setOnboardingCalendarDateSelected] = useState(false);
   const onboardingAccountRef = useRef<string | null>(null);
   const [onboardingVisitedSteps, setOnboardingVisitedSteps] = useState<OnboardingStepKey[]>([]);
   const [amountsVisible, setAmountsVisible] = useState(false);
@@ -1472,6 +1473,8 @@ export function App() {
   }
 
   const activeTitle = viewTitles[view];
+  const activeOnboardingStep = getOnboardingTourStep(onboardingStepIndex, view, onboardingCalendarDateSelected);
+  const isCalendarOnboarding = onboardingVisible && activeOnboardingStep.id === "calendar-records";
   const selectedDateLabel = formatAppDateLabel(selectedDate, {
     year: "numeric",
     month: "short",
@@ -1536,6 +1539,22 @@ export function App() {
     setOnboardingVisible(true);
     if (username) localStorage.setItem(onboardingCurrentStepKey(username), step.id);
     const nonce = Date.now();
+    if (step.id === "calendar-records") {
+      const date = todayIso();
+      setOnboardingCalendarDateSelected(false);
+      setCalendarOverviewFocus({
+        selectedDate: date,
+        month: date.slice(0, 7),
+        overviewPage: "month",
+        weekCampusFilter: "all",
+        weekCourseTypeFilter: "all",
+        weekGradeFilter: "all",
+        weekSubjectFilter: "all",
+        weekStudentFilter: "",
+        weekMakeupFilter: "all",
+        nonce
+      });
+    }
     if (step.studentsPanel) {
       setStudentsPanelFocus({ panel: step.studentsPanel, nonce });
     }
@@ -1605,7 +1624,7 @@ export function App() {
     setNoticeModalOpen(false);
     setFeedbackModalOpen(false);
     setMobileNavOpen(false);
-    setOnboardingVisible(false);
+    setOnboardingVisible(isCalendarOnboarding && returnTarget?.view === "calendar");
     setScheduleCalendarFocus({ date, lessonId, targetPanel: "records", returnTarget: returnTarget ?? null, nonce: Date.now() });
     setView("schedule");
   }
@@ -1710,7 +1729,7 @@ export function App() {
     setNoticeModalOpen(false);
     setFeedbackModalOpen(false);
     setMobileNavOpen(false);
-    setOnboardingVisible(false);
+    setOnboardingVisible(isCalendarOnboarding && target.view === "calendar");
     if (target.view === "calendar" && target.calendarFocus) {
       setCalendarOverviewFocus({ ...target.calendarFocus, nonce: Date.now() });
     }
@@ -2078,6 +2097,7 @@ export function App() {
 
         {onboardingVisible && (
           <OnboardingGuide
+            step={activeOnboardingStep}
             stepIndex={onboardingStepIndex}
             onStepChange={changeOnboardingStep}
             onComplete={completeOnboarding}
@@ -2110,6 +2130,7 @@ export function App() {
                     onWeekStartChange={updateWeekStart}
                     onOpenLessonInRecords={openCalendarLessonInScheduleRecords}
                     onOpenDateInRecords={openCalendarDateInScheduleRecords}
+                    onSelectDate={isCalendarOnboarding ? () => setOnboardingCalendarDateSelected(true) : undefined}
                     focusRequest={calendarOverviewFocus}
                   />
                 )}

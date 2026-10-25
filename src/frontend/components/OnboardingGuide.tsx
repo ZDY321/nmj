@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight, Check, Compass, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { onboardingStepKeys, onboardingTourSteps } from "@/frontend/lib/onboarding";
+import { onboardingStepKeys, onboardingTourSteps, type OnboardingTourStep } from "@/frontend/lib/onboarding";
 import { getTourPanelLayout, getTourSpotlight, type TourRect, type TourViewport } from "@/frontend/lib/onboardingLayout";
 
 const focusableSelector = 'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -17,13 +17,13 @@ function readViewport(): TourViewport {
   };
 }
 
-export function OnboardingGuide({ stepIndex, onStepChange, onComplete, onDismiss }: {
+export function OnboardingGuide({ step, stepIndex, onStepChange, onComplete, onDismiss }: {
+  step: OnboardingTourStep;
   stepIndex: number;
   onStepChange: (index: number) => void;
   onComplete: () => void;
   onDismiss: () => void;
 }) {
-  const step = onboardingTourSteps[stepIndex];
   const panelRef = useRef<HTMLDivElement>(null);
   const targetRef = useRef<HTMLElement | null>(null);
   const callbacksRef = useRef({ onStepChange, onComplete, onDismiss, stepIndex });

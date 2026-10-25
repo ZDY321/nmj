@@ -68,6 +68,12 @@ export const onboardingTourSteps: readonly OnboardingTourStep[] = [
     hint: "已完成和补课完成的课节会用于计算实际课时费。"
   },
   {
+    id: "calendar-records", group: "schedule", groupLabel: "排课与记录", view: "calendar",
+    target: "calendar-overview-grid", title: "从日历快速找到课程",
+    description: "这里是左侧的「日历总览」。点击一个日期，查看当天安排了哪些课程。",
+    hint: "「排课与课时 → 日历查看」也支持：选日期，再点日期标题或课程进入记录。"
+  },
+  {
     id: "payroll", group: "payroll", groupLabel: "工资核对", view: "payroll",
     target: "payroll-filters", title: "月底在这里核对工资",
     description: "先选月份和校区，再向下查看课时费、义务课时扣费和课节明细。",
@@ -80,6 +86,30 @@ export const onboardingTourSteps: readonly OnboardingTourStep[] = [
     hint: "这一步可以按需使用，成绩记录不会影响工资。"
   }
 ];
+
+export function getOnboardingTourStep(index: number, view: ViewKey, calendarDateSelected = false): OnboardingTourStep {
+  const step = onboardingTourSteps[index];
+  if (step.id !== "calendar-records") return step;
+  if (view === "schedule") {
+    return {
+      ...step,
+      target: "lesson-records",
+      title: "已经打开对应的课程记录",
+      description: "这里保留了你刚才选择的日期。点击课节，核对到课情况、上课状态和课程内容。",
+      hint: "可点「返回日历总览」回去查看，或点「下一步」继续了解工资核对。"
+    };
+  }
+  if (calendarDateSelected) {
+    return {
+      ...step,
+      target: "calendar-overview-details",
+      title: "点日期或课程，打开课时记录",
+      description: "这里是所选日期的课程。点上方「查看当天课时」打开当天全部记录；也可以点某节课程查看详情。",
+      hint: "进入记录后引导会继续，也可以点「返回日历总览」回到所选日期。"
+    };
+  }
+  return step;
+}
 
 export function getOnboardingTourStartIndex(savedId: unknown, visitedSteps: OnboardingStepKey[] = []): number {
   const savedIndex = onboardingTourSteps.findIndex((step) => step.id === savedId);

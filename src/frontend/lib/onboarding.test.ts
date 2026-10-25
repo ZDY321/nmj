@@ -6,6 +6,8 @@ describe("onboarding progress", () => {
   it("resumes the exact saved step even within a chapter", () => {
     expect(onboardingTourSteps[getOnboardingTourStartIndex("salary-rules")].id).toBe("salary-rules");
     expect(onboardingTourSteps[getOnboardingTourStartIndex("records")].id).toBe("records");
+    expect(onboardingTourSteps[getOnboardingTourStartIndex("payroll")].id).toBe("payroll");
+    expect(onboardingTourSteps[getOnboardingTourStartIndex("calendar-records")].id).toBe("calendar-records");
   });
 
   it("carries existing chapter progress into the new tour", () => {
