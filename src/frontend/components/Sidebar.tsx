@@ -26,29 +26,33 @@ export function Sidebar({
   return (
     <aside
       className="navy-gradient sticky top-0 z-30 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-white/10 text-white shadow-[18px_0_50px_rgba(3,31,61,0.2)] transition-[width] duration-300 md:flex"
-      style={{ width: collapsed ? 92 : 286 }}
+      style={{ width: collapsed ? 92 : 220 }}
     >
       <div className="flex h-full flex-col p-4">
-        <div className="mb-8 flex items-center justify-between gap-3">
+        <div className="mb-8 flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={onToggle}
             className={cn(
-              "flex min-w-0 items-center gap-3 rounded-[16px] text-left transition-colors hover:bg-white/8",
-              collapsed ? "w-full justify-center p-2" : "p-2 pr-3"
+              "flex min-w-0 items-center gap-2 rounded-[16px] text-left transition-colors hover:bg-white/8",
+              collapsed ? "w-full justify-center p-2" : "flex-1 p-1"
             )}
-            aria-label="折叠侧边栏"
+            aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+            aria-expanded={!collapsed}
           >
-            <div className="orange-gradient flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] shadow-[0_14px_28px_rgba(255,134,23,0.28)]">
-              <GraduationCap size={28} strokeWidth={2.4} />
+            <div className={cn(
+              "orange-gradient flex shrink-0 items-center justify-center shadow-[0_14px_28px_rgba(255,134,23,0.28)]",
+              collapsed ? "h-12 w-12 rounded-[15px]" : "h-10 w-10 rounded-[12px]"
+            )}>
+              <GraduationCap size={collapsed ? 28 : 24} strokeWidth={2.4} />
             </div>
             {!collapsed && (
               <div className="min-w-0">
-                <div className="truncate text-[22px] font-extrabold leading-tight">
+                <div className="truncate text-xl font-extrabold leading-tight">
                   <span>Teach</span>
                   <span className="text-[#ff911f]">Pro</span>
                 </div>
-                <div className="truncate text-sm font-medium text-white/68">课薪记录管理</div>
+                <div className="truncate text-xs font-medium text-white/68">课薪记录管理</div>
               </div>
             )}
           </button>
@@ -58,7 +62,7 @@ export function Sidebar({
               variant="ghost"
               size="icon"
               onClick={onToggle}
-              className="h-9 w-9 rounded-full text-white/70 hover:bg-white/10 hover:text-white"
+              className="h-7 w-7 shrink-0 rounded-full text-white/70 hover:bg-white/10 hover:text-white"
               aria-label="折叠侧边栏"
             >
               <ChevronLeft size={18} />
@@ -112,15 +116,15 @@ export function Sidebar({
               <ChevronRight size={18} />
             </Button>
           ) : (
-            <div className="rounded-[14px] border border-white/12 bg-white/[0.045] p-3 shadow-[0_16px_40px_rgba(0,0,0,0.12)]">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-base font-extrabold text-[#0a3a68]">
+            <div className="rounded-[14px] border border-white/12 bg-white/[0.045] p-2.5 shadow-[0_16px_40px_rgba(0,0,0,0.12)]">
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-base font-extrabold text-[#0a3a68]">
                   {avatarText}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-base font-bold">{profileName}</div>
                 </div>
-                <ChevronRight size={18} className="text-white/52" />
+                <ChevronRight size={18} className="shrink-0 text-white/52" />
               </div>
             </div>
           )}
