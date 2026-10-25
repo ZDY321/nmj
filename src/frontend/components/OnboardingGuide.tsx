@@ -206,7 +206,10 @@ export function OnboardingGuide({ step, stepIndex, onStepChange, onComplete, onD
           </div>
           <div className="px-5 pb-4 pt-4" aria-live="polite" aria-atomic="true">
             <h2 id={titleId} className="text-xl font-extrabold leading-7 text-[#061226]">{step.title}</h2>
-            <p id={descriptionId} className="mt-2 text-sm leading-6 text-[#475569]">{step.description}</p>
+            <p id={descriptionId} className="mt-2 text-sm leading-6 text-[#475569]">
+              {step.emphasis && <strong className="mb-2 block border-l-[3px] border-[#ff8617] pl-3 font-extrabold text-[#c25b09]">{step.emphasis}</strong>}
+              {step.description}
+            </p>
             <p className="mt-3 rounded-[12px] bg-[#fff8ef] px-3 py-2 text-xs leading-5 text-[#9a5b21]">{step.hint}</p>
             {!rect && <div className="mt-3 text-xs leading-5 text-[#64748b]" role="status">
               {missingTargetId === step.id ? <>

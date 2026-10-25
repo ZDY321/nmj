@@ -10,6 +10,7 @@ export type OnboardingTourStep = {
   group: OnboardingStepKey;
   groupLabel: string;
   title: string;
+  emphasis?: string;
   description: string;
   hint: string;
   target: string;
@@ -64,14 +65,15 @@ export const onboardingTourSteps: readonly OnboardingTourStep[] = [
   {
     id: "records", group: "schedule", groupLabel: "排课与记录", view: "schedule", schedulePanel: "records",
     target: "lesson-records", title: "上完课，记得更新状态",
-    description: "在课程记录里选中课节，核实到课情况，再更新为「已完成」。请假或补课也在课节详情里处理。",
+    emphasis: "整个项目最核心的功能中枢",
+    description: "在课程记录里选中课节，核实到课情况，再更新为「已完成」。具体的详细功能，请尽情探索。",
     hint: "已完成和补课完成的课节会用于计算实际课时费。"
   },
   {
     id: "calendar-records", group: "schedule", groupLabel: "排课与记录", view: "calendar",
     target: "calendar-overview-grid", title: "从日历快速找到课程",
     description: "这里是左侧的「日历总览」。点击一个日期，查看当天安排了哪些课程。",
-    hint: "「排课与课时 → 日历查看」也支持：选日期，再点日期标题或课程进入记录。"
+    hint: "选中日期后，点击当天的课程卡片，即可跳转查看当天具体某节课的课程记录详情。"
   },
   {
     id: "payroll", group: "payroll", groupLabel: "工资核对", view: "payroll",
