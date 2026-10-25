@@ -105,7 +105,7 @@ export function ScheduleCalendarPanel({
   weekStartPreference
 }: ScheduleCalendarPanelProps) {
   return (
-    <Card className={`overflow-hidden border-2 ${calendarMode === "schedule" ? "border-[#ffb15c]" : "border-[#93c5fd]"}`}>
+    <Card data-onboarding="schedule-calendar" className={`overflow-hidden border-2 ${calendarMode === "schedule" ? "border-[#ffb15c]" : "border-[#93c5fd]"}`}>
       <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">

@@ -160,7 +160,7 @@ export function StudentArchivePanel({
             {studentStatusFilter !== "all" ? ` · ${studentStatusFilterLabel(studentStatusFilter)}` : ""}
           </Badge>
         </div>
-        <form onSubmit={onAddStudent} className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        <form data-onboarding="student-form" onSubmit={onAddStudent} className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           <Input
             value={studentNameInput}
             onChange={(event) => setStudentNameInput(event.target.value)}

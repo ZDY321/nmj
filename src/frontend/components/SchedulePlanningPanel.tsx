@@ -264,7 +264,7 @@ export function SchedulePlanningPanel({
 
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      <Card className="overflow-hidden">
+      <Card data-onboarding="lesson-planning" className="overflow-hidden">
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <Plus size={14} /> 单次排课 / 补录

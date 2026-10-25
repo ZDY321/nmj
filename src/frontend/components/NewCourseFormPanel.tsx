@@ -143,7 +143,7 @@ export function NewCourseFormPanel({
         <CardDescription>新增时直接设置类型、科目、校区、费用和关联学生。</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={onSubmit} className="space-y-3 rounded-[16px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
+        <form data-onboarding="course-form" onSubmit={onSubmit} className="space-y-3 rounded-[16px] border border-[#dbe4ef] bg-[#f8fbff] p-3">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
             <Input
               value={courseNameInput}

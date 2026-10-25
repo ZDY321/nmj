@@ -135,7 +135,7 @@ export function GradesView({
             <CardDescription>只为在读学生录入；科目来自该学生当前关联的课程档案。</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={addRecord} className="space-y-3">
+            <form data-onboarding="grade-form" onSubmit={addRecord} className="space-y-3">
               <Select value={studentId} onChange={(event) => setStudentId(event.target.value)}>
                 {entryStudentOptions.length === 0 && <option value="">暂无在读学生</option>}
                 {entryStudentOptions.map((student) => (

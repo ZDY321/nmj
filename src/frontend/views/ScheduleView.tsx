@@ -3420,7 +3420,7 @@ export function ScheduleView({
       )}
 
       {schedulePanel === "records" && (
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
+      <div data-onboarding="lesson-records" className="grid grid-cols-1 gap-6 xl:grid-cols-2 xl:items-start">
         {!selected && lessonReturnTarget && (
           <div className="xl:col-span-2">
             <Button type="button" variant="outline" size="sm" onClick={goBackToLessonSource}>

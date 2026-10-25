@@ -37,7 +37,7 @@ export function PayrollReviewFiltersCard({
   onGradeChange: (value: string) => void;
 }) {
   return (
-    <Card className="overflow-hidden">
+    <Card data-onboarding="payroll-filters" className="overflow-hidden">
       <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">

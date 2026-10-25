@@ -1,5 +1,61 @@
 @import "tailwindcss";
 
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.onboarding-blocker {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.onboarding-spotlight {
+  position: absolute;
+  border: 2px solid #ffad60;
+  border-radius: 14px;
+  box-shadow: 0 0 0 4px rgb(255 134 23 / 18%), inset 0 0 0 1px rgb(255 255 255 / 80%);
+}
+
+.onboarding-popover {
+  position: absolute;
+  pointer-events: auto;
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 26%), 0 0 0 1px rgb(255 255 255 / 55%);
+  outline: none;
+}
+
+.onboarding-arrow {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: white;
+  transform: rotate(45deg);
+}
+
+.onboarding-close {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #94a3b8;
+}
+
+.onboarding-close:hover {
+  background: #eef4fb;
+  color: #25324a;
+}
+
+[data-onboarding] {
+  scroll-margin: 20px;
+}
+
 /* 课程详情按钮按详情头部的实际可用宽度折成规整的两列。 */
 .lesson-detail-header {
   container-type: inline-size;

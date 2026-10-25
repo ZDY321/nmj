@@ -134,7 +134,7 @@ export function TeacherSalaryRulesPanel({ amountsVisible, onUpdateProfile, vault
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card data-onboarding="salary-rules" className="overflow-hidden">
       <CardHeader>
         <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
           <BadgeDollarSign size={14} /> 课时费计算

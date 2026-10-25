@@ -60,7 +60,7 @@ export function CampusSettingsCard({
 
   return (
     <Card className="h-fit overflow-hidden">
-      <CardHeader className={expanded ? "gap-3" : "gap-0"}>
+      <CardHeader data-onboarding="campus-form" className={expanded ? "gap-3" : "gap-0"}>
         <button
           type="button"
           onClick={() => setExpanded((current) => !current)}

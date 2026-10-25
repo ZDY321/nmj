@@ -39,7 +39,7 @@ export function TeacherProfilePanel({
   vault
 }: TeacherProfilePanelProps) {
   return (
-    <Card className="overflow-hidden">
+    <Card data-onboarding="teacher-profile" className="overflow-hidden">
       <CardHeader>
         <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
           <Settings size={14} /> 个人与义务课时设置

@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Bell,
-  BookOpen,
+  Compass,
   Calendar,
   GraduationCap,
   LogOut,
@@ -31,7 +31,7 @@ import {
   navItems
 } from "@/frontend/lib/helpers";
 import { generateBatchLessonsInVault, type BatchLessonGenerationResult } from "@/frontend/lib/scheduleBatch";
-import { isOnboardingSetupComplete, normalizeOnboardingStepKeys, type OnboardingStepKey } from "@/frontend/lib/onboarding";
+import { getOnboardingTourStartIndex, isOnboardingSetupComplete, normalizeOnboardingStepKeys, onboardingTourSteps, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { clearStoredSession, clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
 import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
@@ -118,7 +118,7 @@ type StudentsPanelFocus = "profile" | "salaryRules" | "campuses" | "students" | 
 type ScheduleCalendarFocus = {
   date: string;
   lessonId?: string;
-  targetPanel?: "calendar" | "records";
+  targetPanel?: "calendar" | "schedule" | "records";
   calendarMode?: "schedule" | "view";
   scheduleDraft?: {
     courseGroupId?: string;
@@ -158,6 +158,8 @@ export function App() {
   const [feedbackError, setFeedbackError] = useState("");
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
   const [onboardingVisible, setOnboardingVisible] = useState(false);
+  const [onboardingStepIndex, setOnboardingStepIndex] = useState(0);
+  const onboardingAccountRef = useRef<string | null>(null);
   const [onboardingVisitedSteps, setOnboardingVisitedSteps] = useState<OnboardingStepKey[]>([]);
   const [amountsVisible, setAmountsVisible] = useState(false);
   const [persistLoginAfterClose, setPersistLoginAfterClose] = useState(false);
@@ -1354,11 +1356,17 @@ export function App() {
 
   useEffect(() => {
     if (!vault || !username) {
+      onboardingAccountRef.current = null;
       setOnboardingVisible(false);
       return;
     }
+    // Initialize once per login so editing a highlighted form cannot restart or close the tour.
+    if (onboardingAccountRef.current === username) return;
+    onboardingAccountRef.current = username;
     const dismissed = localStorage.getItem(onboardingDismissedKey(username)) === "true";
-    setOnboardingVisible(!dismissed && shouldShowOnboarding(vault));
+    if (!dismissed && shouldShowOnboarding(vault)) {
+      openOnboardingStep(getOnboardingTourStartIndex(localStorage.getItem(onboardingCurrentStepKey(username)), readOnboardingVisitedSteps(username)));
+    }
   }, [username, vault]);
 
   useEffect(() => {
@@ -1463,7 +1471,7 @@ export function App() {
     />);
   }
 
-  const activeTitle = onboardingVisible ? "首次使用指引" : viewTitles[view];
+  const activeTitle = viewTitles[view];
   const selectedDateLabel = formatAppDateLabel(selectedDate, {
     year: "numeric",
     month: "short",
@@ -1504,10 +1512,7 @@ export function App() {
   }
 
   function openOnboardingManually() {
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setMobileNavOpen(false);
-    setOnboardingVisible(true);
+    openOnboardingStep(getOnboardingTourStartIndex(localStorage.getItem(onboardingCurrentStepKey(username)), onboardingVisitedSteps));
   }
 
   function recordOnboardingStep(stepKey: OnboardingStepKey) {
@@ -1521,16 +1526,45 @@ export function App() {
     });
   }
 
-  function openOnboardingStep(stepKey: OnboardingStepKey, nextView: ViewKey, studentsPanel?: StudentsPanelFocus) {
-    recordOnboardingStep(stepKey);
+  function openOnboardingStep(index: number) {
+    const step = onboardingTourSteps[index];
+    if (!step) return;
+    setNoticeModalOpen(false);
+    setFeedbackModalOpen(false);
+    setMobileNavOpen(false);
+    setOnboardingStepIndex(index);
+    setOnboardingVisible(true);
+    if (username) localStorage.setItem(onboardingCurrentStepKey(username), step.id);
+    const nonce = Date.now();
+    if (step.studentsPanel) {
+      setStudentsPanelFocus({ panel: step.studentsPanel, nonce });
+    }
+    if (step.schedulePanel) {
+      setScheduleCalendarFocus({ date: todayIso(), targetPanel: step.schedulePanel, calendarMode: "view", nonce });
+    }
+    if (step.group === "payroll") setPayrollReviewFocus({ panel: "review", nonce });
+    if (step.group === "grades") {
+      setLessonFeedbackFocus(null);
+      setProgressChecklistFocus(null);
+      setProgressSectionFocus({ section: "grades", nonce });
+    }
+    setView(step.view);
+  }
+
+  function changeOnboardingStep(index: number) {
+    const current = onboardingTourSteps[onboardingStepIndex];
+    const next = onboardingTourSteps[index];
+    if (!next) return;
+    if (index === onboardingStepIndex + 1 && next.group !== current.group) {
+      recordOnboardingStep(current.group);
+    }
+    openOnboardingStep(index);
+  }
+
+  function completeOnboarding() {
+    recordOnboardingStep(onboardingTourSteps[onboardingStepIndex].group);
+    if (username) localStorage.removeItem(onboardingCurrentStepKey(username));
     dismissOnboarding();
-    if (nextView === "students" && studentsPanel) {
-      setStudentsPanelFocus({ panel: studentsPanel, nonce: Date.now() });
-    }
-    if (stepKey === "grades") {
-      setProgressSectionFocus({ section: "grades", nonce: Date.now() });
-    }
-    setView(nextView);
   }
 
   function changeView(nextView: ViewKey) {
@@ -1792,7 +1826,7 @@ export function App() {
                 aria-label="查看新手指引"
                 title={guideNeedsAttention ? "新手指引：基础配置待完成" : "新手指引"}
               >
-                <BookOpen size={21} />
+                <Compass size={21} />
                 {guideNeedsAttention && (
                   <>
                     <span className="hidden text-sm font-extrabold sm:inline">新手指引</span>
@@ -2042,16 +2076,15 @@ export function App() {
           </div>
         )}
 
-        <div key={onboardingVisible ? "onboarding" : view} className="app-fade-up">
-            {onboardingVisible && (
-              <OnboardingGuide
-                vault={vault}
-                visitedSteps={onboardingVisitedSteps}
-                onOpenStep={openOnboardingStep}
-                onDismiss={dismissOnboarding}
-              />
-            )}
-            {!onboardingVisible && (
+        {onboardingVisible && (
+          <OnboardingGuide
+            stepIndex={onboardingStepIndex}
+            onStepChange={changeOnboardingStep}
+            onComplete={completeOnboarding}
+            onDismiss={dismissOnboarding}
+          />
+        )}
+        <div key={view} className="app-fade-up">
               <Suspense fallback={<ViewLoading />}>
                 {view === "today" && (
                   <TodayView
@@ -2239,7 +2272,6 @@ export function App() {
                   />
                 )}
               </Suspense>
-            )}
         </div>
         </div>
       </main>
@@ -2269,6 +2301,10 @@ function onboardingDismissedKey(username: string): string {
 
 function onboardingProgressKey(username: string): string {
   return `teacher-salary-tracker:onboarding-progress:${username}`;
+}
+
+function onboardingCurrentStepKey(username: string): string {
+  return `teacher-salary-tracker:onboarding-current-step:${username}`;
 }
 
 function readOnboardingVisitedSteps(username: string): OnboardingStepKey[] {
