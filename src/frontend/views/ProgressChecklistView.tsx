@@ -206,7 +206,7 @@ export function ProgressChecklistView({
     setTemplateSubject(selectedCourse?.subject ?? "");
     setTemplateNote("");
     setTemplateItemsText("");
-  }, [selectedTemplate?.id, selectedTemplate?.updatedAt, selectedCourse?.subject]);
+  }, [selectedTemplateId, selectedTemplate?.id, selectedTemplate?.updatedAt, selectedCourse?.subject]);
 
   const targetDateLessons = useMemo(
     () =>
@@ -390,6 +390,7 @@ export function ProgressChecklistView({
   );
 
   function startNewTemplate() {
+    setTemplatePanelOpen(true);
     setSelectedTemplateId(NEW_TEMPLATE_ID);
     setTemplateName("");
     setTemplateSubject(selectedCourse?.subject ?? "");
@@ -709,8 +710,22 @@ export function ProgressChecklistView({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#25324a]">已有模板</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-bold text-[#25324a]">已有模板</label>
+                  <Button type="button" variant="outline" size="sm" onClick={startNewTemplate}>
+                    <Plus size={15} /> 新建
+                  </Button>
+                </div>
                 <div className="max-h-[240px] space-y-2 overflow-y-auto pr-1">
+                  {selectedTemplateId === NEW_TEMPLATE_ID && (
+                    <div role="status" className="rounded-[12px] border border-[#93c5fd] bg-[#eff6ff] p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 break-words font-extrabold text-[#061226]">{currentTemplateName || "新建模板"}</div>
+                        <Badge variant="amber" className="shrink-0">未保存</Badge>
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-[#64748b]">在下方编辑内容，点击“保存”即可创建。</div>
+                    </div>
+                  )}
                   {templates.map((template) => {
                     const active = template.id === selectedTemplateId;
                     return (
@@ -731,9 +746,9 @@ export function ProgressChecklistView({
                       </button>
                     );
                   })}
-                  {templates.length === 0 && (
+                  {templates.length === 0 && selectedTemplateId !== NEW_TEMPLATE_ID && (
                     <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-4 text-sm font-semibold text-[#64748b]">
-                      还没有模板，先创建一套教材清单。
+                      还没有模板，点击右上方“新建”创建一套教材清单。
                     </div>
                   )}
                 </div>
@@ -798,9 +813,17 @@ export function ProgressChecklistView({
                   </div>
               </div>
 
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-extrabold text-[#25324a]">{selectedTemplate ? "编辑模板" : "新建模板"}</div>
+                {selectedTemplate && (
+                  <Button type="button" variant="destructive" size="sm" onClick={askDeleteTemplate}>
+                    <Trash2 size={15} /> 删除
+                  </Button>
+                )}
+              </div>
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#25324a]">模板名称</label>
-                <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="例如：2025 江苏中考物理真题清单" />
+                <label htmlFor="checklist-template-name" className="text-sm font-bold text-[#25324a]">模板名称</label>
+                <Input id="checklist-template-name" value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="例如：2025 江苏中考物理真题清单" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-[#25324a]">关联科目</label>
@@ -812,8 +835,9 @@ export function ProgressChecklistView({
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#25324a]">条目清单</label>
+                <label htmlFor="checklist-template-items" className="text-sm font-bold text-[#25324a]">条目清单</label>
                 <Textarea
+                  id="checklist-template-items"
                   value={templateItemsText}
                   onChange={(event) => setTemplateItemsText(event.target.value)}
                   placeholder={"每行一个知识点，例如：\n整式乘法\n平方差公式\n完全平方公式"}
@@ -832,21 +856,18 @@ export function ProgressChecklistView({
                   className="min-h-[88px]"
                 />
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Button type="button" variant="outline" onClick={startNewTemplate}>
-                  <Plus size={15} /> 新建
-                </Button>
+              <div className="space-y-2">
                 <Button
                   type="button"
                   onClick={saveTemplate}
                   disabled={!canSaveTemplate}
-                  className="disabled:border-[#e5e7eb] disabled:bg-[#f3f4f6] disabled:text-[#9ca3af] disabled:shadow-none"
+                  className="w-full disabled:border-[#e5e7eb] disabled:bg-[#f3f4f6] disabled:text-[#9ca3af] disabled:shadow-none"
                 >
                   <Save size={15} /> 保存
                 </Button>
-                <Button type="button" variant="destructive" onClick={askDeleteTemplate} disabled={!selectedTemplate}>
-                  <Trash2 size={15} /> 删除
-                </Button>
+                {!currentTemplateName || draftTemplateItems.length === 0 ? (
+                  <div className="text-xs font-semibold text-[#64748b]">填写模板名称和至少一条清单内容后即可保存。</div>
+                ) : null}
               </div>
             </CardContent>
           </Card>
