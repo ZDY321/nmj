@@ -227,13 +227,8 @@ export function LessonChecklistLinker({
                 <div className="mt-2 max-h-[360px] space-y-2 overflow-y-auto pr-1">
                   {perStudentStatus.map((student) => {
                     const resultEntry = syncResult?.find((r) => r.studentId === student.studentId);
-                    const focusedPendingCount = lastSyncSource === "taught"
-                      ? student.taughtPendingCount
-                      : lastSyncSource === "homework"
-                        ? student.homeworkPendingCount
-                        : student.taughtPendingCount + student.homeworkPendingCount;
-                    const showTaught = !lastSyncSource || lastSyncSource === "taught";
-                    const showHomework = !lastSyncSource || lastSyncSource === "homework";
+                    const pendingCount = student.taughtPendingCount + student.homeworkPendingCount;
+                    const hasItems = student.taughtItems.length + student.homeworkItems.length > 0;
                     return (
                       <div
                         key={student.studentId}
@@ -242,13 +237,13 @@ export function LessonChecklistLinker({
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span className="font-bold text-[#25324a]">{student.studentName}</span>
                           <span className="font-semibold text-[#64748b]">
-                            {showTaught && `课堂 ${student.taughtItems.length - student.taughtPendingCount}/${student.taughtItems.length}`}
-                            {showTaught && showHomework && " · "}
-                            {showHomework && `作业 ${student.homeworkItems.length - student.homeworkPendingCount}/${student.homeworkItems.length}`}
+                            课堂 {student.taughtItems.length - student.taughtPendingCount}/{student.taughtItems.length}
+                            {" · "}
+                            作业 {student.homeworkItems.length - student.homeworkPendingCount}/{student.homeworkItems.length}
                           </span>
                         </div>
                         <div className="mt-2 grid gap-2 md:grid-cols-2">
-                          {showTaught && student.taughtItems.length > 0 && (
+                          {student.taughtItems.length > 0 && (
                             <ChecklistStudentItemGroup
                               title="课堂"
                               items={student.taughtItems}
@@ -257,7 +252,7 @@ export function LessonChecklistLinker({
                               tone="blue"
                             />
                           )}
-                          {showHomework && student.homeworkItems.length > 0 && (
+                          {student.homeworkItems.length > 0 && (
                             <ChecklistStudentItemGroup
                               title="作业"
                               items={student.homeworkItems}
@@ -266,7 +261,7 @@ export function LessonChecklistLinker({
                               tone="orange"
                             />
                           )}
-                          {focusedPendingCount === 0 && (
+                          {hasItems && pendingCount === 0 && (
                             <span className="self-center text-xs font-semibold text-[#15803d]">所示条目已完成</span>
                           )}
                         </div>
