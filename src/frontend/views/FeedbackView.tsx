@@ -14,6 +14,7 @@ import {
   lessonFeedbackIndexDocType,
   lessonFeedbackIndexItem,
   lessonFeedbackRecordDocType,
+  syncLessonFeedbackChecklistContent,
   upsertLessonFeedbackIndexItem,
   type LessonFeedbackIndexDocument,
   type LessonFeedbackIndexItem,
@@ -87,6 +88,7 @@ export function LessonFeedbackWorkspace({
   const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const syncingRef = useRef(false);
   const saveStateRef = useRef<SaveState>(saveState);
+  const lastChecklistSyncKeyRef = useRef("");
 
   indexRef.current = indexDocument;
   activeRecordRef.current = activeRecord;
@@ -97,6 +99,18 @@ export function LessonFeedbackWorkspace({
     () => [...vault.lessons].filter((lesson) => lesson.courseGroupId === selectedCourseId).sort(sortLessons).reverse(),
     [selectedCourseId, vault.lessons]
   );
+  const activeLessonChecklistSignature = useMemo(() => {
+    if (!activeRecord?.lessonId) return "";
+    const lesson = vault.lessons.find((item) => item.id === activeRecord.lessonId);
+    if (!lesson) return "";
+    const template = vault.progressChecklistTemplates?.find((item) => item.id === lesson.content.checklistTemplateId);
+    return JSON.stringify({
+      templateId: lesson.content.checklistTemplateId ?? "",
+      taughtIds: lesson.content.taughtChecklistItemIds ?? [],
+      homeworkIds: lesson.content.homeworkChecklistItemIds ?? [],
+      templateItems: template?.items ?? []
+    });
+  }, [activeRecord?.lessonId, vault.lessons, vault.progressChecklistTemplates]);
   const historyItems = useMemo(() => {
     const query = historyQuery.trim().toLocaleLowerCase();
     return [...indexDocument.items]
@@ -193,6 +207,24 @@ export function LessonFeedbackWorkspace({
     }, 850);
     return () => window.clearTimeout(timer);
   }, [activeRecord]);
+
+  useEffect(() => {
+    const current = activeRecordRef.current;
+    if (!current?.lessonId || !activeLessonChecklistSignature) return;
+    const syncKey = `${current.id}:${activeLessonChecklistSignature}`;
+    if (lastChecklistSyncKeyRef.current === syncKey) return;
+    const lesson = vault.lessons.find((item) => item.id === current.lessonId);
+    if (!lesson) return;
+    lastChecklistSyncKeyRef.current = syncKey;
+    const updated = syncLessonFeedbackChecklistContent(
+      current,
+      lesson,
+      vault.progressChecklistTemplates ?? []
+    );
+    if (updated === current) return;
+    activeRecordRef.current = updated;
+    setActiveRecord(updated);
+  }, [activeRecord?.id, activeLessonChecklistSignature]);
 
   useEffect(() => () => {
     if (lessonContentSyncTimerRef.current !== null) window.clearTimeout(lessonContentSyncTimerRef.current);

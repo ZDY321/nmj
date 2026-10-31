@@ -1,8 +1,8 @@
 import { getCourse } from "@/frontend/lib/calculations";
 import { campusName, findStudent, lessonStudentIds, sortLessons } from "@/frontend/lib/helpers";
 import { makeId } from "@/frontend/lib/crypto";
-import { composeLessonContentField } from "@/frontend/lib/lessonContent";
-import type { AttendanceStatus, CourseGroup, Lesson, Student, TeacherVault } from "@/shared/types";
+import { composeLessonContentField, stripLessonChecklistSection } from "@/frontend/lib/lessonContent";
+import type { AttendanceStatus, CourseGroup, Lesson, ProgressChecklistTemplate, Student, TeacherVault } from "@/shared/types";
 
 export const lessonFeedbackIndexDocType = "lesson-feedback-index";
 export const lessonFeedbackIndexDocKey = "primary";
@@ -223,6 +223,27 @@ export function createLessonFeedbackRecord(  vault: TeacherVault,
     createdAt: now,
     updatedAt: now
   };
+}
+
+export function syncLessonFeedbackChecklistContent(
+  record: LessonFeedbackRecord,
+  lesson: Lesson,
+  templates: ProgressChecklistTemplate[]
+): LessonFeedbackRecord {
+  const content = composeLessonContentField(
+    lesson.content,
+    templates,
+    "taught",
+    stripLessonChecklistSection(record.content, "taught")
+  );
+  const homework = composeLessonContentField(
+    lesson.content,
+    templates,
+    "homework",
+    stripLessonChecklistSection(record.homework, "homework")
+  );
+  if (content === record.content && homework === record.homework) return record;
+  return { ...record, content, homework };
 }
 
 export function upsertLessonFeedbackIndexItem(

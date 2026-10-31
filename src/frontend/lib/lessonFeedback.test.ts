@@ -4,6 +4,7 @@ import {
   feedbackAttendanceMark,
   lessonFeedbackIndexItem,
   lessonFeedbackPeriodNumber,
+  syncLessonFeedbackChecklistContent,
   upsertLessonFeedbackIndexItem,
   type LessonFeedbackIndexDocument
 } from "@/frontend/lib/lessonFeedback";
@@ -55,6 +56,50 @@ describe("lesson feedback model", () => {
 
     expect(record.content).toContain("一次函数");
     expect(record.homework).toContain("函数练习");
+  });
+
+  it("refreshes linked checklist text in feedback while preserving editable notes", () => {
+    const vault = createSampleVault();
+    const course = vault.courseGroups.find((item) => item.id === "course_class_math")!;
+    const lesson = vault.lessons.find((item) => item.id === "lesson_20260509_class")!;
+    const template = {
+      id: "feedback_checklist",
+      name: "数学清单",
+      items: [
+        { id: "taught_item", title: "一次函数", order: 1 },
+        { id: "homework_item", title: "函数练习", order: 2 }
+      ],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+    const previousLesson = {
+      ...lesson,
+      content: {
+        ...lesson.content,
+        checklistTemplateId: template.id,
+        taughtChecklistItemIds: ["taught_item"],
+        homeworkChecklistItemIds: []
+      }
+    };
+    const record = createLessonFeedbackRecord(vault, course, previousLesson, "2026-07-31T08:00:00.000Z");
+    const editableRecord = {
+      ...record,
+      content: "教师补充的课堂说明\n\n【关联学习清单·本节课内容】\n- 旧关联"
+    };
+    const currentLesson = {
+      ...previousLesson,
+      content: {
+        ...previousLesson.content,
+        taughtChecklistItemIds: ["homework_item"]
+      }
+    };
+
+    const updated = syncLessonFeedbackChecklistContent(editableRecord, currentLesson, [template]);
+
+    expect(updated.content).toContain("教师补充的课堂说明");
+    expect(updated.content).toContain("函数练习");
+    expect(updated.content).not.toContain("旧关联");
+    expect(updated.homework).toBe(editableRecord.homework);
   });
 
   it("keeps index metadata independent from later record edits", () => {
