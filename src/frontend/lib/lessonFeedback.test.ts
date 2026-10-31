@@ -27,6 +27,36 @@ describe("lesson feedback model", () => {
     expect(record.homework).toBe(lesson.content.homework);
   });
 
+  it("includes lesson-linked checklist items in new feedback snapshots", () => {
+    const vault = createSampleVault();
+    const course = vault.courseGroups.find((item) => item.id === "course_class_math")!;
+    const lesson = vault.lessons.find((item) => item.id === "lesson_20260509_class")!;
+    vault.progressChecklistTemplates = [{
+      id: "feedback_checklist",
+      name: "数学清单",
+      items: [
+        { id: "taught_item", title: "一次函数", order: 1 },
+        { id: "homework_item", title: "函数练习", order: 2 }
+      ],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    }];
+    const linkedLesson = {
+      ...lesson,
+      content: {
+        ...lesson.content,
+        checklistTemplateId: "feedback_checklist",
+        taughtChecklistItemIds: ["taught_item"],
+        homeworkChecklistItemIds: ["homework_item"]
+      }
+    };
+
+    const record = createLessonFeedbackRecord(vault, course, linkedLesson, "2026-07-31T08:00:00.000Z");
+
+    expect(record.content).toContain("一次函数");
+    expect(record.homework).toContain("函数练习");
+  });
+
   it("keeps index metadata independent from later record edits", () => {
     const vault = createSampleVault();
     const course = vault.courseGroups[0];

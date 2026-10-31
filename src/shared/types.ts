@@ -302,8 +302,10 @@ export type SubstituteClassInfo = {
 
 export type LessonContent = {
   taught: string;
+  taughtNotes?: string;
   performance?: string;
   homework: string;
+  homeworkNotes?: string;
   nextLessonReminder: string;
   internalNote?: string;
   checklistTemplateId?: string;

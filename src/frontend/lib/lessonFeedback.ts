@@ -1,6 +1,7 @@
 import { getCourse } from "@/frontend/lib/calculations";
 import { campusName, findStudent, lessonStudentIds, sortLessons } from "@/frontend/lib/helpers";
 import { makeId } from "@/frontend/lib/crypto";
+import { composeLessonContentField } from "@/frontend/lib/lessonContent";
 import type { AttendanceStatus, CourseGroup, Lesson, Student, TeacherVault } from "@/shared/types";
 
 export const lessonFeedbackIndexDocType = "lesson-feedback-index";
@@ -211,8 +212,8 @@ export function createLessonFeedbackRecord(  vault: TeacherVault,
     startTime: lesson?.startTime,
     endTime: lesson?.endTime,
     periodLabel: `第 ${periodNumber} 课`,
-    content: lesson?.content.taught ?? "",
-    homework: lesson?.content.homework ?? "",
+    content: lesson ? composeLessonContentField(lesson.content, vault.progressChecklistTemplates ?? [], "taught") : "",
+    homework: lesson ? composeLessonContentField(lesson.content, vault.progressChecklistTemplates ?? [], "homework") : "",
     generalNotes: "",
     students,
     entries,

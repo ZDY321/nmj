@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { TimeTextInput } from "@/components/ui/time-text-input";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
-import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
+import { LessonChecklistLinkedItems, LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
+import { lessonContentFieldNotes, updateLessonContentField } from "@/frontend/lib/lessonContent";
 import type { AttendanceStatus, CourseType, Lesson, TeacherVault } from "@/shared/types";
 import { buildFeeSnapshot, getCourse, todayIso } from "@/frontend/lib/calculations";
 import {
@@ -226,7 +227,10 @@ export function LessonsView({
 
   function updateContent(field: keyof Lesson["content"], value: string) {
     if (!selected) return;
-    onUpdateLesson({ ...selected, content: { ...selected.content, [field]: value } });
+    const content = field === "taught" || field === "homework"
+      ? updateLessonContentField(selected.content, vault.progressChecklistTemplates ?? [], field, value)
+      : { ...selected.content, [field]: value };
+    onUpdateLesson({ ...selected, content });
   }
 
   function updateAttendance(studentId: string, status: AttendanceStatus) {
@@ -479,9 +483,15 @@ export function LessonsView({
                     <BookOpen size={14} /> 本次课内容
                   </div>
                   <Textarea
-                    value={selected.content.taught}
+                    value={lessonContentFieldNotes(selected.content, "taught")}
                     onChange={(e) => updateContent("taught", e.target.value)}
                     placeholder="例如：本节讲了什么知识点、重点方法、课堂例题、常见错误和掌握情况。"
+                  />
+                  <LessonChecklistLinkedItems
+                    vault={vault}
+                    content={selected.content}
+                    field="taught"
+                    onChange={(content) => onUpdateLesson({ ...selected, content })}
                   />
                 </div>
 
@@ -490,9 +500,15 @@ export function LessonsView({
                     <NotebookPen size={14} /> 课后作业
                   </div>
                   <Textarea
-                    value={selected.content.homework}
+                    value={lessonContentFieldNotes(selected.content, "homework")}
                     onChange={(e) => updateContent("homework", e.target.value)}
                     placeholder="例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。"
+                  />
+                  <LessonChecklistLinkedItems
+                    vault={vault}
+                    content={selected.content}
+                    field="homework"
+                    onChange={(content) => onUpdateLesson({ ...selected, content })}
                   />
                 </div>
 

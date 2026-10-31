@@ -9,6 +9,7 @@ import { ScheduleCalendarFollowupPanels } from "@/frontend/components/ScheduleCa
 import { ScheduleCalendarPanel } from "@/frontend/components/ScheduleCalendarPanel";
 import { ScheduleDayReusePanel } from "@/frontend/components/ScheduleDayReusePanel";
 import { ScheduleLessonDetailPanel } from "@/frontend/components/ScheduleLessonDetailPanel";
+import type { LessonChecklistPerStudentStatus, LessonChecklistStudentItemStatus } from "@/frontend/components/LessonChecklistLinker";
 import { SchedulePanelTabs } from "@/frontend/components/SchedulePanelTabs";
 import { SchedulePlanningPanel, type BatchRepeatMode, type BatchTimeGroup, type WeeklySchedulePatternSlot } from "@/frontend/components/SchedulePlanningPanel";
 import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsListCard";
@@ -87,7 +88,8 @@ import {
   textValue,
   timesOverlap
 } from "@/frontend/lib/scheduleViewHelpers";
-import { checklistCompletionAppliesToSource } from "@/frontend/lib/progressChecklist";
+import { checklistCompletionAppliesToSource, checklistCompletionSource, formatChecklistItemLine } from "@/frontend/lib/progressChecklist";
+import { updateLessonContentField } from "@/frontend/lib/lessonContent";
 import { filterCoursesWithScopedLessons } from "@/frontend/lib/salaryDetailScope";
 import { buildBatchLessonPreview, buildBatchSchedulePreview, endDateForRepeatWeeks, type BatchLessonGenerationResult, type BatchLessonTime, type BatchScheduleConflict } from "@/frontend/lib/scheduleBatch";
 import type { CalendarFocus, CourseTypeFilter, ExternalLessonReturnTarget, InternalLessonReturnTarget, LessonReturnTarget, LessonScope, MakeupLessonFilter, SchedulePanel, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
@@ -162,13 +164,6 @@ type LessonChecklistSyncSummary = {
   homeworkPendingCount: number;
   taughtCompletedCount: number;
   homeworkCompletedCount: number;
-};
-
-type LessonChecklistPerStudentStatus = {
-  studentId: string;
-  studentName: string;
-  taughtPendingCount: number;
-  homeworkPendingCount: number;
 };
 
 type LessonChecklistSyncResult = {
@@ -303,6 +298,7 @@ export function ScheduleView({
   onApplyAiDraft,
   onReturnToView,
   onSaveChecklistCompletions,
+  onUpdateChecklistCompletions,
   onOpenProgressChecklist,
   onOpenLessonFeedback
 }: {
@@ -337,6 +333,7 @@ export function ScheduleView({
   onApplyAiDraft: (session: AiScheduleSession | null) => { ok: boolean; message: string };
   onReturnToView: (target: ExternalLessonReturnTarget) => void;
   onSaveChecklistCompletions: (completions: ProgressChecklistCompletion[]) => void;
+  onUpdateChecklistCompletions: (completions: ProgressChecklistCompletion[], deleteIds: string[]) => void;
   onOpenProgressChecklist?: (lesson: Lesson) => void;
   onOpenLessonFeedback?: (lesson: Lesson) => void;
 }) {
@@ -956,29 +953,39 @@ export function ScheduleView({
 
   const selectedChecklistPerStudentStatus: LessonChecklistPerStudentStatus[] = (() => {
     if (!selected || !selectedChecklistTemplate) return [];
-    const studentMap = new Map<string, { taught: number; homework: number }>();
-    for (const candidate of selectedTaughtChecklistSyncCandidates) {
-      const entry = studentMap.get(candidate.studentId) ?? { taught: 0, homework: 0 };
-      entry.taught++;
-      studentMap.set(candidate.studentId, entry);
-    }
-    for (const candidate of selectedHomeworkChecklistSyncCandidates) {
-      const entry = studentMap.get(candidate.studentId) ?? { taught: 0, homework: 0 };
-      entry.homework++;
-      studentMap.set(candidate.studentId, entry);
-    }
-    for (const studentId of selectedChecklistStudentIds) {
-      if (!studentMap.has(studentId)) {
-        studentMap.set(studentId, { taught: 0, homework: 0 });
-      }
-    }
-    return Array.from(studentMap.entries())
-      .map(([studentId, counts]) => ({
-        studentId,
-        studentName: findStudent(vault, studentId)?.name ?? "未知学生",
-        taughtPendingCount: counts.taught,
-        homeworkPendingCount: counts.homework,
-      }))
+    const completions = vault.progressChecklistCompletions ?? [];
+    const itemsForStudent = (studentId: string, source: LessonChecklistSyncSource): LessonChecklistStudentItemStatus[] => {
+      const itemIds = source === "taught"
+        ? selected.content.taughtChecklistItemIds ?? []
+        : selected.content.homeworkChecklistItemIds ?? [];
+      return Array.from(new Set(itemIds))
+        .map((itemId) => {
+          const item = selectedChecklistTemplate.items.find((candidate) => candidate.id === itemId);
+          if (!item) return undefined;
+          const completed = completions.some((completion) =>
+            completion.templateId === selectedChecklistTemplate.id &&
+            completion.courseGroupId === selected.courseGroupId &&
+            completion.studentId === studentId &&
+            completion.itemId === itemId &&
+            checklistCompletionAppliesToSource(completion, source)
+          );
+          return { itemId, label: formatChecklistItemLine(item, selectedChecklistTemplate.items), completed };
+        })
+        .filter((item): item is LessonChecklistStudentItemStatus => Boolean(item));
+    };
+    return selectedChecklistStudentIds
+      .map((studentId) => {
+        const taughtItems = itemsForStudent(studentId, "taught");
+        const homeworkItems = itemsForStudent(studentId, "homework");
+        return {
+          studentId,
+          studentName: findStudent(vault, studentId)?.name ?? "未知学生",
+          taughtItems,
+          homeworkItems,
+          taughtPendingCount: taughtItems.filter((item) => !item.completed).length,
+          homeworkPendingCount: homeworkItems.filter((item) => !item.completed).length
+        };
+      })
       .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
   })();
 
@@ -1903,7 +1910,10 @@ export function ScheduleView({
 
   function updateContent(field: keyof Lesson["content"], value: string) {
     if (!selected) return;
-    onUpdateLesson({ ...selected, content: { ...selected.content, [field]: value } });
+    const content = field === "taught" || field === "homework"
+      ? updateLessonContentField(selected.content, vault.progressChecklistTemplates ?? [], field, value)
+      : { ...selected.content, [field]: value };
+    onUpdateLesson({ ...selected, content });
   }
 
   function syncSelectedLessonChecklist(source: LessonChecklistSyncSource) {
@@ -1947,6 +1957,58 @@ export function ScheduleView({
       updatedAt: now
     })));
     setChecklistSyncMessage(`已完成 ${candidates.length} 个${sourceLabel}条目。`);
+  }
+
+  function toggleSelectedLessonChecklistCompletion(
+    studentId: string,
+    itemId: string,
+    source: LessonChecklistSyncSource,
+    completed: boolean
+  ) {
+    if (!selected || !selectedChecklistTemplate) return;
+    const completions = (vault.progressChecklistCompletions ?? []).filter((completion) =>
+      completion.templateId === selectedChecklistTemplate.id &&
+      completion.courseGroupId === selected.courseGroupId &&
+      completion.studentId === studentId &&
+      completion.itemId === itemId &&
+      checklistCompletionAppliesToSource(completion, source)
+    );
+    const now = new Date().toISOString();
+
+    if (completed) {
+      if (completions.length > 0) return;
+      const candidates = source === "taught" ? selectedTaughtChecklistSyncCandidates : selectedHomeworkChecklistSyncCandidates;
+      const candidate = candidates.find((entry) => entry.studentId === studentId && entry.itemId === itemId);
+      const sourceLabel = source === "taught" ? "课堂关联" : "作业关联";
+      onUpdateChecklistCompletions([{
+        id: makeId("progress_completion"),
+        templateId: selectedChecklistTemplate.id,
+        itemId,
+        studentId,
+        courseGroupId: selected.courseGroupId,
+        source,
+        completedDate: selected.date || todayIso(),
+        lessonId: selected.id,
+        progressRecordId: candidate?.progressRecordId,
+        note: `${sourceLabel}完成：${selected.date} ${selected.startTime}-${selected.endTime}`,
+        updatedAt: now
+      }], []);
+      setChecklistLastSyncSource(source);
+      setChecklistSyncMessage(`已标记${source === "taught" ? "课堂" : "作业"}条目完成。`);
+      return;
+    }
+
+    const legacyCompletions = completions.filter((completion) => !checklistCompletionSource(completion));
+    const completionIdsToDelete = completions
+      .filter((completion) => checklistCompletionSource(completion) === source)
+      .map((completion) => completion.id);
+    const oppositeSource = source === "taught" ? "homework" : "taught";
+    onUpdateChecklistCompletions(
+      legacyCompletions.map((completion) => ({ ...completion, source: oppositeSource, updatedAt: now })),
+      completionIdsToDelete
+    );
+    setChecklistLastSyncSource(source);
+    setChecklistSyncMessage(`已撤销${source === "taught" ? "课堂" : "作业"}条目完成。`);
   }
 
   function updateAttendance(studentId: string, status: AttendanceStatus) {
@@ -3502,6 +3564,7 @@ export function ScheduleView({
             checklistSyncResult={checklistSyncResult}
             checklistLastSyncSource={checklistLastSyncSource}
             onSyncChecklistCompletions={syncSelectedLessonChecklist}
+            onToggleChecklistCompletion={toggleSelectedLessonChecklistCompletion}
             onSelectDetailMakeupStudentIds={setDetailMakeupStudentIds}
             onSelectedCourseChange={updateSelectedCourse}
             onSelectedDateChange={updateSelectedDate}

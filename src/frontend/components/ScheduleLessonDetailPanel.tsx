@@ -19,8 +19,9 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeTextInput } from "@/components/ui/time-text-input";
-import { LessonChecklistLinker } from "@/frontend/components/LessonChecklistLinker";
+import { LessonChecklistLinkedItems, LessonChecklistLinker, type LessonChecklistPerStudentStatus } from "@/frontend/components/LessonChecklistLinker";
 import { ScheduleLessonAttendancePanel } from "@/frontend/components/ScheduleLessonAttendancePanel";
+import { lessonContentFieldNotes } from "@/frontend/lib/lessonContent";
 import type { AttendanceStatus, Campus, CourseGroup, Lesson, SalaryGradeStage, Student, TeacherVault } from "@/shared/types";
 import {
   attendedStudentNamesForLesson,
@@ -58,7 +59,7 @@ type ScheduleLessonDetailPanelProps = {
   attendanceStudentFilter: string;
   availableTrialStudentOptionCount: number;
   campusOptions: Campus[];
-  checklistPerStudentStatus?: { studentId: string; studentName: string; taughtPendingCount: number; homeworkPendingCount: number }[];
+  checklistPerStudentStatus?: LessonChecklistPerStudentStatus[];
   checklistSyncMessage?: string;
   checklistSyncResult?: { studentId: string; studentName: string; taughtSyncedCount: number; homeworkSyncedCount: number }[];
   checklistLastSyncSource?: LessonChecklistSyncSource | null;
@@ -85,6 +86,7 @@ type ScheduleLessonDetailPanelProps = {
   onOpenProgressChecklist?: (lesson: Lesson) => void;
   onOpenLessonFeedback?: (lesson: Lesson) => void;
   onSyncChecklistCompletions?: (source: LessonChecklistSyncSource) => void;
+  onToggleChecklistCompletion?: (studentId: string, itemId: string, source: LessonChecklistSyncSource, completed: boolean) => void;
   onSelectDetailMakeupStudentIds: (studentIds: string[]) => void;
   onSelectedCourseChange: (courseId: string) => void;
   onSelectedDateChange: (date: string) => void;
@@ -170,6 +172,7 @@ export function ScheduleLessonDetailPanel({
   onOpenProgressChecklist,
   onOpenLessonFeedback,
   onSyncChecklistCompletions,
+  onToggleChecklistCompletion,
   onSelectDetailMakeupStudentIds,
   onSelectedCourseChange,
   onSelectedDateChange,
@@ -593,14 +596,16 @@ export function ScheduleLessonDetailPanel({
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
               <BookOpen size={14} /> 本次课内容
             </div>
-            <Textarea value={selected.content.taught} onChange={(event) => onContentChange("taught", event.target.value)} placeholder="例如：本节讲了什么知识点、重点方法、课堂例题、常见错误和掌握情况。" />
+            <Textarea value={lessonContentFieldNotes(selected.content, "taught")} onChange={(event) => onContentChange("taught", event.target.value)} placeholder="例如：本节讲了什么知识点、重点方法、课堂例题、常见错误和掌握情况。" />
+            <LessonChecklistLinkedItems vault={vault} content={selected.content} field="taught" onChange={onChecklistContentChange} />
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff8617]">
               <NotebookPen size={14} /> 课后作业
             </div>
-            <Textarea value={selected.content.homework} onChange={(event) => onContentChange("homework", event.target.value)} placeholder="例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。" />
+            <Textarea value={lessonContentFieldNotes(selected.content, "homework")} onChange={(event) => onContentChange("homework", event.target.value)} placeholder="例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。" />
+            <LessonChecklistLinkedItems vault={vault} content={selected.content} field="homework" onChange={onChecklistContentChange} />
           </div>
 
           {!isSubstituteClass && (
@@ -616,6 +621,7 @@ export function ScheduleLessonDetailPanel({
               syncMessage={checklistSyncMessage}
               syncSummary={checklistSyncSummary}
               perStudentStatus={checklistPerStudentStatus}
+              onToggleCompletion={onToggleChecklistCompletion}
               syncResult={checklistSyncResult}
               lastSyncSource={checklistLastSyncSource}
             />

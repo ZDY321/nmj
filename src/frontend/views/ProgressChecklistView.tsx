@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BookCheck,
   CalendarDays,
+  Check,
   CheckCheck,
+  Circle,
   Copy,
   ClipboardList,
   CornerUpLeft,
@@ -481,6 +483,30 @@ export function ProgressChecklistView({
   function clearSelectedCompletion() {
     if (selectedCompletions.length === 0) return;
     onDeleteChecklistCompletions(selectedCompletions.map((completion) => completion.id));
+  }
+
+  function toggleChecklistCellCompletion(studentId: string, itemId: string) {
+    const completions = completionGroupsByCell.get(checklistCellKey(studentId, itemId)) ?? [];
+    if (completions.length > 0) {
+      onDeleteChecklistCompletions(completions.map((completion) => completion.id));
+      return;
+    }
+    if (!selectedCourse || !selectedTemplate) return;
+    const context = selectedCellContextByStudent.get(studentId);
+    const sourceLinks = targetLessonLinkedItemSources.get(itemId) ?? [];
+    const now = new Date().toISOString();
+    onSaveChecklistCompletion({
+      id: makeId("progress_completion"),
+      templateId: selectedTemplate.id,
+      itemId,
+      studentId,
+      courseGroupId: selectedCourse.id,
+      source: sourceLinks.length === 1 ? sourceLinks[0] : undefined,
+      completedDate: targetDate || todayIso(),
+      lessonId: selectedLesson?.id ?? context?.lesson?.id,
+      progressRecordId: context?.record?.id,
+      updatedAt: now
+    });
   }
 
   function syncLessonLinkedCompletions(source: ChecklistSyncSource) {
@@ -1084,61 +1110,77 @@ export function ProgressChecklistView({
                               const linkSources = targetLessonLinkedItemSources.get(item.id) ?? [];
                               return (
                                 <td key={`${student.id}-${item.id}`} className="border-b border-r border-[#dbe4ef] p-2 align-top">
-                                  <button
-                                    type="button"
-                                    onClick={() => selectChecklistCell(student.id, item.id)}
-                                    className={`flex min-h-[74px] w-full flex-col items-center justify-center rounded-[10px] border px-2 py-3 text-center transition-colors ${
-                                      active
-                                        ? "border-[#ff8617] bg-[#fff7ed]"
-                                        : completion
-                                          ? "border-[#bbf7d0] bg-[#f0fdf4] hover:border-[#86efac]"
-                                          : "border-[#e8eef6] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
-                                    }`}
-                                  >
-                                    {completion ? (
-                                      <>
-                                        <div className="text-lg font-extrabold text-[#15803d]">✓</div>
-                                        <div className="mt-1 text-xs font-bold text-[#166534]">{completion.completedDate.slice(5)}</div>
-                                        {completedSources.length > 0 && (
-                                          <div className="mt-1 flex flex-wrap justify-center gap-1">
-                                            {completedSources.map((source) => {
-                                              const linkedCompletion = completions.find((c) => checklistCompletionSource(c) === source && c.lessonId);
-                                              const linkedLesson = linkedCompletion?.lessonId ? vault.lessons.find((l) => l.id === linkedCompletion.lessonId) : undefined;
-                                              if (linkedLesson && onOpenLessonInRecords) {
+                                  <div className="space-y-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => selectChecklistCell(student.id, item.id)}
+                                      className={`flex min-h-[68px] w-full flex-col items-center justify-center rounded-[10px] border px-2 py-2 text-center transition-colors ${
+                                        active
+                                          ? "border-[#ff8617] bg-[#fff7ed]"
+                                          : completion
+                                            ? "border-[#bbf7d0] bg-[#f0fdf4] hover:border-[#86efac]"
+                                            : "border-[#e8eef6] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
+                                      }`}
+                                    >
+                                      {completion ? (
+                                        <>
+                                          <div className="text-lg font-extrabold text-[#15803d]">✓</div>
+                                          <div className="mt-1 text-xs font-bold text-[#166534]">{completion.completedDate.slice(5)}</div>
+                                          {completedSources.length > 0 && (
+                                            <div className="mt-1 flex flex-wrap justify-center gap-1">
+                                              {completedSources.map((source) => {
+                                                const linkedCompletion = completions.find((c) => checklistCompletionSource(c) === source && c.lessonId);
+                                                const linkedLesson = linkedCompletion?.lessonId ? vault.lessons.find((l) => l.id === linkedCompletion.lessonId) : undefined;
+                                                if (linkedLesson && onOpenLessonInRecords) {
+                                                  return (
+                                                    <Badge
+                                                      key={source}
+                                                      variant={source === "taught" ? "sky" : "amber"}
+                                                      className="cursor-pointer px-1.5 py-0 text-[10px] hover:opacity-80"
+                                                      onClick={(event: React.MouseEvent) => { event.stopPropagation(); onOpenLessonInRecords(linkedLesson); }}
+                                                    >
+                                                      {source === "taught" ? "课堂↗" : "作业↗"}
+                                                    </Badge>
+                                                  );
+                                                }
                                                 return (
-                                                  <Badge
-                                                    key={source}
-                                                    variant={source === "taught" ? "sky" : "amber"}
-                                                    className="cursor-pointer px-1.5 py-0 text-[10px] hover:opacity-80"
-                                                    onClick={(event: React.MouseEvent) => { event.stopPropagation(); onOpenLessonInRecords(linkedLesson); }}
-                                                  >
-                                                    {source === "taught" ? "课堂↗" : "作业↗"}
+                                                  <Badge key={source} variant={source === "taught" ? "sky" : "amber"} className="px-1.5 py-0 text-[10px]">
+                                                    {source === "taught" ? "课堂" : "作业"}
                                                   </Badge>
                                                 );
-                                              }
-                                              return (
-                                                <Badge key={source} variant={source === "taught" ? "sky" : "amber"} className="px-1.5 py-0 text-[10px]">
-                                                  {source === "taught" ? "课堂" : "作业"}
-                                                </Badge>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-                                        {completion.note && (
-                                          <div className="mt-1 max-h-[2.2rem] overflow-hidden text-[10px] font-semibold leading-4 text-[#166534]" title={completion.note}>
-                                            {completion.note}
-                                          </div>
-                                        )}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <div className="text-xs font-bold text-[#94a3b8]">待完成</div>
-                                        {linkSources.length > 0 && (
-                                          <div className="mt-1 text-[10px] font-extrabold text-[#1557c2]">本节已关联</div>
-                                        )}
-                                      </>
-                                    )}
-                                  </button>
+                                              })}
+                                            </div>
+                                          )}
+                                          {completion.note && (
+                                            <div className="mt-1 max-h-[2.2rem] overflow-hidden text-[10px] font-semibold leading-4 text-[#166534]" title={completion.note}>
+                                              {completion.note}
+                                            </div>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <div className="text-xs font-bold text-[#94a3b8]">待完成</div>
+                                          {linkSources.length > 0 && (
+                                            <div className="mt-1 text-[10px] font-extrabold text-[#1557c2]">本节已关联</div>
+                                          )}
+                                        </>
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleChecklistCellCompletion(student.id, item.id)}
+                                      title={completion ? "撤销完成" : "标记完成"}
+                                      aria-label={`${completion ? "撤销" : "标记"}${student.name}的${formatChecklistItemTitle(item, allItems)}${completion ? "完成" : "为完成"}`}
+                                      className={`flex h-7 w-full items-center justify-center gap-1 rounded-[6px] border text-[10px] font-bold transition-colors ${
+                                        completion
+                                          ? "border-[#fecaca] bg-[#fff7f7] text-[#b91c1c] hover:bg-[#fee2e2]"
+                                          : "border-[#dbe4ef] bg-white text-[#64748b] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
+                                      }`}
+                                    >
+                                      {completion ? <Check size={12} /> : <Circle size={12} />}
+                                      {completion ? "撤销" : "完成"}
+                                    </button>
+                                  </div>
                                 </td>
                               );
                             })}

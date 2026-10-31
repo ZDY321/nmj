@@ -34,6 +34,7 @@ import { generateBatchLessonsInVault, type BatchLessonGenerationResult } from "@
 import { getOnboardingTourStartIndex, getOnboardingTourStep, isOnboardingSetupComplete, normalizeOnboardingStepKeys, onboardingTourSteps, type OnboardingStepKey } from "@/frontend/lib/onboarding";
 import { clearStoredSession, clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
 import { makeId } from "@/frontend/lib/crypto";
+import { updateLessonContentFromFeedback } from "@/frontend/lib/lessonContent";
 import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
 import type { ProgressSectionView } from "@/frontend/views/ProgressView";
 import { clearSavedScheduleImportLocalState } from "@/frontend/lib/scheduleImportReviewLocalState";
@@ -1181,15 +1182,22 @@ export function App() {
     saveProgressChecklistCompletions([completion]);
   }
 
-  function saveProgressChecklistCompletions(completionsToSave: ProgressChecklistCompletion[]) {
-    if (completionsToSave.length === 0) return;
+  function updateProgressChecklistCompletions(completionsToSave: ProgressChecklistCompletion[], completionIdsToDelete: string[]) {
+    if (completionsToSave.length === 0 && completionIdsToDelete.length === 0) return;
     updateVault((draft) => {
       const incomingIds = new Set(completionsToSave.map((completion) => completion.id));
+      const deletedIds = new Set(completionIdsToDelete);
       draft.progressChecklistCompletions = [
         ...completionsToSave,
-        ...(draft.progressChecklistCompletions ?? []).filter((completion) => !incomingIds.has(completion.id))
+        ...(draft.progressChecklistCompletions ?? []).filter((completion) =>
+          !incomingIds.has(completion.id) && !deletedIds.has(completion.id)
+        )
       ];
     });
+  }
+
+  function saveProgressChecklistCompletions(completionsToSave: ProgressChecklistCompletion[]) {
+    updateProgressChecklistCompletions(completionsToSave, []);
   }
 
   function deleteProgressChecklistCompletion(completionId: string) {
@@ -1197,11 +1205,7 @@ export function App() {
   }
 
   function deleteProgressChecklistCompletions(completionIds: string[]) {
-    if (completionIds.length === 0) return;
-    updateVault((draft) => {
-      const completionIdSet = new Set(completionIds);
-      draft.progressChecklistCompletions = (draft.progressChecklistCompletions ?? []).filter((completion) => !completionIdSet.has(completion.id));
-    });
+    updateProgressChecklistCompletions([], completionIds);
   }
 
   function addGradeRecord(record: GradeRecord) {
@@ -1660,6 +1664,8 @@ export function App() {
     setFeedbackModalOpen(false);
     setMobileNavOpen(false);
     setOnboardingVisible(false);
+    setLessonFeedbackFocus(null);
+    setProgressSectionFocus(null);
     setProgressChecklistFocus({
       courseGroupId: lesson.courseGroupId,
       templateId: lesson.content.checklistTemplateId,
@@ -1676,6 +1682,7 @@ export function App() {
     setFeedbackModalOpen(false);
     setMobileNavOpen(false);
     setOnboardingVisible(false);
+    setProgressChecklistFocus(null);
     setLessonFeedbackFocus({ lessonId: lesson.id, nonce: Date.now() });
     setProgressSectionFocus(null);
     // 课后反馈已并入“学情与作业”，跳转落到该页的反馈子页。
@@ -2159,6 +2166,7 @@ export function App() {
                     onApplyAiDraft={applyAiScheduleDraft}
                     onReturnToView={returnToViewFromSchedule}
                     onSaveChecklistCompletions={saveProgressChecklistCompletions}
+                    onUpdateChecklistCompletions={updateProgressChecklistCompletions}
                     onOpenProgressChecklist={openLessonInProgressChecklist}
                     onOpenLessonFeedback={openLessonInFeedback}
                   />
@@ -2188,7 +2196,10 @@ export function App() {
                     onOpenLessonInRecords={openProgressLessonInScheduleRecords}
                     onUpdateLessonContent={(lessonId, patch) => {
                       const lesson = vault.lessons.find((item) => item.id === lessonId);
-                      if (lesson) updateLesson({ ...lesson, content: { ...lesson.content, ...patch } });
+                      if (lesson) updateLesson({
+                        ...lesson,
+                        content: updateLessonContentFromFeedback(lesson.content, vault.progressChecklistTemplates ?? [], patch)
+                      });
                     }}
                   />
                 )}

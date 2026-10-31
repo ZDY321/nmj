@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookCheck, BookOpen, CheckCheck, ChevronDown, ExternalLink, NotebookPen, Search, X } from "lucide-react";
+import { BookCheck, BookOpen, Check, CheckCheck, ChevronDown, Circle, ExternalLink, NotebookPen, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { compareByName, findStudent, lessonStudentIds, lessonTimeRangeLabel } from "@/frontend/lib/helpers";
 import { checklistCompletionAppliesToSource, formatChecklistItemLine, formatChecklistItemTitle } from "@/frontend/lib/progressChecklist";
+import { linkedChecklistItems, removeLessonChecklistItem, syncLessonChecklistContent, type LessonContentChecklistField } from "@/frontend/lib/lessonContent";
 import type { Lesson, LessonContent, ProgressChecklistTemplate, ProgressChecklistTemplateItem, TeacherVault } from "@/shared/types";
 
 type ChecklistField = "taught" | "homework";
@@ -19,13 +20,6 @@ type LessonChecklistSyncSummary = {
   homeworkPendingCount: number;
   taughtCompletedCount: number;
   homeworkCompletedCount: number;
-};
-
-type LessonChecklistPerStudentStatus = {
-  studentId: string;
-  studentName: string;
-  taughtPendingCount: number;
-  homeworkPendingCount: number;
 };
 
 type LessonChecklistSyncResult = {
@@ -52,6 +46,21 @@ type PreviousLessonChecklistProgress = {
   nextPendingItems: ProgressChecklistTemplateItem[];
 };
 
+export type LessonChecklistStudentItemStatus = {
+  itemId: string;
+  label: string;
+  completed: boolean;
+};
+
+export type LessonChecklistPerStudentStatus = {
+  studentId: string;
+  studentName: string;
+  taughtItems: LessonChecklistStudentItemStatus[];
+  homeworkItems: LessonChecklistStudentItemStatus[];
+  taughtPendingCount: number;
+  homeworkPendingCount: number;
+};
+
 export function LessonChecklistLinker({
   vault,
   lesson,
@@ -64,6 +73,7 @@ export function LessonChecklistLinker({
   syncMessage,
   syncSummary,
   perStudentStatus,
+  onToggleCompletion,
   syncResult,
   lastSyncSource
 }: {
@@ -78,6 +88,7 @@ export function LessonChecklistLinker({
   syncMessage?: string;
   syncSummary?: LessonChecklistSyncSummary;
   perStudentStatus?: LessonChecklistPerStudentStatus[];
+  onToggleCompletion?: (studentId: string, itemId: string, source: ChecklistField, completed: boolean) => void;
   syncResult?: LessonChecklistSyncResult[];
   lastSyncSource?: ChecklistField | null;
 }) {
@@ -112,23 +123,23 @@ export function LessonChecklistLinker({
   useEffect(() => {
     if (!content.checklistTemplateId) return;
     if (templates.some((template) => template.id === content.checklistTemplateId)) return;
-    onChange({
+    onChange(syncLessonChecklistContent({
       ...content,
       checklistTemplateId: undefined,
       taughtChecklistItemIds: [],
       homeworkChecklistItemIds: []
-    });
+    }, templates));
   }, [content, onChange, templates]);
 
   function updateTemplate(templateId: string) {
     const nextTemplate = templates.find((template) => template.id === templateId);
     const validItemIds = new Set(nextTemplate?.items.map((item) => item.id) ?? []);
-    onChange({
+    onChange(syncLessonChecklistContent({
       ...content,
       checklistTemplateId: templateId || undefined,
       taughtChecklistItemIds: taughtItemIds.filter((itemId) => validItemIds.has(itemId)),
       homeworkChecklistItemIds: homeworkItemIds.filter((itemId) => validItemIds.has(itemId))
-    });
+    }, templates));
     setItemSearch("");
   }
 
@@ -137,17 +148,10 @@ export function LessonChecklistLinker({
     const nextIds = currentIds.includes(itemId)
       ? currentIds.filter((currentId) => currentId !== itemId)
       : [...currentIds, itemId];
-    onChange({
+    onChange(syncLessonChecklistContent({
       ...content,
       [field === "taught" ? "taughtChecklistItemIds" : "homeworkChecklistItemIds"]: nextIds
-    });
-  }
-
-  function clearChecklistItems(field: ChecklistField) {
-    onChange({
-      ...content,
-      [field === "taught" ? "taughtChecklistItemIds" : "homeworkChecklistItemIds"]: []
-    });
+    }, templates));
   }
 
   const taughtItems = resolveSelectedItems(selectedTemplate, taughtItemIds);
@@ -175,7 +179,7 @@ export function LessonChecklistLinker({
             <BookCheck size={16} className="text-[#1557c2]" /> 关联学习清单
           </div>
           <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-            这里保存结构化关联，不要求你在上面的文本里按固定格式写知识点。
+            关联条目会显示在对应的课程内容或作业区域。
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -220,7 +224,7 @@ export function LessonChecklistLinker({
                 <ChevronDown size={14} className={`text-[#64748b] transition-transform ${studentDetailExpanded ? "rotate-180" : ""}`} />
               </button>
               {studentDetailExpanded && (
-                <div className="mt-2 max-h-[200px] space-y-1.5 overflow-y-auto pr-1">
+                <div className="mt-2 max-h-[360px] space-y-2 overflow-y-auto pr-1">
                   {perStudentStatus.map((student) => {
                     const resultEntry = syncResult?.find((r) => r.studentId === student.studentId);
                     const focusedPendingCount = lastSyncSource === "taught"
@@ -228,36 +232,44 @@ export function LessonChecklistLinker({
                       : lastSyncSource === "homework"
                         ? student.homeworkPendingCount
                         : student.taughtPendingCount + student.homeworkPendingCount;
-                    const allSynced = focusedPendingCount === 0;
                     const showTaught = !lastSyncSource || lastSyncSource === "taught";
                     const showHomework = !lastSyncSource || lastSyncSource === "homework";
                     return (
                       <div
                         key={student.studentId}
-                        className={`flex items-center justify-between rounded-[8px] border px-3 py-1.5 text-xs font-semibold ${
-                          allSynced ? "border-[#d1fae5] bg-[#ecfdf5] text-[#065f46]" : "border-[#e8eef6] bg-white text-[#475569]"
-                        }`}
+                        className="rounded-[8px] border border-[#e8eef6] bg-white p-2.5"
                       >
-                        <span className="font-bold text-[#25324a]">{student.studentName}</span>
-                        <span className="flex items-center gap-2">
-                          {showTaught && student.taughtPendingCount > 0 && (
-                            <span className="text-[#1557c2]">课堂待完成 {student.taughtPendingCount}</span>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="font-bold text-[#25324a]">{student.studentName}</span>
+                          <span className="font-semibold text-[#64748b]">
+                            {showTaught && `课堂 ${student.taughtItems.length - student.taughtPendingCount}/${student.taughtItems.length}`}
+                            {showTaught && showHomework && " · "}
+                            {showHomework && `作业 ${student.homeworkItems.length - student.homeworkPendingCount}/${student.homeworkItems.length}`}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {showTaught && student.taughtItems.length > 0 && (
+                            <ChecklistStudentItemGroup
+                              title="课堂"
+                              items={student.taughtItems}
+                              onToggle={onToggleCompletion ? (item) => onToggleCompletion(student.studentId, item.itemId, "taught", !item.completed) : undefined}
+                              resultCount={resultEntry?.taughtSyncedCount ?? 0}
+                              tone="blue"
+                            />
                           )}
-                          {showHomework && student.homeworkPendingCount > 0 && (
-                            <span className="text-[#c2410c]">作业待完成 {student.homeworkPendingCount}</span>
+                          {showHomework && student.homeworkItems.length > 0 && (
+                            <ChecklistStudentItemGroup
+                              title="作业"
+                              items={student.homeworkItems}
+                              onToggle={onToggleCompletion ? (item) => onToggleCompletion(student.studentId, item.itemId, "homework", !item.completed) : undefined}
+                              resultCount={resultEntry?.homeworkSyncedCount ?? 0}
+                              tone="orange"
+                            />
                           )}
-                          {allSynced && <span>{lastSyncSource === "taught" ? "课堂已完成" : lastSyncSource === "homework" ? "作业已完成" : "✓ 已完成"}</span>}
-                          {resultEntry && showTaught && resultEntry.taughtSyncedCount > 0 && (
-                            <Badge variant="sage" className="px-1.5 py-0 text-[10px]">
-                              课堂本次+{resultEntry.taughtSyncedCount}
-                            </Badge>
+                          {focusedPendingCount === 0 && (
+                            <span className="self-center text-xs font-semibold text-[#15803d]">所示条目已完成</span>
                           )}
-                          {resultEntry && showHomework && resultEntry.homeworkSyncedCount > 0 && (
-                            <Badge variant="sage" className="px-1.5 py-0 text-[10px]">
-                              作业本次+{resultEntry.homeworkSyncedCount}
-                            </Badge>
-                          )}
-                        </span>
+                        </div>
                       </div>
                     );
                   })}
@@ -371,30 +383,97 @@ export function LessonChecklistLinker({
             )}
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
-            <SelectedChecklistItems
-              title="本节课内容已关联"
-              tone="blue"
-              items={taughtItems}
-              orderedItems={selectedTemplate?.items}
-              onClear={() => clearChecklistItems("taught")}
-              onRemove={(itemId) => toggleChecklistItem("taught", itemId)}
-            />
-            <SelectedChecklistItems
-              title="课后作业已关联"
-              tone="orange"
-              items={homeworkItems}
-              orderedItems={selectedTemplate?.items}
-              onClear={() => clearChecklistItems("homework")}
-              onRemove={(itemId) => toggleChecklistItem("homework", itemId)}
-            />
-          </div>
         </>
       ) : (
         <div className="mt-4 rounded-[12px] border border-dashed border-[#cbd6e3] bg-white p-4 text-sm font-semibold leading-6 text-[#64748b]">
           选一个学习清单模板后，就能通过模板筛选和搜索把条目分别关联到本节课内容或课后作业。
         </div>
       )}
+    </div>
+  );
+}
+
+function ChecklistStudentItemGroup({
+  title,
+  items,
+  onToggle,
+  resultCount,
+  tone
+}: {
+  title: string;
+  items: LessonChecklistStudentItemStatus[];
+  onToggle?: (item: LessonChecklistStudentItemStatus) => void;
+  resultCount: number;
+  tone: "blue" | "orange";
+}) {
+  const toneClass = tone === "blue" ? "text-[#1557c2]" : "text-[#c2410c]";
+  return (
+    <div className="min-w-0">
+      <div className={`mb-1 flex items-center gap-1.5 text-[10px] font-extrabold ${toneClass}`}>
+        <span>{title}</span>
+        {resultCount > 0 && <Badge variant="sage" className="px-1.5 py-0 text-[10px]">本次+{resultCount}</Badge>}
+      </div>
+      <div className="space-y-1">
+        {items.map((item) => (
+          <button
+            key={item.itemId}
+            type="button"
+            onClick={() => onToggle?.(item)}
+            disabled={!onToggle}
+            aria-pressed={item.completed}
+            title={`${item.completed ? "撤销完成" : "标记完成"}：${item.label}`}
+            className={`flex w-full items-start gap-1.5 rounded-[6px] border px-2 py-1.5 text-left text-[11px] font-semibold leading-4 transition-colors ${
+              item.completed
+                ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#166534] hover:border-[#86efac]"
+                : "border-[#e8eef6] bg-[#f8fbff] text-[#475569] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
+            }`}
+          >
+            {item.completed ? <Check size={13} className="mt-0.5 shrink-0" /> : <Circle size={13} className="mt-0.5 shrink-0 text-[#94a3b8]" />}
+            <span className="min-w-0 break-words">{item.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function LessonChecklistLinkedItems({
+  vault,
+  content,
+  field,
+  onChange
+}: {
+  vault: TeacherVault;
+  content: LessonContent;
+  field: LessonContentChecklistField;
+  onChange: (content: LessonContent) => void;
+}) {
+  const templates = vault.progressChecklistTemplates ?? [];
+  const items = linkedChecklistItems(content, templates, field);
+  if (items.length === 0) return null;
+  const orderedItems = templates.find((template) => template.id === content.checklistTemplateId)?.items;
+  const toneClass = field === "taught"
+    ? "border-[#bfdbfe] bg-[#eff6ff] text-[#1d4ed8]"
+    : "border-[#fed7aa] bg-[#fff7ed] text-[#c2410c]";
+
+  return (
+    <div className="flex flex-wrap items-start gap-1.5 pt-1">
+      {items.map((item) => {
+        const label = formatChecklistItemLabel(item, orderedItems);
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onChange(removeLessonChecklistItem(content, templates, field, item.id))}
+            className={`inline-flex max-w-full items-center gap-1.5 rounded-[8px] border px-2.5 py-1.5 text-left text-xs font-semibold leading-5 transition-colors hover:opacity-80 ${toneClass}`}
+            title="移除关联"
+            aria-label={`移除关联条目：${label}`}
+          >
+            <span className="break-words">{label}</span>
+            <X size={12} className="shrink-0 opacity-70" />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -488,52 +567,6 @@ function PreviousLessonChecklistProgressItems({
     </div>
   );
 }
-function SelectedChecklistItems({
-  title,
-  tone,
-  items,
-  orderedItems,
-  onClear,
-  onRemove
-}: {
-  title: string;
-  tone: "blue" | "orange";
-  items: ProgressChecklistTemplateItem[];
-  orderedItems?: ProgressChecklistTemplateItem[];
-  onClear: () => void;
-  onRemove: (itemId: string) => void;
-}) {
-  const toneClass = tone === "blue" ? "text-[#1557c2]" : "text-[#c2410c]";
-  return (
-    <div className="rounded-[12px] border border-[#dbe4ef] bg-white p-3">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className={`text-sm font-extrabold ${toneClass}`}>{title}</div>
-        <Button type="button" size="sm" variant="ghost" onClick={onClear} disabled={items.length === 0}>
-          清空
-        </Button>
-      </div>
-      {items.length === 0 ? (
-        <div className="text-sm font-semibold text-[#94a3b8]">暂未关联条目</div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onRemove(item.id)}
-              className="inline-flex items-center gap-1 rounded-full border border-[#dbe4ef] bg-[#f8fbff] px-3 py-1.5 text-left text-xs font-bold text-[#25324a] transition-colors hover:border-[#93c5fd] hover:bg-[#eef5ff]"
-              title="点击移除关联"
-            >
-              <span>{formatChecklistItemLabel(item, orderedItems)}</span>
-              <X size={12} className="text-[#94a3b8]" />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function resolveSelectedItems(
   template: ProgressChecklistTemplate | undefined,
   itemIds: string[]
