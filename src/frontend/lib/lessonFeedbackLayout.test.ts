@@ -28,8 +28,9 @@ describe("lesson feedback sheet layout", () => {
 
   it("expands content rows and moves the table down for long lesson text", () => {
     const base = feedbackSheetLayout(8);
+    const content = "本节课内容".repeat(30);
     const expanded = feedbackSheetLayout(8, {
-      content: "本节课内容".repeat(30),
+      content,
       homework: "课后作业".repeat(24)
     });
 
@@ -39,6 +40,16 @@ describe("lesson feedback sheet layout", () => {
     expect(expanded.tableY).toBe(expanded.homeworkY + expanded.homeworkHeight);
     expect(expanded.studentStartY).toBeGreaterThan(base.studentStartY);
     expect(expanded.height).toBeGreaterThanOrEqual(expanded.bottom + 38);
+
+    const rendered = feedbackWrappedTextLayout(content, 126, expanded.contentY, 626, expanded.contentHeight, {
+      size: 14,
+      padding: 10,
+      maxLines: Infinity,
+      ellipsis: false,
+      valign: "top"
+    });
+    expect(rendered?.lines.join("")).toBe(content);
+    expect(rendered?.lines.at(-1)).not.toContain("…");
   });
 
   it("keeps at least twelve student slots so short classes still fill the sheet", () => {

@@ -221,7 +221,9 @@ function drawContentRows(
       weight: style.fontWeight ?? 400,
       fill: style.color ?? feedbackInkColor,
       padding: 10,
-      valign: "top"
+      valign: "top",
+      maxLines: Infinity,
+      ellipsis: false
     });
   });
 }

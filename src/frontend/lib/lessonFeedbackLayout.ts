@@ -161,7 +161,7 @@ function feedbackContentFieldHeight(text: string | undefined, fontSize: number, 
   if (!text) return defaultHeight;
   const maxUnits = Math.max(1, (width - 18) / Math.max(fontSize, 1));
   const lineCount = feedbackWrapText(text, maxUnits).length;
-  return Math.max(defaultHeight, Math.ceil(lineCount * fontSize * 1.45 + 18));
+  return Math.max(defaultHeight, Math.ceil(lineCount * fontSize * 1.45 + 20));
 }
 
 export function feedbackStudentRowCenter(layout: FeedbackSheetLayout, index: number): number {
