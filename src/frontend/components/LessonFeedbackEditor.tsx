@@ -22,6 +22,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { makeId } from "@/frontend/lib/crypto";
+import {
+  feedbackLessonFieldDisplayIndex,
+  feedbackLessonFieldStoredIndex,
+  feedbackLessonFieldText,
+  restoreFeedbackLessonFieldHeading
+} from "@/frontend/lib/lessonContent";
 import type {
   LessonFeedbackEntry,
   LessonFeedbackFieldKey,
@@ -179,7 +185,18 @@ export function LessonFeedbackEditor({
   const suppressNameClickRef = useRef(false);
   const pageHeight = feedbackPageHeight(record);
   // 编辑器与导出共用同一份坐标，屏幕上的位置即导出图里的位置。
-  const layout = useMemo(() => feedbackSheetLayout(record.students.length), [record.students.length]);
+  const layout = useMemo(() => feedbackSheetLayout(record.students.length, {
+    content: feedbackLessonFieldText(record.content, "taught"),
+    homework: feedbackLessonFieldText(record.homework, "homework"),
+    contentFontSize: record.fieldStyles?.content?.fontSize ?? 14,
+    homeworkFontSize: record.fieldStyles?.homework?.fontSize ?? 14
+  }), [
+    record.students.length,
+    record.content,
+    record.homework,
+    record.fieldStyles?.content?.fontSize,
+    record.fieldStyles?.homework?.fontSize
+  ]);
   const selectedBox = record.textBoxes.find((box) => box.id === selectedTextBoxId);
   const selectedStroke = record.annotations.find((stroke) => stroke.id === selectedStrokeId);
   // 荧光面板对准“正在选字的地方”：文本框或某个学生的评语格。
@@ -657,7 +674,8 @@ export function LessonFeedbackEditor({
     const style = fieldStyleOf(key, defaultSize);
     if (!style.highlights.length) return null;
     const inner = Math.max(0, padding - 1);
-    const rects = feedbackTextBoxHighlightRects(fieldTextOf(key), style.highlights, {
+    const ranges = fieldHighlightsOf(key, style.highlights);
+    const rects = feedbackTextBoxHighlightRects(fieldTextOf(key), ranges, {
       width: width - 2,
       fontSize: style.fontSize,
       fontWeight: style.fontWeight,
@@ -681,12 +699,25 @@ export function LessonFeedbackEditor({
   }
 
   function fieldTextOf(key: LessonFeedbackFieldKey): string {
-    if (key === "content") return record.content;
-    if (key === "homework") return record.homework;
+    if (key === "content") return feedbackLessonFieldText(record.content, "taught");
+    if (key === "homework") return feedbackLessonFieldText(record.homework, "homework");
     if (key === "generalNotes") return record.generalNotes;
     if (key === "teacherName") return record.teacherName;
     if (key === "periodLabel") return record.periodLabel;
     return record.date;
+  }
+
+  function fieldHighlightsOf(key: LessonFeedbackFieldKey, highlights: LessonFeedbackHighlight[]): LessonFeedbackHighlight[] {
+    if (key !== "content" && key !== "homework") return highlights;
+    const value = key === "content" ? record.content : record.homework;
+    const field = key === "content" ? "taught" : "homework";
+    return highlights
+      .map((highlight) => ({
+        ...highlight,
+        start: feedbackLessonFieldDisplayIndex(value, field, highlight.start),
+        end: feedbackLessonFieldDisplayIndex(value, field, highlight.end)
+      }))
+      .filter((highlight) => highlight.end > highlight.start);
   }
 
   function textBoxStyleOf(box: LessonFeedbackTextBox) {
@@ -1112,11 +1143,11 @@ export function LessonFeedbackEditor({
                 ...cellStyle(layout.marginX + 84, layout.contentY, layout.contentWidth - 84, layout.contentHeight, { size: fieldStyleOf("content", 14).fontSize, padding: 10 }),
                 ...fieldTextStyle("content", 14)
               }}
-              value={record.content}
+              value={fieldTextOf("content")}
               onChange={(event) => {
                 const cleared = (record.fieldStyles?.content?.highlights?.length ?? 0) > 0;
                 if (cleared) patchFieldStyle("content", { highlights: [] });
-                patchRecord({ content: event.target.value });
+                patchRecord({ content: restoreFeedbackLessonFieldHeading(event.target.value, record.content, "taught") });
               }}
               onFocus={() => setFocusedField("content")}
               onSelect={(event) => {
@@ -1124,7 +1155,11 @@ export function LessonFeedbackEditor({
                 setTextSelection(
                   target.selectionStart === target.selectionEnd
                     ? null
-                    : { boxId: "field:content", start: target.selectionStart, end: target.selectionEnd }
+                    : {
+                      boxId: "field:content",
+                      start: feedbackLessonFieldStoredIndex(record.content, "taught", target.selectionStart),
+                      end: feedbackLessonFieldStoredIndex(record.content, "taught", target.selectionEnd)
+                    }
                 );
               }}
               placeholder={record.lessonId && !record.content.trim() ? "当前课程信息未填写，请前往当前课程详情页面填写，也可直接在此填写（会同步回课程详情）" : "例如：本节讲了什么知识点、重点方法、课堂例题、常见错误和掌握情况。"}
@@ -1136,11 +1171,11 @@ export function LessonFeedbackEditor({
                 ...cellStyle(layout.marginX + 84, layout.homeworkY, layout.contentWidth - 84, layout.homeworkHeight, { size: fieldStyleOf("homework", 14).fontSize, padding: 10 }),
                 ...fieldTextStyle("homework", 14)
               }}
-              value={record.homework}
+              value={fieldTextOf("homework")}
               onChange={(event) => {
                 const cleared = (record.fieldStyles?.homework?.highlights?.length ?? 0) > 0;
                 if (cleared) patchFieldStyle("homework", { highlights: [] });
-                patchRecord({ homework: event.target.value });
+                patchRecord({ homework: restoreFeedbackLessonFieldHeading(event.target.value, record.homework, "homework") });
               }}
               onFocus={() => setFocusedField("homework")}
               onSelect={(event) => {
@@ -1148,7 +1183,11 @@ export function LessonFeedbackEditor({
                 setTextSelection(
                   target.selectionStart === target.selectionEnd
                     ? null
-                    : { boxId: "field:homework", start: target.selectionStart, end: target.selectionEnd }
+                    : {
+                      boxId: "field:homework",
+                      start: feedbackLessonFieldStoredIndex(record.homework, "homework", target.selectionStart),
+                      end: feedbackLessonFieldStoredIndex(record.homework, "homework", target.selectionEnd)
+                    }
                 );
               }}
               placeholder={record.lessonId && !record.homework.trim() ? "当前课程信息未填写，请前往当前课程详情页面填写，也可直接在此填写（会同步回课程详情）" : "例如：第几页第几题、几道练习、下次前要完成什么、有没有分层要求或备注。"}

@@ -30,6 +30,7 @@ import {
   type FeedbackWrappedTextOptions
 } from "@/frontend/lib/lessonFeedbackLayout";
 import { feedbackTextBoxHighlightRects, feedbackTextBoxLines } from "@/frontend/lib/lessonFeedbackTextMetrics";
+import { feedbackLessonFieldDisplayIndex, feedbackLessonFieldText } from "@/frontend/lib/lessonContent";
 import type {
   LessonFeedbackEntry,
   LessonFeedbackFieldKey,
@@ -41,8 +42,22 @@ import type {
 
 export { feedbackPageWidth } from "@/frontend/lib/lessonFeedbackLayout";
 
-export function feedbackPageHeight(record: Pick<LessonFeedbackRecord, "students" | "textBoxes">): number {
-  const layout = feedbackSheetLayout(record.students.length);
+type FeedbackPageRecord = Pick<LessonFeedbackRecord, "students" | "textBoxes"> &
+  Partial<Pick<LessonFeedbackRecord, "content" | "homework" | "fieldStyles">>;
+
+function feedbackLayoutForRecord(record: FeedbackPageRecord) {
+  const content = record.content ?? "";
+  const homework = record.homework ?? "";
+  return feedbackSheetLayout(record.students.length, {
+    content: feedbackLessonFieldText(content, "taught"),
+    homework: feedbackLessonFieldText(homework, "homework"),
+    contentFontSize: record.fieldStyles?.content?.fontSize ?? 14,
+    homeworkFontSize: record.fieldStyles?.homework?.fontSize ?? 14
+  });
+}
+
+export function feedbackPageHeight(record: FeedbackPageRecord): number {
+  const layout = feedbackLayoutForRecord(record);
   const textBoxBottom = record.textBoxes.reduce((max, box) => Math.max(max, box.y + box.height + 32), 0);
   return Math.max(layout.height, textBoxBottom);
 }
@@ -68,7 +83,7 @@ export function renderLessonFeedbackCanvas(
   const settings = typeof options === "number" ? { scale: options } : options;
   const scale = settings.scale ?? feedbackExportScale;
   const includeValues = settings.includeValues ?? true;
-  const layout = feedbackSheetLayout(record.students.length);
+  const layout = feedbackLayoutForRecord(record);
   const height = feedbackPageHeight(record);
   const canvas = document.createElement("canvas");
   canvas.width = feedbackPageWidth * scale;
@@ -173,8 +188,8 @@ function drawContentRows(
 ): void {
   const { marginX: m, contentWidth: w } = layout;
   const rows: Array<[string, string, number, number, LessonFeedbackFieldKey]> = [
-    ["上课内容", record.content, layout.contentY, layout.contentHeight, "content"],
-    ["今日作业", record.homework, layout.homeworkY, layout.homeworkHeight, "homework"]
+    ["上课内容", feedbackLessonFieldText(record.content, "taught"), layout.contentY, layout.contentHeight, "content"],
+    ["今日作业", feedbackLessonFieldText(record.homework, "homework"), layout.homeworkY, layout.homeworkHeight, "homework"]
   ];
   rows.forEach(([label, value, y, height, key]) => {
     strokeRect(context, m, y, w, height);
@@ -183,7 +198,14 @@ function drawContentRows(
     if (!includeValues) return;
     const style = record.fieldStyles?.[key] ?? {};
     if (style.highlights?.length) {
-      feedbackTextBoxHighlightRects(value, style.highlights, {
+      const rawValue = key === "content" ? record.content : key === "homework" ? record.homework : value;
+      const field = key === "content" ? "taught" : "homework";
+      const highlights = style.highlights.map((highlight) => ({
+        ...highlight,
+        start: feedbackLessonFieldDisplayIndex(rawValue, field, highlight.start),
+        end: feedbackLessonFieldDisplayIndex(rawValue, field, highlight.end)
+      })).filter((highlight) => highlight.end > highlight.start);
+      feedbackTextBoxHighlightRects(value, highlights, {
         width: w - 84 - 2,
         fontSize: style.fontSize ?? 14,
         fontWeight: style.fontWeight ?? 400,

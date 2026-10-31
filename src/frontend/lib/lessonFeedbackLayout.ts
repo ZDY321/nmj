@@ -74,19 +74,26 @@ export type FeedbackSheetLayout = {
   rubricXs: number[];
 };
 
+export type FeedbackContentFieldsLayout = {
+  content?: string;
+  homework?: string;
+  contentFontSize?: number;
+  homeworkFontSize?: number;
+};
+
 // 学生列分界（页面坐标）：姓名 | 出勤 | 课后作业 | 听课 | 参与 | 笔记 | 综合评价
 const sheetColumns = [42, 118, 174, 250, 322, 394, 466, 752];
 
-export function feedbackSheetLayout(studentCount: number): FeedbackSheetLayout {
+export function feedbackSheetLayout(studentCount: number, fields: FeedbackContentFieldsLayout = {}): FeedbackSheetLayout {
   const marginX = 42;
   const contentWidth = 710;
   const metaY = 66;
   const metaHeight = 32;
   const contentY = 98;
-  const contentHeight = 72;
-  const homeworkY = 170;
-  const homeworkHeight = 72;
-  const tableY = 242;
+  const contentHeight = feedbackContentFieldHeight(fields.content, fields.contentFontSize ?? 14, contentWidth - 84);
+  const homeworkY = contentY + contentHeight;
+  const homeworkHeight = feedbackContentFieldHeight(fields.homework, fields.homeworkFontSize ?? 14, contentWidth - 84);
+  const tableY = homeworkY + homeworkHeight;
   const headerTopHeight = 28;
   const headerBottomHeight = 28;
   const studentRowHeight = 32;
@@ -147,6 +154,14 @@ export function feedbackSheetLayout(studentCount: number): FeedbackSheetLayout {
     ],
     rubricXs: [marginX, marginX + 80, marginX + 290, marginX + 500, marginX + contentWidth]
   };
+}
+
+function feedbackContentFieldHeight(text: string | undefined, fontSize: number, width: number): number {
+  const defaultHeight = 72;
+  if (!text) return defaultHeight;
+  const maxUnits = Math.max(1, (width - 18) / Math.max(fontSize, 1));
+  const lineCount = feedbackWrapText(text, maxUnits).length;
+  return Math.max(defaultHeight, Math.ceil(lineCount * fontSize * 1.45 + 18));
 }
 
 export function feedbackStudentRowCenter(layout: FeedbackSheetLayout, index: number): number {

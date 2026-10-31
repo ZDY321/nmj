@@ -17,6 +17,61 @@ function checklistSectionHeading(field: LessonContentChecklistField): string {
   return field === "taught" ? "【关联学习清单·本节课内容】" : "【关联学习清单·课后作业】";
 }
 
+export function feedbackLessonFieldText(value: string, field: LessonContentChecklistField): string {
+  const heading = checklistSectionHeading(field);
+  const headingStart = value.indexOf(heading);
+  if (headingStart < 0) return value;
+  const headingEnd = headingStart + heading.length;
+  const sectionStart = value[headingEnd] === "\n" ? headingEnd + 1 : headingEnd;
+  return value.slice(0, headingStart) + value.slice(sectionStart);
+}
+
+export function restoreFeedbackLessonFieldHeading(
+  value: string,
+  previousValue: string,
+  field: LessonContentChecklistField
+): string {
+  const heading = checklistSectionHeading(field);
+  const headingIndex = previousValue.indexOf(heading);
+  if (headingIndex < 0) return value;
+
+  const previousDisplay = feedbackLessonFieldText(previousValue, field);
+  let prefix = 0;
+  while (prefix < previousDisplay.length && prefix < value.length && previousDisplay[prefix] === value[prefix]) prefix += 1;
+  let suffix = 0;
+  while (
+    suffix < previousDisplay.length - prefix &&
+    suffix < value.length - prefix &&
+    previousDisplay[previousDisplay.length - suffix - 1] === value[value.length - suffix - 1]
+  ) suffix += 1;
+
+  const displayHeadingIndex = headingIndex;
+  const oldSuffixStart = previousDisplay.length - suffix;
+  const mappedHeadingIndex = displayHeadingIndex <= prefix
+    ? displayHeadingIndex
+    : displayHeadingIndex >= oldSuffixStart
+      ? displayHeadingIndex + value.length - previousDisplay.length
+      : prefix + (value.length - prefix - suffix);
+  return `${value.slice(0, mappedHeadingIndex)}${heading}\n${value.slice(mappedHeadingIndex)}`;
+}
+
+export function feedbackLessonFieldStoredIndex(value: string, field: LessonContentChecklistField, index: number): number {
+  const heading = checklistSectionHeading(field);
+  const headingIndex = value.indexOf(heading);
+  if (headingIndex < 0) return index;
+  const hiddenLength = heading.length + (value[headingIndex + heading.length] === "\n" ? 1 : 0);
+  return index >= headingIndex ? index + hiddenLength : index;
+}
+
+export function feedbackLessonFieldDisplayIndex(value: string, field: LessonContentChecklistField, index: number): number {
+  const heading = checklistSectionHeading(field);
+  const headingIndex = value.indexOf(heading);
+  if (headingIndex < 0 || index <= headingIndex) return index;
+  const hiddenEnd = headingIndex + heading.length + (value[headingIndex + heading.length] === "\n" ? 1 : 0);
+  if (index < hiddenEnd) return headingIndex;
+  return index - (hiddenEnd - headingIndex);
+}
+
 export function lessonContentFieldNotes(content: LessonContent, field: LessonContentChecklistField): string {
   const savedNotes = content[notesFieldFor(field)];
   if (typeof savedNotes === "string") return savedNotes;

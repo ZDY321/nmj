@@ -26,6 +26,21 @@ describe("lesson feedback sheet layout", () => {
     expect(layout.studentRowHeight).toBe(32);
   });
 
+  it("expands content rows and moves the table down for long lesson text", () => {
+    const base = feedbackSheetLayout(8);
+    const expanded = feedbackSheetLayout(8, {
+      content: "本节课内容".repeat(30),
+      homework: "课后作业".repeat(24)
+    });
+
+    expect(expanded.contentHeight).toBeGreaterThan(base.contentHeight);
+    expect(expanded.homeworkY).toBe(expanded.contentY + expanded.contentHeight);
+    expect(expanded.homeworkHeight).toBeGreaterThan(base.homeworkHeight);
+    expect(expanded.tableY).toBe(expanded.homeworkY + expanded.homeworkHeight);
+    expect(expanded.studentStartY).toBeGreaterThan(base.studentStartY);
+    expect(expanded.height).toBeGreaterThanOrEqual(expanded.bottom + 38);
+  });
+
   it("keeps at least twelve student slots so short classes still fill the sheet", () => {
     expect(feedbackSheetLayout(3).studentSlots).toBe(12);
     expect(feedbackSheetLayout(12).studentSlots).toBe(12);
