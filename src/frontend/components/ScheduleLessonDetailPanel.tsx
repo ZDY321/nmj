@@ -40,16 +40,13 @@ import { isOrderedTimeRange } from "@/frontend/lib/scheduleViewHelpers";
 import type { LessonReturnTarget } from "@/frontend/lib/scheduleViewTypes";
 
 type LessonContentField = "taught" | "homework";
-type LessonChecklistSyncSource = "taught" | "homework";
+type LessonChecklistSyncSource = "homework";
 
 type LessonChecklistSyncSummary = {
   templateName: string;
   studentCount: number;
-  taughtLinkedItemCount: number;
   homeworkLinkedItemCount: number;
-  taughtPendingCount: number;
   homeworkPendingCount: number;
-  taughtCompletedCount: number;
   homeworkCompletedCount: number;
 };
 
@@ -61,7 +58,7 @@ type ScheduleLessonDetailPanelProps = {
   campusOptions: Campus[];
   checklistPerStudentStatus?: LessonChecklistPerStudentStatus[];
   checklistSyncMessage?: string;
-  checklistSyncResult?: { studentId: string; studentName: string; taughtSyncedCount: number; homeworkSyncedCount: number }[];
+  checklistSyncResult?: { studentId: string; studentName: string; homeworkSyncedCount: number }[];
   checklistLastSyncSource?: LessonChecklistSyncSource | null;
   checklistSyncSummary?: LessonChecklistSyncSummary;
   courseGroupOptions: CourseGroup[];
@@ -85,8 +82,8 @@ type ScheduleLessonDetailPanelProps = {
   onOpenLesson: (lesson: Lesson) => void;
   onOpenProgressChecklist?: (lesson: Lesson) => void;
   onOpenLessonFeedback?: (lesson: Lesson) => void;
-  onSyncChecklistCompletions?: (source: LessonChecklistSyncSource) => void;
-  onToggleChecklistCompletion?: (studentId: string, itemId: string, source: LessonChecklistSyncSource, completed: boolean) => void;
+  onSyncChecklistCompletions?: () => void;
+  onToggleChecklistCompletion?: (studentId: string, itemId: string, completed: boolean) => void;
   onSelectDetailMakeupStudentIds: (studentIds: string[]) => void;
   onSelectedCourseChange: (courseId: string) => void;
   onSelectedDateChange: (date: string) => void;
@@ -611,7 +608,6 @@ export function ScheduleLessonDetailPanel({
           {!isSubstituteClass && (
             <LessonChecklistLinker
               vault={vault}
-              lesson={selected}
               previousLesson={selectedPreviousLesson}
               content={selected.content}
               subjectHint={lessonDisplaySubject(vault, selected)}
