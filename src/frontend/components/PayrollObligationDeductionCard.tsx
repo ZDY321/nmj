@@ -8,14 +8,16 @@ import type { TeacherVault } from "@/shared/types";
 export function PayrollObligationDeductionCard({
   vault,
   amountsVisible,
-  selectedMonth,
+  selectedDateRange,
+  primaryMonth,
   effectiveObligationCampusId,
   obligation,
   deductionApplies
 }: {
   vault: TeacherVault;
   amountsVisible: boolean;
-  selectedMonth: string;
+  selectedDateRange: string;
+  primaryMonth: string;
   effectiveObligationCampusId?: string;
   obligation: ObligationSummary;
   deductionApplies: boolean;
@@ -32,8 +34,8 @@ export function PayrollObligationDeductionCard({
           <CardTitle>义务课时扣费明细</CardTitle>
           <CardDescription className="mt-2">
             {deductionApplies
-              ? `${selectedMonth} · 多校区合并每月最多自动扣 10 小时；先扣本校区单节总课时费较低的课次，本校区不够时再扣其他校区，扣费按实际课节所在校区分摊，实际课时不足不额外补扣。`
-              : `当前筛选校区没有分摊到义务课时扣费；自动扣费按实际被扣课节归属校区，手动扣费归入 ${campusName(vault, effectiveObligationCampusId)}。`}
+              ? `${primaryMonth} 整月核算义务课时，不按所选日期范围折算。课程统计范围：${selectedDateRange}。自动扣费每月最多 10 小时，优先扣本校区低单价课次，再扣其他校区，并按被扣课节归属校区分摊。`
+              : `${primaryMonth} 整月义务课时在当前校区没有分摊扣费；手动扣费归入 ${campusName(vault, effectiveObligationCampusId)}。`}
           </CardDescription>
         </div>
         {deductionApplies && (
@@ -54,16 +56,16 @@ export function PayrollObligationDeductionCard({
               -{formatPrivateMoney(obligation.amount, amountsVisible)}
             </div>
             <div className="mt-1 text-xs font-semibold text-[#9a3412]">
-              本月扣费按老师档案里的手动扣除金额计算，不展示自动抵扣课程明细。
+              手动扣费按所选主月份和老师档案里的金额计入，不展示自动抵扣课程明细。
             </div>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {[
-                { label: "义务上限", value: `${obligation.requiredHours.toFixed(1)} 小时` },
+                { label: "主月份义务上限", value: `${obligation.requiredHours.toFixed(1)} 小时` },
                 { label: "课程抵扣", value: formatPrivateMoney(obligation.courseDeductionAmount, amountsVisible) },
-                { label: "未抵小时", value: `${obligation.missingHours.toFixed(1)} 小时` },
+                { label: "主月份未抵小时", value: `${obligation.missingHours.toFixed(1)} 小时` },
                 { label: "扣费合计", value: `-${formatPrivateMoney(obligation.amount, amountsVisible)}` }
               ].map((item) => (
                 <div key={item.label} className="rounded-[12px] border border-[#fecaca] bg-[#fff1f2] p-3">
@@ -87,7 +89,7 @@ export function PayrollObligationDeductionCard({
                       )}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-[#64748b]">
-                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">本月 {item.lessonCount} 节</span>
+                      <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">主月课程 {item.lessonCount} 节</span>
                       <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">可扣 {item.availableHours.toFixed(1)} 小时</span>
                       <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-[#dbe4ef]">已扣 {item.deductedHours.toFixed(1)} 小时</span>
                       <span className="rounded-full bg-[#fee2e2] px-2.5 py-1 text-[#b91c1c]">扣 {formatPrivateMoney(item.amount, amountsVisible)}</span>
@@ -106,7 +108,7 @@ export function PayrollObligationDeductionCard({
               )}
               {deductedCourses.length === 0 && obligation.missingHours <= 0 && (
                 <div className="rounded-[14px] border border-dashed border-[#cbd6e3] bg-[#f8fbff] p-5 text-center text-sm font-semibold text-[#64748b]">
-                  本月没有产生义务课时扣费。
+                  {primaryMonth} 没有产生义务课时扣费。
                 </div>
               )}
             </div>

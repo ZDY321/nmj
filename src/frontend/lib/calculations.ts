@@ -1529,6 +1529,89 @@ export function estimatedMonthlyIncome(vault: TeacherVault, month: string): numb
   return completedIncome + pendingIncome + vault.profile.baseSalary + adjustments - obligationDeduction;
 }
 
+function monthsInDateRange(startDate: string, endDate: string): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate) return [];
+  const months: string[] = [];
+  const [startYear, startMonth] = startDate.split("-").map(Number);
+  const [endYear, endMonth] = endDate.split("-").map(Number);
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    months.push(`${year}-${String(month).padStart(2, "0")}`);
+    month += 1;
+    if (month > 12) {
+      year += 1;
+      month = 1;
+    }
+  }
+  return months;
+}
+
+function isWholeMonthInDateRange(month: string, startDate: string, endDate: string): boolean {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return startDate <= `${month}-01` && endDate >= `${month}-${String(lastDay).padStart(2, "0")}`;
+}
+
+function dateRangeLessons(vault: TeacherVault, startDate: string, endDate: string): Lesson[] {
+  if (monthsInDateRange(startDate, endDate).length === 0) return [];
+  return vault.lessons.filter((lesson) => lesson.date >= startDate && lesson.date <= endDate);
+}
+
+export function obligationSummaryForDateRange(vault: TeacherVault, primaryMonth: string): ObligationSummary {
+  return obligationSummary(vault, primaryMonth);
+}
+
+export function salaryBreakdownForDateRange(vault: TeacherVault, startDate: string, endDate: string, primaryMonth: string): SalaryBreakdown {
+  const months = monthsInDateRange(startDate, endDate);
+  const selectedLessons = dateRangeLessons(vault, startDate, endDate);
+  const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault);
+  const lessonTotals = selectedLessons.reduce(
+    (totals, lesson) => {
+      if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return totals;
+      const amount = completedAmount(lesson);
+      const course = getCourse(vault, lesson.courseGroupId);
+      if (isSubstituteClassLesson(lesson)) {
+        totals.substituteClass += amount;
+      } else if (lesson.status === "makeup_completed") {
+        totals.makeup += amount;
+      } else if (course ? courseUsesClassBilling(course, vault) : isClassBillingCourseType(lesson.type)) {
+        totals.classLessons += amount;
+      } else {
+        totals.oneOnOne += amount;
+      }
+      return totals;
+    },
+    { oneOnOne: 0, classLessons: 0, makeup: 0, substituteClass: 0 }
+  );
+  const wholeMonths = months.filter((month) => isWholeMonthInDateRange(month, startDate, endDate));
+  const baseSalary = vault.profile.baseSalary * wholeMonths.length;
+  const adjustments = vault.salaryAdjustments
+    .filter((item) => wholeMonths.includes(item.month))
+    .reduce((sum, item) => sum + item.amount, 0);
+  const obligationDeduction = months.length > 0 ? obligationSummaryForDateRange(vault, primaryMonth).amount : 0;
+
+  return {
+    baseSalary,
+    ...lessonTotals,
+    adjustments,
+    obligationDeduction,
+    total: baseSalary + lessonTotals.oneOnOne + lessonTotals.classLessons + lessonTotals.makeup + lessonTotals.substituteClass + adjustments - obligationDeduction
+  };
+}
+
+export function estimatedIncomeForDateRange(vault: TeacherVault, startDate: string, endDate: string, primaryMonth: string): number {
+  const selectedLessons = dateRangeLessons(vault, startDate, endDate);
+  const splitMergeExcludedLessonIds = payrollExcludedSplitMergeLessonIds(vault);
+  const lessonIncome = selectedLessons.reduce((sum, lesson) => {
+    if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return sum;
+    if (lesson.status === "scheduled" || lesson.status === "makeup_pending") return sum + lesson.feeSnapshot.amount;
+    return sum + completedAmount(lesson);
+  }, 0);
+  const breakdown = salaryBreakdownForDateRange(vault, startDate, endDate, primaryMonth);
+  return lessonIncome + breakdown.baseSalary + breakdown.adjustments - breakdown.obligationDeduction;
+}
+
 export function attendanceSummary(vault: TeacherVault, month: string): Record<AttendanceStatus, number> {
   const initial: Record<AttendanceStatus, number> = {
     attended: 0,

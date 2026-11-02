@@ -42,7 +42,10 @@ export type PayrollOverviewCampusAmounts = {
 };
 
 export function PayrollOverviewGrid({
-  selectedMonth,
+  selectedStartDate,
+  selectedEndDate,
+  primaryMonth,
+  dateRangeLabel,
   amountsVisible,
   campusFilter,
   monthLessonCount,
@@ -60,7 +63,10 @@ export function PayrollOverviewGrid({
   typeCountCards,
   onCampusSelect
 }: {
-  selectedMonth: string;
+  selectedStartDate: string;
+  selectedEndDate: string;
+  primaryMonth: string;
+  dateRangeLabel: string;
   amountsVisible: boolean;
   campusFilter: string;
   monthLessonCount: number;
@@ -101,7 +107,7 @@ export function PayrollOverviewGrid({
       });
       const anchor = document.createElement("a");
       anchor.href = dataUrl;
-      anchor.download = `${selectedMonth}-校区合并统计与本月总和-${amountsVisible ? "金额可见" : "金额隐藏"}.png`;
+      anchor.download = `${selectedStartDate}至${selectedEndDate}-${primaryMonth}义务主月-校区合并统计与日期范围总和-${amountsVisible ? "金额可见" : "金额隐藏"}.png`;
       anchor.click();
     } catch (error) {
       console.error("工资核对截图生成失败", error);
@@ -121,8 +127,8 @@ export function PayrollOverviewGrid({
             <span>校区合并统计</span>
             <ScreenshotButton loading={screenshotLoading} onClick={() => void downloadOverviewScreenshot()} />
           </div>
-          <CardTitle>{selectedMonth} 校区汇总</CardTitle>
-          <CardDescription>按云端课表口径区分未抵扣前、已完成、未完成和义务课时抵扣后的已完成时长。</CardDescription>
+          <CardTitle>{dateRangeLabel} 校区汇总</CardTitle>
+          <CardDescription>课程时长按所选日期范围统计；义务课时按 {primaryMonth} 整月核算，跨月天数不会折算义务课时。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -179,11 +185,12 @@ export function PayrollOverviewGrid({
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <BookOpen size={14} />
-            <span>本月总和</span>
+            <span>日期范围总和</span>
             <ScreenshotButton loading={screenshotLoading} onClick={() => void downloadOverviewScreenshot()} />
           </div>
-          <CardTitle>工资总览（仅统计已完成的课时费）</CardTitle>
-          <CardDescription>按基本工资、课时费、补贴扣款和义务课时扣费合并，课程明细金额单独核对。</CardDescription>
+          <CardTitle>工资总览（课时费按所选日期范围统计）</CardTitle>
+          <CardDescription>课时费按所选日期范围统计；义务课时扣费按 {primaryMonth} 整月计算。</CardDescription>
+          <CardDescription>底薪和月度调整仅在日期范围完整覆盖对应月份时计入；课程明细金额单独核对。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -240,7 +247,7 @@ export function PayrollOverviewGrid({
               </div>
             </div>
             <div className="rounded-[8px] border border-[#bfdbfe] bg-[#eaf2ff] p-5">
-              <div className="text-sm font-bold text-[#1557c2]">本月实际收入总和</div>
+              <div className="text-sm font-bold text-[#1557c2]">日期范围实际收入总和</div>
               <div className="mt-2 text-3xl font-extrabold text-[#061226]">{formatPrivateMoney(breakdown.total, amountsVisible)}</div>
             </div>
           </div>
@@ -284,8 +291,8 @@ function ScreenshotButton({ loading, onClick }: { loading: boolean; onClick: () 
       data-screenshot-exclude="true"
       onClick={onClick}
       disabled={loading}
-      aria-label="截图校区合并统计和本月总和"
-      title="下载校区合并统计和本月总和截图"
+      aria-label="截图校区合并统计和日期范围总和"
+      title="下载校区合并统计和日期范围总和截图"
       className="ml-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border border-current/20 bg-white/80 text-current transition-colors hover:bg-white disabled:cursor-wait disabled:opacity-60"
     >
       {loading ? <LoaderCircle size={13} className="animate-spin" /> : <Camera size={13} />}

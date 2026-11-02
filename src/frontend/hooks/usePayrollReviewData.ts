@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CourseType, Lesson, TeacherVault } from "@/shared/types";
 import type { MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
-import { completedAmount, courseUsesClassBilling, estimatedMonthlyIncome, isClassBillingCourseType, isPayrollExcludedSplitMergeLesson, isSubstituteClassLesson, lessonBillableHoursForVault, obligationCampusDeductions, obligationSummary, payrollExcludedSplitMergeLessonIds, salaryBreakdown } from "@/frontend/lib/calculations";
+import { completedAmount, courseUsesClassBilling, estimatedIncomeForDateRange, isClassBillingCourseType, isPayrollExcludedSplitMergeLesson, isSubstituteClassLesson, lessonBillableHoursForVault, obligationCampusDeductions, obligationSummaryForDateRange, payrollExcludedSplitMergeLessonIds, salaryBreakdownForDateRange } from "@/frontend/lib/calculations";
 import { matchesMakeupLessonFilter } from "@/frontend/lib/scheduleViewHelpers";
 import {
   campusName,
@@ -30,7 +30,9 @@ type PayrollCampusAmountDetail = {
 
 export function usePayrollReviewData({
   vault,
-  selectedMonth,
+  selectedStartDate,
+  selectedEndDate,
+  primaryMonth,
   campusFilter,
   typeFilter,
   statusFilter,
@@ -43,7 +45,9 @@ export function usePayrollReviewData({
   detailMakeupFilter
 }: {
   vault: TeacherVault;
-  selectedMonth: string;
+  selectedStartDate: string;
+  selectedEndDate: string;
+  primaryMonth: string;
   campusFilter: string;
   typeFilter: PayrollCourseTypeFilter;
   statusFilter: PayrollLessonStatusFilter;
@@ -80,17 +84,20 @@ export function usePayrollReviewData({
     return matchesCampus && matchesType && matchesStatus && matchesGradeFilter(lesson);
   }
 
-  const monthLessons = useMemo(
-    () => vault.lessons.filter((lesson) => lesson.date.startsWith(selectedMonth)),
-    [selectedMonth, vault.lessons]
+  const isDateRangeValid = Boolean(selectedStartDate && selectedEndDate && selectedStartDate <= selectedEndDate);
+  const rangeLessons = useMemo(
+    () => isDateRangeValid
+      ? vault.lessons.filter((lesson) => lesson.date >= selectedStartDate && lesson.date <= selectedEndDate)
+      : [],
+    [isDateRangeValid, selectedEndDate, selectedStartDate, vault.lessons]
   );
   const splitMergeExcludedLessonIds = useMemo(
-    () => payrollExcludedSplitMergeLessonIds(vault, selectedMonth),
-    [selectedMonth, vault]
+    () => payrollExcludedSplitMergeLessonIds(vault),
+    [vault]
   );
   const monthPayrollLessons = useMemo(
-    () => monthLessons.filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)),
-    [monthLessons, splitMergeExcludedLessonIds]
+    () => rangeLessons.filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)),
+    [rangeLessons, splitMergeExcludedLessonIds]
   );
   const filteredLessons = useMemo(
     () => monthPayrollLessons
@@ -132,12 +139,12 @@ export function usePayrollReviewData({
     [detailCourseFilter, detailEndDateFilter, detailMakeupFilter, detailStartDateFilter, detailStatusFilter, detailStudentFilter, filteredLessons, vault]
   );
 
-  const breakdown = useMemo(() => salaryBreakdown(vault, selectedMonth), [selectedMonth, vault]);
+  const breakdown = useMemo(() => salaryBreakdownForDateRange(vault, selectedStartDate, selectedEndDate, primaryMonth), [primaryMonth, selectedEndDate, selectedStartDate, vault]);
   const lessonFeeTotal = breakdown.oneOnOne + breakdown.classLessons + breakdown.makeup + breakdown.substituteClass;
-  const estimatedIncome = useMemo(() => estimatedMonthlyIncome(vault, selectedMonth), [selectedMonth, vault]);
+  const estimatedIncome = useMemo(() => estimatedIncomeForDateRange(vault, selectedStartDate, selectedEndDate, primaryMonth), [primaryMonth, selectedEndDate, selectedStartDate, vault]);
   const monthObligation = useMemo(
-    () => obligationSummary(vault, selectedMonth),
-    [selectedMonth, vault]
+    () => obligationSummaryForDateRange(vault, primaryMonth),
+    [primaryMonth, vault]
   );
   const currentCampusObligation = monthObligation;
   const filteredObligationByCampus = useMemo(
@@ -188,7 +195,7 @@ export function usePayrollReviewData({
       buckets[bucket][key].count += 1;
     }
 
-    monthLessons.forEach((lesson) => {
+    rangeLessons.forEach((lesson) => {
       if (isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds)) return;
       if (lesson.status !== "completed" && lesson.status !== "makeup_completed") return;
       const campusId = lessonCampusId(vault, lesson);
@@ -211,10 +218,10 @@ export function usePayrollReviewData({
       makeup: Object.values(buckets.makeup).sort((a, b) => b.amount - a.amount),
       substituteClass: Object.values(buckets.substituteClass).sort((a, b) => b.amount - a.amount)
     };
-  }, [monthLessons, splitMergeExcludedLessonIds, vault]);
+  }, [rangeLessons, splitMergeExcludedLessonIds, vault]);
 
   const campusSummaries = useMemo(() => {
-    const campusSummaryBaseLessons = monthLessons
+    const campusSummaryBaseLessons = rangeLessons
       .filter((lesson) => !isPayrollExcludedSplitMergeLesson(lesson, splitMergeExcludedLessonIds))
       .filter((lesson) => matchesReviewFilters(lesson, false));
     const campusSummaryBaseLessonIds = new Set(campusSummaryBaseLessons.map((lesson) => lesson.id));
@@ -249,7 +256,7 @@ export function usePayrollReviewData({
         net: amount - obligation
       };
     });
-  }, [campusOptions, gradeFilter, monthLessons, monthObligation, splitMergeExcludedLessonIds, statusFilter, typeFilter, vault]);
+  }, [campusOptions, gradeFilter, monthObligation, rangeLessons, splitMergeExcludedLessonIds, statusFilter, typeFilter, vault]);
 
   const monthSummaryLessonCount = useMemo(
     () => campusSummaries.reduce((sum, item) => sum + item.lessons.length, 0),

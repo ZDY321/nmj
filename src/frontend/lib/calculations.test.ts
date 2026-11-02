@@ -6,6 +6,8 @@ import {
   headcountAmountBreakdown,
   obligationCampusDeductions,
   obligationSummary,
+  obligationSummaryForDateRange,
+  salaryBreakdownForDateRange,
   payrollExcludedSplitMergeLessonIds,
   salaryBreakdown,
   yearlyTrend
@@ -640,5 +642,68 @@ describe("salary calculations", () => {
     expect(2 * 80 - (otherDeduction?.amount ?? 0)).toBe(80);
     expect(salaryBreakdown(vault, "2026-06").total).toBe(80);
     expect(yearlyTrend(vault, "2026").find((item) => item.month === "2026-06")?.total).toBe(80);
+  });
+
+  it("calculates payroll totals for a date range and includes monthly pay only for complete months", () => {
+    const baseVault = makeVault();
+    const firstLesson = lessonWithSnapshot(baseVault, oneOnOneCourse, {
+      id: "lesson_range_first",
+      date: "2026-06-05",
+      expectedStudentIds: ["student_1"],
+      attendance: [attended("student_1")]
+    });
+    const secondLesson = lessonWithSnapshot(baseVault, oneOnOneCourse, {
+      id: "lesson_range_second",
+      date: "2026-06-06",
+      expectedStudentIds: ["student_1"],
+      attendance: [attended("student_1")]
+    });
+    const vault = makeVault({
+      lessons: [firstLesson, secondLesson],
+      salaryAdjustments: [{ id: "june_bonus", month: "2026-06", title: "June bonus", amount: 200 }]
+    });
+
+    const singleDay = salaryBreakdownForDateRange(vault, "2026-06-05", "2026-06-05", "2026-06");
+    const fullMonth = salaryBreakdownForDateRange(vault, "2026-06-01", "2026-06-30", "2026-06");
+
+    expect(singleDay).toMatchObject({ baseSalary: 0, oneOnOne: firstLesson.feeSnapshot.amount, adjustments: 0 });
+    expect(fullMonth).toEqual(salaryBreakdown(vault, "2026-06"));
+    expect(salaryBreakdownForDateRange(vault, "2026-06-06", "2026-06-05", "2026-06").total).toBe(0);
+  });
+
+  it("uses the primary month for auto-obligation across a cross-month date range", () => {
+    const baseVault = makeVault({
+      profile: {
+        displayName: "Teacher",
+        baseSalary: 0,
+        currency: "CNY",
+        homeCampusId: campus.id,
+        monthlyObligationHours: 2,
+        obligationHourlyDeduction: 50
+      }
+    });
+    const firstLesson = lessonWithSnapshot(baseVault, oneOnOneCourse, {
+      id: "lesson_deducted_first",
+      date: "2026-09-05",
+      expectedStudentIds: ["student_1"],
+      attendance: [attended("student_1")]
+    });
+    const secondLesson = lessonWithSnapshot(baseVault, classCourse, {
+      id: "lesson_deducted_second",
+      date: "2026-10-02",
+      expectedStudentIds: students.slice(0, 7).map((student) => student.id),
+      attendance: students.slice(0, 7).map((student) => attended(student.id))
+    });
+    const vault = makeVault({ ...baseVault, lessons: [firstLesson, secondLesson] });
+
+    const septemberRange = salaryBreakdownForDateRange(vault, "2026-09-01", "2026-09-30", "2026-09");
+    const septemberToOctoberRange = salaryBreakdownForDateRange(vault, "2026-09-01", "2026-10-02", "2026-09");
+    const octoberPrimaryMonth = salaryBreakdownForDateRange(vault, "2026-09-01", "2026-10-02", "2026-10");
+
+    expect(obligationSummaryForDateRange(vault, "2026-09").amount).toBe(120);
+    expect(septemberRange.obligationDeduction).toBe(120);
+    expect(septemberToOctoberRange.obligationDeduction).toBe(120);
+    expect(obligationSummaryForDateRange(vault, "2026-10").amount).toBe(secondLesson.feeSnapshot.amount);
+    expect(octoberPrimaryMonth.obligationDeduction).toBe(secondLesson.feeSnapshot.amount);
   });
 });

@@ -8,7 +8,9 @@ import type { Campus, CourseType, Lesson } from "@/shared/types";
 type LessonStatusFilter = "all" | Lesson["status"];
 
 export function PayrollReviewFiltersCard({
-  selectedMonth,
+  selectedStartDate,
+  selectedEndDate,
+  primaryMonth,
   campusFilter,
   typeFilter,
   statusFilter,
@@ -16,13 +18,17 @@ export function PayrollReviewFiltersCard({
   campusOptions,
   courseTypeOptions,
   gradeOptions,
-  onMonthChange,
+  onStartDateChange,
+  onEndDateChange,
+  onPrimaryMonthChange,
   onCampusChange,
   onTypeChange,
   onStatusChange,
   onGradeChange
 }: {
-  selectedMonth: string;
+  selectedStartDate: string;
+  selectedEndDate: string;
+  primaryMonth: string;
   campusFilter: string;
   typeFilter: "all" | CourseType;
   statusFilter: LessonStatusFilter;
@@ -30,28 +36,56 @@ export function PayrollReviewFiltersCard({
   campusOptions: Campus[];
   courseTypeOptions: Array<{ value: CourseType; label: string }>;
   gradeOptions: string[];
-  onMonthChange: (value: string) => void;
+  onStartDateChange: (value: string) => void;
+  onEndDateChange: (value: string) => void;
+  onPrimaryMonthChange: (value: string) => void;
   onCampusChange: (value: string) => void;
   onTypeChange: (value: "all" | CourseType) => void;
   onStatusChange: (value: LessonStatusFilter) => void;
   onGradeChange: (value: string) => void;
 }) {
+  const isDateRangeValid = Boolean(selectedStartDate && selectedEndDate && selectedStartDate <= selectedEndDate);
+
   return (
     <Card data-onboarding="payroll-filters" className="overflow-hidden">
-      <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <CardHeader className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#1557c2]">
             <FileCheck2 size={14} /> 月底工资核对
           </div>
-          <CardTitle>按校区核对课程、义务课时和本月收入</CardTitle>
+          <CardTitle>按日期范围核对课程、义务课时和收入</CardTitle>
           <CardDescription className="mt-2">
-            先选月份和校区，再核对每节课的状态、班型、学生和扣费后小计。
+            选择日期范围和义务课时主月份，再按校区、课程类型、状态和年级核对工资。
           </CardDescription>
         </div>
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-auto lg:min-w-[860px] xl:grid-cols-5">
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:w-auto 2xl:min-w-[900px]">
           <div className="space-y-2">
-            <label className="text-sm font-medium">月份</label>
-            <Input type="month" value={selectedMonth} onChange={(event) => onMonthChange(event.target.value)} />
+            <label className="text-sm font-medium">开始日期</label>
+            <Input
+              type="date"
+              value={selectedStartDate}
+              max={selectedEndDate || undefined}
+              onChange={(event) => onStartDateChange(event.target.value)}
+              aria-invalid={!isDateRangeValid}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">结束日期</label>
+            <Input
+              type="date"
+              value={selectedEndDate}
+              min={selectedStartDate || undefined}
+              onChange={(event) => onEndDateChange(event.target.value)}
+              aria-invalid={!isDateRangeValid}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">义务课时主月份</label>
+            <Input
+              type="month"
+              value={primaryMonth}
+              onChange={(event) => onPrimaryMonthChange(event.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">校区</label>
@@ -89,6 +123,9 @@ export function PayrollReviewFiltersCard({
               ))}
             </Select>
           </div>
+          {!isDateRangeValid && (
+            <p className="text-sm font-medium text-[#b91c1c] sm:col-span-2 xl:col-span-4">请选择有效的开始日期和结束日期，且开始日期不能晚于结束日期。</p>
+          )}
         </div>
       </CardHeader>
     </Card>

@@ -28,6 +28,14 @@ const scheduleImportArchiveDocType = "schedule_import_reviews";
 const scheduleImportArchiveDocKey = "primary";
 const scheduleImportMainSaveDelayMs = 15_000;
 
+function currentMonthDateRange(): { startDate: string; endDate: string } {
+  const today = todayIso();
+  const month = today.slice(0, 7);
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return { startDate: `${month}-01`, endDate: `${month}-${String(lastDay).padStart(2, "0")}` };
+}
+
 export function PayrollReviewView({
   vault,
   amountsVisible,
@@ -53,7 +61,10 @@ export function PayrollReviewView({
   onOpenReconcileLessonInCalendar?: (lesson: Lesson) => void;
   onSuggestSchedule?: (request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) => void;
 }) {
-  const [selectedMonth, setSelectedMonth] = useState(todayIso().slice(0, 7));
+  const [selectedDateRange, setSelectedDateRange] = useState(currentMonthDateRange);
+  const { startDate: selectedStartDate, endDate: selectedEndDate } = selectedDateRange;
+  const [selectedPrimaryMonth, setSelectedPrimaryMonth] = useState(() => selectedDateRange.startDate.slice(0, 7));
+  const selectedDateRangeLabel = `${selectedStartDate} 至 ${selectedEndDate}`;
   const [campusFilter, setCampusFilter] = useState(vault.profile.homeCampusId ?? vault.campuses[0]?.id ?? "all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<LessonStatusFilter>("all");
@@ -108,7 +119,9 @@ export function PayrollReviewView({
     typeCountCards
   } = usePayrollReviewData({
     vault,
-    selectedMonth,
+    selectedStartDate,
+    selectedEndDate,
+    primaryMonth: selectedPrimaryMonth,
     campusFilter,
     typeFilter,
     statusFilter,
@@ -344,7 +357,9 @@ export function PayrollReviewView({
       ) : (
       <>
       <PayrollReviewFiltersCard
-        selectedMonth={selectedMonth}
+        selectedStartDate={selectedStartDate}
+        selectedEndDate={selectedEndDate}
+        primaryMonth={selectedPrimaryMonth}
         campusFilter={campusFilter}
         typeFilter={typeFilter}
         statusFilter={statusFilter}
@@ -352,7 +367,14 @@ export function PayrollReviewView({
         campusOptions={campusOptions}
         courseTypeOptions={courseTypeOptions}
         gradeOptions={gradeOptions}
-        onMonthChange={setSelectedMonth}
+        onStartDateChange={(value) => {
+          setSelectedDateRange((previous) => ({ ...previous, startDate: value }));
+          if (/^\d{4}-\d{2}-\d{2}$/.test(value)) setSelectedPrimaryMonth(value.slice(0, 7));
+        }}
+        onEndDateChange={(value) => setSelectedDateRange((previous) => ({ ...previous, endDate: value }))}
+        onPrimaryMonthChange={(value) => {
+          if (/^\d{4}-\d{2}$/.test(value)) setSelectedPrimaryMonth(value);
+        }}
         onCampusChange={setCampusFilter}
         onTypeChange={setTypeFilter}
         onStatusChange={setStatusFilter}
@@ -377,8 +399,8 @@ export function PayrollReviewView({
             hint: !obligationDeductionApplies
               ? `抵扣归入 ${campusName(vault, effectiveObligationCampusId)}`
               : currentCampusObligation.mode === "manual"
-              ? "手动填写扣除"
-              : `应扣 ${currentCampusObligation.requiredHours.toFixed(1)}h · 已扣 ${obligationCourseDeductedHours.toFixed(1)}h · 未抵 ${currentCampusObligation.missingHours.toFixed(1)}h`,
+              ? `${selectedPrimaryMonth} 手动填写扣除`
+              : `${selectedPrimaryMonth} 应扣 ${currentCampusObligation.requiredHours.toFixed(1)}h · 已扣 ${obligationCourseDeductedHours.toFixed(1)}h · 未抵 ${currentCampusObligation.missingHours.toFixed(1)}h`,
             danger: true
           },
           {
@@ -389,10 +411,10 @@ export function PayrollReviewView({
           {
             label: "各校区扣前课时费总计",
             value: formatPrivateMoney(lessonFeeTotal, amountsVisible),
-            hint: "本月各校区完成课时费汇总"
+            hint: "所选日期范围内各校区完成课时费汇总"
           },
           {
-            label: "本月预估收入",
+            label: "日期范围预估收入",
             value: formatPrivateMoney(estimatedIncome, amountsVisible),
             hint: "含待上课课节预估"
           }
@@ -402,14 +424,17 @@ export function PayrollReviewView({
       <PayrollObligationDeductionCard
         vault={vault}
         amountsVisible={amountsVisible}
-        selectedMonth={selectedMonth}
+        selectedDateRange={selectedDateRangeLabel}
+        primaryMonth={selectedPrimaryMonth}
         effectiveObligationCampusId={effectiveObligationCampusId}
         obligation={currentCampusObligation}
         deductionApplies={obligationDeductionApplies}
       />
 
       <PayrollOverviewGrid
-        selectedMonth={selectedMonth}
+        selectedStartDate={selectedStartDate}
+        selectedEndDate={selectedEndDate}
+        primaryMonth={selectedPrimaryMonth}
         amountsVisible={amountsVisible}
         campusFilter={campusFilter}
         monthLessonCount={monthLessonCount}
@@ -421,6 +446,7 @@ export function PayrollReviewView({
         monthUnfinishedPayrollHours={monthUnfinishedPayrollHours}
         campusSummaries={campusSummaries}
         breakdown={breakdown}
+        dateRangeLabel={selectedDateRangeLabel}
         lessonFeeTotal={lessonFeeTotal}
         campusCompletedFeeBeforeDeduction={campusLessonFee}
         lessonCampusAmounts={lessonCampusAmounts}
