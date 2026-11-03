@@ -1585,7 +1585,7 @@ export function salaryBreakdownForDateRange(vault: TeacherVault, startDate: stri
     { oneOnOne: 0, classLessons: 0, makeup: 0, substituteClass: 0 }
   );
   const wholeMonths = months.filter((month) => isWholeMonthInDateRange(month, startDate, endDate));
-  const baseSalary = vault.profile.baseSalary * wholeMonths.length;
+  const baseSalary = months.length > 0 ? vault.profile.baseSalary : 0;
   const adjustments = vault.salaryAdjustments
     .filter((item) => wholeMonths.includes(item.month))
     .reduce((sum, item) => sum + item.amount, 0);

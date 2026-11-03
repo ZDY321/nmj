@@ -644,7 +644,7 @@ describe("salary calculations", () => {
     expect(yearlyTrend(vault, "2026").find((item) => item.month === "2026-06")?.total).toBe(80);
   });
 
-  it("calculates payroll totals for a date range and includes monthly pay only for complete months", () => {
+  it("includes one full base salary for any valid date range and monthly adjustments only for complete months", () => {
     const baseVault = makeVault();
     const firstLesson = lessonWithSnapshot(baseVault, oneOnOneCourse, {
       id: "lesson_range_first",
@@ -666,8 +666,9 @@ describe("salary calculations", () => {
     const singleDay = salaryBreakdownForDateRange(vault, "2026-06-05", "2026-06-05", "2026-06");
     const fullMonth = salaryBreakdownForDateRange(vault, "2026-06-01", "2026-06-30", "2026-06");
 
-    expect(singleDay).toMatchObject({ baseSalary: 0, oneOnOne: firstLesson.feeSnapshot.amount, adjustments: 0 });
+    expect(singleDay).toMatchObject({ baseSalary: 3000, oneOnOne: firstLesson.feeSnapshot.amount, adjustments: 0 });
     expect(fullMonth).toEqual(salaryBreakdown(vault, "2026-06"));
+    expect(salaryBreakdownForDateRange(vault, "2026-10-02", "2026-10-31", "2026-10").baseSalary).toBe(3000);
     expect(salaryBreakdownForDateRange(vault, "2026-06-06", "2026-06-05", "2026-06").total).toBe(0);
   });
 
