@@ -451,6 +451,8 @@ export type ProgressChecklistCompletion = {
   studentId: string;
   courseGroupId: string;
   source?: "taught" | "homework";
+  homeworkStatus?: "not_started" | "partial" | "completed";
+  homeworkProgress?: number;
   completedDate: string;
   lessonId?: string;
   progressRecordId?: string;

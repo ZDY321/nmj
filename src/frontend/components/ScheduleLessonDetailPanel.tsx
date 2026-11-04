@@ -608,6 +608,7 @@ export function ScheduleLessonDetailPanel({
           {!isSubstituteClass && (
             <LessonChecklistLinker
               vault={vault}
+              lesson={selected}
               previousLesson={selectedPreviousLesson}
               content={selected.content}
               subjectHint={lessonDisplaySubject(vault, selected)}

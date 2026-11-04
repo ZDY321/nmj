@@ -2187,9 +2187,7 @@ export function App() {
                     onSaveChecklistTemplate={saveProgressChecklistTemplate}
                     onDeleteChecklistTemplate={deleteProgressChecklistTemplate}
                     onSaveChecklistCompletion={saveProgressChecklistCompletion}
-                    onSaveChecklistCompletions={saveProgressChecklistCompletions}
                     onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
-                    onDeleteChecklistCompletions={deleteProgressChecklistCompletions}
                     onSaveExternalPromptTemplate={saveExternalPromptTemplate}
                     onAddGradeRecord={addGradeRecord}
                     onDeleteGradeRecord={deleteGradeRecord}

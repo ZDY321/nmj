@@ -515,6 +515,7 @@ export function LessonsView({
                 {selected && (
                   <LessonChecklistLinker
                     vault={vault}
+                    lesson={selected}
                     previousLesson={selectedPreviousLesson}
                     content={selected.content}
                     subjectHint={courseSubject(vault, selected.courseGroupId)}

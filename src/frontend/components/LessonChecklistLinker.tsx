@@ -4,8 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { compareByName, lessonTimeRangeLabel } from "@/frontend/lib/helpers";
-import { formatChecklistItemLine, formatChecklistItemTitle } from "@/frontend/lib/progressChecklist";
+import { compareByName, findStudent, lessonStudentIds, lessonTimeRangeLabel } from "@/frontend/lib/helpers";
+import { checklistTemplateGrade, checklistTemplateMatchesContext, formatChecklistItemLine, formatChecklistItemTitle } from "@/frontend/lib/progressChecklist";
 import { linkedChecklistItems, removeLessonChecklistItem, syncLessonChecklistContent, type LessonContentChecklistField } from "@/frontend/lib/lessonContent";
 import type { Lesson, LessonContent, ProgressChecklistTemplate, ProgressChecklistTemplateItem, TeacherVault } from "@/shared/types";
 
@@ -26,12 +26,6 @@ type LessonChecklistSyncResult = {
   homeworkSyncedCount: number;
 };
 
-type PreviousLessonChecklistInfo = {
-  lesson: Lesson;
-  template: ProgressChecklistTemplate;
-  taughtItems: ProgressChecklistTemplateItem[];
-};
-
 export type LessonChecklistStudentItemStatus = {
   itemId: string;
   label: string;
@@ -47,6 +41,7 @@ export type LessonChecklistPerStudentStatus = {
 
 export function LessonChecklistLinker({
   vault,
+  lesson,
   previousLesson,
   content,
   subjectHint,
@@ -61,6 +56,7 @@ export function LessonChecklistLinker({
   lastSyncSource
 }: {
   vault: TeacherVault;
+  lesson: Lesson;
   previousLesson?: Lesson;
   content: LessonContent;
   subjectHint?: string;
@@ -88,6 +84,23 @@ export function LessonChecklistLinker({
   );
   const selectedTemplate = templates.find((template) => template.id === content.checklistTemplateId);
   const selectedSubject = subjectHint?.trim() ?? "";
+  const lessonGrades = Array.from(new Set(
+    lessonStudentIds(lesson)
+      .map((studentId) => findStudent(vault, studentId)?.grade?.trim())
+      .filter((grade): grade is string => Boolean(grade))
+  ));
+  const gradeOptions = Array.from(new Set([
+    ...(vault.preferences?.grades ?? []),
+    ...vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade))
+  ]));
+  const matchingTemplates = templates.filter((template) => checklistTemplateMatchesContext(template, {
+    subject: selectedSubject,
+    grades: lessonGrades,
+    gradeOptions
+  }));
+  const visibleTemplates = selectedTemplate && !matchingTemplates.some((template) => template.id === selectedTemplate.id)
+    ? [...matchingTemplates, selectedTemplate]
+    : matchingTemplates;
   const taughtItemIds = content.taughtChecklistItemIds ?? [];
   const homeworkItemIds = content.homeworkChecklistItemIds ?? [];
   const visibleItems = useMemo(() => {
@@ -148,11 +161,6 @@ export function LessonChecklistLinker({
       homework: new Set(uniqueIds(previousLesson.content.homeworkChecklistItemIds ?? []).filter((itemId) => validItemIds.has(itemId)))
     };
   }, [previousLesson, selectedTemplate]);
-  const previousChecklistInfo = useMemo(
-    () => buildPreviousLessonChecklistInfo(vault, previousLesson),
-    [vault, previousLesson]
-  );
-
   return (
     <div className="rounded-[14px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -242,15 +250,14 @@ export function LessonChecklistLinker({
         </div>
       )}
 
-      <PreviousLessonContentCard info={previousChecklistInfo} />
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-2">
           <label className="text-sm font-bold text-[#25324a]">清单模板</label>
           <Select value={content.checklistTemplateId ?? ""} onChange={(event) => updateTemplate(event.target.value)}>
             <option value="">不关联模板</option>
-            {templates.map((template) => (
+            {visibleTemplates.map((template) => (
               <option key={template.id} value={template.id}>
-                {template.name} · {template.subject || "未设科目"}
+                {template.name} · {template.subject || "未设科目"}{checklistTemplateGrade(template, gradeOptions) ? ` · ${checklistTemplateGrade(template, gradeOptions)}` : ""}
               </option>
             ))}
           </Select>
@@ -421,7 +428,7 @@ export function LessonChecklistLinkedItems({
   return (
     <div className="flex flex-wrap items-start gap-1.5 pt-1">
       {items.map((item) => {
-        const label = formatChecklistItemLabel(item, orderedItems);
+        const label = formatChecklistItemLine(item, orderedItems);
         return (
           <button
             key={item.id}
@@ -440,29 +447,6 @@ export function LessonChecklistLinkedItems({
   );
 }
 
-function PreviousLessonContentCard({ info }: { info?: PreviousLessonChecklistInfo }) {
-  if (!info) return null;
-  return (
-    <div className="mt-4 border-t border-[#e8eef6] pt-3">
-      <div className="text-sm font-extrabold text-[#25324a]">上节课课堂内容</div>
-      <div className="mt-1 text-xs font-semibold leading-5 text-[#64748b]">
-        {info.lesson.date} {lessonTimeRangeLabel(info.lesson)} · {info.template.name}
-      </div>
-      {info.taughtItems.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {info.taughtItems.map((item) => (
-            <Badge key={item.id} variant="sky" className="max-w-full whitespace-normal text-left leading-5">
-              {formatChecklistItemLabel(item, info.template.items)}
-            </Badge>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-2 text-xs font-semibold text-[#94a3b8]">未关联课堂内容</div>
-      )}
-    </div>
-  );
-}
-
 function resolveSelectedItems(
   template: ProgressChecklistTemplate | undefined,
   itemIds: string[]
@@ -473,23 +457,6 @@ function resolveSelectedItems(
     .filter((item): item is ProgressChecklistTemplateItem => Boolean(item));
 }
 
-function buildPreviousLessonChecklistInfo(
-  vault: TeacherVault,
-  previousLesson: Lesson | undefined
-): PreviousLessonChecklistInfo | undefined {
-  if (!previousLesson?.content.checklistTemplateId) return undefined;
-  const template = (vault.progressChecklistTemplates ?? []).find((item) => item.id === previousLesson.content.checklistTemplateId);
-  if (!template) return undefined;
-  return {
-    lesson: previousLesson,
-    template,
-    taughtItems: resolveSelectedItems(template, uniqueIds(previousLesson.content.taughtChecklistItemIds ?? []))
-  };
-}
-
 function uniqueIds(ids: string[]): string[] {
   return Array.from(new Set(ids));
-}
-function formatChecklistItemLabel(item: ProgressChecklistTemplateItem, orderedItems?: ProgressChecklistTemplateItem[]): string {
-  return formatChecklistItemLine(item, orderedItems);
 }

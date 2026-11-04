@@ -165,9 +165,7 @@ export function ProgressView({
   onSaveChecklistTemplate,
   onDeleteChecklistTemplate,
   onSaveChecklistCompletion,
-  onSaveChecklistCompletions,
   onDeleteChecklistCompletion,
-  onDeleteChecklistCompletions,
   onSaveExternalPromptTemplate,
   onAddGradeRecord,
   onDeleteGradeRecord,
@@ -188,9 +186,7 @@ export function ProgressView({
   onSaveChecklistTemplate: (template: ProgressChecklistTemplate) => void;
   onDeleteChecklistTemplate: (templateId: string) => void;
   onSaveChecklistCompletion: (completion: ProgressChecklistCompletion) => void;
-  onSaveChecklistCompletions: (completions: ProgressChecklistCompletion[]) => void;
   onDeleteChecklistCompletion: (completionId: string) => void;
-  onDeleteChecklistCompletions: (completionIds: string[]) => void;
   onSaveExternalPromptTemplate: (template: string) => void;
   onAddGradeRecord: (record: GradeRecord) => void;
   onDeleteGradeRecord: (recordId: string) => void;
@@ -489,9 +485,7 @@ export function ProgressView({
           onSaveChecklistTemplate={onSaveChecklistTemplate}
           onDeleteChecklistTemplate={onDeleteChecklistTemplate}
           onSaveChecklistCompletion={onSaveChecklistCompletion}
-          onSaveChecklistCompletions={onSaveChecklistCompletions}
           onDeleteChecklistCompletion={onDeleteChecklistCompletion}
-          onDeleteChecklistCompletions={onDeleteChecklistCompletions}
           onOpenLessonInRecords={onOpenLessonInRecords}
           onSaveExternalPromptTemplate={onSaveExternalPromptTemplate}
         />

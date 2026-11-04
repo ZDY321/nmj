@@ -1,6 +1,7 @@
-import type { ProgressChecklistCompletion, ProgressChecklistTemplateItem } from "@/shared/types";
+import type { ProgressChecklistCompletion, ProgressChecklistTemplate, ProgressChecklistTemplateItem } from "@/shared/types";
 
 export type ChecklistCompletionSource = "taught" | "homework";
+export type ChecklistHomeworkStatus = "not_started" | "partial" | "completed";
 
 export type ProgressChecklistFocus = {
   courseGroupId?: string;
@@ -11,6 +12,28 @@ export type ProgressChecklistFocus = {
   itemId?: string;
   nonce: number;
 };
+
+export function checklistTemplateGrade(template: ProgressChecklistTemplate, gradeOptions: string[] = []): string | undefined {
+  const searchable = `${template.name} ${template.note ?? ""}`.toLowerCase();
+  return gradeOptions
+    .map((grade) => grade.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .find((grade) => searchable.includes(grade.toLowerCase()));
+}
+
+export function checklistTemplateMatchesContext(
+  template: ProgressChecklistTemplate,
+  context: { subject?: string; grades?: string[]; gradeOptions?: string[] }
+): boolean {
+  const subject = context.subject?.trim().toLowerCase();
+  const templateSubject = template.subject?.trim().toLowerCase();
+  if (subject && templateSubject && subject !== templateSubject) return false;
+
+  const grades = new Set((context.grades ?? []).map((grade) => grade.trim().toLowerCase()).filter(Boolean));
+  const templateGrade = checklistTemplateGrade(template, context.gradeOptions)?.toLowerCase();
+  return grades.size === 0 || !templateGrade || grades.has(templateGrade);
+}
 
 export function checklistCellKey(studentId: string, itemId: string): string {
   return `${studentId}::${itemId}`;
@@ -30,6 +53,22 @@ export function checklistCompletionAppliesToSource(
 ): boolean {
   const resolvedSource = checklistCompletionSource(completion);
   return !resolvedSource || resolvedSource === source;
+}
+
+export function checklistCompletionHomeworkStatus(
+  completion: Pick<ProgressChecklistCompletion, "source" | "note" | "homeworkStatus" | "homeworkProgress">
+): ChecklistHomeworkStatus | undefined {
+  if (checklistCompletionSource(completion) !== "homework") return undefined;
+  if (completion.homeworkStatus) return completion.homeworkStatus;
+  if (completion.homeworkProgress === undefined || completion.homeworkProgress >= 100) return "completed";
+  return completion.homeworkProgress <= 0 ? "not_started" : "partial";
+}
+
+export function checklistCompletionIsComplete(
+  completion: Pick<ProgressChecklistCompletion, "source" | "note" | "homeworkStatus" | "homeworkProgress">
+): boolean {
+  const status = checklistCompletionHomeworkStatus(completion);
+  return status !== "not_started" && status !== "partial";
 }
 
 const CHINESE_NUMBER_VALUES: Record<string, number> = {
