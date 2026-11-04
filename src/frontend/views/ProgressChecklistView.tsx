@@ -1175,16 +1175,29 @@ export function ProgressChecklistView({
                         </Button>
                       </div>
                       {selectedCompletions.length > 0 ? (
-                        <div className="max-h-48 space-y-1 overflow-y-auto">
+                        <div className="max-h-64 space-y-1 overflow-y-auto">
                           {selectedCompletions.slice().sort(compareChecklistCompletions).map((entry) => (
                             <button
                               key={entry.id}
                               type="button"
                               onClick={() => setSelectedCompletionId(entry.id)}
-                              className={`flex w-full items-center justify-between gap-3 rounded-[6px] border px-3 py-2 text-left text-xs font-bold ${selectedCompletionId === entry.id ? "border-[#ff8617] bg-[#fff7ed]" : "border-[#e2e8f0] bg-white hover:bg-[#f8fbff]"}`}
+                              className={`flex w-full flex-col gap-2 rounded-[6px] border px-3 py-2 text-left ${selectedCompletionId === entry.id ? "border-[#ff8617] bg-[#fff7ed]" : "border-[#e2e8f0] bg-white hover:bg-[#f8fbff]"}`}
                             >
-                              <span>{entry.completedDate} · {completionStateLabel(entry)}</span>
-                              <span className="text-[#64748b]">{selectedCompletionId === entry.id ? "编辑中" : "编辑"}</span>
+                              <span className="flex w-full flex-wrap items-center gap-1.5">
+                                <span className="mr-auto text-xs font-extrabold text-[#25324a]">{entry.completedDate}</span>
+                                <span className="rounded-[4px] bg-[#eef2f7] px-1.5 py-1 text-[10px] font-bold text-[#475569]">
+                                  {resolveCompletionSource(entry) === "taught" ? "课堂记录" : "作业记录"}
+                                </span>
+                                <span className={`rounded-[4px] px-1.5 py-1 text-[10px] font-bold ${completionStateClasses(entry)}`}>
+                                  {completionStateLabel(entry)}
+                                </span>
+                                <span className="text-[10px] font-semibold text-[#64748b]">
+                                  {selectedCompletionId === entry.id ? "正在编辑" : "点击编辑"}
+                                </span>
+                              </span>
+                              <span className="w-full whitespace-pre-wrap break-words border-t border-[#e2e8f0] pt-1.5 text-left text-[11px] font-medium leading-4 text-[#475569]">
+                                {entry.note?.trim() ? `备注：${entry.note}` : "备注：暂无备注"}
+                              </span>
                             </button>
                           ))}
                         </div>
