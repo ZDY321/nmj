@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checklistCompletionHomeworkStatus, checklistCompletionIsComplete, checklistTemplateGrade, checklistTemplateMatchesContext } from "@/frontend/lib/progressChecklist";
-import type { ProgressChecklistTemplate } from "@/shared/types";
+import { checklistCompletionHomeworkStatus, checklistCompletionIsComplete, checklistTemplateGrade, checklistTemplateMatchesContext, groupChecklistCompletionsByDate } from "@/frontend/lib/progressChecklist";
+import type { ProgressChecklistCompletion, ProgressChecklistTemplate } from "@/shared/types";
 
 function makeTemplate(patch: Partial<ProgressChecklistTemplate> = {}): ProgressChecklistTemplate {
   return {
@@ -64,5 +64,29 @@ describe("checklist completion state", () => {
     expect(checklistCompletionHomeworkStatus({ source: "homework", homeworkProgress: 0 })).toBe("not_started");
     expect(checklistCompletionHomeworkStatus({ source: "homework", homeworkProgress: 45 })).toBe("partial");
     expect(checklistCompletionHomeworkStatus({ source: "homework", homeworkProgress: 100 })).toBe("completed");
+  });
+});
+
+describe("checklist completion date groups", () => {
+  it("shows one matrix marker per date while retaining every record in the group", () => {
+    const makeCompletion = (id: string, completedDate: string): ProgressChecklistCompletion => ({
+      id,
+      templateId: "template_1",
+      itemId: "item_1",
+      studentId: "student_1",
+      courseGroupId: "course_1",
+      completedDate,
+      updatedAt: `2026-10-${id === "newer" ? "03" : "02"}T00:00:00.000Z`
+    });
+
+    const groups = groupChecklistCompletionsByDate([
+      makeCompletion("older", "2026-10-02"),
+      makeCompletion("newer", "2026-10-02"),
+      makeCompletion("next-day", "2026-10-03")
+    ]);
+
+    expect(groups.map(({ date }) => date)).toEqual(["2026-10-02", "2026-10-03"]);
+    expect(groups[0]?.completions.map(({ id }) => id)).toEqual(["older", "newer"]);
+    expect(groups[1]?.completions.map(({ id }) => id)).toEqual(["next-day"]);
   });
 });

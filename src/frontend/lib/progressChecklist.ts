@@ -39,6 +39,19 @@ export function checklistCellKey(studentId: string, itemId: string): string {
   return `${studentId}::${itemId}`;
 }
 
+export function groupChecklistCompletionsByDate(
+  completions: ProgressChecklistCompletion[]
+): Array<{ date: string; completions: ProgressChecklistCompletion[] }> {
+  const groups = new Map<string, ProgressChecklistCompletion[]>();
+  completions.forEach((completion) => {
+    groups.set(completion.completedDate, [...(groups.get(completion.completedDate) ?? []), completion]);
+  });
+  return Array.from(groups, ([date, entries]) => ({
+    date,
+    completions: entries.sort((a, b) => `${a.updatedAt} ${a.id}`.localeCompare(`${b.updatedAt} ${b.id}`))
+  })).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function checklistCompletionSource(completion: Pick<ProgressChecklistCompletion, "source" | "note">): ChecklistCompletionSource | undefined {
   if (completion.source === "taught" || completion.source === "homework") return completion.source;
   const note = completion.note ?? "";
