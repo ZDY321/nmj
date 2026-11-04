@@ -8,10 +8,12 @@ import {
   CornerUpLeft,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Plus,
   Save,
   Search,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,15 +26,17 @@ import { generateAiScheduleDraft, getUsableAiProviders } from "@/frontend/lib/cl
 import { todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import {
+  buildChecklistDateMarkers,
   checklistCellKey,
   checklistCompletionHomeworkStatus,
   checklistCompletionIsComplete,
   checklistCompletionSource,
-  groupChecklistCompletionsByDate,
+  checklistCompletionDateChanged,
   checklistTemplateMatchesContext,
   formatChecklistItemLine,
   formatChecklistItemTitle,
   stripChecklistTitlePrefix,
+  type ChecklistDateMarker,
   type ProgressChecklistFocus
 } from "@/frontend/lib/progressChecklist";
 import { stringValue } from "@/frontend/lib/typeGuards";
@@ -44,6 +48,7 @@ import {
   courseTypeLabel,
   findStudent,
   lessonStudentIds,
+  lessonStatusLabels,
   sortCoursesByName,
   subjectOptionsForVault
 } from "@/frontend/lib/helpers";
@@ -102,6 +107,7 @@ export function ProgressChecklistView({
   const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false);
   const [selectedCell, setSelectedCell] = useState<ChecklistCellSelection | null>(null);
   const [selectedCompletionId, setSelectedCompletionId] = useState(NEW_COMPLETION_ID);
+  const [selectedDateDetail, setSelectedDateDetail] = useState<ChecklistDateMarker | null>(null);
   const [completionSource, setCompletionSource] = useState<"taught" | "homework">("homework");
   const [homeworkStatus, setHomeworkStatus] = useState<"not_started" | "partial" | "completed">("not_started");
   const [selectedCellDate, setSelectedCellDate] = useState(todayIso());
@@ -161,6 +167,15 @@ export function ProgressChecklistView({
       cancelled = true;
     };
   }, [token, aiFeatureEnabled]);
+
+  useEffect(() => {
+    if (!selectedDateDetail) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setSelectedDateDetail(null);
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [selectedDateDetail]);
 
   const selectedCourse = courseOptions.find((course) => course.id === selectedCourseId);
   const focusLesson = focusRequest?.lessonId ? vault.lessons.find((lesson) => lesson.id === focusRequest.lessonId) : undefined;
@@ -275,6 +290,31 @@ export function ProgressChecklistView({
     });
     return groups;
   }, [completionList]);
+  const lessonDateMarkers = useMemo(() => {
+    if (selectedTemplateId === NEW_TEMPLATE_ID) return [];
+    const validItemIds = new Set(allItems.map((item) => item.id));
+    return vault.lessons.flatMap((lesson) => {
+      if (lesson.courseGroupId !== selectedCourseId
+        || lesson.content.checklistTemplateId !== selectedTemplateId
+        || (lesson.status !== "completed" && lesson.status !== "makeup_completed")) {
+        return [];
+      }
+      const linkedItemIds = Array.from(new Set(lesson.content.taughtChecklistItemIds ?? []))
+        .filter((itemId) => validItemIds.has(itemId));
+      if (linkedItemIds.length === 0) return [];
+      const activeStudentIds = lessonStudentIds(lesson).filter((studentId) => selectedStudentIds.has(studentId));
+      return activeStudentIds.flatMap((studentId) => linkedItemIds.map((itemId) => ({
+        studentId,
+        itemId,
+        date: lesson.date,
+        lessonId: lesson.id
+      })));
+    });
+  }, [allItems, selectedCourseId, selectedStudentIds, selectedTemplateId, vault.lessons]);
+  const dateMarkersByCell = useMemo(
+    () => buildChecklistDateMarkers(completionList, lessonDateMarkers),
+    [completionList, lessonDateMarkers]
+  );
   const completionMap = useMemo(() => {
     const map = new Map<string, ProgressChecklistCompletion>();
     completionGroupsByCell.forEach((completions, key) => {
@@ -396,10 +436,12 @@ export function ProgressChecklistView({
     if (!selectedCourse || !selectedTemplate || !selectedStudent || !selectedItem) return;
     const now = new Date().toISOString();
     const completedDate = selectedCellDate || todayIso();
+    const dateChanged = checklistCompletionDateChanged(selectedCompletion?.completedDate, completedDate);
     const note = completionNote.trim() || undefined;
-    onSaveChecklistCompletion({
+    const matchingLesson = findUniqueChecklistLessonForDate(vault.lessons, selectedCourse.id, selectedStudent.id, completedDate);
+    const completion: ProgressChecklistCompletion = {
       ...(selectedCompletion ?? {}),
-      id: selectedCompletion?.id ?? makeId("progress_completion"),
+      id: dateChanged ? makeId("progress_completion") : selectedCompletion?.id ?? makeId("progress_completion"),
       templateId: selectedTemplate.id,
       itemId: selectedItem.id,
       studentId: selectedStudent.id,
@@ -408,10 +450,12 @@ export function ProgressChecklistView({
       homeworkStatus: completionSource === "homework" ? homeworkStatus : undefined,
       homeworkProgress: undefined,
       completedDate,
-      lessonId: findUniqueChecklistLessonForDate(vault.lessons, selectedCourse.id, selectedStudent.id, completedDate)?.id,
+      lessonId: matchingLesson?.id ?? (dateChanged ? undefined : selectedCompletion?.lessonId),
       note,
       updatedAt: now
-    });
+    };
+    onSaveChecklistCompletion(completion);
+    setSelectedCompletionId(completion.id);
   }
 
   function startNewCompletion() {
@@ -552,9 +596,121 @@ export function ProgressChecklistView({
     return Boolean(stringValue(templateObject.name) || itemTitles.length > 0 || stringValue(templateObject.note));
   }
 
+  const selectedDateDetailItem = selectedDateDetail
+    ? allItems.find((item) => item.id === selectedDateDetail.itemId)
+    : undefined;
+  const selectedDateDetailLessons = selectedDateDetail
+    ? checklistLessonsForDateMarker(selectedDateDetail, selectedCourse?.id ?? "", vault.lessons, selectedDateDetail.studentId)
+    : [];
+
   return (
     <div className="space-y-6">
       {dialog}
+
+      {selectedDateDetail && (
+        <div
+          role="presentation"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#061226]/45 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedDateDetail(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checklist-date-detail-title"
+            className="flex max-h-[88vh] w-full max-w-[720px] flex-col overflow-hidden rounded-[12px] border border-[#dbe4ef] bg-white shadow-[0_28px_80px_rgba(6,18,38,0.28)]"
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-[#e8eef6] p-5">
+              <div className="min-w-0">
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold text-[#1557c2]">
+                  <CalendarDays size={15} /> 清单日期详情
+                </div>
+                <h2 id="checklist-date-detail-title" className="text-lg font-extrabold text-[#061226]">
+                  {selectedDateDetail.date} · {findStudent(vault, selectedDateDetail.studentId)?.name ?? "学生"}
+                </h2>
+                <div className="mt-1 text-sm font-semibold text-[#64748b]">
+                  {selectedCourse?.name ?? "课程"} · {selectedDateDetailItem ? formatChecklistItemTitle(selectedDateDetailItem, allItems) : "清单条目"}
+                </div>
+              </div>
+              <Button type="button" variant="ghost" size="icon" aria-label="关闭日期详情" onClick={() => setSelectedDateDetail(null)}>
+                <X size={18} />
+              </Button>
+            </header>
+
+            <div className="min-h-0 space-y-5 overflow-y-auto p-5">
+              <section className="space-y-2">
+                <h3 className="text-sm font-extrabold text-[#25324a]">关联课程详情 · {selectedDateDetailLessons.length} 节</h3>
+                {selectedDateDetailLessons.length > 0 ? selectedDateDetailLessons.map((lesson) => (
+                  <article key={lesson.id} className="rounded-[8px] border border-[#dbe4ef] bg-[#f8fbff] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 space-y-1 text-sm">
+                        <div className="font-extrabold text-[#061226]">{courseName(vault, lesson.courseGroupId)}</div>
+                        <div className="font-semibold text-[#475569]">{lesson.date} · {lesson.startTime}-{lesson.endTime}</div>
+                        <div className="text-xs font-semibold text-[#64748b]">
+                          {campusName(vault, lesson.campusId ?? selectedCourse?.defaultCampusId)} · {lessonStatusLabels[lesson.status]}
+                        </div>
+                        {lesson.content.taught.trim() && (
+                          <p className="mt-2 whitespace-pre-wrap text-xs font-medium leading-5 text-[#475569]">{lesson.content.taught}</p>
+                        )}
+                      </div>
+                      {onOpenLessonInRecords && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 border-[#bfdbfe] bg-white text-[#1557c2]"
+                          onClick={() => {
+                            setSelectedDateDetail(null);
+                            onOpenLessonInRecords(lesson);
+                          }}
+                        >
+                          <ExternalLink size={14} /> 打开课程详情
+                        </Button>
+                      )}
+                    </div>
+                  </article>
+                )) : (
+                  <div className="rounded-[8px] border border-dashed border-[#cbd6e3] p-4 text-sm font-semibold text-[#64748b]">
+                    这一天没有找到明确关联的课程记录。
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-extrabold text-[#25324a]">完成记录 · {selectedDateDetail.completions.length} 条</h3>
+                {selectedDateDetail.completions.length > 0 ? selectedDateDetail.completions.map((completion) => (
+                  <div key={completion.id} className="flex flex-col gap-2 rounded-[8px] border border-[#e2e8f0] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 text-sm">
+                      <div className="font-bold text-[#25324a]">{completion.completedDate} · {completionStateLabel(completion)}</div>
+                      {completion.note && <div className="mt-1 whitespace-pre-wrap text-xs text-[#64748b]">{completion.note}</div>}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => {
+                        setSelectedCell({ studentId: selectedDateDetail.studentId, itemId: selectedDateDetail.itemId });
+                        setSelectedCompletionId(completion.id);
+                        setSelectedDateDetail(null);
+                      }}
+                    >
+                      编辑记录
+                    </Button>
+                  </div>
+                )) : (
+                  <div className="text-xs font-medium text-[#64748b]">此日期来自课程中关联的授课内容，没有单独的完成记录。</div>
+                )}
+              </section>
+            </div>
+
+            <footer className="flex justify-end border-t border-[#e8eef6] bg-[#f8fbff] p-4">
+              <Button type="button" variant="outline" onClick={() => setSelectedDateDetail(null)}>关闭</Button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {focusLesson && onOpenLessonInRecords && (
         <div className="flex flex-col gap-3 rounded-[14px] border border-[#bfdbfe] bg-[#f8fbff] p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -809,7 +965,7 @@ export function ProgressChecklistView({
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
                 <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-bold text-[#25324a]">选择课程</label>
-                  <Select value={selectedCourseId} onChange={(event) => { setSelectedCourseId(event.target.value); setSyncMessage(""); }}>
+                  <Select value={selectedCourseId} onChange={(event) => { setSelectedCourseId(event.target.value); setSelectedDateDetail(null); setSyncMessage(""); }}>
                     <option value="">请选择课程</option>
                     {courseOptions.map((course) => (
                       <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>
@@ -818,7 +974,7 @@ export function ProgressChecklistView({
                 </div>
                 <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-bold text-[#25324a]">选择模板</label>
-                  <Select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+                  <Select value={selectedTemplateId} onChange={(event) => { setSelectedTemplateId(event.target.value); setSelectedDateDetail(null); }}>
                     <option value="">请选择模板</option>
                     {selectedTemplateId === NEW_TEMPLATE_ID && <option value={NEW_TEMPLATE_ID}>当前草稿（未保存）</option>}
                     {templates.map((template) => (
@@ -914,7 +1070,7 @@ export function ProgressChecklistView({
                             </th>
                             {visibleItems.map((item) => {
                               const cellKey = checklistCellKey(student.id, item.id);
-                              const completions = completionGroupsByCell.get(cellKey) ?? [];
+                              const dateMarkers = dateMarkersByCell.get(cellKey) ?? [];
                               const active = selectedCell?.studentId === student.id && selectedCell.itemId === item.id;
                               return (
                                 <td key={`${student.id}-${item.id}`} className="border-b border-r border-[#dbe4ef] p-2 align-top">
@@ -931,35 +1087,33 @@ export function ProgressChecklistView({
                                       className={`flex min-h-[68px] w-full flex-col items-center justify-center gap-1 rounded-[6px] border px-2 py-2 text-center transition-colors ${
                                         active
                                           ? "border-[#ff8617] bg-[#fff7ed]"
-                                          : completions.length > 0
+                                          : dateMarkers.length > 0
                                             ? "border-[#cbd5e1] bg-white hover:border-[#93c5fd]"
                                             : "border-[#e8eef6] bg-[#f8fbff] hover:border-[#93c5fd] hover:bg-[#eef5ff]"
                                       }`}
                                     >
-                                      {completions.length > 0 ? (
+                                      {dateMarkers.length > 0 ? (
                                         <div className="flex w-full flex-col items-center gap-1">
-                                          {groupChecklistCompletionsByDate(completions).map((day) => {
-                                            const representative = day.completions.at(-1)!;
-                                            const states = Array.from(new Set(day.completions.map(completionStateLabel)));
+                                          {dateMarkers.map((marker) => {
+                                            const representative = marker.completions.at(-1);
+                                            const states = Array.from(new Set(marker.completions.map(completionStateLabel)));
+                                            const markerTitle = [
+                                              ...states,
+                                              marker.lessonIds.length > 0 ? `${marker.lessonIds.length} 节关联课程` : "无关联课程"
+                                            ].join(" · ");
                                             return (
                                               <button
-                                                key={day.date}
+                                                key={marker.date}
                                                 type="button"
                                                 onClick={(event) => {
                                                   event.stopPropagation();
-                                                  const lesson = resolveChecklistDateLesson(day.completions, vault.lessons, student.id);
-                                                  if (lesson && onOpenLessonInRecords) {
-                                                    onOpenLessonInRecords(lesson);
-                                                    return;
-                                                  }
-                                                  selectChecklistCell(student.id, item.id);
-                                                  setSelectedCompletionId(representative.id);
+                                                  setSelectedDateDetail(marker);
                                                 }}
-                                                aria-label={`查看 ${day.date} 的课程详情或完成记录`}
-                                                title={`${day.date} · ${states.join("、")} · ${day.completions.length} 条记录`}
-                                                className={`max-w-full whitespace-nowrap rounded-[4px] px-1.5 py-1 text-[10px] font-extrabold leading-none hover:brightness-95 ${completionStateClasses(representative)}`}
+                                                aria-label={`查看 ${marker.date} 的课程详情和完成记录`}
+                                                title={`${marker.date} · ${markerTitle}`}
+                                                className={`max-w-full whitespace-nowrap rounded-[4px] px-1.5 py-1 text-[10px] font-extrabold leading-none hover:brightness-95 ${representative ? completionStateClasses(representative) : "bg-[#dbeafe] text-[#1d4ed8]"}`}
                                               >
-                                                {day.date}
+                                                {marker.date}
                                               </button>
                                             );
                                           })}
@@ -1098,22 +1252,27 @@ function compareChecklistCompletions(a: ProgressChecklistCompletion, b: Progress
   return `${a.completedDate} ${a.updatedAt} ${a.id}`.localeCompare(`${b.completedDate} ${b.updatedAt} ${b.id}`);
 }
 
-function resolveChecklistDateLesson(
-  completions: ProgressChecklistCompletion[],
+function checklistLessonsForDateMarker(
+  marker: ChecklistDateMarker,
+  courseGroupId: string,
   lessons: Lesson[],
   studentId: string
-): Lesson | undefined {
-  const linkedLessonIds = Array.from(new Set(completions.map((completion) => completion.lessonId).filter(Boolean)));
-  if (linkedLessonIds.length > 0) {
-    if (linkedLessonIds.length !== 1) return undefined;
-    return lessons.find((lesson) =>
-      lesson.id === linkedLessonIds[0] && lesson.courseGroupId === completions[0]?.courseGroupId
-    );
+): Lesson[] {
+  if (marker.lessonIds.length > 0) {
+    const linkedIds = new Set(marker.lessonIds);
+    return lessons
+      .filter((lesson) => linkedIds.has(lesson.id) && lesson.courseGroupId === courseGroupId)
+      .sort((a, b) => `${a.date} ${a.startTime} ${a.id}`.localeCompare(`${b.date} ${b.startTime} ${b.id}`));
   }
 
-  const completion = completions[0];
-  if (!completion) return undefined;
-  return findUniqueChecklistLessonForDate(lessons, completion.courseGroupId, studentId, completion.completedDate);
+  return lessons
+    .filter((lesson) =>
+      lesson.courseGroupId === courseGroupId &&
+      lesson.date === marker.date &&
+      lesson.status !== "cancelled" &&
+      lessonStudentIds(lesson).includes(studentId)
+    )
+    .sort((a, b) => `${a.startTime} ${a.id}`.localeCompare(`${b.startTime} ${b.id}`));
 }
 
 function findUniqueChecklistLessonForDate(

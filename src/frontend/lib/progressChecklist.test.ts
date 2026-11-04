@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checklistCompletionHomeworkStatus, checklistCompletionIsComplete, checklistTemplateGrade, checklistTemplateMatchesContext, groupChecklistCompletionsByDate } from "@/frontend/lib/progressChecklist";
+import { buildChecklistDateMarkers, checklistCompletionDateChanged, checklistCompletionHomeworkStatus, checklistCompletionIsComplete, checklistTemplateGrade, checklistTemplateMatchesContext } from "@/frontend/lib/progressChecklist";
 import type { ProgressChecklistCompletion, ProgressChecklistTemplate } from "@/shared/types";
 
 function makeTemplate(patch: Partial<ProgressChecklistTemplate> = {}): ProgressChecklistTemplate {
@@ -67,26 +67,37 @@ describe("checklist completion state", () => {
   });
 });
 
-describe("checklist completion date groups", () => {
-  it("shows one matrix marker per date while retaining every record in the group", () => {
-    const makeCompletion = (id: string, completedDate: string): ProgressChecklistCompletion => ({
+describe("checklist matrix date markers", () => {
+  it("includes every completed lesson date and merges same-day sources", () => {
+    const makeCompletion = (id: string, completedDate: string, studentId = "student_1", itemId = "item_1"): ProgressChecklistCompletion => ({
       id,
       templateId: "template_1",
-      itemId: "item_1",
-      studentId: "student_1",
+      itemId,
+      studentId,
       courseGroupId: "course_1",
       completedDate,
-      updatedAt: `2026-10-${id === "newer" ? "03" : "02"}T00:00:00.000Z`
+      updatedAt: "2026-10-31T00:00:00.000Z"
     });
+    const markers = buildChecklistDateMarkers(
+      [makeCompletion("completion-31", "2026-10-31"), makeCompletion("other-cell", "2026-10-29", "student_2")],
+      [
+        { studentId: "student_1", itemId: "item_1", date: "2026-10-30", lessonId: "lesson-30" },
+        { studentId: "student_1", itemId: "item_1", date: "2026-10-31", lessonId: "lesson-31" },
+        { studentId: "student_1", itemId: "item_1", date: "2026-10-31", lessonId: "lesson-31" },
+        { studentId: "student_1", itemId: "item_2", date: "2026-10-29", lessonId: "other-item" }
+      ]
+    );
 
-    const groups = groupChecklistCompletionsByDate([
-      makeCompletion("older", "2026-10-02"),
-      makeCompletion("newer", "2026-10-02"),
-      makeCompletion("next-day", "2026-10-03")
-    ]);
+    const cellMarkers = markers.get("student_1::item_1") ?? [];
+    expect(cellMarkers.map(({ date }) => date)).toEqual(["2026-10-30", "2026-10-31"]);
+    expect(cellMarkers[1]?.completions.map(({ id }) => id)).toEqual(["completion-31"]);
+    expect(cellMarkers[1]?.lessonIds).toEqual(["lesson-31"]);
+    expect(markers.get("student_2::item_1")?.map(({ date }) => date)).toEqual(["2026-10-29"]);
+  });
 
-    expect(groups.map(({ date }) => date)).toEqual(["2026-10-02", "2026-10-03"]);
-    expect(groups[0]?.completions.map(({ id }) => id)).toEqual(["older", "newer"]);
-    expect(groups[1]?.completions.map(({ id }) => id)).toEqual(["next-day"]);
+  it("preserves the original day by treating a changed date as a new completion", () => {
+    expect(checklistCompletionDateChanged("2026-10-30", "2026-10-31")).toBe(true);
+    expect(checklistCompletionDateChanged("2026-10-30", "2026-10-30")).toBe(false);
+    expect(checklistCompletionDateChanged(undefined, "2026-10-31")).toBe(false);
   });
 });

@@ -13,6 +13,21 @@ export type ProgressChecklistFocus = {
   nonce: number;
 };
 
+export type ChecklistLessonDateMarker = {
+  studentId: string;
+  itemId: string;
+  date: string;
+  lessonId: string;
+};
+
+export type ChecklistDateMarker = {
+  studentId: string;
+  itemId: string;
+  date: string;
+  completions: ProgressChecklistCompletion[];
+  lessonIds: string[];
+};
+
 export function checklistTemplateGrade(template: ProgressChecklistTemplate, gradeOptions: string[] = []): string | undefined {
   const searchable = `${template.name} ${template.note ?? ""}`.toLowerCase();
   return gradeOptions
@@ -39,17 +54,52 @@ export function checklistCellKey(studentId: string, itemId: string): string {
   return `${studentId}::${itemId}`;
 }
 
-export function groupChecklistCompletionsByDate(
-  completions: ProgressChecklistCompletion[]
-): Array<{ date: string; completions: ProgressChecklistCompletion[] }> {
-  const groups = new Map<string, ProgressChecklistCompletion[]>();
+export function buildChecklistDateMarkers(
+  completions: ProgressChecklistCompletion[],
+  lessonMarkers: ChecklistLessonDateMarker[]
+): Map<string, ChecklistDateMarker[]> {
+  const groups = new Map<string, ChecklistDateMarker>();
   completions.forEach((completion) => {
-    groups.set(completion.completedDate, [...(groups.get(completion.completedDate) ?? []), completion]);
+    const key = checklistCellKey(completion.studentId, completion.itemId);
+    const groupKey = `${key}::${completion.completedDate}`;
+    const group = groups.get(groupKey) ?? {
+      studentId: completion.studentId,
+      itemId: completion.itemId,
+      date: completion.completedDate,
+      completions: [],
+      lessonIds: []
+    };
+    group.completions.push(completion);
+    if (completion.lessonId && !group.lessonIds.includes(completion.lessonId)) group.lessonIds.push(completion.lessonId);
+    groups.set(groupKey, group);
   });
-  return Array.from(groups, ([date, entries]) => ({
-    date,
-    completions: entries.sort((a, b) => `${a.updatedAt} ${a.id}`.localeCompare(`${b.updatedAt} ${b.id}`))
-  })).sort((a, b) => a.date.localeCompare(b.date));
+  lessonMarkers.forEach((marker) => {
+    const key = checklistCellKey(marker.studentId, marker.itemId);
+    const groupKey = `${key}::${marker.date}`;
+    const group = groups.get(groupKey) ?? {
+      studentId: marker.studentId,
+      itemId: marker.itemId,
+      date: marker.date,
+      completions: [],
+      lessonIds: []
+    };
+    if (!group.lessonIds.includes(marker.lessonId)) group.lessonIds.push(marker.lessonId);
+    groups.set(groupKey, group);
+  });
+
+  const result = new Map<string, ChecklistDateMarker[]>();
+  groups.forEach((marker) => {
+    marker.completions.sort((a, b) => `${a.updatedAt} ${a.id}`.localeCompare(`${b.updatedAt} ${b.id}`));
+    marker.lessonIds.sort((a, b) => a.localeCompare(b));
+    const key = checklistCellKey(marker.studentId, marker.itemId);
+    result.set(key, [...(result.get(key) ?? []), marker]);
+  });
+  result.forEach((markers) => markers.sort((a, b) => a.date.localeCompare(b.date)));
+  return result;
+}
+
+export function checklistCompletionDateChanged(existingDate: string | undefined, nextDate: string): boolean {
+  return existingDate !== undefined && existingDate !== nextDate;
 }
 
 export function checklistCompletionSource(completion: Pick<ProgressChecklistCompletion, "source" | "note">): ChecklistCompletionSource | undefined {
