@@ -32,6 +32,7 @@ import {
   checklistCompletionIsComplete,
   checklistCompletionSource,
   checklistCompletionDateChanged,
+  checklistLessonIdsForDateMarker,
   checklistTemplateMatchesContext,
   formatChecklistItemLine,
   formatChecklistItemTitle,
@@ -1097,9 +1098,15 @@ export function ProgressChecklistView({
                                           {dateMarkers.map((marker) => {
                                             const representative = marker.completions.at(-1);
                                             const states = Array.from(new Set(marker.completions.map(completionStateLabel)));
+                                            const associatedLessonCount = checklistLessonsForDateMarker(
+                                              marker,
+                                              selectedCourse?.id ?? "",
+                                              vault.lessons,
+                                              student.id
+                                            ).length;
                                             const markerTitle = [
                                               ...states,
-                                              marker.lessonIds.length > 0 ? `${marker.lessonIds.length} 节关联课程` : "无关联课程"
+                                              associatedLessonCount > 0 ? `${associatedLessonCount} 节关联课程` : "无关联课程"
                                             ].join(" · ");
                                             return (
                                               <button
@@ -1258,20 +1265,21 @@ function checklistLessonsForDateMarker(
   lessons: Lesson[],
   studentId: string
 ): Lesson[] {
-  if (marker.lessonIds.length > 0) {
-    const linkedIds = new Set(marker.lessonIds);
-    return lessons
-      .filter((lesson) => linkedIds.has(lesson.id) && lesson.courseGroupId === courseGroupId)
-      .sort((a, b) => `${a.date} ${a.startTime} ${a.id}`.localeCompare(`${b.date} ${b.startTime} ${b.id}`));
-  }
-
+  const lessonIds = checklistLessonIdsForDateMarker(
+    marker,
+    lessons.map((lesson) => ({
+      id: lesson.id,
+      date: lesson.date,
+      courseGroupId: lesson.courseGroupId,
+      status: lesson.status,
+      studentIds: lessonStudentIds(lesson)
+    })),
+    courseGroupId,
+    studentId
+  );
+  const linkedIds = new Set(lessonIds);
   return lessons
-    .filter((lesson) =>
-      lesson.courseGroupId === courseGroupId &&
-      lesson.date === marker.date &&
-      lesson.status !== "cancelled" &&
-      lessonStudentIds(lesson).includes(studentId)
-    )
+    .filter((lesson) => linkedIds.has(lesson.id))
     .sort((a, b) => `${a.startTime} ${a.id}`.localeCompare(`${b.startTime} ${b.id}`));
 }
 

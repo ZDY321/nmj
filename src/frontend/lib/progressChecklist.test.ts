@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChecklistDateMarkers, checklistCompletionDateChanged, checklistCompletionHomeworkStatus, checklistCompletionIsComplete, checklistTemplateGrade, checklistTemplateMatchesContext } from "@/frontend/lib/progressChecklist";
+import { buildChecklistDateMarkers, checklistCompletionDateChanged, checklistCompletionHomeworkStatus, checklistCompletionIsComplete, checklistLessonIdsForDateMarker, checklistTemplateGrade, checklistTemplateMatchesContext } from "@/frontend/lib/progressChecklist";
 import type { ProgressChecklistCompletion, ProgressChecklistTemplate } from "@/shared/types";
 
 function makeTemplate(patch: Partial<ProgressChecklistTemplate> = {}): ProgressChecklistTemplate {
@@ -99,5 +99,26 @@ describe("checklist matrix date markers", () => {
     expect(checklistCompletionDateChanged("2026-10-30", "2026-10-31")).toBe(true);
     expect(checklistCompletionDateChanged("2026-10-30", "2026-10-30")).toBe(false);
     expect(checklistCompletionDateChanged(undefined, "2026-10-31")).toBe(false);
+  });
+
+  it("only associates lessons from the selected marker date", () => {
+    const marker = { date: "2026-10-31", lessonIds: ["lesson-30", "lesson-31"] };
+    const lessons = [
+      { id: "lesson-30", date: "2026-10-30", courseGroupId: "course_1", status: "completed", studentIds: ["student_1"] },
+      { id: "lesson-31", date: "2026-10-31", courseGroupId: "course_1", status: "completed", studentIds: ["student_1"] }
+    ];
+
+    expect(checklistLessonIdsForDateMarker(marker, lessons, "course_1", "student_1")).toEqual(["lesson-31"]);
+  });
+
+  it("does not guess when multiple same-day lessons have no explicit link", () => {
+    const marker = { date: "2026-10-31", lessonIds: ["lesson-30"] };
+    const lessons = [
+      { id: "lesson-30", date: "2026-10-30", courseGroupId: "course_1", status: "completed", studentIds: ["student_1"] },
+      { id: "lesson-31-morning", date: "2026-10-31", courseGroupId: "course_1", status: "completed", studentIds: ["student_1"] },
+      { id: "lesson-31-afternoon", date: "2026-10-31", courseGroupId: "course_1", status: "completed", studentIds: ["student_1"] }
+    ];
+
+    expect(checklistLessonIdsForDateMarker(marker, lessons, "course_1", "student_1")).toEqual([]);
   });
 });

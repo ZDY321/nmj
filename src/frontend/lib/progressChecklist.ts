@@ -28,6 +28,14 @@ export type ChecklistDateMarker = {
   lessonIds: string[];
 };
 
+export type ChecklistLessonDateCandidate = {
+  id: string;
+  date: string;
+  courseGroupId: string;
+  status: string;
+  studentIds: string[];
+};
+
 export function checklistTemplateGrade(template: ProgressChecklistTemplate, gradeOptions: string[] = []): string | undefined {
   const searchable = `${template.name} ${template.note ?? ""}`.toLowerCase();
   return gradeOptions
@@ -100,6 +108,23 @@ export function buildChecklistDateMarkers(
 
 export function checklistCompletionDateChanged(existingDate: string | undefined, nextDate: string): boolean {
   return existingDate !== undefined && existingDate !== nextDate;
+}
+
+export function checklistLessonIdsForDateMarker(
+  marker: Pick<ChecklistDateMarker, "date" | "lessonIds">,
+  candidates: ChecklistLessonDateCandidate[],
+  courseGroupId: string,
+  studentId: string
+): string[] {
+  const sameDayCandidates = candidates.filter((lesson) =>
+    lesson.courseGroupId === courseGroupId &&
+    lesson.date === marker.date &&
+    lesson.status !== "cancelled" &&
+    lesson.studentIds.includes(studentId)
+  );
+  const linkedSameDayCandidates = sameDayCandidates.filter((lesson) => marker.lessonIds.includes(lesson.id));
+  if (linkedSameDayCandidates.length > 0) return linkedSameDayCandidates.map((lesson) => lesson.id);
+  return sameDayCandidates.length === 1 ? [sameDayCandidates[0].id] : [];
 }
 
 export function checklistCompletionSource(completion: Pick<ProgressChecklistCompletion, "source" | "note">): ChecklistCompletionSource | undefined {
