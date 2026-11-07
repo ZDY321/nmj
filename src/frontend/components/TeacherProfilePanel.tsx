@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Settings } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,38 +6,80 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import type { Campus, SalaryGradeId, TeacherProfile, TeacherVault } from "@/shared/types";
-import { salaryGradeRateForStage, type ObligationSummary, type SalaryGradeRule } from "@/frontend/lib/calculations";
+import { obligationSummary, salaryGradeLabel, salaryGradeRateForStage, salaryGradeRuleById, salaryGradeRulesForVault, todayIso } from "@/frontend/lib/calculations";
 import { formatPrivateMoney } from "@/frontend/lib/helpers";
 
 type TeacherProfilePanelProps = {
   amountsVisible: boolean;
   campusOptions: Campus[];
-  isManualObligationMode: boolean;
-  obligation: ObligationSummary;
-  obligationMode: TeacherProfile["obligationDeductionMode"];
-  onUpdateDefaultSalaryGrade: (salaryGradeId: string) => void;
-  onUpdateHomeCampus: (campusId: string) => void;
-  onUpdateObligationCampus: (campusId: string) => void;
-  onUpdateProfile: (patch: Partial<TeacherProfile>) => void;
-  renderSalaryGradeOptions: (currentId?: SalaryGradeId) => ReactNode;
-  selectedProfileSalaryGrade: SalaryGradeRule | undefined;
+  onUpdateProfile: (profile: TeacherProfile) => void;
   vault: TeacherVault;
 };
 
-export function TeacherProfilePanel({
-  amountsVisible,
-  campusOptions,
-  isManualObligationMode,
-  obligation,
-  obligationMode,
-  onUpdateDefaultSalaryGrade,
-  onUpdateHomeCampus,
-  onUpdateObligationCampus,
-  onUpdateProfile,
-  renderSalaryGradeOptions,
-  selectedProfileSalaryGrade,
-  vault
-}: TeacherProfilePanelProps) {
+export function TeacherProfilePanel({ amountsVisible, campusOptions, onUpdateProfile, vault }: TeacherProfilePanelProps) {
+  const salaryGradeOptions = salaryGradeRulesForVault(vault);
+  const selectedProfileSalaryGrade = salaryGradeRuleById(vault.profile.defaultSalaryGradeId, vault);
+  const obligationCampusId = vault.profile.obligationCampusId ?? vault.profile.homeCampusId ?? "";
+  const obligationMode = vault.profile.obligationDeductionMode ?? "auto_gap";
+  const isManualObligationMode = obligationMode === "manual";
+  const obligationMonth = todayIso().slice(0, 7);
+  const obligation = useMemo(
+    () => obligationSummary(vault, obligationMonth, obligationCampusId || undefined),
+    [vault, obligationMonth, obligationCampusId]
+  );
+
+  function updateDefaultSalaryGrade(salaryGradeId: string) {
+    if (!salaryGradeId) {
+      updateProfile({ defaultSalaryGradeId: undefined });
+      return;
+    }
+    const rule = salaryGradeRuleById(salaryGradeId as SalaryGradeId, vault);
+    if (!rule) return;
+    updateProfile({
+      defaultSalaryGradeId: rule.id,
+      baseSalary: rule.baseSalary
+    });
+  }
+
+  function salaryGradeSelectOptions(currentId?: SalaryGradeId): ReactNode {
+    const currentRule = currentId ? salaryGradeRuleById(currentId, vault) : undefined;
+    const includeCurrentRule = currentRule && !salaryGradeOptions.some((rule) => rule.id === currentRule.id);
+    return (
+      <>
+        {includeCurrentRule && (
+          <option value={currentRule.id}>旧规则：{salaryGradeLabel(currentRule)}（建议切换）</option>
+        )}
+        {salaryGradeOptions.map((rule) => (
+          <option key={rule.id} value={rule.id}>{salaryGradeLabel(rule)}</option>
+        ))}
+      </>
+    );
+  }
+
+  function updateProfile(patch: Partial<TeacherProfile>) {
+    onUpdateProfile({
+      ...vault.profile,
+      ...patch
+    });
+  }
+
+  function updateHomeCampus(campusId: string) {
+    const nextCampusId = campusId || undefined;
+    onUpdateProfile({
+      ...vault.profile,
+      homeCampusId: nextCampusId,
+      obligationCampusId: vault.profile.obligationCampusId
+    });
+  }
+
+  function updateObligationCampus(campusId: string) {
+    const nextCampusId = campusId || undefined;
+    onUpdateProfile({
+      ...vault.profile,
+      obligationCampusId: nextCampusId
+    });
+  }
+
   return (
     <Card data-onboarding="teacher-profile" className="overflow-hidden">
       <CardHeader>
@@ -51,11 +93,11 @@ export function TeacherProfilePanel({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="space-y-2">
             <label className="text-sm font-medium">显示姓名</label>
-            <Input value={vault.profile.displayName} onChange={(event) => onUpdateProfile({ displayName: event.target.value })} />
+            <Input value={vault.profile.displayName} onChange={(event) => updateProfile({ displayName: event.target.value })} />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">所在校区</label>
-            <Select value={vault.profile.homeCampusId ?? ""} onChange={(event) => onUpdateHomeCampus(event.target.value)}>
+            <Select value={vault.profile.homeCampusId ?? ""} onChange={(event) => updateHomeCampus(event.target.value)}>
               <option value="">未设置</option>
               {campusOptions.map((campus) => (
                 <option key={campus.id} value={campus.id}>{campus.name}</option>
@@ -64,7 +106,7 @@ export function TeacherProfilePanel({
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">义务课时本校区</label>
-            <Select value={vault.profile.obligationCampusId ?? ""} onChange={(event) => onUpdateObligationCampus(event.target.value)}>
+            <Select value={vault.profile.obligationCampusId ?? ""} onChange={(event) => updateObligationCampus(event.target.value)}>
               <option value="">跟随所在校区</option>
               {campusOptions.map((campus) => (
                 <option key={campus.id} value={campus.id}>{campus.name}</option>
@@ -75,7 +117,7 @@ export function TeacherProfilePanel({
             <label className="text-sm font-medium">扣义务课时方式</label>
             <Select
               value={obligationMode}
-              onChange={(event) => onUpdateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
+              onChange={(event) => updateProfile({ obligationDeductionMode: event.target.value as TeacherProfile["obligationDeductionMode"] })}
             >
               <option value="auto_gap">按单节总课时费从低到高自动抵扣，不足不补扣</option>
               <option value="manual">手动填写扣除金额</option>
@@ -87,7 +129,7 @@ export function TeacherProfilePanel({
               type="number"
               min={0}
               value={vault.profile.monthlyObligationHours ?? 0}
-              onChange={(event) => onUpdateProfile({ monthlyObligationHours: Math.max(Number(event.target.value), 0) })}
+              onChange={(event) => updateProfile({ monthlyObligationHours: Math.max(Number(event.target.value), 0) })}
               disabled={isManualObligationMode}
             />
           </div>
@@ -98,7 +140,7 @@ export function TeacherProfilePanel({
                 type="number"
                 min={0}
                 value={vault.profile.obligationHourlyDeduction ?? 0}
-                onChange={(event) => onUpdateProfile({ obligationHourlyDeduction: Math.max(Number(event.target.value), 0) })}
+                onChange={(event) => updateProfile({ obligationHourlyDeduction: Math.max(Number(event.target.value), 0) })}
                 disabled={isManualObligationMode}
               />
             </SensitiveAmountField>
@@ -110,16 +152,16 @@ export function TeacherProfilePanel({
                 type="number"
                 min={0}
                 value={vault.profile.manualObligationDeduction ?? 0}
-                onChange={(event) => onUpdateProfile({ manualObligationDeduction: Math.max(Number(event.target.value), 0) })}
+                onChange={(event) => updateProfile({ manualObligationDeduction: Math.max(Number(event.target.value), 0) })}
                 disabled={!isManualObligationMode}
               />
             </SensitiveAmountField>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">默认课时费等级</label>
-            <Select value={vault.profile.defaultSalaryGradeId ?? ""} onChange={(event) => onUpdateDefaultSalaryGrade(event.target.value)}>
+            <Select value={vault.profile.defaultSalaryGradeId ?? ""} onChange={(event) => updateDefaultSalaryGrade(event.target.value)}>
               <option value="">未设置</option>
-              {renderSalaryGradeOptions(vault.profile.defaultSalaryGradeId)}
+              {salaryGradeSelectOptions(vault.profile.defaultSalaryGradeId)}
             </Select>
           </div>
           <div className="space-y-2">
@@ -133,7 +175,7 @@ export function TeacherProfilePanel({
                   value={vault.profile.baseSalary}
                   onChange={(event) => {
                     const value = Number(event.target.value);
-                    onUpdateProfile({ baseSalary: Number.isFinite(value) ? Math.max(value, 0) : 0 });
+                    updateProfile({ baseSalary: Number.isFinite(value) ? Math.max(value, 0) : 0 });
                   }}
                   className="pl-10"
                 />
@@ -155,7 +197,7 @@ export function TeacherProfilePanel({
             <label className="text-sm font-medium">个人备注</label>
             <Textarea
               value={vault.profile.note ?? ""}
-              onChange={(event) => onUpdateProfile({ note: event.target.value })}
+              onChange={(event) => updateProfile({ note: event.target.value })}
               placeholder="例如：主要负责中心校区，高中数学方向"
               className="min-h-[76px]"
             />

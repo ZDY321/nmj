@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { Campus, CourseGroup, CourseType, TeacherVault } from "@/shared/types";
-import { campusName, courseHasActiveStudent, courseTypeLabel, studentNames } from "@/frontend/lib/helpers";
+import { campusName, courseTypeLabel, studentNames } from "@/frontend/lib/helpers";
 
 type ConfirmRequest = {
   title: string;
@@ -32,6 +32,7 @@ type CourseArchiveListPanelProps = {
   courseFeeSummary: (course: CourseGroup) => string;
   courseGradeFilter: string;
   courseInUse: (courseId: string) => boolean;
+  courseHasActiveStudent: (course: CourseGroup) => boolean;
   courseSearch: string;
   courseStatusFilter: "active" | "paused" | "all";
   courseSubjectFilter: string;
@@ -66,6 +67,7 @@ export function CourseArchiveListPanel({
   courseFeeSummary,
   courseGradeFilter,
   courseInUse,
+  courseHasActiveStudent,
   courseSearch,
   courseStatusFilter,
   courseSubjectFilter,
@@ -90,7 +92,8 @@ export function CourseArchiveListPanel({
   vault,
   visibleCourses
 }: CourseArchiveListPanelProps) {
-  const selectedVisibleCount = visibleCourses.filter((course) => selectedCourseIds.includes(course.id)).length;
+  const selectedCourseIdSet = new Set(selectedCourseIds);
+  const selectedVisibleCount = visibleCourses.filter((course) => selectedCourseIdSet.has(course.id)).length;
   const allVisibleSelected = visibleCourses.length > 0 && selectedVisibleCount === visibleCourses.length;
 
   return (
@@ -207,8 +210,8 @@ export function CourseArchiveListPanel({
         <div className="max-h-[520px] space-y-0 overflow-y-auto pr-0 sm:pr-2">
           {visibleCourses.map((course) => {
             const used = courseInUse(course.id);
-            const effectivelyPaused = course.status === "paused" || !courseHasActiveStudent(vault, course);
-            const selected = selectedCourseIds.includes(course.id);
+            const effectivelyPaused = course.status === "paused" || !courseHasActiveStudent(course);
+            const selected = selectedCourseIdSet.has(course.id);
             return (
               <motion.div
                 key={course.id}

@@ -29,7 +29,6 @@ import {
   courseSubject,
   courseTypeLabel,
   formatPrivateMoney,
-  lessonDisplayName,
   lessonDisplaySubject,
   lessonStatusLabels,
   lessonTimeRangeLabel,

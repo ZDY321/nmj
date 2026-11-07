@@ -160,7 +160,7 @@ export function LoginScreen({
                 管理课时、排课和工资统计
               </h1>
               <div className="mt-8 space-y-4">
-                {privacyNoticeLines.map((line, i) => (
+                {privacyNoticeLines.map((line) => (
                   <div key={line} className="flex gap-3 text-sm leading-relaxed text-white/76">
                     <ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#ff911f]" />
                     <span>{line}</span>

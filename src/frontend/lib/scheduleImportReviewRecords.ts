@@ -66,7 +66,7 @@ export function savedReviewRowsAsPreview(rows: ScheduleImportReviewRecord["rows"
 export function savedReviewResolutionMap(review: ScheduleImportReviewRecord): ScheduleImportResolutionMap {
   const embeddedResolutions = Object.fromEntries(review.rows.flatMap((row) => {
     if (!row.resolutionStatus && !row.resolutionNote?.trim() && !row.linkedSystemLessonIds?.length) return [];
-    return [[savedReviewRowResolutionKey(row), {
+    return [[resolutionKey(row), {
       status: row.resolutionStatus ?? "unreviewed",
       note: row.resolutionNote,
       linkedSystemLessonIds: row.linkedSystemLessonIds,
@@ -78,18 +78,6 @@ export function savedReviewResolutionMap(review: ScheduleImportReviewRecord): Sc
     ...embeddedResolutions,
     ...(review.resolutions ?? {})
   };
-}
-
-function savedReviewRowResolutionKey(row: ScheduleImportReviewRecord["rows"][number]): string {
-  return [
-    row.systemLessonId || row.id,
-    row.fileName,
-    row.date,
-    row.startTime,
-    row.endTime,
-    row.matchedCourseId ?? "",
-    row.title
-  ].join("|");
 }
 
 export function buildNextScheduleImportState(

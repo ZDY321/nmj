@@ -31,7 +31,6 @@ type ScheduleRecordsListCardProps = {
   dayNote: string;
   effectiveLessonDay: string;
   effectiveLessonScope: LessonScope;
-  lessonDay: string;
   lessonMonth: string;
   lessonRangeEnd: string;
   lessonRangeStart: string;
@@ -70,7 +69,6 @@ export function ScheduleRecordsListCard({
   dayNote,
   effectiveLessonDay,
   effectiveLessonScope,
-  lessonDay,
   lessonMonth,
   lessonRangeEnd,
   lessonRangeStart,

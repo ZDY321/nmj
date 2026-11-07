@@ -1,20 +1,20 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { ClassFeeTierFields } from "@/frontend/components/ClassFeeTierFields";
+import { classHeadcountFeeDescription, courseBillingHint, missingSalaryGradeDescription, salaryGradeFeeDescription } from "@/frontend/lib/courseFeePresentation";
+import type { Dispatch, SetStateAction } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Save, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
-import type { Campus, ClassFeeTier, CourseGroup, CourseType, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
-import { billableStudentCapForRule, calculateClassHeadcountFee, courseUsesStandardBillingHours, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
-import { courseRequiresSameGradeStudents, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
+import type { Campus, ClassFeeTier, CourseGroup, CourseType, Student, TeacherVault } from "@/shared/types";
+import { billableStudentCapForRule, feeRuleForCourseType, fixedFeeForRule } from "@/frontend/lib/calculations";
+import { courseRequiresSameGradeStudents, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
   value: CourseType;
   label: string;
 };
-
-type CourseFeeMode = "salary_default" | "salary_specific" | "custom";
 
 type CourseEditDialogProps = {
   amountsVisible: boolean;
@@ -27,21 +27,17 @@ type CourseEditDialogProps = {
   editingCourseStudentOptions: Student[];
   editingCourseTypeOptions: CourseTypeOption[];
   courseFeeSummary: (course: CourseGroup) => string;
-  feeModeValue: (rule: CourseGroup["feeRule"]) => CourseFeeMode;
   firstCourseStudentGrade: (studentIds: string[]) => string | undefined;
   gradeFilterOptions: string[];
   hasUnsetGradeFilterOption: boolean;
   onCancel: () => void;
   onChangeCourseType: (type: CourseType) => void;
-  onChangeFeeMode: (mode: CourseFeeMode) => void;
-  onChangeSalaryGrade: (salaryGradeId: string) => void;
   onSave: () => void;
   onToggleCourseStudent: (studentId: string) => void;
   onUpdateClassFeeTier: (tierId: string, patch: Partial<ClassFeeTier>) => void;
   onUpdateCourse: (patch: Partial<CourseGroup>) => void;
   onUpdateCourseFee: (patch: Partial<CourseGroup["feeRule"]>) => void;
   onUpdateTrialFixedFee: (fixedFee: number) => void;
-  renderSalaryGradeOptions: (currentId?: SalaryGradeId) => ReactNode;
   setCourseStudentCampusFilter: Dispatch<SetStateAction<string>>;
   setCourseStudentGradeFilter: Dispatch<SetStateAction<string>>;
   setCourseStudentScope: Dispatch<SetStateAction<"all" | "selected" | "available">>;
@@ -62,21 +58,17 @@ export function CourseEditDialog({
   editingCourseStudentOptions,
   editingCourseTypeOptions,
   courseFeeSummary,
-  feeModeValue,
   firstCourseStudentGrade,
   gradeFilterOptions,
   hasUnsetGradeFilterOption,
   onCancel,
   onChangeCourseType,
-  onChangeFeeMode,
-  onChangeSalaryGrade,
   onSave,
   onToggleCourseStudent,
   onUpdateClassFeeTier,
   onUpdateCourse,
   onUpdateCourseFee,
   onUpdateTrialFixedFee,
-  renderSalaryGradeOptions,
   setCourseStudentCampusFilter,
   setCourseStudentGradeFilter,
   setCourseStudentScope,
@@ -85,6 +77,8 @@ export function CourseEditDialog({
   supportsSalaryGradeFee,
   vault
 }: CourseEditDialogProps) {
+  const salaryGradeDescription = editingCourse?.feeRule.mode === "salary_grade"
+    ? salaryGradeFeeDescription(vault, editingCourse.feeRule, editingCourse.studentIds, amountsVisible) : undefined;
   const requiresSameGradeStudents = editingCourse ? courseRequiresSameGradeStudents(vault, editingCourse.type, editingCourse.feeRule) : false;
   const selectedCourseStudentGrade = editingCourse && requiresSameGradeStudents ? firstCourseStudentGrade(editingCourse.studentIds) : undefined;
   const selectedCourseStudentGradeLabel = selectedCourseStudentGrade || "未设置年级";
@@ -167,7 +161,7 @@ export function CourseEditDialog({
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">课时费规则</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                      常规课程默认跟随教师档案里的课时费等级；保存后只会同步未来待上课课节，已完成课时保留原金额快照。{courseBillingHint(vault, editingCourse)}
+                      常规课程默认跟随教师档案里的课时费等级；保存后只会同步未来待上课课节，已完成课时保留原金额快照。{courseBillingHint(editingCourse.type)}
                     </div>
                   </div>
                   {editingCourse.feeRule.mode === "salary_grade" && (
@@ -175,15 +169,7 @@ export function CourseEditDialog({
                       <div className="whitespace-pre-line rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
                         {courseFeeSummary(editingCourse)}
                       </div>
-                      {resolveSalaryGradeRule(vault, editingCourse.feeRule)
-                        ? (() => {
-                            const rule = resolveSalaryGradeRule(vault, editingCourse.feeRule);
-                            if (!rule) return "";
-                            const stage = salaryGradeStageForStudentIds(vault, editingCourse.studentIds);
-                            const rate = salaryGradeRateForStage(rule, stage);
-                            return <div>{`跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。`}</div>
-                          })()
-                        : "还没有设置老师默认课时费等级，请先在老师个人信息里设置。"}
+                      {salaryGradeDescription ? <div>{salaryGradeDescription}</div> : missingSalaryGradeDescription}
                     </div>
                   )}
                 </div>
@@ -194,50 +180,19 @@ export function CourseEditDialog({
                   <div>
                     <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                     <div className="mt-1 text-xs font-semibold text-[#64748b]">
-                      当前关联 {editingCourse.studentIds.length} 人，{salaryGradeStageForStudentIds(vault, editingCourse.studentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, editingCourse.studentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(editingCourse.feeRule, editingCourse.studentIds.length, editingCourse.type, salaryGradeStageForStudentIds(vault, editingCourse.studentIds)), amountsVisible)}，{courseBillingHint(vault, editingCourse)}
+                      {classHeadcountFeeDescription(vault, editingCourse.type, editingCourse.feeRule, editingCourse.studentIds, amountsVisible)}
                     </div>
                   </div>
                   <div className="whitespace-pre-line rounded-[12px] border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-extrabold text-[#15803d]">
                     {courseFeeSummary(editingCourse)}
                   </div>
-                  {normalizedClassFeeTiers(editingCourse.feeRule).slice(0, 1).map((tier) => (
-                    <div key={tier.id} className="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white p-2 sm:grid-cols-3">
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={tier.minStudents}
-                          onChange={(event) => onUpdateClassFeeTier(tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
-                          className="h-9"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">基础费用</label>
-                        <SensitiveAmountField visible={amountsVisible} className="h-9">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={tier.baseFee}
-                            onChange={(event) => onUpdateClassFeeTier(tier.id, { baseFee: Math.max(Number(event.target.value), 0) })}
-                            className="h-9"
-                          />
-                        </SensitiveAmountField>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-[#64748b]">每增加一人</label>
-                        <SensitiveAmountField visible={amountsVisible} className="h-9">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={tier.perStudentFee ?? 0}
-                            onChange={(event) => onUpdateClassFeeTier(tier.id, { perStudentFee: Math.max(Number(event.target.value), 0) })}
-                            className="h-9"
-                          />
-                        </SensitiveAmountField>
-                      </div>
-                    </div>
-                  ))}
+                  <ClassFeeTierFields
+                    feeRule={editingCourse.feeRule}
+                    amountsVisible={amountsVisible}
+                    onChange={onUpdateClassFeeTier}
+                    rowClassName="grid grid-cols-1 gap-2 rounded-[12px] border border-[#e8eef6] bg-white p-2 sm:grid-cols-3"
+                    inputClassName="h-9"
+                  />
                 </div>
               ) : editingCourse.type === "trial" ? (
                 <div className="space-y-1">
@@ -427,12 +382,5 @@ export function CourseEditDialog({
       )}
     </AnimatePresence>
   );
-}
-
-function courseBillingHint(vault: TeacherVault, course: CourseGroup): string {
-  if (course.type === "trial") return "试听按单次固定金额计费。";
-  return courseUsesStandardBillingHours(course)
-    ? "按标准课时统计；例：10:10-12:00 实际 110 分钟，默认计费 2 小时，可在课节详情手动改为 1 小时等拆课课时。"
-    : "按实际上课时长折算。";
 }
 

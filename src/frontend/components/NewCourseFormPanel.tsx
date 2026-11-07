@@ -1,21 +1,20 @@
-import type { Dispatch, FormEvent, ReactNode, SetStateAction } from "react";
+import { ClassFeeTierFields } from "@/frontend/components/ClassFeeTierFields";
+import { classHeadcountFeeDescription, courseBillingHint, missingSalaryGradeDescription, salaryGradeFeeDescription } from "@/frontend/lib/courseFeePresentation";
+import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { CalendarDays, GraduationCap, Plus, Search, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
-import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, SalaryGradeId, Student, TeacherVault } from "@/shared/types";
-import { billableStudentCapForRule, calculateClassHeadcountFee, courseTypeUsesStandardBillingHours, defaultSalaryGradeRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, resolveSalaryGradeRule, salaryGradeLabel, salaryGradeRateForStage, salaryGradeStageForStudentIds, salaryGradeStageLabels } from "@/frontend/lib/calculations";
-import { campusName, courseRequiresSameGradeStudents, formatPrivateMoney, studentLimitForCourseType } from "@/frontend/lib/helpers";
+import type { Campus, ClassFeeTier, CourseGroup, CourseType, FeeRule, Student, TeacherVault } from "@/shared/types";
+import { billableStudentCapForRule, feeRuleForCourseType, fixedFeeForRule } from "@/frontend/lib/calculations";
+import { campusName, courseRequiresSameGradeStudents, studentLimitForCourseType } from "@/frontend/lib/helpers";
 
 type CourseTypeOption = {
   value: CourseType;
   label: string;
 };
-
-type CourseFeeMode = "salary_default" | "salary_specific" | "custom";
 
 type NewCourseFormPanelProps = {
   activeStudentCount: number;
@@ -31,7 +30,6 @@ type NewCourseFormPanelProps = {
   courseSubjectInput: string;
   courseType: CourseType;
   courseTypeOptions: CourseTypeOption[];
-  feeModeValue: (rule: FeeRule) => CourseFeeMode;
   firstCourseStudentGrade: (studentIds: string[]) => string | undefined;
   newCourseStudentSearch: string;
   newCourseStudentGradeFilter: string;
@@ -39,8 +37,6 @@ type NewCourseFormPanelProps = {
   gradeFilterOptions: string[];
   hasUnsetGradeFilterOption: boolean;
   onChangeCourseCampus: (campusId: string) => void;
-  onChangeCourseFeeMode: (mode: CourseFeeMode) => void;
-  onChangeCourseSalaryGrade: (salaryGradeId: string) => void;
   onChangeCourseType: (courseType: CourseType) => void;
   onOpenSchedule: () => void;
   onSubmit: (event: FormEvent) => void;
@@ -48,7 +44,6 @@ type NewCourseFormPanelProps = {
   onUpdateClassFeeTier: (tierId: string, patch: Partial<ClassFeeTier>) => void;
   onUpdateCourseFee: (patch: Partial<FeeRule>) => void;
   onUpdateTrialFixedFee: (fixedFee: number) => void;
-  renderSalaryGradeOptions: (currentId?: SalaryGradeId) => ReactNode;
   setCourseNameEdited: Dispatch<SetStateAction<boolean>>;
   setCourseNameInput: Dispatch<SetStateAction<string>>;
   setCourseStatusInput: Dispatch<SetStateAction<CourseGroup["status"]>>;
@@ -76,7 +71,6 @@ export function NewCourseFormPanel({
   courseSubjectInput,
   courseType,
   courseTypeOptions,
-  feeModeValue,
   firstCourseStudentGrade,
   newCourseStudentSearch,
   newCourseStudentGradeFilter,
@@ -84,8 +78,6 @@ export function NewCourseFormPanel({
   gradeFilterOptions,
   hasUnsetGradeFilterOption,
   onChangeCourseCampus,
-  onChangeCourseFeeMode,
-  onChangeCourseSalaryGrade,
   onChangeCourseType,
   onOpenSchedule,
   onSubmit,
@@ -93,7 +85,6 @@ export function NewCourseFormPanel({
   onUpdateClassFeeTier,
   onUpdateCourseFee,
   onUpdateTrialFixedFee,
-  renderSalaryGradeOptions,
   setCourseNameEdited,
   setCourseNameInput,
   setCourseStatusInput,
@@ -106,12 +97,8 @@ export function NewCourseFormPanel({
   supportsSalaryGradeFee,
   vault
 }: NewCourseFormPanelProps) {
-  const usesStandardBilling = courseTypeUsesStandardBillingHours(courseType);
-  const classBillingHint = courseType === "trial"
-    ? "试听按单次固定金额计费。"
-    : usesStandardBilling
-      ? "按标准课时统计；例：10:10-12:00 实际 110 分钟，默认计费 2 小时，可在课节详情手动改为 1 小时等拆课课时。"
-      : "按实际上课时长折算。";
+  const classBillingHint = courseBillingHint(courseType);
+  const salaryGradeDescription = courseFeeRule.mode === "salary_grade" ? salaryGradeFeeDescription(vault, courseFeeRule, courseStudentIds, amountsVisible) : undefined;
   const requiresSameGradeStudents = courseRequiresSameGradeStudents(vault, courseType, courseFeeRule);
   const billableStudentCap = billableStudentCapForRule(courseType, feeRuleForCourseType(vault, courseType));
   const overflowStudentCount = billableStudentCap === undefined ? 0 : Math.max(courseStudentIds.length - billableStudentCap, 0);
@@ -189,15 +176,9 @@ export function NewCourseFormPanel({
               </div>
               {courseFeeRule.mode === "salary_grade" && (
                 <div className="rounded-[12px] border border-[#e8eef6] bg-[#f8fbff] px-3 py-2 text-xs font-bold leading-5 text-[#475569]">
-                  {resolveSalaryGradeRule(vault, courseFeeRule)
-                    ? (() => {
-                        const rule = resolveSalaryGradeRule(vault, courseFeeRule);
-                        if (!rule) return "";
-                        const stage = salaryGradeStageForStudentIds(vault, courseStudentIds);
-                        const rate = salaryGradeRateForStage(rule, stage);
-                        return `跟随默认等级：${salaryGradeLabel(rule)} · ${stage ? salaryGradeStageLabels[stage] : "未识别年级，按初三"}：底薪 ${formatPrivateMoney(rule.baseSalary, amountsVisible)}，一对一 ${formatPrivateMoney(rate.oneOnOneFee, amountsVisible)}，班课底费 ${formatPrivateMoney(rate.classBaseFee, amountsVisible)}，人头加价 ${formatPrivateMoney(rate.headcountIncrementFee, amountsVisible)}。${billableStudentCap !== undefined ? `计费人数上限 ${billableStudentCap} 人。` : ""}`
-                      })()
-                    : "还没有设置老师默认课时费等级，请先在老师个人信息里设置。"}
+                  {salaryGradeDescription
+                    ? salaryGradeDescription + (billableStudentCap !== undefined ? `计费人数上限 ${billableStudentCap} 人。` : "")
+                    : missingSalaryGradeDescription}
                 </div>
               )}
             </div>
@@ -208,47 +189,16 @@ export function NewCourseFormPanel({
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm font-extrabold text-[#061226]">人数计费模板</div>
                 <div className="text-xs font-semibold text-[#64748b]">
-                  当前关联 {courseStudentIds.length} 人，{salaryGradeStageForStudentIds(vault, courseStudentIds) ? salaryGradeStageLabels[salaryGradeStageForStudentIds(vault, courseStudentIds)!] : "未识别年级，按初三"} 2小时标准课预计 {formatPrivateMoney(calculateClassHeadcountFee(courseFeeRule, courseStudentIds.length, courseType, salaryGradeStageForStudentIds(vault, courseStudentIds)), amountsVisible)}，{classBillingHint}
+                  {classHeadcountFeeDescription(vault, courseType, courseFeeRule, courseStudentIds, amountsVisible)}
                 </div>
               </div>
-              {normalizedClassFeeTiers(courseFeeRule).slice(0, 1).map((tier) => (
-                <div key={tier.id} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#64748b]">最少人数</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={tier.minStudents}
-                      onChange={(event) => onUpdateClassFeeTier(tier.id, { minStudents: Math.max(Number(event.target.value), 0) })}
-                      className="h-9 bg-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#64748b]">基础费用</label>
-                    <SensitiveAmountField visible={amountsVisible} className="h-9">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={tier.baseFee}
-                        onChange={(event) => onUpdateClassFeeTier(tier.id, { baseFee: Math.max(Number(event.target.value), 0) })}
-                        className="h-9 bg-white"
-                      />
-                    </SensitiveAmountField>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-[#64748b]">每增加一人</label>
-                    <SensitiveAmountField visible={amountsVisible} className="h-9">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={tier.perStudentFee ?? 0}
-                        onChange={(event) => onUpdateClassFeeTier(tier.id, { perStudentFee: Math.max(Number(event.target.value), 0) })}
-                        className="h-9 bg-white"
-                      />
-                    </SensitiveAmountField>
-                  </div>
-                </div>
-              ))}
+              <ClassFeeTierFields
+                feeRule={courseFeeRule}
+                amountsVisible={amountsVisible}
+                onChange={onUpdateClassFeeTier}
+                rowClassName="grid grid-cols-1 gap-2 sm:grid-cols-3"
+                inputClassName="h-9 bg-white"
+              />
             </div>
           ) : courseType === "trial" ? (
             <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[#dbe4ef] bg-white p-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-end">

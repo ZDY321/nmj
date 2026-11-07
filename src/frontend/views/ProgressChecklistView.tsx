@@ -117,7 +117,6 @@ export function ProgressChecklistView({
   const [aiProviderId, setAiProviderId] = useState("");
   const [aiPrompt, setAiPrompt] = useState("请按教材、真题、专题或题型要求生成一套可逐项勾选的学习清单模板，适合学生按完成日期记录。");
   const [aiMessage, setAiMessage] = useState("");
-  const [syncMessage, setSyncMessage] = useState("");
   const [promptCopyMessage, setPromptCopyMessage] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const { confirm, dialog } = useConfirmDialog();
@@ -241,7 +240,6 @@ export function ProgressChecklistView({
       setSelectedCompletionId(matchingCompletion?.id ?? NEW_COMPLETION_ID);
     }
     setTemplatePanelOpen(false);
-    setSyncMessage("");
   }, [focusRequest?.nonce]);
 
   const draftTemplateItems = useMemo(
@@ -386,7 +384,6 @@ export function ProgressChecklistView({
     setSelectedCellDate(todayIso());
     setCompletionNote("");
     setAiMessage("");
-    setSyncMessage("");
   }
 
   function saveTemplate() {
@@ -966,7 +963,7 @@ export function ProgressChecklistView({
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
                 <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-bold text-[#25324a]">选择课程</label>
-                  <Select value={selectedCourseId} onChange={(event) => { setSelectedCourseId(event.target.value); setSelectedDateDetail(null); setSyncMessage(""); }}>
+                  <Select value={selectedCourseId} onChange={(event) => { setSelectedCourseId(event.target.value); setSelectedDateDetail(null); }}>
                     <option value="">请选择课程</option>
                     {courseOptions.map((course) => (
                       <option key={course.id} value={course.id}>{course.name} · {course.subject}</option>

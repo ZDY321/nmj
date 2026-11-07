@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { Campus, CourseType, Student, TeacherVault } from "@/shared/types";
 import { campusName } from "@/frontend/lib/helpers";
+import type { StudentStatusFilter } from "@/frontend/hooks/useStudentFilters";
 
 type ConfirmRequest = {
   title: string;
@@ -24,8 +25,6 @@ type CourseTypeOption = {
   label: string;
 };
 
-type StudentStatusFilter = "active" | "transition" | "archived" | "all";
-
 type StudentArchivePanelProps = {
   archiveRowClass: (panel: "students", id: string) => string;
   archiveSearch: string;
@@ -34,7 +33,6 @@ type StudentArchivePanelProps = {
   campusOptions: Campus[];
   confirm: (request: ConfirmRequest) => void;
   courseTypeOptions: CourseTypeOption[];
-  customGradeInput: string;
   gradeFilter: string;
   gradeFilterOptions: string[];
   gradeOptions: string[];
@@ -54,7 +52,6 @@ type StudentArchivePanelProps = {
   selectedStudentIds: string[];
   setArchiveSearch: Dispatch<SetStateAction<string>>;
   setBatchStudentText: Dispatch<SetStateAction<string>>;
-  setCustomGradeInput: Dispatch<SetStateAction<string>>;
   setGradeFilter: Dispatch<SetStateAction<string>>;
   setStudentCampusFilter: Dispatch<SetStateAction<string>>;
   setStudentCampusInput: Dispatch<SetStateAction<string>>;
@@ -92,7 +89,6 @@ export function StudentArchivePanel({
   campusOptions,
   confirm,
   courseTypeOptions,
-  customGradeInput,
   gradeFilter,
   gradeFilterOptions,
   gradeOptions,
@@ -112,7 +108,6 @@ export function StudentArchivePanel({
   selectedStudentIds,
   setArchiveSearch,
   setBatchStudentText,
-  setCustomGradeInput,
   setGradeFilter,
   setStudentCampusFilter,
   setStudentCampusInput,

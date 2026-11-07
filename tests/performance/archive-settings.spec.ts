@@ -1,0 +1,247 @@
+import { expect, test, type Page } from "@playwright/test";
+import { createBenchmarkVault } from "./fixtures";
+import { openSyntheticWorkspace } from "./session";
+
+function settingsVault() {
+  const vault = createBenchmarkVault({ students: 12, courses: 1, lessons: 3 });
+  vault.profile.homeCampusId = "campus_a";
+  vault.preferences = { ...vault.preferences!, grades: ["初一", "初二", "初三"], subjects: ["语文", "数学"] };
+  return vault;
+}
+function settingsCard(page: Page, title: string) {
+  return page.locator('div[class~="rounded-[18px]"]').filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+}
+function settingsRow(page: Page, title: string, value: string) {
+  return settingsCard(page, title).locator('div[class~="p-3"]').filter({ has: page.locator("span").getByText(value, { exact: true }) });
+}
+async function openSettings(page: Page) {
+  await page.getByRole("button", { name: "档案信息", exact: true }).click();
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+}
+async function expandCard(page: Page, title: string) {
+  await settingsCard(page, title).getByRole("button", { expanded: false }).click();
+}
+
+test("campus settings preserve normalization, drafts, cancellation, deletion guards and form fallback", async ({ page, context }) => {
+  const vault = settingsVault();
+  vault.campuses.push({ id: "campus_history", name: "历史课时校区" }, { id: "campus_course", name: "课程引用校区" });
+  vault.lessons[0].campusId = "campus_history";
+  vault.courseGroups[0].defaultCampusId = "campus_course";
+  const session = await openSyntheticWorkspace(page, context, vault);
+  await openSettings(page);
+  await expandCard(page, "校区与班型");
+  const card = settingsCard(page, "校区与班型");
+  for (const name of ["测试东校区", "测试西校区", "历史课时校区", "课程引用校区"]) {
+    await expect(card.getByRole("button", { name: "删除校区 " + name, exact: true })).toBeDisabled();
+  }
+  const name = card.getByPlaceholder("校区名称，例如：中心校区", { exact: true });
+  await name.fill("   ");
+  await card.getByRole("button", { name: "添加校区", exact: true }).click();
+  expect(session.saveCount).toBe(0);
+  await name.fill("  回归校区  ");
+  await card.getByPlaceholder("地址，例如：人民路 88 号", { exact: true }).fill("  新地址  ");
+  await card.getByPlaceholder("备注，可选", { exact: true }).fill("  新备注  ");
+  await card.getByRole("button", { expanded: true }).click();
+  await expandCard(page, "校区与班型");
+  await expect(name).toHaveValue("  回归校区  ");
+  await page.getByRole("button", { name: "学生列表", exact: true }).click();
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+  await expect(card.getByRole("button", { expanded: false })).toBeVisible();
+  await expandCard(page, "校区与班型");
+  await expect(name).toHaveValue("  回归校区  ");
+  await card.getByRole("button", { name: "添加校区", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).campuses.length).toBe(5);
+  const created = (await session.readSavedVault()).campuses.find(campus => campus.name === "回归校区")!;
+  expect(created).toMatchObject({ address: "新地址", note: "新备注" });
+  for (const placeholder of ["校区名称，例如：中心校区", "地址，例如：人民路 88 号", "备注，可选"]) {
+    await expect(card.getByPlaceholder(placeholder, { exact: true })).toHaveValue("");
+  }
+  await card.getByRole("button", { name: "编辑校区 回归校区", exact: true }).click();
+  await card.getByPlaceholder("校区名称", { exact: true }).fill("   ");
+  const beforeCancel = session.saveCount;
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(card.getByPlaceholder("校区名称", { exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "取消", exact: true }).click();
+  expect(session.saveCount).toBe(beforeCancel);
+  expect((await session.readSavedVault()).campuses.find(campus => campus.id === created.id)).toEqual(created);
+  await card.getByRole("button", { name: "编辑校区 回归校区", exact: true }).click();
+  await card.getByPlaceholder("校区名称", { exact: true }).fill("  改名校区  ");
+  await card.getByPlaceholder("地址", { exact: true }).fill("  保留地址空格  ");
+  await card.getByPlaceholder("备注", { exact: true }).fill("  保留备注空格  ");
+  await page.getByRole("button", { name: "添加课程档案", exact: true }).click();
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+  await expandCard(page, "校区与班型");
+  await expect(card.getByPlaceholder("校区名称", { exact: true })).toHaveValue("  改名校区  ");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).campuses.find(campus => campus.id === created.id)?.name).toBe("改名校区");
+  expect((await session.readSavedVault()).campuses.find(campus => campus.id === created.id)).toEqual({ ...created, name: "改名校区", address: "  保留地址空格  ", note: "  保留备注空格  " });
+  await page.getByRole("button", { name: "添加课程档案", exact: true }).click();
+  const courseCampus = page.locator('form[data-onboarding="course-form"] select').filter({ has: page.locator("option").getByText("未设置校区", { exact: true }) });
+  await courseCampus.selectOption(created.id);
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+  await expandCard(page, "校区与班型");
+  await card.getByRole("button", { name: "删除校区 改名校区", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "删除校区「改名校区」？", exact: true });
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  expect((await session.readSavedVault()).campuses).toHaveLength(5);
+  await card.getByRole("button", { name: "删除校区 改名校区", exact: true }).click();
+  await dialog.getByRole("button", { name: "删除", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).campuses.length).toBe(4);
+  await page.getByRole("button", { name: "添加课程档案", exact: true }).click();
+  await expect(courseCampus).toHaveValue("campus_a");
+  const saved = await session.readSavedVault();
+  expect(saved.students).toEqual(vault.students);
+  expect(saved.courseGroups).toEqual(vault.courseGroups);
+  expect(saved.lessons).toEqual(vault.lessons);
+  expect(session.pageErrors).toEqual([]);
+  expect(session.unexpectedRequests).toEqual([]);
+});
+
+test("subject settings preserve duplicate feedback, rename propagation, history and course draft fallback", async ({ page, context }) => {
+  const vault = settingsVault();
+  vault.lessons[0].substituteClass = { subject: "物理", presentStudentCount: 1 };
+  const session = await openSyntheticWorkspace(page, context, vault);
+  await openSettings(page);
+  await expandCard(page, "科目列表");
+  const card = settingsCard(page, "科目列表");
+  const input = card.getByPlaceholder("新增科目，例如：英语、物理", { exact: true });
+  await expect(settingsRow(page, "科目列表", "语文").getByTitle("已有课程使用，不能直接删除", { exact: true })).toBeDisabled();
+  await expect(settingsRow(page, "科目列表", "物理").getByTitle("删除科目", { exact: true })).toBeEnabled();
+  await input.fill("   ");
+  await expect(card.getByRole("button", { name: "添加科目", exact: true })).toBeDisabled();
+  await input.fill("  数学  ");
+  await card.getByRole("button", { name: "添加科目", exact: true }).click();
+  await expect(card.getByText("已存在科目「数学」。", { exact: true })).toBeVisible();
+  expect(session.saveCount).toBe(0);
+  await input.fill("  英语  ");
+  await expect(card.getByText("已存在科目「数学」。", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "学生列表", exact: true }).click();
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+  await expandCard(page, "科目列表");
+  await expect(input).toHaveValue("  英语  ");
+  await card.getByRole("button", { name: "添加科目", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).preferences!.subjects).toEqual(["语文", "数学", "英语"]);
+  await expect(input).toHaveValue("");
+  await page.getByRole("button", { name: "添加课程档案", exact: true }).click();
+  const courseSubject = page.locator('form[data-onboarding="course-form"] select').filter({ has: page.locator('option[value="数学"]') });
+  await courseSubject.selectOption("英语");
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+  await expandCard(page, "科目列表");
+  await settingsRow(page, "科目列表", "语文").getByTitle("编辑科目", { exact: true }).click();
+  const editInput = card.getByRole("textbox").last();
+  await editInput.fill("  数学  ");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(card.getByText("已存在科目「数学」。", { exact: true })).toBeVisible();
+  await editInput.fill("取消的改名");
+  await expect(card.getByText("已存在科目「数学」。", { exact: true })).toHaveCount(0);
+  await card.getByRole("button", { name: "取消", exact: true }).click();
+  expect((await session.readSavedVault()).courseGroups).toEqual(vault.courseGroups);
+  await settingsRow(page, "科目列表", "语文").getByTitle("编辑科目", { exact: true }).click();
+  await editInput.fill("  新语文  ");
+  await card.getByRole("button", { expanded: true }).click();
+  await expandCard(page, "科目列表");
+  await expect(editInput).toHaveValue("  新语文  ");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).courseGroups[0].subject).toBe("新语文");
+  expect((await session.readSavedVault()).preferences!.subjects).toEqual(["新语文", "数学", "英语"]);
+  await expect(settingsRow(page, "科目列表", "新语文").getByTitle("已有课程使用，不能直接删除", { exact: true })).toBeDisabled();
+  await settingsRow(page, "科目列表", "英语").getByTitle("删除科目", { exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "删除科目「英语」？", exact: true });
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  expect((await session.readSavedVault()).preferences!.subjects).toContain("英语");
+  await settingsRow(page, "科目列表", "英语").getByTitle("删除科目", { exact: true }).click();
+  await dialog.getByRole("button", { name: "删除", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).preferences!.subjects).toEqual(["新语文", "数学"]);
+  await page.getByRole("button", { name: "添加课程档案", exact: true }).click();
+  await expect(courseSubject).toHaveValue("数学");
+  await expect(courseSubject.locator("option")).toHaveText(["数学", "物理", "新语文"]);
+  const saved = await session.readSavedVault();
+  expect(saved.courseGroups).toEqual([{ ...vault.courseGroups[0], subject: "新语文" }]);
+  expect(saved.lessons).toEqual(vault.lessons);
+  expect(saved.students).toEqual(vault.students);
+  expect(session.pageErrors).toEqual([]);
+  expect(session.unexpectedRequests).toEqual([]);
+});
+
+test("grade settings retain ordered choices, error feedback, student rename propagation and direct deletion", async ({ page, context }) => {
+  const vault = settingsVault();
+  const session = await openSyntheticWorkspace(page, context, vault);
+  await openSettings(page);
+  await expandCard(page, "学生年级设置");
+  const card = settingsCard(page, "学生年级设置");
+  const input = card.getByPlaceholder("新增年级，例如：小一、高一", { exact: true });
+  await expect(settingsRow(page, "学生年级设置", "初三").getByTitle("已有学生使用，不能删除", { exact: true })).toBeDisabled();
+  await input.fill(" 初一 ");
+  await card.getByRole("button", { name: "添加年级", exact: true }).click();
+  await expect(card.getByText("已存在年级「初一」。", { exact: true })).toBeVisible();
+  expect(session.saveCount).toBe(0);
+  await input.fill("  高二  ");
+  await expect(card.getByText("已存在年级「初一」。", { exact: true })).toBeVisible();
+  await card.getByRole("button", { expanded: true }).click();
+  await expandCard(page, "学生年级设置");
+  await expect(input).toHaveValue("  高二  ");
+  await card.getByRole("button", { name: "添加年级", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).preferences!.grades).toEqual(["初一", "初二", "初三", "高二"]);
+  await expect(input).toHaveValue("");
+  await expect(card.getByText("已存在年级「初一」。", { exact: true })).toHaveCount(0);
+  await settingsRow(page, "学生年级设置", "初三").getByTitle("编辑年级", { exact: true }).click();
+  const editInput = card.getByRole("textbox").last();
+  await editInput.fill("  ");
+  await expect(card.getByRole("button", { name: "保存", exact: true })).toBeDisabled();
+  await editInput.fill("初二");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(card.getByText("已存在年级「初二」。", { exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "取消", exact: true }).click();
+  expect((await session.readSavedVault()).students).toEqual(vault.students);
+  await expect(card.getByText("已存在年级「初二」。", { exact: true })).toHaveCount(0);
+  await settingsRow(page, "学生年级设置", "初三").getByTitle("编辑年级", { exact: true }).click();
+  await editInput.fill("  毕业年级  ");
+  await page.getByRole("button", { name: "学生列表", exact: true }).click();
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+  await expandCard(page, "学生年级设置");
+  await expect(editInput).toHaveValue("  毕业年级  ");
+  await card.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).students.every(student => student.grade === "毕业年级")).toBe(true);
+  await expect(settingsRow(page, "学生年级设置", "毕业年级").getByTitle("已有学生使用，不能删除", { exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "学生列表", exact: true }).click();
+  const newStudentGrade = page.locator('form[data-onboarding="student-form"] select').filter({ has: page.locator("option").getByText("未设置年级", { exact: true }) });
+  await expect(newStudentGrade.locator("option")).toHaveText(["未设置年级", "初一", "初二", "毕业年级", "高二"]);
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+  await expandCard(page, "学生年级设置");
+  await settingsRow(page, "学生年级设置", "高二").getByTitle("删除年级", { exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect.poll(async () => (await session.readSavedVault()).preferences!.grades).toEqual(["初一", "初二", "毕业年级"]);
+  const saved = await session.readSavedVault();
+  expect(saved.students).toEqual(vault.students.map(student => ({ ...student, grade: "毕业年级" })));
+  expect(saved.courseGroups).toEqual(vault.courseGroups);
+  expect(saved.lessons).toEqual(vault.lessons);
+  expect(session.pageErrors).toEqual([]);
+  expect(session.unexpectedRequests).toEqual([]);
+});
+
+test("student promotion uses configured grade order and keeps its feedback connected to grade settings", async ({ page, context }) => {
+  const vault = settingsVault();
+  vault.preferences!.grades = ["初一", "高一", "初三"];
+  vault.students[0].grade = "初一";
+  const session = await openSyntheticWorkspace(page, context, vault);
+  await page.getByRole("button", { name: "档案信息", exact: true }).click();
+  await page.getByRole("button", { name: "学生列表", exact: true }).click();
+  await page.getByRole("checkbox", { name: "选择学生 合成学生0000", exact: true }).check();
+  await page.getByRole("button", { name: "升一年级", exact: true }).click();
+  await expect.poll(async () => (await session.readSavedVault()).students[0].grade).toBe("高一");
+  await expect(page.getByRole("checkbox", { name: "选择学生 合成学生0000", exact: true })).not.toBeChecked();
+  await page.getByRole("checkbox", { name: "选择学生 合成学生0001", exact: true }).check();
+  const beforeNoop = session.saveCount;
+  await page.getByRole("button", { name: "升一年级", exact: true }).click();
+  await page.getByRole("button", { name: "校区与班型", exact: true }).click();
+  await expandCard(page, "学生年级设置");
+  const card = settingsCard(page, "学生年级设置");
+  await expect(card.getByText("选中的学生没有可提升的已配置年级，或已经是最后一个年级。", { exact: true })).toBeVisible();
+  expect(session.saveCount).toBe(beforeNoop);
+  const saved = await session.readSavedVault();
+  expect(saved.students).toEqual(vault.students.map(student => student.id === "student_0" ? { ...student, grade: "高一" } : student));
+  expect(saved.courseGroups).toEqual(vault.courseGroups);
+  expect(saved.lessons).toEqual(vault.lessons);
+  expect(session.pageErrors).toEqual([]);
+  expect(session.unexpectedRequests).toEqual([]);
+});

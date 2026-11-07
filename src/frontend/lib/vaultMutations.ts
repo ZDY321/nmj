@@ -1,7 +1,7 @@
 import { buildFeeSnapshot, buildSubstituteClassFeeSnapshot, getCourse, isClassBillingCourseType, isSubstituteClassLesson, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
 import { activeStudentIdsForCourse, lessonStudentIds, makeupNeededStudentIds, studentLimitForCourseType } from "@/frontend/lib/helpers";
-import { attendanceStatusForLessonStatus } from "@/frontend/lib/scheduleViewHelpers";
+import { attendanceForStudentIds } from "@/frontend/lib/lessonAttendance";
 import { stringValue } from "@/frontend/lib/typeGuards";
 import type {
   AttendanceStatus,
@@ -142,7 +142,7 @@ export function syncLessonsWithCourseDefaults(vault: TeacherVault, course: Cours
       type: course.type,
       campusId: course.defaultCampusId,
       expectedStudentIds: [...activeStudentIds],
-      attendance: lessonAttendanceFromCourse(vault, lesson, course),
+      attendance: attendanceForStudentIds(vault, lesson, activeStudentIdsForCourse(vault, course)),
       trialStudentCount: isClassBillingCourseType(course.type) ? lesson.trialStudentCount ?? 0 : 0,
       trialFee: isClassBillingCourseType(course.type) ? lesson.trialFee ?? 0 : 0
     });
@@ -217,7 +217,7 @@ export function migrateLessonsFromCourseType(
         type: course.type,
         campusId: course.defaultCampusId,
         expectedStudentIds: [...activeStudentIdsForCourse(vault, course)],
-        attendance: lessonAttendanceFromCourse(vault, lesson, course),
+        attendance: attendanceForStudentIds(vault, lesson, activeStudentIdsForCourse(vault, course)),
         trialStudentCount: isClassBillingCourseType(course.type) ? lesson.trialStudentCount ?? 0 : 0,
         trialFee: isClassBillingCourseType(course.type) ? lesson.trialFee ?? 0 : 0
       });
@@ -292,6 +292,41 @@ export function repairCourseStudentLinksFromLessons(vault: TeacherVault, student
   });
 
   return changedCount;
+}
+
+// Ordinary batches have no makeup side effects and can replace lessons in one pass.
+// Keep the sequential path for linked or unresolved makeup: earlier edits affect later ones.
+export function applyLessonUpdates(vault: TeacherVault, updates: Lesson[]): void {
+  if (updates.length === 0) return;
+  const previousById = new Map<string, Lesson>();
+  const linkedOriginalIds = new Set<string>();
+  for (const lesson of vault.lessons) {
+    if (!previousById.has(lesson.id)) previousById.set(lesson.id, lesson);
+    if (typeof lesson.linkedOriginalLessonId === "string") linkedOriginalIds.add(lesson.linkedOriginalLessonId);
+  }
+  const simpleBatch = updates.every((lesson) => {
+    const previous = previousById.get(lesson.id);
+    return !lesson.linkedOriginalLessonId && !previous?.linkedOriginalLessonId &&
+      !linkedOriginalIds.has(lesson.id) && makeupNeededStudentIds(lesson).length === 0 &&
+      (!previous || makeupNeededStudentIds(previous).length === 0);
+  });
+  if (simpleBatch) {
+    const updatesById = new Map(updates.map((lesson) => [lesson.id, lesson]));
+    vault.lessons = vault.lessons.map((lesson) => updatesById.get(lesson.id) ?? lesson);
+    return;
+  }
+
+  const affectedOriginalIds = new Set<string>();
+  for (const lesson of updates) {
+    const previous = vault.lessons.find((item) => item.id === lesson.id);
+    if (previous?.linkedOriginalLessonId) affectedOriginalIds.add(previous.linkedOriginalLessonId);
+    if (lesson.linkedOriginalLessonId) affectedOriginalIds.add(lesson.linkedOriginalLessonId);
+    if (!lesson.linkedOriginalLessonId) affectedOriginalIds.add(lesson.id);
+    cleanupResolvedMakeupLessons(vault, lesson);
+    const nextLesson = syncOriginalLessonFromMakeupCompletion(vault, lesson);
+    vault.lessons = vault.lessons.map((item) => item.id === nextLesson.id ? nextLesson : item);
+  }
+  affectedOriginalIds.forEach((id) => recalculateLinkedMakeupLessonFeeSnapshots(vault, id));
 }
 
 export function cleanupResolvedMakeupLessons(vault: TeacherVault, updatedOriginal: Lesson) {
@@ -396,25 +431,6 @@ function shouldSyncLessonWithCourseDefaults(lesson: Lesson, scope: CourseLessonS
   if (lesson.status !== "scheduled" && lesson.status !== "draft") return false;
   if (scope === "all_unfinished") return true;
   return lesson.date >= todayIso();
-}
-
-function lessonAttendanceFromCourse(vault: TeacherVault, lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
-  const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
-  const fallbackStatus = attendanceStatusForLessonStatus(lesson.status);
-  return activeStudentIdsForCourse(vault, course).map((studentId) => {
-    const existing = existingByStudent.get(studentId);
-    if (existing) {
-      return {
-        ...existing,
-        trial: existing.trial ?? Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
-      };
-    }
-    return {
-      studentId,
-      status: fallbackStatus,
-      trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
-    };
-  });
 }
 
 function shouldSyncFutureLessonWithStudentTrialStatus(lesson: Lesson): boolean {

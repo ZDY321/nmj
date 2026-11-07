@@ -49,8 +49,7 @@ import {
 import {
   feedbackBraceGeometry,
   feedbackBracePath,
-  feedbackSheetLayout,
-  feedbackStudentRowCenter
+  feedbackSheetLayout
 } from "@/frontend/lib/lessonFeedbackLayout";
 import { nearestStrokeId } from "@/frontend/lib/lessonFeedbackHitTest";
 import { feedbackHighlightColors } from "@/frontend/lib/lessonFeedbackLayout";
@@ -447,10 +446,6 @@ export function LessonFeedbackEditor({
     };
   }, [braceDrag]);
 
-  const rowCenters = useMemo(() => new Map(record.students.map((student, index) => [
-    student.id,
-    feedbackStudentRowCenter(layout, index)
-  ])), [layout, record.students]);
 
   function emit(nextRecord: LessonFeedbackRecord, history = true): void {
     if (history) {
@@ -600,10 +595,6 @@ export function LessonFeedbackEditor({
     emit(next);
     setSelectedTextBoxId(box.id);
     setActiveTool("select");
-  }
-
-  function addTextBox(point: LessonFeedbackPoint): void {
-    createTextBoxAt(point.x, point.y, 210, 86);
   }
 
   function patchTextBox(boxId: string, patch: Partial<LessonFeedbackTextBox>, history = false): void {

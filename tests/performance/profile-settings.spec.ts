@@ -1,0 +1,80 @@
+import { expect, test, type Page } from "@playwright/test";
+import { legacySalaryGradeRules } from "../../src/frontend/lib/calculations";
+import { createBenchmarkVault } from "./fixtures";
+import { openSyntheticWorkspace } from "./session";
+
+function profileField(page: Page, label: string) {
+  return page.locator('[data-onboarding="teacher-profile"] div[class~="space-y-2"]').filter({ has: page.locator("label").getByText(label, { exact: true }) });
+}
+
+test("profile editing preserves campus following, manual obligation controls and unrelated records", async ({ page, context }) => {
+  const vault = createBenchmarkVault({ students: 12, courses: 1, lessons: 3 });
+  vault.profile = { ...vault.profile, homeCampusId: "campus_a", obligationCampusId: "campus_b", monthlyObligationHours: 10, obligationHourlyDeduction: 40, baseSalary: 1500, phone: "保留电话", email: "keep@example.invalid" };
+  const session = await openSyntheticWorkspace(page, context, vault);
+  await page.getByRole("button", { name: "档案信息", exact: true }).click();
+  const profile = page.locator('[data-onboarding="teacher-profile"]');
+  await expect(profileField(page, "基本工资").locator("input")).toHaveCount(0);
+  await page.getByRole("button", { name: "显示课时费金额", exact: true }).click();
+  await profileField(page, "显示姓名").locator("input").fill("  个人设置回归  ");
+  await expect.poll(async () => (await session.readSavedVault()).profile.displayName).toBe("  个人设置回归  ");
+  await profileField(page, "所在校区").locator("select").selectOption("campus_b");
+  await expect.poll(async () => (await session.readSavedVault()).profile.homeCampusId).toBe("campus_b");
+  expect((await session.readSavedVault()).profile.obligationCampusId).toBe("campus_b");
+  await profileField(page, "义务课时本校区").locator("select").selectOption("");
+  await expect.poll(async () => (await session.readSavedVault()).profile.obligationCampusId).toBeUndefined();
+  await profileField(page, "所在校区").locator("select").selectOption("campus_a");
+  await expect.poll(async () => (await session.readSavedVault()).profile.homeCampusId).toBe("campus_a");
+  const dueHours = profile.locator('div[class~="p-3"]').filter({ has: page.getByText("本月应扣", { exact: true }) }).last();
+  await expect(dueHours).toContainText("6.0 小时");
+  await profileField(page, "扣义务课时方式").locator("select").selectOption("manual");
+  await expect(profileField(page, "每月义务小时").locator("input")).toBeDisabled();
+  await expect(profileField(page, "缺口参考单价").locator("input")).toBeDisabled();
+  await expect(profileField(page, "手动扣除金额").locator("input")).toBeEnabled();
+  await profileField(page, "手动扣除金额").locator("input").fill("1234");
+  await expect.poll(async () => (await session.readSavedVault()).profile.manualObligationDeduction).toBe(1234);
+  await profileField(page, "基本工资").locator("input").fill("-20");
+  await expect.poll(async () => (await session.readSavedVault()).profile.baseSalary).toBe(0);
+  await profileField(page, "个人备注").locator("textarea").fill("  保留备注空格  ");
+  await expect.poll(async () => (await session.readSavedVault()).profile.note).toBe("  保留备注空格  ");
+  await page.getByRole("button", { name: "学生列表", exact: true }).click();
+  await page.getByRole("button", { name: "老师个人信息", exact: true }).click();
+  await expect(profileField(page, "手动扣除金额").locator("input")).toHaveValue("1234");
+  await profileField(page, "扣义务课时方式").locator("select").selectOption("auto_gap");
+  await expect(profileField(page, "手动扣除金额").locator("input")).toBeDisabled();
+  await expect(profileField(page, "每月义务小时").locator("input")).toBeEnabled();
+  await expect.poll(async () => (await session.readSavedVault()).profile.obligationDeductionMode).toBe("auto_gap");
+  const saved = await session.readSavedVault();
+  expect(saved.profile).toEqual({ ...vault.profile, displayName: "  个人设置回归  ", obligationCampusId: undefined, obligationDeductionMode: "auto_gap", manualObligationDeduction: 1234, baseSalary: 0, note: "  保留备注空格  " });
+  expect(saved.students).toEqual(vault.students);
+  expect(saved.courseGroups).toEqual(vault.courseGroups);
+  expect(saved.lessons).toEqual(vault.lessons);
+  expect(session.pageErrors).toEqual([]);
+  expect(session.unexpectedRequests).toEqual([]);
+});
+
+test("profile salary grades retain legacy choices and only update base salary on selecting a rule", async ({ page, context }) => {
+  const vault = createBenchmarkVault({ students: 12, courses: 1, lessons: 3 });
+  const legacy = legacySalaryGradeRules[0];
+  vault.profile = { ...vault.profile, baseSalary: 1777, defaultSalaryGradeId: legacy.id, salaryGradeRules: [{ id: "custom_salary_profile", label: "个人回归等级", baseSalary: 4200, oneOnOneFee: 85, classBaseFee: 150, headcountIncrementFee: 12 }] };
+  const session = await openSyntheticWorkspace(page, context, vault);
+  await page.getByRole("button", { name: "档案信息", exact: true }).click();
+  await page.getByRole("button", { name: "显示课时费金额", exact: true }).click();
+  const grade = profileField(page, "默认课时费等级").locator("select");
+  await expect(grade).toHaveValue(legacy.id);
+  await expect(grade.locator("option").filter({ hasText: "旧规则：" })).toContainText(legacy.label);
+  await expect(profileField(page, "基本工资").locator("input")).toHaveValue("1777");
+  expect(session.saveCount).toBe(0);
+  await grade.selectOption("custom_salary_profile");
+  await expect.poll(async () => (await session.readSavedVault()).profile.baseSalary).toBe(4200);
+  await expect(profileField(page, "课时费规则")).toContainText("85");
+  await grade.selectOption("");
+  await expect.poll(async () => (await session.readSavedVault()).profile.defaultSalaryGradeId).toBeUndefined();
+  await expect(profileField(page, "基本工资").locator("input")).toHaveValue("4200");
+  await expect(profileField(page, "课时费规则")).toContainText("未设置默认课时费等级");
+  const saved = await session.readSavedVault();
+  expect(saved.profile).toEqual({ ...vault.profile, baseSalary: 4200, defaultSalaryGradeId: undefined });
+  expect(saved.lessons).toEqual(vault.lessons);
+  expect(saved.courseGroups).toEqual(vault.courseGroups);
+  expect(session.pageErrors).toEqual([]);
+  expect(session.unexpectedRequests).toEqual([]);
+});

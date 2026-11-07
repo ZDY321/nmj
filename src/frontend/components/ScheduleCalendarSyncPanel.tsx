@@ -1,3 +1,4 @@
+import { timesOverlap } from "@/frontend/lib/time";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarDays, CalendarRange, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import {
   lessonTimeRangeLabel,
   lessonStatusLabels
 } from "@/frontend/lib/helpers";
-import { isOrderedDateRange, timesOverlap } from "@/frontend/lib/scheduleViewHelpers";
+import { isOrderedDateRange } from "@/frontend/lib/scheduleViewHelpers";
 
 export type ScheduleCalendarSyncPanelProps = {
   isOpen: boolean;

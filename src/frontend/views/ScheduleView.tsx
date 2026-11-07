@@ -1,5 +1,3 @@
-import { useEffect, useMemo, useState } from "react";
-import { CornerUpLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { ScheduleAdjustmentPanel, type ScheduleAdjustmentConflictPolicy, type ScheduleAdjustmentPreviewItem } from "@/frontend/components/ScheduleAdjustmentPanel";
@@ -9,39 +7,28 @@ import { ScheduleCalendarFollowupPanels } from "@/frontend/components/ScheduleCa
 import { ScheduleCalendarPanel } from "@/frontend/components/ScheduleCalendarPanel";
 import { ScheduleDayReusePanel } from "@/frontend/components/ScheduleDayReusePanel";
 import { ScheduleLessonDetailPanel } from "@/frontend/components/ScheduleLessonDetailPanel";
-import type { LessonChecklistPerStudentStatus, LessonChecklistStudentItemStatus } from "@/frontend/components/LessonChecklistLinker";
 import { SchedulePanelTabs } from "@/frontend/components/SchedulePanelTabs";
-import { SchedulePlanningPanel, type BatchRepeatMode, type BatchTimeGroup, type WeeklySchedulePatternSlot } from "@/frontend/components/SchedulePlanningPanel";
+import { SchedulePlanningPanel } from "@/frontend/components/SchedulePlanningPanel";
 import { ScheduleRecordsListCard } from "@/frontend/components/ScheduleRecordsListCard";
 import { ScheduleStudentStatsPanel } from "@/frontend/components/ScheduleStudentStatsPanel";
 import { ScheduleTrashPanel } from "@/frontend/components/ScheduleTrashPanel";
 import { SubstituteClassLessonPanel } from "@/frontend/components/SubstituteClassLessonPanel";
-import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
-import type { AiProviderConfig, AiScheduleDraftResponse, AiScheduleSession, AiScheduleTaskType, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, LessonStatus, ProgressChecklistCompletion, ProgressChecklistTemplate, SalaryGradeStage, StudentProgressRecord, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
-import { billableHoursForCourseLesson, billableStudentCapForRule, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, calculateClassHeadcountFee, classHeadcountBaseStudentCountForRule, feeRuleForCourseType, getCourse, hoursBetween, isClassBillingCourseType, isSubstituteClassLesson, lessonDurationMultiplierForCourse, presentCount, resolveSalaryGradeRule, salaryGradeAmountForCount, salaryGradeStageForLesson, substituteClassPresentCount, suggestedLessonBillableHoursForVault, todayIso } from "@/frontend/lib/calculations";
-import { generateAiScheduleDraft, getAiProviders, getUsableAiProviders } from "@/frontend/lib/cloud";
+import { useScheduleAi } from "@/frontend/hooks/useScheduleAi";
+import { useScheduleAttendance } from "@/frontend/hooks/useScheduleAttendance";
+import { useScheduleBatchPlanning } from "@/frontend/hooks/useScheduleBatchPlanning";
+import { useScheduleChecklist } from "@/frontend/hooks/useScheduleChecklist";
+import { useScheduleNavigation } from "@/frontend/hooks/useScheduleNavigation";
+import { useScheduleReuse } from "@/frontend/hooks/useScheduleReuse";
+import { useScheduleStudentStats } from "@/frontend/hooks/useScheduleStudentStats";
+import { useScheduleSubstitute } from "@/frontend/hooks/useScheduleSubstitute";
+import { useScheduleTrash } from "@/frontend/hooks/useScheduleTrash";
+import { billableHoursForCourseLesson, getCourse, isClassBillingCourseType, todayIso } from "@/frontend/lib/calculations";
 import { makeId } from "@/frontend/lib/crypto";
-import { buildScheduleDayReusePreview, buildScheduleRangeReusePreview } from "@/frontend/lib/scheduleDayReuse";
 import {
-  attendanceLabels,
   addDays,
-  attendedStudentIdsForLesson,
-  buildScheduleSyncLessonsForDate,
-  campusName,
-  compareByName,
   courseHasActiveStudent,
   courseName,
-  courseTypeOptionsForVault,
   createLessonFromCourse,
-  createSubstituteClassLesson,
-  findStudent,
-  formatDateIso,
-  isMakeupNeededAttendanceEntry,
-  isMakeupAttendanceStatus,
-  lessonStatusLabels,
-  lessonStudentIds,
-  linkSyncedLessonsToPreviousLessons,
-  makeupNeededStudentIds,
   monthShift,
   orderedWeekdayLabels,
   orderedWeekdays,
@@ -49,222 +36,27 @@ import {
   shortWeekdayLabels,
   sortCampusesForProfile,
   sortCoursesByName,
-  sortLessons,
   sortStudentsByName,
   subjectOptionsForVault,
-  weekDatesFor,
-  weekStartsOn,
-  weekdayOfDateIso,
-  weekdayLabels
+  weekStartsOn
 } from "@/frontend/lib/helpers";
+import { attendanceForStudentIds } from "@/frontend/lib/lessonAttendance";
+import type { BatchLessonGenerationResult } from "@/frontend/lib/scheduleBatch";
+import { dateWithWeekday, parseOptionalBillingHours, updateTimeWithTwoHourEnd } from "@/frontend/lib/scheduleDraftValues";
 import {
-  aiChatEndpoint,
-  arrayValue,
-  attendanceStatusForLessonStatus,
-  buildStudentStatsGroupedLessonRows,
-  buildStudentStatsRows,
-  buildScheduleAiContext,
-  canRestoreDeletedLesson,
-  calendarLessonsForDateWithFilters,
-  datesBetweenLocal,
-  deletedLessonSourceLabel,
-  deletedLessonSourceVariant,
-  filterScheduleRecordLessons,
   filterScheduleCourseOptions,
-  filterStudentStatsLessons,
-  filterTrashLessons,
-  filteredStudentIdsForStats,
-  formatAiValue,
-  isCompletedLessonStatus,
   isOrderedDateRange,
   isOrderedTimeRange,
-  isPendingLessonStatus,
-  isPlainRecord,
-  isoWeekValue,
-  lessonStatusForAttendanceStatus,
-  matchesCalendarLessonFilters,
-  offsetDate,
-  sortDeletedLessons,
-  textValue,
-  timesOverlap
+  offsetDate
 } from "@/frontend/lib/scheduleViewHelpers";
-import { checklistCompletionAppliesToSource, formatChecklistItemLine } from "@/frontend/lib/progressChecklist";
-import { updateLessonContentField } from "@/frontend/lib/lessonContent";
-import { filterCoursesWithScopedLessons } from "@/frontend/lib/salaryDetailScope";
-import { buildBatchLessonPreview, buildBatchSchedulePreview, endDateForRepeatWeeks, type BatchLessonGenerationResult, type BatchLessonTime, type BatchScheduleConflict } from "@/frontend/lib/scheduleBatch";
-import type { CalendarFocus, CourseTypeFilter, ExternalLessonReturnTarget, InternalLessonReturnTarget, LessonReturnTarget, LessonScope, MakeupLessonFilter, SchedulePanel, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
-
-function dateWithWeekday(date: string): string {
-  return `${date} · ${weekdayLabels[weekdayOfDateIso(date)]}`;
-}
+import type { CalendarFocus, ExternalLessonReturnTarget } from "@/frontend/lib/scheduleViewTypes";
+import { timesOverlap } from "@/frontend/lib/time";
+import type { AiScheduleSession, Lesson, ProgressChecklistCompletion, TeacherVault, TimePreset, UserRole, WeekStart, Weekday } from "@/shared/types";
+import { CornerUpLeft } from "lucide-react";
+import { useEffect, useState } from "react";
 
 function optionalDateWithWeekday(date: string | null | undefined): string {
   return date ? dateWithWeekday(date) : "未知";
-}
-
-type WeeklyPatternCreatableItem = BatchLessonTime & {
-  slot: WeeklySchedulePatternSlot;
-  course: CourseGroup;
-};
-
-type WeeklyPatternPreview = {
-  candidateCount: number;
-  conflictCount: number;
-  existingCount: number;
-  duplicateCount: number;
-  conflicts: BatchScheduleConflict[];
-  invalidSlotCount: number;
-  creatableItems: WeeklyPatternCreatableItem[];
-};
-
-type BatchPerDayPreview = {
-  totalCount: number;
-  conflictCount: number;
-  existingCount: number;
-  duplicateCount: number;
-  existingConflictCount: number;
-  internalConflictCount: number;
-  conflicts: BatchScheduleConflict[];
-  unassignedWeekdays: Weekday[];
-  groupCounts: Array<{ groupId: string; count: number; conflictCount: number; existingCount: number; duplicateCount: number }>;
-  creatableItems: Array<BatchLessonTime & { group: BatchTimeGroup }>;
-};
-
-function timeTwoHoursLater(time: string): string {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
-  if (!match) return "";
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
-  const totalMinutes = Math.min(hour * 60 + minute + 120, 23 * 60 + 59);
-  return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
-}
-
-function parseOptionalBillingHours(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const hours = Number(trimmed);
-  return Number.isFinite(hours) ? Math.max(hours, 0) : undefined;
-}
-
-type LessonChecklistSource = "taught" | "homework";
-type LessonChecklistSyncSource = "homework";
-
-type LessonChecklistSyncCandidate = {
-  studentId: string;
-  itemId: string;
-  progressRecordId?: string;
-};
-
-type LessonChecklistSyncSummary = {
-  templateName: string;
-  studentCount: number;
-  homeworkLinkedItemCount: number;
-  homeworkPendingCount: number;
-  homeworkCompletedCount: number;
-};
-
-type LessonChecklistSyncResult = {
-  studentId: string;
-  studentName: string;
-  homeworkSyncedCount: number;
-};
-
-function checklistCellKey(studentId: string, itemId: string): string {
-  return `${studentId}::${itemId}`;
-}
-
-function linkedChecklistItemIds(
-  lesson: Lesson,
-  template: ProgressChecklistTemplate,
-  source: LessonChecklistSource
-): string[] {
-  const validItemIds = new Set(template.items.map((item) => item.id));
-  const rawItemIds = source === "taught" ? lesson.content.taughtChecklistItemIds ?? [] : lesson.content.homeworkChecklistItemIds ?? [];
-  return Array.from(new Set(rawItemIds)).filter((itemId) => validItemIds.has(itemId));
-}
-
-function buildLessonChecklistSyncCandidates({
-  lesson,
-  template,
-  studentIds,
-  completions,
-  progressRecords,
-  source,
-  progressRecordLessonId = lesson.id
-}: {
-  lesson: Lesson;
-  template: ProgressChecklistTemplate;
-  studentIds: string[];
-  completions: ProgressChecklistCompletion[];
-  progressRecords: StudentProgressRecord[];
-  source: LessonChecklistSource;
-  progressRecordLessonId?: string;
-}): LessonChecklistSyncCandidate[] {
-  const itemIds = linkedChecklistItemIds(lesson, template, source);
-  if (itemIds.length === 0 || studentIds.length === 0) return [];
-
-  const existingKeys = new Set(
-    completions
-      .filter((completion) =>
-        completion.templateId === template.id &&
-        completion.courseGroupId === lesson.courseGroupId &&
-        completion.lessonId === lesson.id &&
-        checklistCompletionAppliesToSource(completion, source)
-      )
-      .map((completion) => checklistCellKey(completion.studentId, completion.itemId))
-  );
-  const progressRecordByStudentId = new Map<string, StudentProgressRecord>();
-  progressRecords
-    .filter((record) => record.courseGroupId === lesson.courseGroupId && record.lessonId === progressRecordLessonId)
-    .sort((a, b) => `${a.date} ${a.updatedAt}`.localeCompare(`${b.date} ${b.updatedAt}`))
-    .forEach((record) => progressRecordByStudentId.set(record.studentId, record));
-
-  return studentIds.flatMap((studentId) =>
-    itemIds
-      .filter((itemId) => !existingKeys.has(checklistCellKey(studentId, itemId)))
-      .map((itemId) => ({
-        studentId,
-        itemId,
-        progressRecordId: progressRecordByStudentId.get(studentId)?.id
-      }))
-  );
-}
-
-function buildLessonChecklistSyncSummary({
-  lesson,
-  template,
-  studentCount,
-  homeworkPendingCount
-}: {
-  lesson: Lesson;
-  template: ProgressChecklistTemplate;
-  studentCount: number;
-  homeworkPendingCount: number;
-}): LessonChecklistSyncSummary {
-  const homeworkLinkedItemCount = linkedChecklistItemIds(lesson, template, "homework").length;
-  const homeworkTotal = homeworkLinkedItemCount * studentCount;
-  return {
-    templateName: template.name,
-    studentCount,
-    homeworkLinkedItemCount,
-    homeworkPendingCount,
-    homeworkCompletedCount: Math.max(homeworkTotal - homeworkPendingCount, 0)
-  };
-}
-
-function endDateForLessonCount(startDate: string, weekdays: Weekday[], lessonCount: number): string {
-  if (!startDate || weekdays.length === 0 || lessonCount <= 0) return "";
-  let matched = 0;
-  let cursor = startDate;
-  for (let index = 0; index < 3660; index += 1) {
-    if (weekdays.includes(weekdayOfDateIso(cursor))) {
-      matched += 1;
-      if (matched >= lessonCount) return cursor;
-    }
-    cursor = addDays(cursor, 1);
-  }
-  return "";
 }
 
 export function ScheduleView({
@@ -330,16 +122,7 @@ export function ScheduleView({
   onOpenProgressChecklist?: (lesson: Lesson) => void;
   onOpenLessonFeedback?: (lesson: Lesson) => void;
 }) {
-  const initialFocusedDate = calendarFocus?.date ?? todayIso();
-  const initialFocusedMonth = initialFocusedDate.slice(0, 7);
-  const initialTargetPanel = calendarFocus?.targetPanel ?? "calendar";
-  const initialSelectedLessonId = calendarFocus?.lessonId ?? (
-    initialTargetPanel === "records"
-      ? vault.lessons.filter((lesson) => lesson.date === initialFocusedDate).sort(sortLessons)[0]?.id
-      : vault.lessons[0]?.id
-  ) ?? "";
   const weekStartPreference = weekStartsOn(vault);
-  const initialWeekDates = weekDatesFor(initialFocusedDate, weekStartPreference);
   const campusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
   const studentOptions = sortStudentsByName(vault.students);
   const courseSelectionOptions = sortCoursesByName(vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)));
@@ -351,205 +134,174 @@ export function ScheduleView({
   const [singleStartTime, setSingleStartTime] = useState("19:00");
   const [singleEndTime, setSingleEndTime] = useState("21:00");
   const [singleBillingHours, setSingleBillingHours] = useState("");
-  const [ruleCourseGroupId, setRuleCourseGroupId] = useState(firstCourseId);
-  const [ruleCourseSearch, setRuleCourseSearch] = useState("");
-  const [selectedWeekdays, setSelectedWeekdays] = useState<Weekday[]>([]);
-  const [ruleStartTime, setRuleStartTime] = useState("19:00");
-  const [ruleEndTime, setRuleEndTime] = useState("21:00");
-  const [ruleBillingHours, setRuleBillingHours] = useState("");
-  const [rangeStart, setRangeStart] = useState(todayIso());
-  const [rangeEnd, setRangeEnd] = useState(monthShift(todayIso().slice(0, 7), 1) + "-01");
-  const [batchLessonTargetCount, setBatchLessonTargetCount] = useState("");
-  const [batchRepeatMode, setBatchRepeatMode] = useState<BatchRepeatMode>("end_date");
-  const [batchRepeatWeeks, setBatchRepeatWeeks] = useState("4");
-  const [weeklyPatternSlots, setWeeklyPatternSlots] = useState<WeeklySchedulePatternSlot[]>([]);
-  const [batchPerDayMode, setBatchPerDayMode] = useState(false);
-  const [batchTimeGroups, setBatchTimeGroups] = useState<BatchTimeGroup[]>([]);
   const [calendarCourseGroupId, setCalendarCourseGroupId] = useState(firstCourseId);
   const [calendarCourseSearch, setCalendarCourseSearch] = useState("");
   const [calendarStartTime, setCalendarStartTime] = useState("19:00");
   const [calendarEndTime, setCalendarEndTime] = useState("21:00");
   const [calendarBillingHours, setCalendarBillingHours] = useState("");
-  const [calendarMonth, setCalendarMonth] = useState(initialFocusedMonth);
-  const [calendarMode, setCalendarMode] = useState<"schedule" | "view">("view");
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState(initialFocusedDate);
-  const [calendarViewCampusFilter, setCalendarViewCampusFilter] = useState("all");
-  const [calendarViewCourseTypeFilter, setCalendarViewCourseTypeFilter] = useState<CourseTypeFilter>("all");
-  const [calendarViewGradeFilter, setCalendarViewGradeFilter] = useState("all");
-  const [calendarViewSubjectFilter, setCalendarViewSubjectFilter] = useState("all");
-  const [calendarViewStudentFilter, setCalendarViewStudentFilter] = useState("");
-  const [calendarViewMakeupFilter, setCalendarViewMakeupFilter] = useState<MakeupLessonFilter>("all");
-  const [syncSourceDate, setSyncSourceDate] = useState(addDays(initialFocusedDate, -7));
-  const [syncTargetDate, setSyncTargetDate] = useState(initialFocusedDate);
-  const [syncRangeSourceStart, setSyncRangeSourceStart] = useState(addDays(initialWeekDates[0] ?? initialFocusedDate, -7));
-  const [syncRangeSourceEnd, setSyncRangeSourceEnd] = useState(addDays(initialWeekDates[6] ?? initialFocusedDate, -7));
-  const [syncRangeTargetStart, setSyncRangeTargetStart] = useState(initialWeekDates[0] ?? initialFocusedDate);
-  const [syncRangeTargetEnd, setSyncRangeTargetEnd] = useState(initialWeekDates[6] ?? initialFocusedDate);
-  const [selectedSyncLessonIds, setSelectedSyncLessonIds] = useState<string[]>([]);
-  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
-  const [calendarDetailDate, setCalendarDetailDate] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState(initialSelectedLessonId);
-  const [lessonHistory, setLessonHistory] = useState<string[]>([]);
-  const [lessonReturnTarget, setLessonReturnTarget] = useState<LessonReturnTarget | null>(calendarFocus?.returnTarget ?? null);
-  const [checklistSyncMessage, setChecklistSyncMessage] = useState("");
-  const [checklistSyncResult, setChecklistSyncResult] = useState<LessonChecklistSyncResult[]>([]);
-  const [checklistLastSyncSource, setChecklistLastSyncSource] = useState<LessonChecklistSyncSource | null>(null);
-  const [campusFilter, setCampusFilter] = useState("all");
-  const [studentFilter, setStudentFilter] = useState("");
-  const [courseTypeFilter, setCourseTypeFilter] = useState<CourseTypeFilter>("all");
-  const [studentStatsNameFilter, setStudentStatsNameFilter] = useState("");
-  const [studentStatsCourseFilter, setStudentStatsCourseFilter] = useState("all");
-  const [studentStatsCourseTypeFilter, setStudentStatsCourseTypeFilter] = useState<CourseTypeFilter>("all");
-  const [studentStatsSubjectFilter, setStudentStatsSubjectFilter] = useState("all");
-  const [studentStatsCampusFilter, setStudentStatsCampusFilter] = useState("all");
-  const [studentStatsStatusFilter, setStudentStatsStatusFilter] = useState<"all" | Lesson["status"]>("all");
-  const [studentStatsMakeupFilter, setStudentStatsMakeupFilter] = useState<StudentStatsMakeupFilter>("all");
-  const [studentStatsDateStart, setStudentStatsDateStart] = useState(todayIso().slice(0, 7) + "-01");
-  const [studentStatsDateEnd, setStudentStatsDateEnd] = useState(todayIso());
-  const [studentStatsStartTime, setStudentStatsStartTime] = useState("");
-  const [studentStatsEndTime, setStudentStatsEndTime] = useState("");
-  const [expandedStudentStatsGroupIds, setExpandedStudentStatsGroupIds] = useState<string[]>([]);
-  const studentStatsDateScopeLessons = useMemo(() => filterStudentStatsLessons(vault, {
-    campusFilter: "all",
-    courseFilter: "all",
-    courseTypeFilter: "all",
-    dateEnd: studentStatsDateEnd,
-    dateStart: studentStatsDateStart,
-    endTime: "",
-    normalizedNameFilter: "",
-    startTime: "",
-    statusFilter: "all",
-    subjectFilter: "all",
-    makeupFilter: "all"
-  }), [studentStatsDateEnd, studentStatsDateStart, vault]);
-  const studentStatsCourseOptions = useMemo(
-    () => sortCoursesByName(filterCoursesWithScopedLessons(vault.courseGroups, studentStatsDateScopeLessons)),
-    [studentStatsDateScopeLessons, vault.courseGroups]
-  );
-  const studentStatsCourseOptionIds = studentStatsCourseOptions.map((course) => course.id).join("|");
-  const [lessonScope, setLessonScope] = useState<LessonScope>("month");
-  const [lessonMonth, setLessonMonth] = useState(initialFocusedMonth);
-  const [lessonDay, setLessonDay] = useState(initialFocusedDate);
-  const [lessonRangeStart, setLessonRangeStart] = useState(todayIso());
-  const [lessonRangeEnd, setLessonRangeEnd] = useState(todayIso());
-  const [lessonWeek, setLessonWeek] = useState(isoWeekValue(todayIso()));
-  const [syncRecordsWithCalendarDate, setSyncRecordsWithCalendarDate] = useState(true);
-  const [showOnlyMakeup, setShowOnlyMakeup] = useState(false);
-  const [makeupManagementTab, setMakeupManagementTab] = useState<"regular" | "substitute">("regular");
-  const [schedulePanel, setSchedulePanel] = useState<SchedulePanel>(initialTargetPanel);
+  const studentStats = useScheduleStudentStats(vault);
+  const {
+    initialFocusedDate,
+    calendarMonth,
+    setCalendarMonth,
+    calendarMode,
+    setCalendarMode,
+    selectedCalendarDate,
+    setSelectedCalendarDate,
+    calendarViewCampusFilter,
+    setCalendarViewCampusFilter,
+    calendarViewCourseTypeFilter,
+    setCalendarViewCourseTypeFilter,
+    calendarViewGradeFilter,
+    setCalendarViewGradeFilter,
+    calendarViewSubjectFilter,
+    setCalendarViewSubjectFilter,
+    calendarViewStudentFilter,
+    setCalendarViewStudentFilter,
+    calendarViewMakeupFilter,
+    setCalendarViewMakeupFilter,
+    calendarDetailDate,
+    setCalendarDetailDate,
+    selectedId,
+    setSelectedId,
+    lessonHistory,
+    lessonReturnTarget,
+    campusFilter,
+    setCampusFilter,
+    studentFilter,
+    setStudentFilter,
+    courseTypeFilter,
+    setCourseTypeFilter,
+    lessonScope,
+    setLessonScope,
+    lessonMonth,
+    setLessonMonth,
+    setLessonDay,
+    lessonRangeStart,
+    setLessonRangeStart,
+    lessonRangeEnd,
+    setLessonRangeEnd,
+    lessonWeek,
+    setLessonWeek,
+    syncRecordsWithCalendarDate,
+    setSyncRecordsWithCalendarDate,
+    showOnlyMakeup,
+    setShowOnlyMakeup,
+    makeupManagementTab,
+    setMakeupManagementTab,
+    schedulePanel,
+    setSchedulePanel,
+    calendarViewCampusOptions,
+    calendarViewCourseTypeOptions,
+    calendarViewGradeOptions,
+    calendarViewSubjectOptions,
+    calendarDayNoteForDate,
+    calendarLessonsForDate,
+    selectedCalendarLessons,
+    selectedCalendarDateAllLessons,
+    selectedCalendarRefreshableLessons,
+    selectedCalendarWeekLessons,
+    selectedCalendarCompletedCount,
+    selectedCalendarPendingCount,
+    selectedCalendarCancelledCount,
+    selectedCalendarAmount,
+    selectedCalendarDayNote,
+    calendarDetailLessons,
+    calendarDetailDayNote,
+    calendarDetailAmount,
+    calendarDetailCompletedCount,
+    calendarDetailPendingCount,
+    calendarDetailCancelledCount,
+    effectiveLessonScope,
+    effectiveLessonDay,
+    lessons,
+    selected,
+    switchSchedulePanel,
+    openDateInRecords,
+    openLessonInRecords,
+    goBackToPreviousLesson,
+    goBackToLessonSource
+  } = useScheduleNavigation({ vault, calendarFocus, weekStartPreference, onReturnToView, setCalendarCourseGroupId, setSingleCourseGroupId, setCalendarStartTime, setSingleStartTime, setCalendarEndTime, setSingleEndTime, setSingleDate });
+
   const [customPresetStart, setCustomPresetStart] = useState("08:00");
   const [customPresetEnd, setCustomPresetEnd] = useState("10:00");
-  const [temporaryStudentId, setTemporaryStudentId] = useState("");
-  const [temporaryStudentSearch, setTemporaryStudentSearch] = useState("");
-  const [attendanceStudentFilter, setAttendanceStudentFilter] = useState("");
-  const [attendancePanelOpen, setAttendancePanelOpen] = useState(false);
-  const [trashDateStart, setTrashDateStart] = useState("");
-  const [trashDateEnd, setTrashDateEnd] = useState("");
-  const [trashCampusFilter, setTrashCampusFilter] = useState("all");
-  const [trashSourceFilter, setTrashSourceFilter] = useState<"all" | DeletedLesson["source"]>("all");
-  const [trashSearch, setTrashSearch] = useState("");
-  const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
-  const [makeupOriginalDateFilter, setMakeupOriginalDateFilter] = useState("");
-  const [makeupDate, setMakeupDate] = useState(todayIso());
-  const [makeupStartTime, setMakeupStartTime] = useState("19:00");
-  const [makeupEndTime, setMakeupEndTime] = useState("21:00");
-  const [substituteDate, setSubstituteDate] = useState(todayIso());
-  const [substituteStartTime, setSubstituteStartTime] = useState("19:00");
-  const [substituteEndTime, setSubstituteEndTime] = useState("21:00");
-  const [substituteBillingHours, setSubstituteBillingHours] = useState("");
-  const [substituteCampusId, setSubstituteCampusId] = useState(vault.profile.homeCampusId ?? vault.campuses[0]?.id ?? "");
-  const [substituteSubject, setSubstituteSubject] = useState("");
-  const [substituteTitle, setSubstituteTitle] = useState("");
-  const [substituteExternalClassName, setSubstituteExternalClassName] = useState("");
-  const [substituteOriginalTeacherName, setSubstituteOriginalTeacherName] = useState("");
-  const [substituteSalaryGradeStage, setSubstituteSalaryGradeStage] = useState<SalaryGradeStage>("junior_3");
-  const [substitutePresentStudentCount, setSubstitutePresentStudentCount] = useState("");
-  const [substituteStudentNamesText, setSubstituteStudentNamesText] = useState("");
-  const [substituteNote, setSubstituteNote] = useState("");
-  const [substituteStatus, setSubstituteStatus] = useState<"scheduled" | "completed">("completed");
-  const [detailMakeupStudentIds, setDetailMakeupStudentIds] = useState<string[]>([]);
-  const [makeupArrangementOpen, setMakeupArrangementOpen] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
   const [scheduleNotice, setScheduleNotice] = useState("");
-  const [aiProviders, setAiProviders] = useState<AiProviderConfig[]>([]);
-  const aiProviderId = aiSession?.providerId ?? "";
-  const aiTaskType = aiSession?.taskType ?? "auto";
-  const aiInstruction = aiSession?.instruction ?? "";
-  const aiFollowupAnswer = aiSession?.followupAnswer ?? "";
-  const aiDraft = aiSession?.draft ?? null;
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiApplying, setAiApplying] = useState(false);
-  const [aiApplyResult, setAiApplyResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const aiMessage = aiSession?.message ?? "";
   const { confirm, dialog } = useConfirmDialog();
+  const {
+    substituteDate,
+    setSubstituteDate,
+    substituteStartTime,
+    setSubstituteStartTime,
+    substituteEndTime,
+    setSubstituteEndTime,
+    substituteBillingHours,
+    setSubstituteBillingHours,
+    substituteCampusId,
+    setSubstituteCampusId,
+    substituteSubject,
+    setSubstituteSubject,
+    substituteTitle,
+    setSubstituteTitle,
+    substituteExternalClassName,
+    setSubstituteExternalClassName,
+    substituteOriginalTeacherName,
+    setSubstituteOriginalTeacherName,
+    substituteSalaryGradeStage,
+    setSubstituteSalaryGradeStage,
+    substitutePresentStudentCount,
+    setSubstitutePresentStudentCount,
+    substituteStudentNamesText,
+    setSubstituteStudentNamesText,
+    substituteNote,
+    setSubstituteNote,
+    substituteStatus,
+    setSubstituteStatus,
+    isSubstituteTimeValid,
+    substitutePreviewSnapshot,
+    addSubstituteClassRecord
+  } = useScheduleSubstitute({ vault, selectedCalendarDate, weekStartPreference, confirm, validateTimeRange, findTimeConflict, onAddLesson, setSelectedId, setSelectedCalendarDate, setCalendarMonth, setLessonDay, setScheduleError, showScheduleError, showScheduleNotice });
+
+  const batchPlanning = useScheduleBatchPlanning({ vault, courseSelectionOptions, confirm, onAddLessons, onGenerateDrafts, showScheduleError, showScheduleNotice, validateTimeRange, validateDateRange, suggestedBillingHoursForDraft });
+  const {
+    syncSourceDate,
+    setSyncSourceDate,
+    syncTargetDate,
+    setSyncTargetDate,
+    syncRangeSourceStart,
+    setSyncRangeSourceStart,
+    syncRangeSourceEnd,
+    setSyncRangeSourceEnd,
+    syncRangeTargetStart,
+    setSyncRangeTargetStart,
+    syncRangeTargetEnd,
+    setSyncRangeTargetEnd,
+    selectedSyncLessonIds,
+    syncPanelOpen,
+    setSyncPanelOpen,
+    syncSourceLessons,
+    selectableSyncLessons,
+    selectedSyncLessons,
+    dayReusePreview,
+    rangeReusePreview,
+    syncRangeSourceDates,
+    syncRangeTargetDates,
+    syncRangeSourceLessons,
+    syncRangeActiveLessons,
+    toggleSyncLesson,
+    setAllSyncLessons,
+    copySelectedLessonsToDate,
+    copyLessonRangeToDateRange,
+    fillSyncRangeFromSelectedWeek
+  } = useScheduleReuse({ vault, initialFocusedDate, selectedCalendarDate, weekStartPreference, schedulePanel, confirm, onAddLessons, setSelectedCalendarDate, setCalendarMonth, setScheduleError, showScheduleError, showScheduleNotice });
+  const trash = useScheduleTrash({ vault, confirm, showScheduleError, onRestoreDeletedLessons, onPermanentlyDeleteDeletedLessons });
   const isAdmin = role === "admin";
+  const scheduleAi = useScheduleAi({ vault, token, isAdmin, aiSession, onAiSessionChange, onApplyAiDraft, calendarMonth, selectedCalendarDate, weekStartPreference });
   const aiScheduleEntryVisible = isAdmin
     ? Boolean(vault.profile.aiSchedulingAdminEnabled ?? vault.profile.aiSchedulingEnabled)
     : Boolean(vault.profile.aiSchedulingEnabled);
-  const calendarViewCampusOptions = sortCampusesForProfile(vault.campuses, vault.profile.homeCampusId);
-  const calendarViewCourseTypeOptions = courseTypeOptionsForVault(vault);
-  const calendarViewGradeOptions = Array.from(
-    new Set(vault.students.map((student) => student.grade?.trim()).filter((grade): grade is string => Boolean(grade)))
-  ).sort(compareByName);
-  const calendarViewSubjectOptions = subjectOptionsForVault(vault);
-  const syncSourceLessons = vault.lessons
-    .filter((lesson) => lesson.date === syncSourceDate)
-    .sort(sortLessons);
-  const syncSourceLessonIds = syncSourceLessons.map((lesson) => lesson.id).join("|");
-  const selectableSyncLessons = syncSourceLessons.filter((lesson) => {
-    const course = getCourse(vault, lesson.courseGroupId);
-    return Boolean(course && course.status === "active" && courseHasActiveStudent(vault, course));
-  });
-  const selectableSyncLessonIds = selectableSyncLessons.map((lesson) => lesson.id).join("|");
-  const selectedWeekdayKey = selectedWeekdays.join("|");
-  const batchTargetCount = Math.max(Math.floor(Number(batchLessonTargetCount)), 0);
-  const batchRepeatWeekCount = Math.max(Math.floor(Number(batchRepeatWeeks)), 0);
-  const isBatchRepeatWeeksValid = batchRepeatMode !== "weeks" || batchRepeatWeekCount > 0;
-  const batchEffectiveRangeEnd = batchRepeatMode === "weeks" ? endDateForRepeatWeeks(rangeStart, batchRepeatWeekCount) : rangeEnd;
-  const isBatchDateRangeValid = isBatchRepeatWeeksValid && isOrderedDateRange(rangeStart, batchEffectiveRangeEnd);
-  const batchPreview = buildBatchLessonPreview(vault.lessons, {
-    startDate: rangeStart,
-    endDate: isBatchDateRangeValid ? batchEffectiveRangeEnd : "",
-    weekdays: selectedWeekdays,
-    courseGroupId: ruleCourseGroupId,
-    startTime: ruleStartTime,
-    endTime: ruleEndTime
-  });
-  const batchConflictCount = batchPreview.conflicts.length;
-  const weeklyPatternPreview = buildWeeklyPatternPreview();
-  const weeklyPatternCandidateCount = weeklyPatternPreview.candidateCount;
-  const weeklyPatternConflictCount = weeklyPatternPreview.conflictCount;
-  const weeklyPatternCreatableCount = weeklyPatternPreview.creatableItems.length;
-  const weeklyPatternInvalidSlotCount = weeklyPatternPreview.invalidSlotCount;
-  const batchPerDayPreview = buildBatchPerDayPreview();
   const singleSuggestedBillingHours = suggestedBillingHoursForDraft(singleCourseGroupId, singleStartTime, singleEndTime);
-  const ruleSuggestedBillingHours = suggestedBillingHoursForDraft(ruleCourseGroupId, ruleStartTime, ruleEndTime);
   const calendarSuggestedBillingHours = suggestedBillingHoursForDraft(calendarCourseGroupId, calendarStartTime, calendarEndTime);
-
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    const loadProviders = isAdmin ? getAiProviders : getUsableAiProviders;
-    loadProviders(token)
-      .then((providers) => {
-        if (cancelled) return;
-        setAiProviders(providers);
-        const nextProviderId = aiProviderId && providers.some((provider) => provider.id === aiProviderId && provider.enabled)
-          ? aiProviderId
-          : providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "";
-        if (nextProviderId !== aiProviderId) {
-          patchAiSession({ providerId: nextProviderId });
-        }
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setAiProviders([]);
-        patchAiSession({ message: error instanceof Error ? error.message : "AI 配置加载失败。" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isAdmin, token]);
 
   useEffect(() => {
     if (schedulePanel === "ai" && !aiScheduleEntryVisible) {
@@ -561,269 +313,15 @@ export function ScheduleView({
     const fallbackCourseId = courseSelectionOptions[0]?.id ?? "";
     const hasCourse = (courseId: string) => courseSelectionOptions.some((course) => course.id === courseId);
     setSingleCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
-    setRuleCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
     setCalendarCourseGroupId((current) => (hasCourse(current) ? current : fallbackCourseId));
   }, [courseSelectionOptionIds]);
-
-  useEffect(() => {
-    if (batchRepeatMode !== "end_date" || !batchTargetCount || selectedWeekdays.length === 0) return;
-    const nextEndDate = endDateForLessonCount(rangeStart, selectedWeekdays, batchTargetCount);
-    if (nextEndDate && nextEndDate !== rangeEnd) {
-      setRangeEnd(nextEndDate);
-    }
-  }, [batchRepeatMode, batchTargetCount, rangeStart, selectedWeekdayKey]);
-
-  useEffect(() => {
-    setCalendarViewCampusFilter((current) =>
-      current === "all" || calendarViewCampusOptions.some((campus) => campus.id === current) ? current : "all"
-    );
-    setCalendarViewCourseTypeFilter((current) =>
-      current === "all" || calendarViewCourseTypeOptions.some((type) => type.value === current) ? current : "all"
-    );
-    setCalendarViewGradeFilter((current) =>
-      current === "all" || calendarViewGradeOptions.some((grade) => grade === current) ? current : "all"
-    );
-    setCalendarViewSubjectFilter((current) =>
-      current === "all" || calendarViewSubjectOptions.some((subject) => subject === current) ? current : "all"
-    );
-  }, [calendarViewCampusOptions, calendarViewCourseTypeOptions, calendarViewGradeOptions, calendarViewSubjectOptions]);
-
-  useEffect(() => {
-    setSyncTargetDate(selectedCalendarDate);
-    setSyncSourceDate(addDays(selectedCalendarDate, -7));
-    const selectedWeekDates = weekDatesFor(selectedCalendarDate, weekStartPreference);
-    setSyncRangeSourceStart(addDays(selectedWeekDates[0] ?? selectedCalendarDate, -7));
-    setSyncRangeSourceEnd(addDays(selectedWeekDates[6] ?? selectedCalendarDate, -7));
-    setSyncRangeTargetStart(selectedWeekDates[0] ?? selectedCalendarDate);
-    setSyncRangeTargetEnd(selectedWeekDates[6] ?? selectedCalendarDate);
-    setMakeupDate(selectedCalendarDate);
-    setSubstituteDate(selectedCalendarDate);
-  }, [selectedCalendarDate, weekStartPreference]);
-
-  useEffect(() => {
-    if (syncRecordsWithCalendarDate) {
-      setLessonDay(selectedCalendarDate);
-    }
-  }, [selectedCalendarDate, syncRecordsWithCalendarDate]);
-
-  useEffect(() => {
-    setSelectedSyncLessonIds((current) => {
-      const availableIds = new Set(selectableSyncLessons.map((lesson) => lesson.id));
-      const kept = current.filter((lessonId) => availableIds.has(lessonId));
-      if (kept.length > 0 || selectableSyncLessons.length === 0) return kept;
-      return selectableSyncLessons.map((lesson) => lesson.id);
-    });
-  }, [selectableSyncLessonIds]);
-
-  useEffect(() => {
-    setStudentStatsCourseFilter((current) =>
-      current === "all" || studentStatsCourseOptions.some((course) => course.id === current) ? current : "all"
-    );
-  }, [studentStatsCourseOptionIds]);
-
-  useEffect(() => {
-    setMakeupArrangementOpen(false);
-    setDetailMakeupStudentIds([]);
-  }, [selectedId]);
-
-  useEffect(() => {
-    if (!calendarFocus?.date) return;
-    setSchedulePanel(calendarFocus.targetPanel ?? "calendar");
-    setCalendarMode(calendarFocus.calendarMode ?? "view");
-    setSelectedCalendarDate(calendarFocus.date);
-    setCalendarMonth(calendarFocus.date.slice(0, 7));
-    setLessonDay(calendarFocus.date);
-    setLessonMonth(calendarFocus.date.slice(0, 7));
-    if (calendarFocus.scheduleDraft?.courseGroupId) {
-      setCalendarCourseGroupId(calendarFocus.scheduleDraft.courseGroupId);
-      setSingleCourseGroupId(calendarFocus.scheduleDraft.courseGroupId);
-    }
-    if (calendarFocus.scheduleDraft?.startTime) {
-      setCalendarStartTime(calendarFocus.scheduleDraft.startTime);
-      setSingleStartTime(calendarFocus.scheduleDraft.startTime);
-    }
-    if (calendarFocus.scheduleDraft?.endTime) {
-      setCalendarEndTime(calendarFocus.scheduleDraft.endTime);
-      setSingleEndTime(calendarFocus.scheduleDraft.endTime);
-    }
-    if (calendarFocus.scheduleDraft) {
-      setSingleDate(calendarFocus.date);
-      setLessonReturnTarget(calendarFocus.returnTarget ?? null);
-    }
-    setSyncRecordsWithCalendarDate(true);
-    if (calendarFocus.targetPanel === "records") {
-      setCampusFilter("all");
-      setCourseTypeFilter("all");
-      setStudentFilter("");
-      setShowOnlyMakeup(false);
-    }
-    if (calendarFocus.lessonId) {
-      const focusedLesson = vault.lessons.find((lesson) => lesson.id === calendarFocus.lessonId);
-      if (focusedLesson) {
-        setLessonHistory([]);
-        openLessonInRecords(focusedLesson, { pushHistory: false, returnTarget: calendarFocus.returnTarget ?? null });
-      } else {
-        setLessonReturnTarget(calendarFocus.returnTarget ?? null);
-        setSelectedId(calendarFocus.lessonId);
-      }
-    } else if (calendarFocus.targetPanel === "records") {
-      openDateInRecords(calendarFocus.date, { returnTarget: calendarFocus.returnTarget ?? null });
-    }
-  }, [calendarFocus?.nonce]);
-
-  useEffect(() => {
-    setDetailMakeupStudentIds([]);
-    setAttendancePanelOpen(false);
-  }, [selectedId]);
-
-  useEffect(() => {
-    const availableTrashIds = new Set((vault.deletedLessons ?? []).map((item) => item.id));
-    setSelectedTrashIds((current) => current.filter((id) => availableTrashIds.has(id)));
-  }, [vault.deletedLessons]);
 
   const visibleWeekdays = orderedWeekdays(weekStartPreference);
   const visibleWeekdayLabels = orderedWeekdayLabels(weekStartPreference, shortWeekdayLabels);
   const customTimePresets = vault.preferences?.customTimePresets ?? [];
   const singleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, singleCourseSearch, singleCourseGroupId);
-  const ruleCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, ruleCourseSearch, ruleCourseGroupId);
   const calendarCourseOptions = filterScheduleCourseOptions(vault, courseSelectionOptions, calendarCourseSearch, calendarCourseGroupId);
-  const activeMakeupLessons = vault.lessons
-    .filter((lesson) => (Boolean(lesson.linkedOriginalLessonId) || Boolean(lesson.makeupOriginalDate)) && lesson.status !== "cancelled")
-    .sort(sortLessons);
-  const activeMakeupLessonsByOriginal = activeMakeupLessons.reduce<Record<string, Lesson[]>>((groups, lesson) => {
-    const originalId = lesson.linkedOriginalLessonId ?? findOriginalLessonForMakeupLesson(lesson)?.id;
-    if (!originalId) return groups;
-    groups[originalId] = [...(groups[originalId] ?? []), lesson];
-    return groups;
-  }, {});
-  const selectedSyncLessons = useMemo(
-    () => vault.lessons
-      .filter((lesson) => lesson.date === syncSourceDate && selectedSyncLessonIds.includes(lesson.id))
-      .sort(sortLessons),
-    [vault.lessons, selectedSyncLessonIds, syncSourceDate]
-  );
-  const dayReusePreview = useMemo(
-    () => buildScheduleDayReusePreview(vault, selectedSyncLessons, syncTargetDate),
-    [vault, selectedSyncLessons, syncTargetDate]
-  );
-  const syncRangeSourceDates = datesBetweenLocal(syncRangeSourceStart, syncRangeSourceEnd);
-  const syncRangeTargetDates = datesBetweenLocal(syncRangeTargetStart, syncRangeTargetEnd);
-  const rangeReusePreview = useMemo(
-    () => buildScheduleRangeReusePreview(vault, syncRangeSourceDates, syncRangeTargetDates),
-    [vault, syncRangeSourceStart, syncRangeSourceEnd, syncRangeTargetStart, syncRangeTargetEnd]
-  );
-  const syncRangeSourceLessons = vault.lessons.filter((lesson) => syncRangeSourceDates.includes(lesson.date));
-  const syncRangeActiveLessons = syncRangeSourceLessons.filter((lesson) => {
-    const course = getCourse(vault, lesson.courseGroupId);
-    return Boolean(course && course.status === "active" && courseHasActiveStudent(vault, course));
-  });
-  function calendarDayNoteForDate(date: string): string {
-    return vault.calendarDayNotes?.find((item) => item.date === date)?.note ?? "";
-  }
-
-  const calendarLessonFilters = {
-    campusFilter: calendarViewCampusFilter,
-    courseTypeFilter: calendarViewCourseTypeFilter,
-    gradeFilter: calendarViewGradeFilter,
-    subjectFilter: calendarViewSubjectFilter,
-    studentFilter: calendarViewStudentFilter,
-    makeupFilter: calendarViewMakeupFilter
-  };
-  const matchesCalendarLessonFilter = (lesson: Lesson) => matchesCalendarLessonFilters(vault, lesson, calendarLessonFilters);
-  const calendarLessonsForDate = (date: string) => calendarLessonsForDateWithFilters(vault, date, calendarLessonFilters);
-  const selectedCalendarLessons = calendarLessonsForDate(selectedCalendarDate);
-  const selectedCalendarDateAllLessons = vault.lessons.filter((lesson) => lesson.date === selectedCalendarDate).sort(sortLessons);
-  const selectedCalendarRefreshableLessons = selectedCalendarDateAllLessons.filter((lesson) => Boolean(getCourse(vault, lesson.courseGroupId)));
-  const selectedCalendarWeekLessons = vault.lessons.filter((lesson) => weekDatesFor(selectedCalendarDate, weekStartPreference).includes(lesson.date) && matchesCalendarLessonFilter(lesson));
-  const selectedCalendarCompletedCount = selectedCalendarLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
-  const selectedCalendarPendingCount = selectedCalendarLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
-  const selectedCalendarCancelledCount = selectedCalendarLessons.filter((lesson) => lesson.status === "cancelled").length;
-  const selectedCalendarAmount = selectedCalendarLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
-  const selectedCalendarDayNote = calendarDayNoteForDate(selectedCalendarDate);
-  const calendarDetailLessons = calendarDetailDate ? calendarLessonsForDate(calendarDetailDate) : [];
-  const calendarDetailDayNote = calendarDetailDate ? calendarDayNoteForDate(calendarDetailDate) : "";
-  const calendarDetailAmount = calendarDetailLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
-  const calendarDetailCompletedCount = calendarDetailLessons.filter((lesson) => isCompletedLessonStatus(lesson.status)).length;
-  const calendarDetailPendingCount = calendarDetailLessons.filter((lesson) => isPendingLessonStatus(lesson.status)).length;
-  const calendarDetailCancelledCount = calendarDetailLessons.filter((lesson) => lesson.status === "cancelled").length;
-  const normalizedStudentFilter = studentFilter.trim().toLowerCase();
-  const normalizedStudentStatsNameFilter = studentStatsNameFilter.trim().toLowerCase();
   const studentStatsSubjects = subjectOptionsForVault(vault);
-  const effectiveLessonScope = syncRecordsWithCalendarDate ? "day" : lessonScope;
-  const effectiveLessonDay = syncRecordsWithCalendarDate ? selectedCalendarDate : lessonDay;
-  const lessons = filterScheduleRecordLessons(vault, {
-    campusFilter,
-    courseTypeFilter,
-    effectiveDay: effectiveLessonDay,
-    lessonMonth,
-    lessonRangeEnd,
-    lessonRangeStart,
-    lessonWeek,
-    normalizedStudentFilter,
-    scope: effectiveLessonScope,
-    showOnlyMakeup
-  });
-  const studentStatsLessons = filterStudentStatsLessons(vault, {
-    campusFilter: studentStatsCampusFilter,
-    courseFilter: studentStatsCourseFilter,
-    courseTypeFilter: studentStatsCourseTypeFilter,
-    dateEnd: studentStatsDateEnd,
-    dateStart: studentStatsDateStart,
-    endTime: studentStatsEndTime,
-    normalizedNameFilter: normalizedStudentStatsNameFilter,
-    startTime: studentStatsStartTime,
-    statusFilter: studentStatsStatusFilter,
-    subjectFilter: studentStatsSubjectFilter,
-    makeupFilter: studentStatsMakeupFilter
-  });
-  const studentStatsRows = buildStudentStatsRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
-  const studentStatsGroupedLessonRows = buildStudentStatsGroupedLessonRows(vault, studentStatsLessons, normalizedStudentStatsNameFilter);
-  const studentStatsExternalStudentCount = studentStatsLessons.reduce(
-    (sum, lesson) => sum + (isSubstituteClassLesson(lesson) ? substituteClassPresentCount(lesson) : 0),
-    0
-  );
-  const studentStatsStudentLessonCount = studentStatsLessons.reduce(
-    (sum, lesson) => sum + (isSubstituteClassLesson(lesson) ? substituteClassPresentCount(lesson) : filteredStudentIdsForStats(vault, lesson, normalizedStudentStatsNameFilter).length),
-    0
-  );
-  const studentStatsInvolvedStudentCount = studentStatsRows.length + studentStatsExternalStudentCount;
-  const studentStatsStatusCounts = studentStatsLessons.reduce<Record<LessonStatus, number>>((counts, lesson) => {
-    counts[lesson.status] += 1;
-    return counts;
-  }, {
-    draft: 0,
-    scheduled: 0,
-    completed: 0,
-    cancelled: 0,
-    makeup_pending: 0,
-    makeup_completed: 0
-  });
-  const studentStatsTotalFee = studentStatsLessons.reduce((sum, lesson) => sum + lesson.feeSnapshot.amount, 0);
-  const studentStatsCompletedFeeTotal = studentStatsLessons.reduce(
-    (sum, lesson) => sum + (isCompletedLessonStatus(lesson.status) ? lesson.feeSnapshot.amount : 0),
-    0
-  );
-  const deletedLessons = sortDeletedLessons(vault.deletedLessons ?? []);
-  const normalizedTrashSearch = trashSearch.trim().toLowerCase();
-  const trashLessons = filterTrashLessons(vault, deletedLessons, {
-    campusFilter: trashCampusFilter,
-    dateEnd: trashDateEnd,
-    dateStart: trashDateStart,
-    normalizedSearch: normalizedTrashSearch,
-    sourceFilter: trashSourceFilter
-  });
-  const selectedTrashIdSet = new Set(selectedTrashIds);
-  const selectedVisibleTrashIds = trashLessons.filter((item) => selectedTrashIdSet.has(item.id)).map((item) => item.id);
-  const selectedVisibleTrashLessonIds = new Set(
-    trashLessons.filter((item) => selectedTrashIdSet.has(item.id)).map((item) => item.lesson.id)
-  );
-  const allVisibleTrashSelected = trashLessons.length > 0 && trashLessons.every((item) => selectedTrashIdSet.has(item.id));
-  const activeLessonIds = new Set(vault.lessons.map((lesson) => lesson.id));
-  const selectedTrashRestoreCount = selectedVisibleTrashIds.filter((id) => {
-    const item = trashLessons.find((deletedLesson) => deletedLesson.id === id);
-    return item ? canRestoreDeletedLesson(vault, activeLessonIds, item, selectedVisibleTrashLessonIds) : false;
-  }).length;
-  const selected = vault.lessons.find((lesson) => lesson.id === selectedId) ?? lessons[0];
   const selectedCourse = selected ? getCourse(vault, selected.courseGroupId) : undefined;
   const detailCourseGroupOptions = selectedCourse && !courseSelectionOptions.some((course) => course.id === selectedCourse.id)
     ? [selectedCourse, ...courseSelectionOptions]
@@ -834,223 +332,84 @@ export function ScheduleView({
   const selectedPreviousLesson = selected ? previousLesson(vault, selected) : undefined;
   const selectedPreviousTaught = selectedPreviousLesson?.content.taught.trim() ?? "";
   const selectedPreviousHomework = selectedPreviousLesson?.content.homework.trim() ?? "";
-  const selectedLessonStudentCount = selected ? lessonStudentIds(selected).length : 0;
-  const selectedExpectedStudentCount = selected ? new Set(selected.expectedStudentIds).size : 0;
-  const selectedAttendedStudentCount = selected ? attendedStudentIdsForLesson(selected).length : 0;
-  const selectedRecalculatedLesson = selected ? recalculateLessonFee(selected) : undefined;
-  const selectedCalculatedAmount = selectedRecalculatedLesson?.feeSnapshot.amount ?? selected?.feeSnapshot.amount ?? 0;
-  const selectedCalculatedPresentCount = selectedRecalculatedLesson?.feeSnapshot.presentStudentCount ?? (selected ? presentCount(selected) : 0);
-  const selectedCalculatedBillableCount = selectedRecalculatedLesson?.feeSnapshot.billableStudentCount;
-  const selectedActualHours = selected ? hoursBetween(selected.startTime, selected.endTime) : 0;
-  const selectedSuggestedBillingHours = selected ? suggestedLessonBillableHoursForVault(vault, selected) : 0;
-  const selectedBillingHours = selected?.feeSnapshot.hours ?? selectedSuggestedBillingHours;
-  const selectedScheduledMakeupStudentIds = selected ? activeMakeupStudentIdsForOriginal(selected.id) : new Set<string>();
-  const selectedLinkedMakeupLessons = selected && !selected.linkedOriginalLessonId ? activeMakeupLessonsByOriginal[selected.id] ?? [] : [];
-  const selectedMakeupCandidateStudentIds = selected
-    ? makeupNeededStudentIds(selected).filter((studentId) => !selectedScheduledMakeupStudentIds.has(studentId))
-    : [];
-  const selectedWholeLessonPending =
-    selected?.status === "makeup_pending" &&
-    !selected.linkedOriginalLessonId &&
-    selectedLessonStudentCount > 0 &&
-    selectedMakeupCandidateStudentIds.length === selectedLessonStudentCount;
-  const selectedMakeupAssignableStudentIds = selectedWholeLessonPending
-    ? lessonStudentIds(selected)
-    : selectedMakeupCandidateStudentIds;
-  const selectedMakeupAssignableSet = new Set(selectedMakeupAssignableStudentIds);
-  const selectedDetailMakeupStudentIds = detailMakeupStudentIds.filter((studentId) => selectedMakeupAssignableSet.has(studentId));
-  const normalizedTemporaryStudentSearch = temporaryStudentSearch.trim().toLowerCase();
-  const normalizedAttendanceStudentFilter = attendanceStudentFilter.trim().toLowerCase();
-  const temporaryStudentOptions = selected
-    ? studentOptions.filter((student) => {
-        const isAvailable = student.status === "active" && !selected.expectedStudentIds.includes(student.id);
-        const searchable = [
-          student.name,
-          student.grade ?? "",
-          campusName(vault, student.defaultCampusId),
-          student.note ?? "",
-          student.temporaryTrial ? "试听 临时试听" : ""
-        ].join(" ").toLowerCase();
-        return isAvailable && (!normalizedTemporaryStudentSearch || searchable.includes(normalizedTemporaryStudentSearch));
-      })
-    : [];
-  const selectedTemporaryStudent = temporaryStudentId
-    ? vault.students.find((student) => student.id === temporaryStudentId)
-    : undefined;
-  const displayedTemporaryStudentOptions =
-    selectedTemporaryStudent && selectedTemporaryStudent.status === "active" && !temporaryStudentOptions.some((student) => student.id === selectedTemporaryStudent.id)
-      ? [selectedTemporaryStudent, ...temporaryStudentOptions]
-      : temporaryStudentOptions;
-  const availableTrialStudentOptionCount = temporaryStudentOptions.filter((student) => student.temporaryTrial).length;
-  const selectedNamedTrialStudentCount = selected
-    ? selected.attendance.filter((entry) => {
-        const student = findStudent(vault, entry.studentId);
-        return Boolean(entry.trial ?? student?.temporaryTrial);
-      }).length
-    : 0;
-  const selectedAttendanceEntries = selected
-    ? selected.attendance.filter((entry) => {
-        const student = findStudent(vault, entry.studentId);
-        const searchable = [
-          student?.name ?? "",
-          student?.grade ?? "",
-          campusName(vault, student?.defaultCampusId),
-          student?.note ?? "",
-          attendanceLabels[entry.status],
-          entry.note ?? "",
-          entry.temporary ? "临时加入" : "",
-          (entry.trial ?? student?.temporaryTrial) ? "试听 试听学生" : ""
-        ].join(" ").toLowerCase();
-        return !normalizedAttendanceStudentFilter || searchable.includes(normalizedAttendanceStudentFilter);
-      }).sort((a, b) => {
-        const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
-        const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
-        return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
-      })
-    : [];
-  const selectedChecklistStudentIds = selected
-    ? lessonStudentIds(selected).filter((studentId) => findStudent(vault, studentId)?.status === "active")
-    : [];
-  const selectedPreviousChecklistTemplate = selectedPreviousLesson?.content.checklistTemplateId
-    ? (vault.progressChecklistTemplates ?? []).find((template) => template.id === selectedPreviousLesson.content.checklistTemplateId)
-    : undefined;
-  const selectedPreviousHomeworkChecklistSyncCandidates = selected && selectedPreviousLesson && selectedPreviousChecklistTemplate
-    ? buildLessonChecklistSyncCandidates({
-        lesson: selectedPreviousLesson,
-        template: selectedPreviousChecklistTemplate,
-        studentIds: selectedChecklistStudentIds,
-        completions: vault.progressChecklistCompletions ?? [],
-        progressRecords: vault.studentProgressRecords ?? [],
-        source: "homework",
-        progressRecordLessonId: selected.id
-      })
-    : [];
-  const selectedChecklistSyncSummary = selected && selectedPreviousLesson && selectedPreviousChecklistTemplate
-    ? buildLessonChecklistSyncSummary({
-        lesson: selectedPreviousLesson,
-        template: selectedPreviousChecklistTemplate,
-        studentCount: selectedChecklistStudentIds.length,
-        homeworkPendingCount: selectedPreviousHomeworkChecklistSyncCandidates.length
-      })
-    : undefined;
+  const {
+    temporaryStudentId,
+    setTemporaryStudentId,
+    temporaryStudentSearch,
+    setTemporaryStudentSearch,
+    attendanceStudentFilter,
+    setAttendanceStudentFilter,
+    attendancePanelOpen,
+    setAttendancePanelOpen,
+    makeupOriginalDateFilter,
+    setMakeupOriginalDateFilter,
+    makeupDate,
+    setMakeupDate,
+    makeupStartTime,
+    setMakeupStartTime,
+    makeupEndTime,
+    setMakeupEndTime,
+    setDetailMakeupStudentIds,
+    makeupArrangementOpen,
+    setMakeupArrangementOpen,
+    selectedExpectedStudentCount,
+    selectedAttendedStudentCount,
+    selectedCalculatedAmount,
+    selectedCalculatedPresentCount,
+    selectedCalculatedBillableCount,
+    selectedActualHours,
+    selectedSuggestedBillingHours,
+    selectedBillingHours,
+    selectedLinkedMakeupLessons,
+    selectedMakeupCandidateStudentIds,
+    selectedWholeLessonPending,
+    selectedMakeupAssignableStudentIds,
+    selectedDetailMakeupStudentIds,
+    selectedTemporaryStudent,
+    displayedTemporaryStudentOptions,
+    availableTrialStudentOptionCount,
+    selectedNamedTrialStudentCount,
+    selectedAttendanceEntries,
+    scheduledMakeupLessonForStudent,
+    makeupEntries,
+    scheduledMakeupEntries,
+    isMakeupTimeValid,
+    recalculateLessonFee,
+    updateSelected,
+    recalculateSelectedFee,
+    updateSelectedBillingHours,
+    resetSelectedBillingHoursToSuggested,
+    updateSelectedStatus,
+    updateSelectedCourse,
+    updateContent,
+    updateAttendance,
+    updateAttendanceMakeupExempt,
+    updateMakeupManagementAttendance,
+    updateMakeupManagementExempt,
+    markOriginalStudentsMadeUp,
+    completeScheduledMakeupLessons,
+    updateAttendanceNote,
+    toggleDetailMakeupStudent,
+    makeupMarkerForLesson,
+    createSelectedMakeupLesson,
+    updateTemporaryFee,
+    defaultTemporaryFeeForEntry,
+    updateTrialStats,
+    addTemporaryStudent,
+    askRemoveLessonStudent,
+    updateSelectedDate,
+    updateSelectedTime
+  } = useScheduleAttendance({ vault, selected, selectedId, studentOptions, selectedCalendarDate, weekStartPreference, confirm, onUpdateLesson, onUpdateLessons, onAddLessonAndUpdateLesson, openLessonInRecords, setSelectedCalendarDate, setCalendarMonth, findTimeConflict, validateTimeRange, showScheduleError, showScheduleNotice });
 
-  const selectedChecklistPerStudentStatus: LessonChecklistPerStudentStatus[] = (() => {
-    if (!selected || !selectedPreviousLesson || !selectedPreviousChecklistTemplate) return [];
-    const completions = vault.progressChecklistCompletions ?? [];
-    const homeworkItemIds = Array.from(new Set(selectedPreviousLesson.content.homeworkChecklistItemIds ?? []));
-    const homeworkItemsForStudent = (studentId: string): LessonChecklistStudentItemStatus[] => homeworkItemIds
-      .map((itemId) => {
-        const item = selectedPreviousChecklistTemplate.items.find((candidate) => candidate.id === itemId);
-        if (!item) return undefined;
-        const completed = completions.some((completion) =>
-          completion.templateId === selectedPreviousChecklistTemplate.id &&
-          completion.courseGroupId === selectedPreviousLesson.courseGroupId &&
-          completion.lessonId === selectedPreviousLesson.id &&
-          completion.studentId === studentId &&
-          completion.itemId === itemId &&
-          checklistCompletionAppliesToSource(completion, "homework")
-        );
-        return { itemId, label: formatChecklistItemLine(item, selectedPreviousChecklistTemplate.items), completed };
-      })
-      .filter((item): item is LessonChecklistStudentItemStatus => Boolean(item));
-    return selectedChecklistStudentIds
-      .map((studentId) => {
-        const homeworkItems = homeworkItemsForStudent(studentId);
-        return {
-          studentId,
-          studentName: findStudent(vault, studentId)?.name ?? "未知学生",
-          homeworkItems,
-          homeworkPendingCount: homeworkItems.filter((item) => !item.completed).length
-        };
-      })
-      .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId));
-  })();
-
-  useEffect(() => {
-    setChecklistSyncMessage("");
-    setChecklistSyncResult([]);
-    setChecklistLastSyncSource(null);
-  }, [selected?.id]);
-
-  function activeMakeupStudentIdsForOriginal(originalLessonId: string): Set<string> {
-    return new Set((activeMakeupLessonsByOriginal[originalLessonId] ?? []).flatMap((lesson) => lessonStudentIds(lesson)));
-  }
-
-  function findOriginalLessonForMakeupLesson(makeupLesson: Lesson): Lesson | undefined {
-    if (makeupLesson.linkedOriginalLessonId) {
-      return vault.lessons.find((lesson) => lesson.id === makeupLesson.linkedOriginalLessonId);
-    }
-    if (!makeupLesson.makeupOriginalDate) return undefined;
-    const makeupStudentIds = new Set(lessonStudentIds(makeupLesson));
-    const candidates = vault.lessons.filter(
-      (lesson) =>
-        lesson.id !== makeupLesson.id &&
-        !lesson.linkedOriginalLessonId &&
-        lesson.courseGroupId === makeupLesson.courseGroupId &&
-        lesson.date === makeupLesson.makeupOriginalDate &&
-        lesson.status !== "cancelled"
-    );
-    return candidates.find((lesson) => lessonStudentIds(lesson).some((studentId) => makeupStudentIds.has(studentId))) ?? candidates[0];
-  }
-
-  function scheduledMakeupLessonForStudent(originalLessonId: string, studentId: string): Lesson | undefined {
-    return (activeMakeupLessonsByOriginal[originalLessonId] ?? []).find((lesson) => lessonStudentIds(lesson).includes(studentId));
-  }
-
-  function isFullyScheduledMakeupOriginal(lesson: Lesson): boolean {
-    if (lesson.linkedOriginalLessonId || lesson.status !== "makeup_pending") return false;
-    const neededStudentIds = lessonStudentIds(lesson);
-    if (neededStudentIds.length === 0) return false;
-    const scheduledStudentIds = activeMakeupStudentIdsForOriginal(lesson.id);
-    return neededStudentIds.every((studentId) => scheduledStudentIds.has(studentId));
-  }
-
-  const makeupGroups = vault.lessons
-    .filter((lesson) => lesson.status !== "cancelled" && !lesson.linkedOriginalLessonId)
-    .map((lesson) => {
-      const scheduledStudentIds = activeMakeupStudentIdsForOriginal(lesson.id);
-      const rawEntries = lesson.attendance
-        .filter((entry) => isMakeupNeededAttendanceEntry(entry))
-        .sort((a, b) => {
-          const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
-          const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
-          return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
-        });
-      const rawStudentIds = makeupNeededStudentIds(lesson);
-      const studentIds = rawStudentIds.filter((studentId) => !scheduledStudentIds.has(studentId));
-      const entriesByStudentId = new Map(rawEntries.map((entry) => [entry.studentId, entry]));
-      const entries = studentIds
-        .map((studentId) => entriesByStudentId.get(studentId) ?? { studentId, status: "makeup_pending" as AttendanceStatus, note: lesson.note })
-        .sort((a, b) => {
-          const aName = findStudent(vault, a.studentId)?.name ?? "未知学生";
-          const bName = findStudent(vault, b.studentId)?.name ?? "未知学生";
-          return compareByName(aName, bName) || a.studentId.localeCompare(b.studentId);
-        });
-      const totalStudentCount = lessonStudentIds(lesson).length;
-      const scheduledCount = rawStudentIds.length - studentIds.length;
-      return {
-        lesson,
-        entries,
-        studentIds,
-        scheduledCount,
-        wholeLesson: lesson.status === "makeup_pending" && scheduledCount === 0 && studentIds.length > 0 && (totalStudentCount > 0 ? studentIds.length === totalStudentCount : true)
-      };
-    })
-    .filter((group) => group.studentIds.length > 0)
-    .sort((a, b) => sortLessons(a.lesson, b.lesson));
-  const makeupEntries = makeupGroups.filter(({ lesson }) => {
-    if (lesson.status === "makeup_pending" && isFullyScheduledMakeupOriginal(lesson)) return false;
-    return !makeupOriginalDateFilter || lesson.date === makeupOriginalDateFilter;
-  });
-  const scheduledMakeupEntries = activeMakeupLessons
-    .map((lesson) => ({
-      lesson,
-      original: findOriginalLessonForMakeupLesson(lesson)
-    }))
-    .filter(({ lesson, original }) => {
-      if (!makeupOriginalDateFilter) return true;
-      return lesson.makeupOriginalDate === makeupOriginalDateFilter || original?.date === makeupOriginalDateFilter;
-    });
+  const {
+    checklistSyncMessage,
+    checklistSyncResult,
+    checklistLastSyncSource,
+    selectedChecklistSyncSummary,
+    selectedChecklistPerStudentStatus,
+    syncSelectedLessonChecklist,
+    toggleSelectedLessonChecklistCompletion
+  } = useScheduleChecklist({ vault, selected, selectedPreviousLesson, onSaveChecklistCompletions, onUpdateChecklistCompletions });
   const dateShortcuts = [
     { label: "今天", value: offsetDate(0) },
     { label: "昨天", value: offsetDate(-1) },
@@ -1058,164 +417,15 @@ export function ScheduleView({
   ];
   const isSingleTimeValid = isOrderedTimeRange(singleStartTime, singleEndTime);
   const isCustomPresetTimeValid = isOrderedTimeRange(customPresetStart, customPresetEnd);
-  const isBatchTimeValid = isOrderedTimeRange(ruleStartTime, ruleEndTime);
   const isCalendarTimeValid = isOrderedTimeRange(calendarStartTime, calendarEndTime);
-  const isMakeupTimeValid = isOrderedTimeRange(makeupStartTime, makeupEndTime);
-  const isSubstituteTimeValid = isOrderedTimeRange(substituteStartTime, substituteEndTime);
-  const substitutePresentCountNumber = Math.max(Math.floor(Number(substitutePresentStudentCount)), 0);
-  const substituteManualBillingHours = parseOptionalBillingHours(substituteBillingHours);
-  const substitutePreviewLesson: Lesson = {
-    id: "preview_substitute_lesson",
-    date: substituteDate || todayIso(),
-    startTime: substituteStartTime,
-    endTime: substituteEndTime,
-    courseGroupId: SUBSTITUTE_CLASS_COURSE_GROUP_ID,
-    campusId: substituteCampusId || undefined,
-    type: "small_class",
-    status: substituteStatus,
-    lessonSource: "substitute_class",
-    substituteClass: {
-      title: substituteTitle.trim() || undefined,
-      externalClassName: substituteExternalClassName.trim() || undefined,
-      originalTeacherName: substituteOriginalTeacherName.trim() || undefined,
-      subject: substituteSubject.trim() || undefined,
-      salaryGradeStage: substituteSalaryGradeStage,
-      presentStudentCount: substitutePresentCountNumber,
-      studentNamesText: substituteStudentNamesText.trim() || undefined,
-      note: substituteNote.trim() || undefined
-    },
-    expectedStudentIds: [],
-    attendance: [],
-    feeSnapshot: substituteManualBillingHours !== undefined
-      ? { amount: 0, hours: substituteManualBillingHours, manualHours: true }
-      : { amount: 0 },
-    linkedOriginalLessonId: null,
-    content: {
-      taught: "",
-      performance: "",
-      homework: "",
-      nextLessonReminder: "",
-      internalNote: ""
-    },
-    note: substituteNote.trim() || undefined
-  };
-  const substitutePreviewSnapshot = buildSubstituteClassFeeSnapshot(vault, substitutePreviewLesson);
-  const aiActiveStudentCount = vault.students.filter((student) => student.status === "active").length;
-  const aiActiveCourseCount = vault.courseGroups.filter((course) => course.status === "active" && courseHasActiveStudent(vault, course)).length;
-  const aiPendingLessonCount = vault.lessons.filter((lesson) => lesson.status === "scheduled" || lesson.status === "makeup_pending").length;
-  const aiTodayLessonCount = vault.lessons.filter((lesson) => lesson.date === todayIso()).length;
-  const aiContextSummary = {
-    activeStudents: aiActiveStudentCount,
-    activeCourses: aiActiveCourseCount,
-    pendingLessons: aiPendingLessonCount,
-    todayLessons: aiTodayLessonCount,
-    campuses: vault.campuses.length,
-    subjects: subjectOptionsForVault(vault)
-  };
-  const enabledAiProviders = aiProviders.filter((provider) => provider.enabled);
-  const selectedAiProvider = aiProviders.find((provider) => provider.id === aiProviderId);
-  const canShowAiProviderEndpoint = isAdmin;
-  const selectedAiEndpoint = selectedAiProvider ? aiChatEndpoint(selectedAiProvider.baseUrl, selectedAiProvider) : "";
-  const aiDraftRecord = isPlainRecord(aiDraft?.draft) ? aiDraft.draft : null;
-  const aiDraftActions = arrayValue(aiDraftRecord?.actions).filter(isPlainRecord);
-  const aiDraftQuestions = arrayValue(aiDraftRecord?.questions);
-  const aiDraftWarnings = arrayValue(aiDraftRecord?.warnings);
-  const aiDraftSummary = textValue(aiDraftRecord?.summary, aiDraft ? "AI 已生成建议，请按下方内容核对。" : "");
-  const aiDraftAnswer = textValue(aiDraftRecord?.answer ?? aiDraftRecord?.result ?? aiDraftRecord?.analysis, "");
-  const aiRawResultText = aiDraft ? JSON.stringify(aiDraft.draft ?? aiDraft.text, null, 2) : "";
-  const canClearAiWork = Boolean(aiInstruction || aiFollowupAnswer || aiDraft || aiMessage || aiApplyResult);
-  const aiDraftCanApply = !aiLoading && !aiApplying && aiApplyResult?.ok !== true && aiDraftActions.length > 0 && aiDraftQuestions.length === 0;
-  const selectedAiUsage = selectedAiProvider
-    ? {
-        dailyLimit: selectedAiProvider.dailyLimit,
-        usedToday: selectedAiProvider.usedToday ?? 0,
-        remainingToday: selectedAiProvider.remainingToday ?? Math.max(selectedAiProvider.dailyLimit - (selectedAiProvider.usedToday ?? 0), 0)
-      }
-    : null;
-  const aiUsageText = selectedAiUsage
-    ? `今日已用 ${selectedAiUsage.usedToday} 次 / 剩余 ${selectedAiUsage.remainingToday} 次 / 每人上限 ${selectedAiUsage.dailyLimit} 次`
-    : "未选择接口，暂无法显示今日次数";
-
-  function patchAiSession(patch: Partial<AiScheduleSession>) {
-    if ("draft" in patch) {
-      setAiApplyResult(null);
-    }
-    onAiSessionChange({
-      providerId: aiProviderId,
-      taskType: aiTaskType,
-      instruction: aiInstruction,
-      followupAnswer: aiFollowupAnswer,
-      draft: aiDraft,
-      message: aiMessage,
-      ...patch
-    });
-  }
-
-  function patchSelectedAiProviderUsage(result: AiScheduleDraftResponse) {
-    if (!result.providerUsage) return;
-    setAiProviders((current) =>
-      current.map((provider) =>
-        provider.id === result.providerId
-          ? {
-              ...provider,
-              dailyLimit: result.providerUsage?.dailyLimit ?? provider.dailyLimit,
-              usedToday: result.providerUsage?.usedToday,
-              remainingToday: result.providerUsage?.remainingToday
-            }
-          : provider
-      )
-    );
-  }
-
-  async function copyAiRawResult() {
-    if (!aiRawResultText) {
-      patchAiSession({ message: "暂无可复制的原始返回内容。" });
-      return;
-    }
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(aiRawResultText);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = aiRawResultText;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        const copied = document.execCommand("copy");
-        document.body.removeChild(textarea);
-        if (!copied) throw new Error("copy failed");
-      }
-      patchAiSession({ message: "原始返回内容已复制。" });
-    } catch {
-      patchAiSession({ message: "复制失败，请手动选中原始内容复制。" });
-    }
-  }
-
-  function clearAiWork() {
-    setAiApplyResult(null);
-    patchAiSession({ instruction: "", followupAnswer: "", draft: null, message: "" });
-  }
-
   function suggestedBillingHoursForDraft(courseGroupId: string, startTime: string, endTime: string): number {
     const course = getCourse(vault, courseGroupId);
     if (!course || !isOrderedTimeRange(startTime, endTime)) return 0;
-    return billableHoursForCourseLesson(course, { startTime, endTime }, vault);
-  }
-
-  function updateTimeWithTwoHourEnd(startTime: string, setStartTime: (value: string) => void, setEndTime: (value: string) => void) {
-    setStartTime(startTime);
-    const nextEndTime = timeTwoHoursLater(startTime);
-    if (nextEndTime) setEndTime(nextEndTime);
+    return billableHoursForCourseLesson(course, { startTime, endTime });
   }
 
   function updateSingleStartTime(startTime: string) {
     updateTimeWithTwoHourEnd(startTime, setSingleStartTime, setSingleEndTime);
-  }
-
-  function updateRuleStartTime(startTime: string) {
-    updateTimeWithTwoHourEnd(startTime, setRuleStartTime, setRuleEndTime);
   }
 
   function updateCalendarStartTime(startTime: string) {
@@ -1226,103 +436,8 @@ export function ScheduleView({
     updateTimeWithTwoHourEnd(startTime, setCustomPresetStart, setCustomPresetEnd);
   }
 
-  function updateRangeEndManually(date: string) {
-    setBatchLessonTargetCount("");
-    setRangeEnd(date);
-  }
-
   function addSingleLesson(status: "scheduled" | "completed") {
     addLessonFromCourse(singleCourseGroupId, singleDate, singleStartTime, singleEndTime, status, parseOptionalBillingHours(singleBillingHours));
-  }
-
-  async function refreshAiProviders() {
-    if (!token) return;
-    patchAiSession({ message: "" });
-    try {
-      const providers = await (isAdmin ? getAiProviders(token) : getUsableAiProviders(token));
-      setAiProviders(providers);
-      const nextProviderId = aiProviderId && providers.some((provider) => provider.id === aiProviderId && provider.enabled)
-        ? aiProviderId
-        : providers.find((provider) => provider.enabled && provider.isDefault)?.id ?? providers.find((provider) => provider.enabled)?.id ?? "";
-      patchAiSession({ providerId: nextProviderId });
-    } catch (error) {
-      patchAiSession({ message: error instanceof Error ? error.message : "AI 配置加载失败。" });
-    }
-  }
-
-  async function submitAiDraft() {
-    if (!token || !aiProviderId || !aiInstruction.trim()) {
-      patchAiSession({ message: !aiProviderId ? "请先选择可用的 AI 接口配置。" : "请先填写要让 AI 处理的内容。" });
-      return;
-    }
-    setAiLoading(true);
-    patchAiSession({ draft: null, followupAnswer: "", message: "正在生成新的 AI 建议..." });
-    try {
-      const result = await generateAiScheduleDraft(token, {
-        providerId: aiProviderId,
-        taskType: aiTaskType,
-        instruction: aiInstruction.trim(),
-        context: buildScheduleAiContext(vault, { calendarMonth, selectedCalendarDate, weekStartPreference })
-      });
-      patchSelectedAiProviderUsage(result);
-      patchAiSession({ draft: result, message: "AI 建议已生成，请先人工核对。" });
-    } catch (error) {
-      patchAiSession({ draft: null, message: error instanceof Error ? error.message : "AI 生成建议失败。" });
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
-  async function submitAiFollowup() {
-    if (!aiFollowupAnswer.trim()) {
-      patchAiSession({ message: "请先填写补充信息。" });
-      return;
-    }
-    const questionsText = aiDraftQuestions.map((question, index) => `${index + 1}. ${formatAiValue(question)}`).join("\n");
-    const nextInstruction = [
-      aiInstruction.trim(),
-      "",
-      "以下是 AI 上一次提出的需要确认的问题：",
-      questionsText || "无",
-      "",
-      "我补充确认的信息如下，请结合原始需求重新生成完整、可执行的结构化建议：",
-      aiFollowupAnswer.trim()
-    ].join("\n");
-    setAiLoading(true);
-    patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: null, message: "正在根据补充信息重新生成建议..." });
-    try {
-      const result = await generateAiScheduleDraft(token, {
-        providerId: aiProviderId,
-        taskType: aiTaskType,
-        instruction: nextInstruction,
-        context: buildScheduleAiContext(vault, { calendarMonth, selectedCalendarDate, weekStartPreference })
-      });
-      patchSelectedAiProviderUsage(result);
-      patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: result, message: "已带着补充信息重新生成建议，请继续核对。" });
-    } catch (error) {
-      patchAiSession({ instruction: nextInstruction, followupAnswer: "", draft: null, message: error instanceof Error ? error.message : "AI 生成建议失败。" });
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
-  function applyAiDraft() {
-    if (aiApplying) return;
-    setAiApplying(true);
-    setAiApplyResult(null);
-    patchAiSession({ message: "正在写入 AI 建议..." });
-    const result = onApplyAiDraft({
-      providerId: aiProviderId,
-      taskType: aiTaskType,
-      instruction: aiInstruction,
-      followupAnswer: aiFollowupAnswer,
-      draft: aiDraft,
-      message: aiMessage
-    });
-    const displayResult = result.ok ? result : { ...result, message: `AI 建议写入失败：${result.message}` };
-    setAiApplyResult(displayResult);
-    patchAiSession({ message: displayResult.message });
-    window.setTimeout(() => setAiApplying(false), 250);
   }
 
   function goToCalendarSchedulingFromSingle() {
@@ -1380,347 +495,7 @@ export function ScheduleView({
     showScheduleNotice(`已添加 ${dateWithWeekday(lessonDate)} ${lessonStartTime}-${lessonEndTime} 的课节。`);
   }
 
-  function addSubstituteClassRecord(force = false) {
-    if (!substituteDate) {
-      showScheduleError("请选择代班补课日期。");
-      return;
-    }
-    if (!validateTimeRange(substituteStartTime, substituteEndTime, "代班补课结束时间必须晚于开始时间。")) return;
-    if (substitutePresentCountNumber <= 0) {
-      showScheduleError("请填写代班补课到课人数。");
-      return;
-    }
-    const conflict = findTimeConflict(substituteDate, substituteStartTime, substituteEndTime);
-    if (conflict && !force) {
-      confirm({
-        title: "代班补课时间已有课程",
-        description: `${substituteDate} ${substituteStartTime}-${substituteEndTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要添加。`,
-        confirmLabel: "仍然添加",
-        tone: "danger",
-        onConfirm: () => addSubstituteClassRecord(true)
-      });
-      return;
-    }
-    const lesson = createSubstituteClassLesson(vault, {
-      date: substituteDate,
-      startTime: substituteStartTime,
-      endTime: substituteEndTime,
-      campusId: substituteCampusId || undefined,
-      subject: substituteSubject,
-      title: substituteTitle,
-      externalClassName: substituteExternalClassName,
-      originalTeacherName: substituteOriginalTeacherName,
-      salaryGradeStage: substituteSalaryGradeStage,
-      presentStudentCount: substitutePresentCountNumber,
-      studentNamesText: substituteStudentNamesText,
-      note: substituteNote,
-      manualBillingHours: substituteManualBillingHours,
-      status: substituteStatus
-    });
-    onAddLesson(lesson);
-    setSelectedId(lesson.id);
-    setSelectedCalendarDate(substituteDate);
-    setCalendarMonth(substituteDate.slice(0, 7));
-    setLessonDay(substituteDate);
-    setScheduleError("");
-    showScheduleNotice(`已添加 ${dateWithWeekday(substituteDate)} ${substituteStartTime}-${substituteEndTime} 的代班补课记录。`);
-    setSubstituteTitle("");
-    setSubstituteExternalClassName("");
-    setSubstituteOriginalTeacherName("");
-    setSubstitutePresentStudentCount("");
-    setSubstituteStudentNamesText("");
-    setSubstituteNote("");
-  }
-
-  function toggleSyncLesson(lessonId: string) {
-    setSelectedSyncLessonIds((current) =>
-      current.includes(lessonId) ? current.filter((id) => id !== lessonId) : [...current, lessonId]
-    );
-  }
-
-  function setAllSyncLessons(selected: boolean) {
-    setSelectedSyncLessonIds(selected ? selectableSyncLessons.map((lesson) => lesson.id) : []);
-  }
-
-  function toggleExpandedStudentStatsGroup(groupId: string) {
-    setExpandedStudentStatsGroupIds((current) =>
-      current.includes(groupId) ? current.filter((id) => id !== groupId) : [...current, groupId]
-    );
-  }
-
-  function copyLessonBatchesToDates(
-    batches: Array<{ sourceLessons: Lesson[]; targetDate: string; targetStartDate: string }>,
-    options: {
-      force?: boolean;
-      onConfirm: () => void;
-      afterSync: () => void;
-      conflictDescription: (replaceCount: number) => string;
-      skippedMessage?: (syncedCount: number, skippedCount: number) => string;
-    }
-  ) {
-    const syncBuilds = batches.map((batch) => ({
-      ...buildScheduleSyncLessonsForDate(vault, batch.sourceLessons, batch.targetDate, batch.targetStartDate),
-      targetDate: batch.targetDate
-    }));
-    const replaceLessonIds = Array.from(new Set(syncBuilds.flatMap((build) => build.replaceLessonIds)));
-    const lessonsToAdd = linkSyncedLessonsToPreviousLessons(
-      vault,
-      syncBuilds.flatMap((build) => build.lessons),
-      replaceLessonIds
-    );
-    const skippedCount = syncBuilds.reduce((sum, build) => sum + build.skippedCount, 0);
-    const conflictSkippedCount = syncBuilds.reduce((sum, build) => sum + build.conflictSkippedCount, 0);
-
-    if (replaceLessonIds.length > 0 && !options.force) {
-      confirm({
-        title: "目标日期已有同课程课节",
-        description: options.conflictDescription(replaceLessonIds.length),
-        confirmLabel: "覆盖并复用",
-        onConfirm: options.onConfirm
-      });
-      return;
-    }
-
-    if (lessonsToAdd.length === 0) {
-      showScheduleError(
-        conflictSkippedCount > 0
-          ? "目标时间已有其他课程，已跳过复用，未覆盖原有手动排课。"
-          : skippedCount > 0
-            ? "可复用课程已暂停，未复用。"
-            : "没有可复用的来源课节。"
-      );
-      return;
-    }
-
-    onAddLessons(lessonsToAdd, { replaceLessonIds });
-    options.afterSync();
-    setScheduleError("");
-    showScheduleNotice(`已复用 ${lessonsToAdd.length} 节课程。`);
-    if (skippedCount > 0 || conflictSkippedCount > 0) {
-      const messages = [
-        skippedCount > 0 ? `${skippedCount} 节来源课程已暂停，未复用` : "",
-        conflictSkippedCount > 0 ? `${conflictSkippedCount} 节目标时间已有其他课程，已跳过` : ""
-      ].filter(Boolean);
-      showScheduleError(
-        skippedCount > 0 && conflictSkippedCount === 0 && options.skippedMessage
-          ? options.skippedMessage(lessonsToAdd.length, skippedCount)
-          : `已复用 ${lessonsToAdd.length} 节；${messages.join("；")}。`
-      );
-    }
-  }
-
-  function copySelectedLessonsToDate(force = false) {
-    if (!syncSourceDate || !syncTargetDate) {
-      showScheduleError("请选择要复用的来源日期和目标日期。");
-      return;
-    }
-    if (syncSourceDate === syncTargetDate) {
-      showScheduleError("来源日期和目标日期不能相同。");
-      return;
-    }
-    if (selectedSyncLessons.length === 0) {
-      showScheduleError("请至少勾选一节要复用的课程。");
-      return;
-    }
-
-    copyLessonBatchesToDates(
-      [{ sourceLessons: selectedSyncLessons, targetDate: syncTargetDate, targetStartDate: syncTargetDate }],
-      {
-        force,
-        onConfirm: () => copySelectedLessonsToDate(true),
-        afterSync: () => {
-          if (schedulePanel === "calendar") {
-            setSelectedCalendarDate(syncTargetDate);
-            setCalendarMonth(syncTargetDate.slice(0, 7));
-          }
-        },
-        conflictDescription: (replaceCount) => `${syncTargetDate} 有 ${replaceCount} 节课会被覆盖。已取消的来源课节也会复用为待上课。`
-      }
-    );
-  }
-
-  function copyLessonRangeToDateRange(force = false) {
-    if (!syncRangeSourceStart || !syncRangeSourceEnd || !syncRangeTargetStart || !syncRangeTargetEnd) {
-      showScheduleError("请选择完整的来源日期段和目标日期段。");
-      return;
-    }
-    if (!isOrderedDateRange(syncRangeSourceStart, syncRangeSourceEnd) || !isOrderedDateRange(syncRangeTargetStart, syncRangeTargetEnd)) {
-      showScheduleError("日期段结束日期不能早于开始日期。");
-      return;
-    }
-    if (syncRangeSourceDates.length !== syncRangeTargetDates.length) {
-      showScheduleError(`来源日期段有 ${syncRangeSourceDates.length} 天，目标日期段有 ${syncRangeTargetDates.length} 天，请保持天数一致。`);
-      return;
-    }
-    if (syncRangeSourceDates.some((date, index) => date === syncRangeTargetDates[index])) {
-      showScheduleError("来源日期和对应目标日期不能相同。");
-      return;
-    }
-
-    const sourceSnapshot = [...vault.lessons];
-    const batches = syncRangeSourceDates.map((sourceDate, index) => ({
-      sourceLessons: sourceSnapshot.filter((lesson) => lesson.date === sourceDate),
-      targetDate: syncRangeTargetDates[index],
-      targetStartDate: syncRangeTargetDates[0]
-    }));
-    if (!batches.some((batch) => batch.sourceLessons.length > 0)) {
-      showScheduleError("来源日期范围没有可复用课节。");
-      return;
-    }
-
-    copyLessonBatchesToDates(batches, {
-      force,
-      onConfirm: () => copyLessonRangeToDateRange(true),
-      afterSync: () => {
-        if (schedulePanel === "calendar") {
-          setSelectedCalendarDate(syncRangeTargetStart);
-          setCalendarMonth(syncRangeTargetStart.slice(0, 7));
-        }
-      },
-      conflictDescription: (replaceCount) => `${syncRangeTargetStart} 至 ${syncRangeTargetEnd} 有 ${replaceCount} 节同时间课节会被覆盖。已取消的来源课节也会复用为待上课。`,
-      skippedMessage: (reusedCount, skippedCount) => `已复用 ${reusedCount} 节；${skippedCount} 节来源课程已暂停，未复用。`
-    });
-  }
-
-  function fillSyncRangeFromSelectedWeek() {
-    const selectedWeekDates = weekDatesFor(selectedCalendarDate, weekStartPreference);
-    const targetStart = selectedWeekDates[0] ?? selectedCalendarDate;
-    const targetEnd = selectedWeekDates[6] ?? selectedCalendarDate;
-    setSyncRangeSourceStart(addDays(targetStart, -7));
-    setSyncRangeSourceEnd(addDays(targetEnd, -7));
-    setSyncRangeTargetStart(targetStart);
-    setSyncRangeTargetEnd(targetEnd);
-  }
-
-  function toggleWeekday(day: Weekday) {
-    setSelectedWeekdays((current) =>
-      current.includes(day) ? current.filter((item) => item !== day) : [...current, day].sort()
-    );
-  }
-
-  function addWeeklyPatternSlot() {
-    if (!ruleCourseGroupId) {
-      showScheduleError("请先选择要加入周循环模板的课程。");
-      return;
-    }
-    if (selectedWeekdays.length === 0) {
-      showScheduleError("请先选择要加入周循环模板的星期。");
-      return;
-    }
-    if (!validateTimeRange(ruleStartTime, ruleEndTime)) return;
-    const course = getCourse(vault, ruleCourseGroupId);
-    if (!course || course.status !== "active") {
-      showScheduleError("这个课程已暂停或不存在，请先选择当前课程。");
-      return;
-    }
-    if (!courseHasActiveStudent(vault, course)) {
-      showScheduleError("这个课程没有在读学生，请先在档案信息中关联在读学生。");
-      return;
-    }
-
-    const weekdays = Array.from(new Set(selectedWeekdays)).sort((a, b) => a - b);
-    const billingHours = ruleBillingHours.trim();
-    setWeeklyPatternSlots((current) => {
-      const matchedIndex = current.findIndex(
-        (slot) =>
-          slot.courseGroupId === ruleCourseGroupId &&
-          slot.startTime === ruleStartTime &&
-          slot.endTime === ruleEndTime &&
-          slot.billingHours.trim() === billingHours
-      );
-      if (matchedIndex < 0) {
-        return [
-          ...current,
-          {
-            id: makeId("weekly_pattern"),
-            courseGroupId: ruleCourseGroupId,
-            weekdays,
-            startTime: ruleStartTime,
-            endTime: ruleEndTime,
-            billingHours
-          }
-        ];
-      }
-      return current.map((slot, index) =>
-        index === matchedIndex
-          ? { ...slot, weekdays: Array.from(new Set([...slot.weekdays, ...weekdays])).sort((a, b) => a - b) }
-          : slot
-      );
-    });
-    showScheduleNotice(`已加入周循环模板：${course.name} ${weekdays.map((day) => weekdayLabels[day]).join("、")} ${ruleStartTime}-${ruleEndTime}。`);
-  }
-
-  function applyWeeklyPatternSlot(slot: WeeklySchedulePatternSlot) {
-    setRuleCourseGroupId(slot.courseGroupId);
-    setSelectedWeekdays([...slot.weekdays].sort((a, b) => a - b));
-    setRuleStartTime(slot.startTime);
-    setRuleEndTime(slot.endTime);
-    setRuleBillingHours(slot.billingHours);
-  }
-
-  function deleteWeeklyPatternSlot(slotId: string) {
-    setWeeklyPatternSlots((current) => current.filter((slot) => slot.id !== slotId));
-  }
-
   // --- Per-day time group handlers ---
-
-  function setBatchPerDayModeWithSync(value: boolean) {
-    if (value && !batchPerDayMode) {
-      // Turning ON: seed first group from current single-time values
-      setBatchTimeGroups([
-        {
-          id: makeId("btg"),
-          startTime: ruleStartTime,
-          endTime: ruleEndTime,
-          billingHours: ruleBillingHours,
-          weekdays: [...selectedWeekdays]
-        }
-      ]);
-    } else if (!value && batchPerDayMode) {
-      // Turning OFF: apply first group's time back to single inputs
-      const first = batchTimeGroups[0];
-      if (first) {
-        setRuleStartTime(first.startTime);
-        setRuleEndTime(first.endTime);
-        setRuleBillingHours(first.billingHours);
-      }
-    }
-    setBatchPerDayMode(value);
-  }
-
-  function addBatchTimeGroup() {
-    setBatchTimeGroups((current) => [
-      ...current,
-      {
-        id: makeId("btg"),
-        startTime: ruleStartTime,
-        endTime: ruleEndTime,
-        billingHours: ruleBillingHours,
-        weekdays: Array.from(new Set(selectedWeekdays)).sort((a, b) => a - b)
-      }
-    ]);
-  }
-
-  function updateBatchTimeGroup(id: string, updates: Partial<Omit<BatchTimeGroup, "id">>) {
-    setBatchTimeGroups((current) => current.map((group) => (group.id === id ? { ...group, ...updates } : group)));
-  }
-
-  function deleteBatchTimeGroup(id: string) {
-    setBatchTimeGroups((current) => current.filter((group) => group.id !== id));
-  }
-
-  function toggleBatchTimeGroupWeekday(groupId: string, day: Weekday) {
-    setBatchTimeGroups((current) =>
-      current.map((group) => {
-        if (group.id !== groupId) return group;
-        const has = group.weekdays.includes(day);
-        return {
-          ...group,
-          weekdays: has ? group.weekdays.filter((d) => d !== day) : [...group.weekdays, day].sort((a, b) => a - b)
-        };
-      })
-    );
-  }
 
   function addCustomPreset() {
     if (!customPresetStart || !customPresetEnd) return;
@@ -1735,49 +510,6 @@ export function ScheduleView({
     });
   }
 
-  function recalculateLessonFee(lesson: Lesson): Lesson {
-    if (isSubstituteClassLesson(lesson)) {
-      return {
-        ...lesson,
-        type: "small_class",
-        feeSnapshot: buildSubstituteClassFeeSnapshot(vault, lesson)
-      };
-    }
-    const course = getCourse(vault, lesson.courseGroupId);
-    if (!course) return lesson;
-    const normalizedLesson: Lesson = {
-      ...lesson,
-      attendance: lesson.attendance.map((entry) => ({
-        ...entry,
-        trial: entry.trial ?? Boolean(vault.students.find((student) => student.id === entry.studentId)?.temporaryTrial)
-      }))
-    };
-    return {
-      ...normalizedLesson,
-      type: course.type,
-      feeSnapshot: buildFeeSnapshot(vault, course, normalizedLesson)
-    };
-  }
-
-  function attendanceFromCurrentCourse(lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
-    const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
-    const fallbackStatus = attendanceStatusForLessonStatus(lesson.status);
-    return course.studentIds.map((studentId) => {
-      const existing = existingByStudent.get(studentId);
-      if (existing) {
-        return {
-          ...existing,
-          trial: existing.trial ?? Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
-        };
-      }
-      return {
-        studentId,
-        status: fallbackStatus,
-        trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
-      };
-    });
-  }
-
   function refreshLessonFromCurrentCourse(lesson: Lesson): Lesson | null {
     const course = getCourse(vault, lesson.courseGroupId);
     if (!course) return null;
@@ -1786,7 +518,7 @@ export function ScheduleView({
       campusId: course.defaultCampusId,
       type: course.type,
       expectedStudentIds: [...course.studentIds],
-      attendance: attendanceFromCurrentCourse(lesson, course),
+      attendance: attendanceForStudentIds(vault, lesson, course.studentIds),
       trialStudentCount: isClassBillingCourseType(course.type) ? lesson.trialStudentCount ?? 0 : 0,
       trialFee: isClassBillingCourseType(course.type) ? lesson.trialFee ?? 0 : 0
     });
@@ -1816,629 +548,6 @@ export function ScheduleView({
     });
   }
 
-  function updateSelected(patch: Partial<Lesson>, shouldRecalculate = false) {
-    if (!selected) return;
-    const next = { ...selected, ...patch };
-    onUpdateLesson(shouldRecalculate ? recalculateLessonFee(next) : next);
-  }
-
-  function recalculateSelectedFee() {
-    if (!selected) return;
-    onUpdateLesson(recalculateLessonFee(selected));
-  }
-
-  function updateSelectedBillingHours(hours: number) {
-    if (!selected) return;
-    const nextHours = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
-    onUpdateLesson(recalculateLessonFee({
-      ...selected,
-      feeSnapshot: {
-        ...selected.feeSnapshot,
-        hours: nextHours,
-        manualHours: true
-      }
-    }));
-  }
-
-  function resetSelectedBillingHoursToSuggested() {
-    if (!selected) return;
-    const { manualHours: _manualHours, hours: _hours, ...restSnapshot } = selected.feeSnapshot;
-    onUpdateLesson(recalculateLessonFee({
-      ...selected,
-      feeSnapshot: restSnapshot
-    }));
-  }
-
-  function updateSelectedStatus(status: Lesson["status"]) {
-    if (!selected) return;
-    const attendanceStatus = attendanceStatusForLessonStatus(status);
-    const next: Lesson = {
-      ...selected,
-      status,
-      attendance: selected.attendance.map((entry) => ({
-        ...entry,
-        status: attendanceStatus
-      }))
-    };
-    onUpdateLesson(recalculateLessonFee(next));
-  }
-
-  function updateSelectedCourse(courseId: string) {
-    if (!selected) return;
-    const course = getCourse(vault, courseId);
-    if (!course) return;
-    const next: Lesson = {
-      ...selected,
-      courseGroupId: course.id,
-      campusId: course.defaultCampusId,
-      type: course.type,
-      expectedStudentIds: [...course.studentIds],
-      attendance: course.studentIds.map((studentId) => ({
-        studentId,
-        status: "attended",
-        trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
-      })),
-      trialStudentCount: isClassBillingCourseType(course.type) ? selected.trialStudentCount ?? 0 : 0,
-      trialFee: isClassBillingCourseType(course.type) ? selected.trialFee ?? 0 : 0,
-      feeSnapshot: { ...selected.feeSnapshot, amount: 0 }
-    };
-    onUpdateLesson(recalculateLessonFee(next));
-  }
-
-  function updateContent(field: keyof Lesson["content"], value: string) {
-    if (!selected) return;
-    const content = field === "taught" || field === "homework"
-      ? updateLessonContentField(selected.content, vault.progressChecklistTemplates ?? [], field, value)
-      : { ...selected.content, [field]: value };
-    onUpdateLesson({ ...selected, content });
-  }
-
-  function syncSelectedLessonChecklist() {
-    if (!selected || !selectedPreviousLesson || !selectedPreviousChecklistTemplate) return;
-    const candidates = selectedPreviousHomeworkChecklistSyncCandidates;
-    setChecklistLastSyncSource("homework");
-    if (candidates.length === 0) {
-      setChecklistSyncResult([]);
-      setChecklistSyncMessage("上节作业已全部检查完成。");
-      return;
-    }
-
-    const countsByStudent = new Map<string, number>();
-    for (const candidate of candidates) {
-      countsByStudent.set(candidate.studentId, (countsByStudent.get(candidate.studentId) ?? 0) + 1);
-    }
-    setChecklistSyncResult(
-      Array.from(countsByStudent.entries())
-        .map(([studentId, count]) => ({
-          studentId,
-          studentName: findStudent(vault, studentId)?.name ?? "未知学生",
-          homeworkSyncedCount: count
-        }))
-        .sort((a, b) => compareByName(a.studentName, b.studentName) || a.studentId.localeCompare(b.studentId))
-    );
-
-    const now = new Date().toISOString();
-    onSaveChecklistCompletions(candidates.map((candidate) => ({
-      id: makeId("progress_completion"),
-      templateId: selectedPreviousChecklistTemplate.id,
-      itemId: candidate.itemId,
-      studentId: candidate.studentId,
-      courseGroupId: selectedPreviousLesson.courseGroupId,
-      source: "homework",
-      completedDate: selected.date || todayIso(),
-      lessonId: selectedPreviousLesson.id,
-      progressRecordId: candidate.progressRecordId,
-      note: `本节检查上节课后作业：${selected.date} ${selected.startTime}-${selected.endTime}`,
-      updatedAt: now
-    })));
-    setChecklistSyncMessage(`已检查 ${candidates.length} 个上节作业条目。`);
-  }
-
-  function toggleSelectedLessonChecklistCompletion(
-    studentId: string,
-    itemId: string,
-    completed: boolean
-  ) {
-    if (!selected || !selectedPreviousLesson || !selectedPreviousChecklistTemplate) return;
-    const completions = (vault.progressChecklistCompletions ?? []).filter((completion) =>
-      completion.templateId === selectedPreviousChecklistTemplate.id &&
-      completion.courseGroupId === selectedPreviousLesson.courseGroupId &&
-      completion.lessonId === selectedPreviousLesson.id &&
-      completion.studentId === studentId &&
-      completion.itemId === itemId &&
-      checklistCompletionAppliesToSource(completion, "homework")
-    );
-    const now = new Date().toISOString();
-
-    if (completed) {
-      if (completions.length > 0) return;
-      const candidate = selectedPreviousHomeworkChecklistSyncCandidates.find((entry) => entry.studentId === studentId && entry.itemId === itemId);
-      onUpdateChecklistCompletions([{
-        id: makeId("progress_completion"),
-        templateId: selectedPreviousChecklistTemplate.id,
-        itemId,
-        studentId,
-        courseGroupId: selectedPreviousLesson.courseGroupId,
-        source: "homework",
-        completedDate: selected.date || todayIso(),
-        lessonId: selectedPreviousLesson.id,
-        progressRecordId: candidate?.progressRecordId,
-        note: `本节检查上节课后作业：${selected.date} ${selected.startTime}-${selected.endTime}`,
-        updatedAt: now
-      }], []);
-      setChecklistLastSyncSource("homework");
-      setChecklistSyncMessage("已标记上节作业完成。");
-      return;
-    }
-
-    onUpdateChecklistCompletions([], completions.map((completion) => completion.id));
-    setChecklistLastSyncSource("homework");
-    setChecklistSyncMessage("已撤销上节作业的完成标记。");
-  }
-
-  function updateAttendance(studentId: string, status: AttendanceStatus) {
-    if (!selected) return;
-    const singleStudentLesson = selectedLessonStudentCount <= 1;
-    const nextLesson: Lesson = {
-      ...selected,
-      attendance: selected.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, status, makeupExempt: isMakeupAttendanceStatus(status) ? entry.makeupExempt : undefined } : entry
-      )
-    };
-    if (singleStudentLesson) {
-      nextLesson.status = lessonStatusForAttendanceStatus(status);
-    }
-    onUpdateLesson(recalculateLessonFee(nextLesson));
-  }
-
-  function statusAfterNoMakeupNeeded(lesson: Lesson): Lesson["status"] {
-    if (lesson.attendance.length > 0 && lesson.attendance.every((entry) => entry.status === "cancelled")) return "cancelled";
-    if (lesson.attendance.length > 0 && lesson.attendance.every((entry) => entry.status === "makeup_completed")) return "makeup_completed";
-    return "completed";
-  }
-
-  function updateAttendanceMakeupExempt(studentId: string, makeupExempt: boolean) {
-    if (!selected) return;
-    const nextLesson: Lesson = {
-      ...selected,
-      attendance: selected.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, makeupExempt: makeupExempt ? true : undefined } : entry
-      )
-    };
-    const neededStudentIds = makeupNeededStudentIds(nextLesson);
-    if (makeupExempt && nextLesson.status === "makeup_pending" && neededStudentIds.length === 0) {
-      nextLesson.status = statusAfterNoMakeupNeeded(nextLesson);
-    }
-    if (!makeupExempt && selectedLessonStudentCount <= 1 && neededStudentIds.includes(studentId)) {
-      nextLesson.status = "makeup_pending";
-    }
-    onUpdateLesson(recalculateLessonFee(nextLesson));
-  }
-
-  function updateMakeupManagementAttendance(lesson: Lesson, studentId: string, status: AttendanceStatus) {
-    const hasAttendanceEntry = lesson.attendance.some((entry) => entry.studentId === studentId);
-    const nextLesson: Lesson = {
-      ...lesson,
-      attendance: [
-        ...lesson.attendance.map((entry) =>
-          entry.studentId === studentId ? { ...entry, status, makeupExempt: isMakeupAttendanceStatus(status) ? entry.makeupExempt : undefined } : entry
-        ),
-        ...(hasAttendanceEntry ? [] : [{ studentId, status }])
-      ]
-    };
-    if (lessonStudentIds(lesson).length <= 1) {
-      nextLesson.status = lessonStatusForAttendanceStatus(status);
-    } else if (nextLesson.status === "makeup_pending" && makeupNeededStudentIds(nextLesson).length === 0) {
-      nextLesson.status = statusAfterNoMakeupNeeded(nextLesson);
-    }
-    onUpdateLesson(recalculateLessonFee(nextLesson));
-  }
-
-  function updateMakeupManagementExempt(lesson: Lesson, studentId: string, makeupExempt: boolean) {
-    const hasAttendanceEntry = lesson.attendance.some((entry) => entry.studentId === studentId);
-    const nextLesson: Lesson = {
-      ...lesson,
-      attendance: [
-        ...lesson.attendance.map((entry) =>
-          entry.studentId === studentId ? { ...entry, makeupExempt: makeupExempt ? true : undefined } : entry
-        ),
-        ...(hasAttendanceEntry ? [] : [{ studentId, status: "makeup_pending" as AttendanceStatus, makeupExempt: makeupExempt ? true : undefined }])
-      ]
-    };
-    const neededStudentIds = makeupNeededStudentIds(nextLesson);
-    if (makeupExempt && nextLesson.status === "makeup_pending" && neededStudentIds.length === 0) {
-      nextLesson.status = statusAfterNoMakeupNeeded(nextLesson);
-    }
-    if (!makeupExempt && lessonStudentIds(lesson).length <= 1 && neededStudentIds.includes(studentId)) {
-      nextLesson.status = "makeup_pending";
-    }
-    onUpdateLesson(recalculateLessonFee(nextLesson));
-  }
-
-  function markOriginalStudentsMadeUp(lesson: Lesson, studentIds: string[]) {
-    if (studentIds.length === 0) return;
-    const studentIdSet = new Set(studentIds);
-    const existingStudentIds = new Set(lesson.attendance.map((entry) => entry.studentId));
-    const completedNote = `${todayIso()} 已补课完成`;
-    const nextLesson: Lesson = {
-      ...lesson,
-      attendance: [
-        ...lesson.attendance.map((entry) =>
-          studentIdSet.has(entry.studentId)
-            ? { ...entry, status: "makeup_completed" as AttendanceStatus, makeupExempt: undefined, note: entry.note || completedNote }
-            : entry
-        ),
-        ...studentIds
-          .filter((studentId) => !existingStudentIds.has(studentId))
-          .map((studentId) => ({ studentId, status: "makeup_completed" as AttendanceStatus, note: completedNote }))
-      ]
-    };
-    if ((nextLesson.status === "makeup_pending" || lesson.status === "makeup_pending") && makeupNeededStudentIds(nextLesson).length === 0) {
-      nextLesson.status = statusAfterNoMakeupNeeded(nextLesson);
-    }
-    onUpdateLesson(recalculateLessonFee(nextLesson));
-    showScheduleNotice(`已标记 ${studentIds.length} 名学生已补课。`);
-  }
-
-  function completeScheduledMakeupLessons(makeupLessons: Lesson[]) {
-    const activeLessons = makeupLessons.filter((lesson) => lesson.status !== "completed" && lesson.status !== "makeup_completed");
-    if (activeLessons.length === 0) return;
-    onUpdateLessons(activeLessons.map((lesson) => recalculateLessonFee({
-      ...lesson,
-      status: "makeup_completed",
-      attendance: lesson.attendance.map((entry) => ({ ...entry, status: "makeup_completed" as AttendanceStatus, makeupExempt: undefined }))
-    })));
-    showScheduleNotice(`已标记 ${activeLessons.length} 节补课完成。`);
-  }
-
-  function updateAttendanceNote(studentId: string, note: string) {
-    if (!selected) return;
-    onUpdateLesson({
-      ...selected,
-      attendance: selected.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, note } : entry
-      )
-    });
-  }
-
-  function toggleDetailMakeupStudent(studentId: string) {
-    setDetailMakeupStudentIds((current) =>
-      current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]
-    );
-  }
-
-  function switchSchedulePanel(nextPanel: SchedulePanel, options: { calendarMode?: "schedule" | "view" } = {}) {
-    if (nextPanel === "substitute") {
-      setMakeupManagementTab("substitute");
-      setSchedulePanel("makeup");
-    } else {
-      setSchedulePanel(nextPanel);
-    }
-    if (nextPanel === "calendar") {
-      setCalendarMode(options.calendarMode ?? "view");
-    }
-    if (nextPanel !== "records") {
-      setLessonReturnTarget(null);
-    }
-  }
-
-  function buildPanelReturnTarget(panel: SchedulePanel): InternalLessonReturnTarget | null {
-    switch (panel) {
-      case "ai":
-        return { kind: "panel", panel, label: "返回 AI 排课助手" };
-      case "schedule":
-        return { kind: "panel", panel, label: "返回排课" };
-      case "calendar":
-        return {
-          kind: "panel",
-          panel,
-          label: "返回日历查看",
-          calendarDate: selectedCalendarDate,
-          calendarMonth: calendarMonth,
-          calendarMode,
-          calendarDetailDate
-        };
-      case "makeup":
-        return { kind: "panel", panel, label: "返回补课管理" };
-      case "studentStats":
-        return { kind: "panel", panel, label: "返回学生课次统计" };
-      default:
-        return null;
-    }
-  }
-
-  function openDateInRecords(date: string, options: { returnTarget?: LessonReturnTarget | null } = {}) {
-    const firstLesson = vault.lessons.filter((lesson) => lesson.date === date).sort(sortLessons)[0];
-    setLessonReturnTarget(Object.prototype.hasOwnProperty.call(options, "returnTarget")
-      ? options.returnTarget ?? null
-      : buildPanelReturnTarget(schedulePanel));
-    setLessonHistory([]);
-    setCampusFilter("all");
-    setCourseTypeFilter("all");
-    setStudentFilter("");
-    setShowOnlyMakeup(false);
-    setSelectedId(firstLesson?.id ?? "");
-    setSelectedCalendarDate(date);
-    setCalendarMonth(date.slice(0, 7));
-    setLessonDay(date);
-    setLessonMonth(date.slice(0, 7));
-    setLessonScope("day");
-    setSyncRecordsWithCalendarDate(true);
-    setCalendarDetailDate(null);
-    setSchedulePanel("records");
-  }
-
-  function openLessonInRecords(
-    lesson: Lesson,
-    options: { pushHistory?: boolean; preserveReturnTarget?: boolean; returnTarget?: LessonReturnTarget | null } = {}
-  ) {
-    const pushHistory = options.pushHistory ?? true;
-    const preserveReturnTarget = options.preserveReturnTarget ?? schedulePanel === "records";
-    if (pushHistory && lesson.id !== selectedId) {
-      setLessonHistory((history) => [...history, selectedId].filter(Boolean).slice(-12));
-    }
-    if (Object.prototype.hasOwnProperty.call(options, "returnTarget")) {
-      setLessonReturnTarget(options.returnTarget ?? null);
-    } else if (!preserveReturnTarget) {
-      setLessonReturnTarget(buildPanelReturnTarget(schedulePanel));
-    }
-    setSelectedId(lesson.id);
-    setSelectedCalendarDate(lesson.date);
-    setCalendarMonth(lesson.date.slice(0, 7));
-    setLessonDay(lesson.date);
-    setLessonMonth(lesson.date.slice(0, 7));
-    setSyncRecordsWithCalendarDate(true);
-    setCalendarDetailDate(null);
-    setSchedulePanel("records");
-  }
-
-  function goBackToPreviousLesson() {
-    const previousId = lessonHistory.at(-1);
-    if (!previousId) return;
-    setLessonHistory((history) => history.slice(0, -1));
-    const previousLesson = vault.lessons.find((lesson) => lesson.id === previousId);
-    if (previousLesson) {
-      openLessonInRecords(previousLesson, { pushHistory: false });
-      return;
-    }
-    setSelectedId(previousId);
-  }
-
-  function goBackToLessonSource() {
-    if (!lessonReturnTarget) return;
-    if (lessonReturnTarget.kind === "panel") {
-      if (lessonReturnTarget.panel === "calendar") {
-        if (lessonReturnTarget.calendarDate) {
-          setSelectedCalendarDate(lessonReturnTarget.calendarDate);
-        }
-        if (lessonReturnTarget.calendarMonth) {
-          setCalendarMonth(lessonReturnTarget.calendarMonth);
-        }
-        if (lessonReturnTarget.calendarMode) {
-          setCalendarMode(lessonReturnTarget.calendarMode);
-        }
-        setCalendarDetailDate(lessonReturnTarget.calendarDetailDate ?? null);
-      }
-      setLessonReturnTarget(null);
-      setSchedulePanel(lessonReturnTarget.panel);
-      return;
-    }
-    setLessonReturnTarget(null);
-    onReturnToView(lessonReturnTarget);
-  }
-
-  function makeupMarkerForLesson(lesson: Lesson): string | null {
-    const lessonCompleted = isCompletedLessonStatus(lesson.status);
-    const hasCompletedMakeupAttendance = lesson.attendance.some((entry) => entry.status === "makeup_completed");
-    if (lesson.linkedOriginalLessonId) return lessonCompleted || hasCompletedMakeupAttendance ? "已补课" : "补课";
-    const linkedMakeupLessons = activeMakeupLessonsByOriginal[lesson.id] ?? [];
-    const completedMakeupCount = linkedMakeupLessons.filter((item) => isCompletedLessonStatus(item.status)).length;
-    if (completedMakeupCount > 0 && (lesson.status === "makeup_completed" || hasCompletedMakeupAttendance)) {
-      return completedMakeupCount === linkedMakeupLessons.length ? "已补课" : "部分已补";
-    }
-    if (linkedMakeupLessons.length > 0) {
-      return completedMakeupCount === linkedMakeupLessons.length && completedMakeupCount > 0 ? "已补课" : "已安排补课";
-    }
-    if (lesson.status === "makeup_completed" || hasCompletedMakeupAttendance) return "已补课";
-    if (makeupNeededStudentIds(lesson).length > 0 || (lesson.status === "makeup_pending" && lesson.attendance.length === 0)) {
-      return "待补课";
-    }
-    return null;
-  }
-
-  function createSelectedMakeupLesson(studentIds: string[]) {
-    if (!selected || studentIds.length === 0) return;
-    createMakeupLesson(selected, studentIds);
-    setDetailMakeupStudentIds([]);
-  }
-
-  function updateTemporaryFee(studentId: string, value?: number) {
-    if (!selected) return;
-    const nextLesson: Lesson = {
-      ...selected,
-      attendance: selected.attendance.map((entry) =>
-        entry.studentId === studentId ? { ...entry, temporaryFee: value !== undefined && Number.isFinite(value) ? value : undefined } : entry
-      )
-    };
-    onUpdateLesson(recalculateLessonFee(nextLesson));
-  }
-
-  function defaultTemporaryFeeForEntry(lesson: Lesson, entry: Lesson["attendance"][number]): number | undefined {
-    const course = getCourse(vault, lesson.courseGroupId);
-    if (!course || entry.trial) return undefined;
-    const presentStudentCount = presentCount(lesson);
-    const entryIsPresent = entry.status === "attended" || (Boolean(lesson.linkedOriginalLessonId) && entry.status === "makeup_completed");
-    if (!entryIsPresent) return 0;
-    const countWithoutEntry = Math.max(presentStudentCount - 1, 0);
-    const multiplier = lessonDurationMultiplierForCourse(course, lesson, vault);
-    const stage = salaryGradeStageForLesson(vault, course, lesson);
-    if (course.feeRule.mode === "salary_grade") {
-      const gradeRule = resolveSalaryGradeRule(vault, course.feeRule);
-      if (!gradeRule) return undefined;
-      const courseTypeRule = feeRuleForCourseType(vault, course.type);
-      const baseStudentCount = classHeadcountBaseStudentCountForRule(course.type, courseTypeRule);
-      const billableStudentCap = billableStudentCapForRule(course.type, courseTypeRule);
-      return Math.round((salaryGradeAmountForCount(gradeRule, course.type, presentStudentCount, stage, baseStudentCount, billableStudentCap) - salaryGradeAmountForCount(gradeRule, course.type, countWithoutEntry, stage, baseStudentCount, billableStudentCap)) * multiplier);
-    }
-    if (course.feeRule.mode !== "class_headcount") return undefined;
-    return Math.round((calculateClassHeadcountFee(course.feeRule, presentStudentCount, course.type, stage) - calculateClassHeadcountFee(course.feeRule, countWithoutEntry, course.type, stage)) * multiplier);
-  }
-
-  function updateTrialStats(patch: Pick<Partial<Lesson>, "trialStudentCount" | "trialFee">) {
-    if (!selected) return;
-    onUpdateLesson(recalculateLessonFee({ ...selected, ...patch }));
-  }
-
-  function addTemporaryStudent() {
-    if (!selected || !temporaryStudentId || selected.expectedStudentIds.includes(temporaryStudentId)) return;
-    const student = findStudent(vault, temporaryStudentId);
-    if (student?.status !== "active") return;
-    const isTrialStudent = Boolean(student?.temporaryTrial);
-    const next: Lesson = {
-      ...selected,
-      expectedStudentIds: [...selected.expectedStudentIds, temporaryStudentId],
-      attendance: [
-        ...selected.attendance,
-        {
-          studentId: temporaryStudentId,
-          status: "attended",
-          temporary: true,
-          trial: isTrialStudent,
-          temporaryFee: undefined,
-          note: isTrialStudent ? "试听加入" : "临时添加"
-        }
-      ]
-    };
-    onUpdateLesson(recalculateLessonFee(next));
-    setTemporaryStudentId("");
-    setTemporaryStudentSearch("");
-  }
-
-  function removeLessonStudent(studentId: string) {
-    if (!selected) return;
-    const next: Lesson = {
-      ...selected,
-      expectedStudentIds: selected.expectedStudentIds.filter((id) => id !== studentId),
-      attendance: selected.attendance.filter((entry) => entry.studentId !== studentId)
-    };
-    onUpdateLesson(recalculateLessonFee(next));
-  }
-
-  function askRemoveLessonStudent(studentId: string) {
-    const student = findStudent(vault, studentId);
-    confirm({
-      title: `从本节课移除「${student?.name ?? "未知学生"}」？`,
-      description: "只会影响当前课节的学生名单、到课状态和费用快照，不会修改课程档案里的班级学生。",
-      confirmLabel: "移除",
-      tone: "danger",
-      onConfirm: () => removeLessonStudent(studentId)
-    });
-  }
-
-  function createMakeupLesson(
-    original: Lesson,
-    studentIds: string[],
-    options: { date?: string; startTime?: string; endTime?: string; force?: boolean } = {}
-  ) {
-    const course = getCourse(vault, original.courseGroupId);
-    if (!course || studentIds.length === 0) return;
-    const scheduledDate = options.date ?? makeupDate;
-    const scheduledStartTime = options.startTime ?? makeupStartTime;
-    const scheduledEndTime = options.endTime ?? makeupEndTime;
-    if (!scheduledDate) {
-      showScheduleError("请选择补课日期。");
-      return;
-    }
-    if (!validateTimeRange(scheduledStartTime, scheduledEndTime, "补课结束时间必须晚于开始时间。")) return;
-    const conflict = findTimeConflict(scheduledDate, scheduledStartTime, scheduledEndTime);
-    if (conflict && !options.force) {
-      confirm({
-        title: "补课时间已有课程",
-        description: `${scheduledDate} ${scheduledStartTime}-${scheduledEndTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要安排补课。`,
-        confirmLabel: "仍然安排",
-        tone: "danger",
-        onConfirm: () => createMakeupLesson(original, studentIds, { date: scheduledDate, startTime: scheduledStartTime, endTime: scheduledEndTime, force: true })
-      });
-      return;
-    }
-    const makeup = createLessonFromCourse(vault, course, {
-      date: scheduledDate,
-      startTime: scheduledStartTime,
-      endTime: scheduledEndTime,
-      campusId: original.campusId ?? course.defaultCampusId,
-      status: "scheduled"
-    });
-    const makeupStudents = studentIds
-      .map((studentId) => findStudent(vault, studentId)?.name ?? "未知学生")
-      .join("、");
-    const nextMakeup = recalculateLessonFee({
-      ...makeup,
-      expectedStudentIds: [...studentIds],
-      attendance: studentIds.map((studentId) => ({ studentId, status: "attended" as AttendanceStatus })),
-      linkedOriginalLessonId: original.id,
-      makeupStudentId: studentIds.length === 1 ? studentIds[0] : undefined,
-      makeupOriginalDate: original.date,
-      makeupScheduledDate: scheduledDate,
-      note: `${makeupStudents} 补 ${original.date} 的课程`
-    });
-    const nextOriginal: Lesson = {
-      ...original,
-      attendance: original.attendance.map((entry) =>
-        studentIds.includes(entry.studentId)
-          ? { ...entry, status: "makeup_pending", note: entry.note || `已安排 ${scheduledDate} 补课` }
-          : entry
-      )
-    };
-    onAddLessonAndUpdateLesson(nextMakeup, nextOriginal);
-    openLessonInRecords(nextMakeup);
-    setSelectedCalendarDate(scheduledDate);
-    setCalendarMonth(scheduledDate.slice(0, 7));
-  }
-
-  function updateSelectedDate(nextDate: string) {
-    if (!selected) return;
-    const nextLesson: Lesson = {
-      ...selected,
-      date: nextDate,
-      makeupScheduledDate: selected.linkedOriginalLessonId ? nextDate : selected.makeupScheduledDate
-    };
-    const conflict = findTimeConflict(nextDate, selected.startTime, selected.endTime, selected.id);
-    const applyChange = () => {
-      onUpdateLesson(nextLesson);
-      setSelectedCalendarDate(nextDate);
-      setCalendarMonth(nextDate.slice(0, 7));
-    };
-    if (conflict) {
-      confirm({
-        title: "这个时间段已有课程",
-        description: `${dateWithWeekday(nextDate)} ${selected.startTime}-${selected.endTime} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
-        confirmLabel: "仍然调整",
-        tone: "danger",
-        onConfirm: applyChange
-      });
-      return;
-    }
-    applyChange();
-  }
-
-  function updateSelectedTime(nextStart: string, nextEnd: string) {
-    if (!selected) return;
-    if (!validateTimeRange(nextStart, nextEnd)) return;
-    const conflict = findTimeConflict(selected.date, nextStart, nextEnd, selected.id);
-    const applyChange = () => updateSelected({ startTime: nextStart, endTime: nextEnd }, true);
-    if (conflict) {
-      confirm({
-        title: "这个时间段已有课程",
-        description: `${dateWithWeekday(selected.date)} ${nextStart}-${nextEnd} 与「${courseName(vault, conflict.courseGroupId)} ${conflict.startTime}-${conflict.endTime}」冲突。请确认是否仍要调整。`,
-        confirmLabel: "仍然调整",
-        tone: "danger",
-        onConfirm: applyChange
-      });
-      return;
-    }
-    applyChange();
-  }
-
   function askDeleteLesson(lesson: Lesson) {
     const linkedMakeupCount = vault.lessons.filter((item) => item.linkedOriginalLessonId === lesson.id).length;
     confirm({
@@ -2447,65 +556,6 @@ export function ScheduleView({
       confirmLabel: "移入回收站",
       tone: "danger",
       onConfirm: () => onDeleteLesson(lesson.id)
-    });
-  }
-
-  function toggleTrashSelection(id: string) {
-    setSelectedTrashIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-    );
-  }
-
-  function toggleAllVisibleTrashSelection() {
-    setSelectedTrashIds((current) => {
-      const visibleIds = trashLessons.map((item) => item.id);
-      if (visibleIds.length === 0) return current;
-      if (visibleIds.every((id) => current.includes(id))) {
-        return current.filter((id) => !visibleIds.includes(id));
-      }
-      return Array.from(new Set([...current, ...visibleIds]));
-    });
-  }
-
-  function restoreTrashItems(ids: string[]) {
-    const restoringLessonIds = new Set(
-      deletedLessons.filter((item) => ids.includes(item.id)).map((item) => item.lesson.id)
-    );
-    const restorables = ids.filter((id) => {
-      const item = deletedLessons.find((deletedLesson) => deletedLesson.id === id);
-      return item && canRestoreDeletedLesson(vault, activeLessonIds, item, restoringLessonIds);
-    });
-    if (restorables.length === 0) {
-      showScheduleError("选中的课节当前无法恢复，可能已有同 ID 课节或课程档案已不存在。");
-      return;
-    }
-    onRestoreDeletedLessons(restorables);
-    setSelectedTrashIds((current) => current.filter((id) => !restorables.includes(id)));
-  }
-
-  function askRestoreTrashItems(ids: string[]) {
-    const count = ids.length;
-    if (count === 0) return;
-    confirm({
-      title: count === 1 ? "恢复这节课？" : `恢复选中的 ${count} 节课？`,
-      description: "恢复后课节会回到课程记录和日历中，原来的课程内容、作业、学生出勤和费用快照会一并恢复。",
-      confirmLabel: "恢复",
-      onConfirm: () => restoreTrashItems(ids)
-    });
-  }
-
-  function askPermanentDeleteTrashItems(ids: string[]) {
-    const count = ids.length;
-    if (count === 0) return;
-    confirm({
-      title: count === 1 ? "彻底删除这条回收站记录？" : `彻底删除选中的 ${count} 条回收站记录？`,
-      description: "彻底删除后将无法从系统内恢复，请确认这些课节不再需要找回。",
-      confirmLabel: "彻底删除",
-      tone: "danger",
-      onConfirm: () => {
-        onPermanentlyDeleteDeletedLessons(ids);
-        setSelectedTrashIds((current) => current.filter((id) => !ids.includes(id)));
-      }
     });
   }
 
@@ -2528,127 +578,6 @@ export function ScheduleView({
     });
   }
 
-  function buildWeeklyPatternPreview(): WeeklyPatternPreview {
-    const preview: WeeklyPatternPreview = {
-      candidateCount: 0,
-      conflictCount: 0,
-      existingCount: 0,
-      duplicateCount: 0,
-      conflicts: [],
-      invalidSlotCount: 0,
-      creatableItems: []
-    };
-    if (!isBatchDateRangeValid) return preview;
-
-    const rangeDates = datesBetweenLocal(rangeStart, batchEffectiveRangeEnd);
-    const candidates: WeeklyPatternCreatableItem[] = [];
-
-    for (const slot of weeklyPatternSlots) {
-      const course = getCourse(vault, slot.courseGroupId);
-      const slotValid =
-        Boolean(course && course.status === "active" && courseHasActiveStudent(vault, course)) &&
-        slot.weekdays.length > 0 &&
-        isOrderedTimeRange(slot.startTime, slot.endTime);
-
-      if (!slotValid || !course) {
-        preview.invalidSlotCount += 1;
-        continue;
-      }
-
-      const slotDates = rangeDates.filter((date) => slot.weekdays.includes(weekdayOfDateIso(date)));
-      for (const date of slotDates) {
-        candidates.push({
-          slot,
-          course,
-          courseGroupId: course.id,
-          date,
-          startTime: slot.startTime,
-          endTime: slot.endTime
-        });
-      }
-    }
-
-    const batch = buildBatchSchedulePreview(vault.lessons, candidates);
-    preview.candidateCount = batch.candidateCount;
-    preview.conflictCount = batch.conflicts.length;
-    preview.existingCount = batch.existingItems.length;
-    preview.duplicateCount = batch.duplicateItems.length;
-    preview.conflicts = batch.conflicts;
-    preview.creatableItems = batch.creatableItems;
-    return preview;
-  }
-
-  function buildBatchPerDayPreview(): BatchPerDayPreview {
-    const preview: BatchPerDayPreview = {
-      totalCount: 0,
-      conflictCount: 0,
-      existingCount: 0,
-      duplicateCount: 0,
-      existingConflictCount: 0,
-      internalConflictCount: 0,
-      conflicts: [],
-      unassignedWeekdays: [],
-      groupCounts: [],
-      creatableItems: []
-    };
-    if (!batchPerDayMode || !isBatchDateRangeValid || batchTimeGroups.length === 0) return preview;
-
-    const rangeDates = datesBetweenLocal(rangeStart, batchEffectiveRangeEnd);
-    const candidates: Array<BatchLessonTime & { group: BatchTimeGroup }> = [];
-
-    // Find weekdays selected globally but not assigned to any group
-    const assignedWeekdays = new Set(batchTimeGroups.flatMap((g) => g.weekdays));
-    preview.unassignedWeekdays = selectedWeekdays.filter((d) => !assignedWeekdays.has(d));
-
-    for (const group of batchTimeGroups) {
-      if (group.weekdays.length === 0 || !isOrderedTimeRange(group.startTime, group.endTime)) continue;
-
-      const groupDates = rangeDates.filter((date) => group.weekdays.includes(weekdayOfDateIso(date)));
-      for (const date of groupDates) {
-        candidates.push({ group, date, courseGroupId: ruleCourseGroupId, startTime: group.startTime, endTime: group.endTime });
-      }
-    }
-
-    const batch = buildBatchSchedulePreview(vault.lessons, candidates);
-    preview.totalCount = batch.candidateCount;
-    preview.conflictCount = batch.conflicts.length;
-    preview.existingCount = batch.existingItems.length;
-    preview.duplicateCount = batch.duplicateItems.length;
-    preview.existingConflictCount = batch.conflicts.filter((conflict) => conflict.source === "existing").length;
-    preview.internalConflictCount = batch.conflicts.filter((conflict) => conflict.source === "batch").length;
-    preview.conflicts = batch.conflicts;
-    preview.creatableItems = batch.creatableItems;
-    preview.groupCounts = batchTimeGroups.map((group) => ({
-      groupId: group.id,
-      count: candidates.filter((item) => item.group.id === group.id).length,
-      conflictCount: batch.conflicts.filter((conflict) => conflict.candidate.group.id === group.id).length,
-      existingCount: batch.existingItems.filter((item) => item.group.id === group.id).length,
-      duplicateCount: batch.duplicateItems.filter((item) => item.group.id === group.id).length
-    }));
-    return preview;
-  }
-
-  function batchConflictDetails(conflicts: BatchScheduleConflict[]): string[] {
-    return conflicts.map(({ candidate, conflictingLesson, source }) =>
-      `${dateWithWeekday(candidate.date)} ${candidate.startTime}-${candidate.endTime} 与${source === "batch" ? "本次排课中的" : "已有的"}「${courseName(vault, conflictingLesson.courseGroupId)} ${conflictingLesson.startTime}-${conflictingLesson.endTime}」重叠`
-    );
-  }
-
-  function describeBatchSkippedItems(existingCount: number, duplicateCount: number, conflictCount: number): string {
-    const parts: string[] = [];
-    if (existingCount > 0) parts.push(`${existingCount} 节已排课`);
-    if (duplicateCount > 0) parts.push(`${duplicateCount} 节批次内重复课节已合并`);
-    if (conflictCount > 0) parts.push(`${conflictCount} 节因时间冲突已跳过`);
-    return parts.join("，");
-  }
-
-  function describeBatchPerDayConflicts(preview: BatchPerDayPreview): string {
-    const parts: string[] = [];
-    if (preview.existingConflictCount > 0) parts.push(`${preview.existingConflictCount} 节与日历已有课程重叠`);
-    if (preview.internalConflictCount > 0) parts.push(`${preview.internalConflictCount} 节是本次时间组之间重叠`);
-    return parts.join("，");
-  }
-
   function findTimeConflict(lessonDate: string, lessonStartTime: string, lessonEndTime: string, ignoredLessonId?: string): Lesson | undefined {
     return vault.lessons.find(
       (lesson) =>
@@ -2657,150 +586,6 @@ export function ScheduleView({
         lesson.status !== "cancelled" &&
         timesOverlap(lesson.startTime, lesson.endTime, lessonStartTime, lessonEndTime)
     );
-  }
-
-  function generateBatchLessons() {
-    if (!isBatchRepeatWeeksValid) {
-      showScheduleError("重复周数至少为 1。");
-      return;
-    }
-    if (!validateDateRange(rangeStart, batchEffectiveRangeEnd) || !validateTimeRange(ruleStartTime, ruleEndTime)) {
-      return;
-    }
-    if (batchPreview.candidateCount === 0) {
-      showScheduleError("当前日期范围和星期没有匹配课节。");
-      return;
-    }
-    const manualBillingHours = parseOptionalBillingHours(ruleBillingHours);
-    const result = onGenerateDrafts(rangeStart, batchEffectiveRangeEnd, selectedWeekdays, ruleCourseGroupId, ruleStartTime, ruleEndTime, manualBillingHours);
-    const skippedDescription = describeBatchSkippedItems(result.existingCount, 0, result.conflictCount);
-    showScheduleNotice(
-      result.createdCount > 0
-        ? `已生成 ${result.createdCount} 节待上课${skippedDescription ? `，${skippedDescription}` : ""}。`
-        : `没有新增课节，${skippedDescription || "当前条件没有可生成课节"}。`
-    );
-  }
-
-  function hasBatchConflicts(): boolean {
-    if (!isBatchDateRangeValid || !isBatchTimeValid) return false;
-    return batchConflictCount > 0;
-  }
-
-  function generateBatchPerDayLessons() {
-    if (!isBatchRepeatWeeksValid) {
-      showScheduleError("重复周数至少为 1。");
-      return;
-    }
-    if (!validateDateRange(rangeStart, batchEffectiveRangeEnd)) return;
-    if (batchTimeGroups.length === 0) {
-      showScheduleError("请添加至少一个时间分组。");
-      return;
-    }
-    const invalidGroup = batchTimeGroups.find((g) => g.weekdays.length === 0 || !isOrderedTimeRange(g.startTime, g.endTime));
-    if (invalidGroup) {
-      showScheduleError("时间分组中有未选星期、日期范围或时间无效的条目，请调整后再生成。");
-      return;
-    }
-    if (batchPerDayPreview.unassignedWeekdays.length > 0) {
-      showScheduleError(
-        `星期${batchPerDayPreview.unassignedWeekdays.map((d) => weekdayLabels[d]).join("、")}尚未分配到任何时间组，请分配或取消选择。`
-      );
-      return;
-    }
-
-    const preview = buildBatchPerDayPreview();
-    if (preview.totalCount === 0) {
-      showScheduleError("当前日期范围和分时条件没有匹配课节。");
-      return;
-    }
-    if (preview.creatableItems.length === 0) {
-      const showMessage = preview.conflictCount > 0 ? showScheduleError : showScheduleNotice;
-      showMessage(`没有新增课节，${describeBatchSkippedItems(preview.existingCount, preview.duplicateCount, preview.conflictCount)}。`);
-      return;
-    }
-
-    const course = getCourse(vault, ruleCourseGroupId);
-    if (!course || course.status !== "active" || !courseHasActiveStudent(vault, course)) {
-      showScheduleError("所选课程不可用（已暂停、已删除或没有在读学生），请重新选择。");
-      return;
-    }
-
-    const lessonsToAdd = preview.creatableItems.map(({ group, date }) =>
-      createLessonFromCourse(vault, course, {
-        date,
-        startTime: group.startTime,
-        endTime: group.endTime,
-        campusId: course.defaultCampusId,
-        manualBillingHours: parseOptionalBillingHours(group.billingHours),
-        status: "scheduled"
-      })
-    );
-    onAddLessons(lessonsToAdd);
-    const skippedDescription = describeBatchSkippedItems(preview.existingCount, preview.duplicateCount, preview.conflictCount);
-    showScheduleNotice(
-      `已按分时生成 ${lessonsToAdd.length} 节待上课${skippedDescription ? `，${skippedDescription}` : ""}。`
-    );
-  }
-
-  function validateWeeklyPattern(): boolean {
-    if (!isBatchRepeatWeeksValid) {
-      showScheduleError("重复周数至少为 1。");
-      return false;
-    }
-    if (!validateDateRange(rangeStart, batchEffectiveRangeEnd)) return false;
-    if (weeklyPatternSlots.length === 0) {
-      showScheduleError("请先加入至少一条周循环模板。");
-      return false;
-    }
-    const invalidTimeSlot = weeklyPatternSlots.find((slot) => slot.weekdays.length === 0 || !isOrderedTimeRange(slot.startTime, slot.endTime));
-    if (invalidTimeSlot) {
-      showScheduleError("周循环模板中有未选星期或时间无效的条目，请删除或套用后调整。");
-      return false;
-    }
-    const unavailableSlot = weeklyPatternSlots.find((slot) => {
-      const course = getCourse(vault, slot.courseGroupId);
-      return !course || course.status !== "active" || !courseHasActiveStudent(vault, course);
-    });
-    if (unavailableSlot) {
-      showScheduleError("周循环模板中有已暂停、已删除或没有在读学生的课程，请删除或调整后再生成。");
-      return false;
-    }
-    return true;
-  }
-
-  function generateWeeklyPatternLessons() {
-    if (!validateWeeklyPattern()) return;
-    const preview = buildWeeklyPatternPreview();
-    if (preview.candidateCount === 0) {
-      showScheduleError("当前日期范围和周循环模板没有匹配课节。");
-      return;
-    }
-    if (preview.creatableItems.length === 0) {
-      const showMessage = preview.conflictCount > 0 ? showScheduleError : showScheduleNotice;
-      showMessage(`没有新增课节，${describeBatchSkippedItems(preview.existingCount, preview.duplicateCount, preview.conflictCount)}。`);
-      return;
-    }
-
-    const lessonsToAdd = preview.creatableItems.map(({ slot, date, course }) =>
-      createLessonFromCourse(vault, course, {
-        date,
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-        campusId: course.defaultCampusId,
-        manualBillingHours: parseOptionalBillingHours(slot.billingHours),
-        status: "scheduled"
-      })
-    );
-    onAddLessons(lessonsToAdd);
-    const skippedDescription = describeBatchSkippedItems(preview.existingCount, preview.duplicateCount, preview.conflictCount);
-    showScheduleNotice(
-      `已按周循环模板生成 ${lessonsToAdd.length} 节待上课${skippedDescription ? `，${skippedDescription}` : ""}。`
-    );
-  }
-
-  function hasWeeklyPatternConflicts(): boolean {
-    if (!isBatchDateRangeValid || weeklyPatternSlots.length === 0) return false;
-    return weeklyPatternConflictCount > 0;
   }
 
   function showScheduleError(message: string) {
@@ -2856,7 +641,7 @@ export function ScheduleView({
       />
       <SchedulePanelTabs
         activePanel={schedulePanel}
-        deletedLessonCount={deletedLessons.length}
+        deletedLessonCount={trash.deletedLessonCount}
         onChange={switchSchedulePanel}
         role={role}
         aiSchedulingEnabled={aiScheduleEntryVisible}
@@ -2881,45 +666,7 @@ export function ScheduleView({
       )}
 
       {schedulePanel === "ai" && aiScheduleEntryVisible && (
-        <ScheduleAiPanel
-          aiActiveCourseCount={aiActiveCourseCount}
-          aiActiveStudentCount={aiActiveStudentCount}
-          aiApplyResult={aiApplyResult}
-          aiApplying={aiApplying}
-          aiContextSummary={aiContextSummary}
-          aiDraft={aiDraft}
-          aiDraftActions={aiDraftActions}
-          aiDraftAnswer={aiDraftAnswer}
-          aiDraftCanApply={aiDraftCanApply}
-          aiDraftQuestions={aiDraftQuestions}
-          aiDraftRecord={aiDraftRecord}
-          aiDraftSummary={aiDraftSummary}
-          aiDraftWarnings={aiDraftWarnings}
-          aiFollowupAnswer={aiFollowupAnswer}
-          aiInstruction={aiInstruction}
-          aiLoading={aiLoading}
-          aiMessage={aiMessage}
-          aiPendingLessonCount={aiPendingLessonCount}
-          aiProviderId={aiProviderId}
-          aiRawResultText={aiRawResultText}
-          aiTaskType={aiTaskType}
-          aiTodayLessonCount={aiTodayLessonCount}
-          aiUsageText={aiUsageText}
-          canClearAiWork={canClearAiWork}
-          canShowAiProviderEndpoint={canShowAiProviderEndpoint}
-          enabledAiProviders={enabledAiProviders}
-          isAdmin={isAdmin}
-          onApplyAiDraft={applyAiDraft}
-          onClearAiWork={clearAiWork}
-          onCopyAiRawResult={copyAiRawResult}
-          onPatchSession={patchAiSession}
-          onRefreshAiProviders={refreshAiProviders}
-          onSubmitAiDraft={submitAiDraft}
-          onSubmitAiFollowup={submitAiFollowup}
-          selectedAiEndpoint={selectedAiEndpoint}
-          selectedAiProvider={selectedAiProvider}
-          selectedAiUsage={selectedAiUsage}
-        />
+        <ScheduleAiPanel {...scheduleAi} />
       )}
       {schedulePanel === "schedule" && (
         <ScheduleDayReusePanel
@@ -2958,74 +705,15 @@ export function ScheduleView({
       )}
       {schedulePanel === "schedule" && (
         <SchedulePlanningPanel
-          batchCandidateCount={batchPreview.candidateCount}
-          batchConflictCount={batchConflictCount}
-          batchConflictDetails={batchConflictDetails(batchPerDayMode ? batchPerDayPreview.conflicts : batchPreview.conflicts)}
-          batchExistingCount={batchPreview.existingItems.length}
-          batchEffectiveRangeEnd={batchEffectiveRangeEnd}
-          batchLessonTargetCount={batchLessonTargetCount}
-          batchPerDayConflictCount={batchPerDayPreview.conflictCount}
-          batchPerDayExistingCount={batchPerDayPreview.existingCount}
-          batchPerDayDuplicateCount={batchPerDayPreview.duplicateCount}
-          batchPerDayGroupCounts={batchPerDayPreview.groupCounts}
-          batchPerDayMode={batchPerDayMode}
-          batchPerDayTotalCount={batchPerDayPreview.totalCount}
-          batchPerDayUnassignedWeekdays={batchPerDayPreview.unassignedWeekdays}
-          batchRepeatMode={batchRepeatMode}
-          batchRepeatWeeks={batchRepeatWeeks}
-          batchTimeGroups={batchTimeGroups}
+          {...batchPlanning}
           customPresetEnd={customPresetEnd}
           customPresetStart={customPresetStart}
           customTimePresets={customTimePresets}
           dateShortcuts={dateShortcuts}
-          isBatchDateRangeValid={isBatchDateRangeValid}
-          isBatchRepeatWeeksValid={isBatchRepeatWeeksValid}
-          isBatchTimeValid={isBatchTimeValid}
           isCustomPresetTimeValid={isCustomPresetTimeValid}
           isSingleTimeValid={isSingleTimeValid}
-          ruleBillingHours={ruleBillingHours}
-          ruleSuggestedBillingHours={ruleSuggestedBillingHours}
-          onAddBatchTimeGroup={addBatchTimeGroup}
           onAddCustomPreset={addCustomPreset}
           onAddSingleLesson={addSingleLesson}
-          onAddWeeklyPatternSlot={addWeeklyPatternSlot}
-          onApplyWeeklyPatternSlot={applyWeeklyPatternSlot}
-          onBatchGenerate={() => {
-            if (!isBatchRepeatWeeksValid) {
-              showScheduleError("重复周数至少为 1。");
-              return;
-            }
-            if (!validateDateRange(rangeStart, batchEffectiveRangeEnd)) return;
-            if (batchPerDayMode) {
-              const conflictDescription = describeBatchPerDayConflicts(batchPerDayPreview);
-              const conflictText = batchPerDayPreview.conflictCount > 0
-                ? `系统会跳过 ${batchPerDayPreview.conflictCount} 节时间段${conflictDescription ? `（${conflictDescription}）` : ""}，只生成没有冲突的课程。`
-                : `系统将按当前 ${batchTimeGroups.length} 个时间组生成 ${batchPerDayPreview.creatableItems.length} 节待上课课节，已排课和批次内重复的课节会自动跳过。`;
-              confirm({
-                title: batchPerDayPreview.conflictCount > 0
-                  ? batchPerDayPreview.existingConflictCount > 0 ? "按日分时排课中存在时间冲突" : "按日分时时间组有重叠"
-                  : "确认按日分时生成课时？",
-                description: conflictText,
-                confirmLabel: batchPerDayPreview.conflictCount > 0 ? "跳过冲突并生成" : "确认生成",
-                onConfirm: generateBatchPerDayLessons
-              });
-              return;
-            }
-            if (!validateTimeRange(ruleStartTime, ruleEndTime)) {
-              return;
-            }
-            if (hasBatchConflicts()) {
-              confirm({
-                title: "批量排课中存在时间冲突",
-                description: `系统会跳过 ${batchConflictCount} 节时间冲突，生成 ${batchPreview.creatableItems.length} 节待上课。${batchPreview.existingItems.length > 0 ? `另有 ${batchPreview.existingItems.length} 节已排课，会自动跳过。` : ""}${batchConflictDetails(batchPreview.conflicts).slice(0, 3).join("；")}。`,
-                confirmLabel: "跳过冲突并生成",
-                onConfirm: generateBatchLessons
-              });
-              return;
-            }
-            generateBatchLessons();
-          }}
-          onDeleteBatchTimeGroup={deleteBatchTimeGroup}
           onDeleteCustomPreset={(preset) =>
             confirm({
               title: `删除常用时段「${preset.label}」？`,
@@ -3035,45 +723,9 @@ export function ScheduleView({
               onConfirm: () => onDeleteCustomTimePreset(preset.id)
             })
           }
-          onDeleteWeeklyPatternSlot={deleteWeeklyPatternSlot}
-          onGenerateWeeklyPattern={() => {
-            if (!validateWeeklyPattern()) return;
-            if (hasWeeklyPatternConflicts()) {
-              confirm({
-                title: "周循环模板中存在时间冲突",
-                description: `系统会跳过 ${weeklyPatternConflictCount} 节已经有课或模板内互相重叠的时间段，只生成没有冲突的课程。`,
-                confirmLabel: "跳过冲突并生成",
-                onConfirm: generateWeeklyPatternLessons
-              });
-              return;
-            }
-            generateWeeklyPatternLessons();
-          }}
           onGoToCalendarScheduling={goToCalendarSchedulingFromSingle}
-          onSetBatchPerDayMode={setBatchPerDayModeWithSync}
-          onToggleBatchTimeGroupWeekday={toggleBatchTimeGroupWeekday}
-          onToggleWeekday={toggleWeekday}
-          onUpdateBatchTimeGroup={updateBatchTimeGroup}
-          rangeEnd={rangeEnd}
-          rangeStart={rangeStart}
-          ruleCourseGroupId={ruleCourseGroupId}
-          ruleCourseOptions={ruleCourseOptions}
-          ruleCourseSearch={ruleCourseSearch}
-          ruleEndTime={ruleEndTime}
-          ruleStartTime={ruleStartTime}
-          selectedWeekdays={selectedWeekdays}
-          setBatchLessonTargetCount={setBatchLessonTargetCount}
-          setBatchRepeatMode={setBatchRepeatMode}
-          setBatchRepeatWeeks={setBatchRepeatWeeks}
           setCustomPresetEnd={setCustomPresetEnd}
           setCustomPresetStart={updateCustomPresetStartTime}
-          setRangeEnd={updateRangeEndManually}
-          setRangeStart={setRangeStart}
-          setRuleBillingHours={setRuleBillingHours}
-          setRuleCourseGroupId={setRuleCourseGroupId}
-          setRuleCourseSearch={setRuleCourseSearch}
-          setRuleEndTime={setRuleEndTime}
-          setRuleStartTime={updateRuleStartTime}
           setSingleBillingHours={setSingleBillingHours}
           setSingleCourseGroupId={setSingleCourseGroupId}
           setSingleCourseSearch={setSingleCourseSearch}
@@ -3089,15 +741,6 @@ export function ScheduleView({
           singleStartTime={singleStartTime}
           singleSuggestedBillingHours={singleSuggestedBillingHours}
           visibleWeekdays={visibleWeekdays}
-          weeklyPatternCandidateCount={weeklyPatternCandidateCount}
-          weeklyPatternConflictCount={weeklyPatternConflictCount}
-          weeklyPatternConflictDetails={batchConflictDetails(weeklyPatternPreview.conflicts)}
-          weeklyPatternExistingCount={weeklyPatternPreview.existingCount}
-          weeklyPatternDuplicateCount={weeklyPatternPreview.duplicateCount}
-          weeklyPatternCourseOptions={vault.courseGroups}
-          weeklyPatternCreatableCount={weeklyPatternCreatableCount}
-          weeklyPatternInvalidSlotCount={weeklyPatternInvalidSlotCount}
-          weeklyPatternSlots={weeklyPatternSlots}
         />
       )}
 
@@ -3374,74 +1017,20 @@ export function ScheduleView({
 
       {schedulePanel === "studentStats" && (
         <ScheduleStudentStatsPanel
+          {...studentStats}
           amountsVisible={amountsVisible}
           campusOptions={campusOptions}
-          courseGroupOptions={studentStatsCourseOptions}
-          expandedGroupIds={expandedStudentStatsGroupIds}
-          groupedLessonRows={studentStatsGroupedLessonRows}
-          involvedStudentCount={studentStatsInvolvedStudentCount}
-          lessonCount={studentStatsLessons.length}
           onOpenLesson={openLessonInRecords}
-          onToggleGroup={toggleExpandedStudentStatsGroup}
-          rows={studentStatsRows}
-          setCampusFilter={setStudentStatsCampusFilter}
-          setCourseFilter={setStudentStatsCourseFilter}
-          setCourseTypeFilter={setStudentStatsCourseTypeFilter}
-          setDateEnd={setStudentStatsDateEnd}
-          setDateStart={setStudentStatsDateStart}
-          setEndTime={setStudentStatsEndTime}
-          setNameFilter={setStudentStatsNameFilter}
-          setStartTime={setStudentStatsStartTime}
-          setStatusFilter={setStudentStatsStatusFilter}
-          setSubjectFilter={setStudentStatsSubjectFilter}
-          setMakeupFilter={setStudentStatsMakeupFilter}
-          studentLessonCount={studentStatsStudentLessonCount}
-          statusCounts={studentStatsStatusCounts}
           subjectOptions={studentStatsSubjects}
-          completedFeeTotal={studentStatsCompletedFeeTotal}
-          scheduledFeeTotal={studentStatsTotalFee}
-          values={{
-            campusFilter: studentStatsCampusFilter,
-            courseFilter: studentStatsCourseFilter,
-            courseTypeFilter: studentStatsCourseTypeFilter,
-            dateEnd: studentStatsDateEnd,
-            dateStart: studentStatsDateStart,
-            endTime: studentStatsEndTime,
-            nameFilter: studentStatsNameFilter,
-            startTime: studentStatsStartTime,
-            statusFilter: studentStatsStatusFilter,
-            subjectFilter: studentStatsSubjectFilter,
-            makeupFilter: studentStatsMakeupFilter
-          }}
           vault={vault}
         />
       )}
 
       {schedulePanel === "trash" && (
         <ScheduleTrashPanel
-          activeLessonIds={activeLessonIds}
-          allVisibleTrashSelected={allVisibleTrashSelected}
+          {...trash}
           campusOptions={campusOptions}
           dateWithWeekday={dateWithWeekday}
-          deletedLessonCount={deletedLessons.length}
-          onPermanentDelete={askPermanentDeleteTrashItems}
-          onRestore={askRestoreTrashItems}
-          onToggleAllVisible={toggleAllVisibleTrashSelection}
-          onToggleSelection={toggleTrashSelection}
-          selectedTrashIdSet={selectedTrashIdSet}
-          selectedTrashRestoreCount={selectedTrashRestoreCount}
-          selectedVisibleTrashIds={selectedVisibleTrashIds}
-          setTrashCampusFilter={setTrashCampusFilter}
-          setTrashDateEnd={setTrashDateEnd}
-          setTrashDateStart={setTrashDateStart}
-          setTrashSearch={setTrashSearch}
-          setTrashSourceFilter={setTrashSourceFilter}
-          trashCampusFilter={trashCampusFilter}
-          trashDateEnd={trashDateEnd}
-          trashDateStart={trashDateStart}
-          trashLessons={trashLessons}
-          trashSearch={trashSearch}
-          trashSourceFilter={trashSourceFilter}
           vault={vault}
         />
       )}
@@ -3464,7 +1053,6 @@ export function ScheduleView({
           dayNote={effectiveLessonScope === "day" ? calendarDayNoteForDate(effectiveLessonDay) : ""}
           effectiveLessonDay={effectiveLessonDay}
           effectiveLessonScope={effectiveLessonScope}
-          lessonDay={lessonDay}
           lessonMonth={lessonMonth}
           lessonRangeEnd={lessonRangeEnd}
           lessonRangeStart={lessonRangeStart}

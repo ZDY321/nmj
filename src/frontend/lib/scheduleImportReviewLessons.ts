@@ -298,7 +298,7 @@ export function summarizeScheduleImportImportedLessons(
 export function importPreviewLessonBillableHours(vault: TeacherVault, row: Pick<ImportPreviewLesson, "startTime" | "endTime" | "matchedCourseId" | "mappedCourseId">): number {
   const courseId = row.matchedCourseId ?? row.mappedCourseId;
   const course = courseId ? vault.courseGroups.find((item) => item.id === courseId) : undefined;
-  if (course) return billableHoursForCourseLesson(course, row, vault);
+  if (course) return billableHoursForCourseLesson(course, row);
   return durationHours(row.startTime, row.endTime);
 }
 

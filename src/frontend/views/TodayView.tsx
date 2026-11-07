@@ -36,8 +36,7 @@ import {
   lessonTimeRangeLabel,
   previousLesson,
   sortCampusesForProfile,
-  sortLessons,
-  studentNames
+  sortLessons
 } from "@/frontend/lib/helpers";
 
 type TodaySubPage = "lessons" | "todos" | "memos";

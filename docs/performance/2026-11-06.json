@@ -1,0 +1,1812 @@
+{
+  "date": "2026-11-06",
+  "before": [
+    {
+      "label": "before",
+      "scale": {
+        "name": "small",
+        "students": 40,
+        "courses": 12,
+        "lessons": 240
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 2356,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 18
+          },
+          "ScheduleView": {
+            "renders": 10,
+            "commits": 4,
+            "commitMs": 560
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 352,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 107
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 2,
+          "commits": 1,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 2,
+          "commits": 1,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 424,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 157
+          },
+          "ScheduleView": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 175
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 1023,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 41
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 6,
+            "commits": 3,
+            "commitMs": 75
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 115,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 46
+            }
+          }
+        },
+        {
+          "elapsedMs": 103,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 48
+            }
+          }
+        },
+        {
+          "elapsedMs": 111,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 47
+            }
+          }
+        },
+        {
+          "elapsedMs": 115,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 49
+            }
+          }
+        },
+        {
+          "elapsedMs": 49,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 7
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 2,
+          "commits": 1,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 2,
+          "commits": 1,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 980,
+        "renders": {
+          "App": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 64
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 30
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 3,
+          "serializeMs": 0,
+          "encryptMs": 132,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 134,
+          "localWriteMs": 0,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 0,
+          "encryptMs": 134,
+          "localWriteMs": 0,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 0,
+          "encryptMs": 146,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 143,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        }
+      ]
+    },
+    {
+      "label": "before",
+      "scale": {
+        "name": "medium",
+        "students": 240,
+        "courses": 80,
+        "lessons": 1800
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 3489,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 16
+          },
+          "ScheduleView": {
+            "renders": 10,
+            "commits": 4,
+            "commitMs": 1697
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 1289,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 346
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 2,
+          "commits": 1,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 2,
+          "commits": 1,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 2349,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 1322
+          },
+          "ScheduleView": {
+            "renders": 8,
+            "commits": 3,
+            "commitMs": 1005
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 343,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 61
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 6,
+            "commits": 3,
+            "commitMs": 109
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 158,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 49
+            }
+          }
+        },
+        {
+          "elapsedMs": 90,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 25
+            }
+          }
+        },
+        {
+          "elapsedMs": 124,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 52
+            }
+          }
+        },
+        {
+          "elapsedMs": 134,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 60
+            }
+          }
+        },
+        {
+          "elapsedMs": 130,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 63
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 2,
+          "commits": 1,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 2,
+          "commits": 1,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 1048,
+        "renders": {
+          "App": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 78
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 38
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 16,
+          "serializeMs": 6,
+          "encryptMs": 204,
+          "localWriteMs": 6,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 18,
+          "serializeMs": 2,
+          "encryptMs": 171,
+          "localWriteMs": 9,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 17,
+          "serializeMs": 3,
+          "encryptMs": 178,
+          "localWriteMs": 9,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 15,
+          "serializeMs": 4,
+          "encryptMs": 185,
+          "localWriteMs": 9,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 17,
+          "serializeMs": 5,
+          "encryptMs": 176,
+          "localWriteMs": 8,
+          "jsonBytes": 1219408
+        }
+      ]
+    }
+  ],
+  "intermediate": [
+    {
+      "label": "date-hoist",
+      "scale": {
+        "name": "large",
+        "students": 800,
+        "courses": 240,
+        "lessons": 3600
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 4627,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 18
+          },
+          "ScheduleView": {
+            "renders": 12,
+            "commits": 4,
+            "commitMs": 1261
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 1261,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 332
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 3106,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 1045
+          },
+          "ScheduleView": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 829
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 1712,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 16
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 3,
+            "commitMs": 411
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 446,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 215
+            }
+          }
+        },
+        {
+          "elapsedMs": 340,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 154
+            }
+          }
+        },
+        {
+          "elapsedMs": 317,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 146
+            }
+          }
+        },
+        {
+          "elapsedMs": 308,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 152
+            }
+          }
+        },
+        {
+          "elapsedMs": 298,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 148
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 2345,
+        "renders": {
+          "App": {
+            "renders": 8,
+            "commits": 3,
+            "commitMs": 360
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 6,
+            "commits": 3,
+            "commitMs": 163
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 33,
+          "serializeMs": 9,
+          "encryptMs": 318,
+          "localWriteMs": 15,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 44,
+          "serializeMs": 9,
+          "encryptMs": 400,
+          "localWriteMs": 14,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 39,
+          "serializeMs": 8,
+          "encryptMs": 333,
+          "localWriteMs": 17,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 36,
+          "serializeMs": 7,
+          "encryptMs": 361,
+          "localWriteMs": 17,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 38,
+          "serializeMs": 9,
+          "encryptMs": 301,
+          "localWriteMs": 16,
+          "jsonBytes": 2528275
+        }
+      ],
+      "stage": "greeting isolated and date calculations hoisted; student index not yet applied"
+    }
+  ],
+  "after": [
+    {
+      "label": "after-final",
+      "scale": {
+        "name": "small",
+        "students": 40,
+        "courses": 12,
+        "lessons": 240
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 2345,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 17
+          },
+          "ScheduleView": {
+            "renders": 10,
+            "commits": 4,
+            "commitMs": 493
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 361,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 94
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 353,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 121
+          },
+          "ScheduleView": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 156
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 1006,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 26
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 3,
+            "commitMs": 72
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 112,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 56
+            }
+          }
+        },
+        {
+          "elapsedMs": 117,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 56
+            }
+          }
+        },
+        {
+          "elapsedMs": 104,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 50
+            }
+          }
+        },
+        {
+          "elapsedMs": 79,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 26
+            }
+          }
+        },
+        {
+          "elapsedMs": 54,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 6
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 984,
+        "renders": {
+          "App": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 79
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 34
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 138,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 139,
+          "localWriteMs": 0,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 0,
+          "encryptMs": 143,
+          "localWriteMs": 0,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 130,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 197,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        }
+      ],
+      "batch": {
+        "updatedLessons": 200,
+        "samples": [
+          {
+            "previousMs": 4,
+            "optimizedMs": 0
+          },
+          {
+            "previousMs": 3,
+            "optimizedMs": 0
+          },
+          {
+            "previousMs": 4,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 3,
+            "optimizedMs": 0
+          },
+          {
+            "previousMs": 2,
+            "optimizedMs": 0
+          }
+        ]
+      }
+    },
+    {
+      "label": "after-final",
+      "scale": {
+        "name": "medium",
+        "students": 240,
+        "courses": 80,
+        "lessons": 1800
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 1398,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 18
+          },
+          "ScheduleView": {
+            "renders": 10,
+            "commits": 4,
+            "commitMs": 699
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 478,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 147
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 818,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 340
+          },
+          "ScheduleView": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 302
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 489,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 20
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 3,
+            "commitMs": 383
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 182,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 68
+            }
+          }
+        },
+        {
+          "elapsedMs": 103,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 51
+            }
+          }
+        },
+        {
+          "elapsedMs": 123,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 50
+            }
+          }
+        },
+        {
+          "elapsedMs": 108,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 50
+            }
+          }
+        },
+        {
+          "elapsedMs": 129,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 53
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 1056,
+        "renders": {
+          "App": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 73
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 38
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 17,
+          "serializeMs": 4,
+          "encryptMs": 208,
+          "localWriteMs": 13,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 19,
+          "serializeMs": 3,
+          "encryptMs": 179,
+          "localWriteMs": 8,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 18,
+          "serializeMs": 3,
+          "encryptMs": 209,
+          "localWriteMs": 8,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 17,
+          "serializeMs": 3,
+          "encryptMs": 192,
+          "localWriteMs": 7,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 17,
+          "serializeMs": 3,
+          "encryptMs": 173,
+          "localWriteMs": 8,
+          "jsonBytes": 1219408
+        }
+      ],
+      "batch": {
+        "updatedLessons": 200,
+        "samples": [
+          {
+            "previousMs": 20,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 18,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 14,
+            "optimizedMs": 2
+          },
+          {
+            "previousMs": 16,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 19,
+            "optimizedMs": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": "after-final",
+      "scale": {
+        "name": "large",
+        "students": 800,
+        "courses": 240,
+        "lessons": 3600
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 4098,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 16
+          },
+          "ScheduleView": {
+            "renders": 12,
+            "commits": 4,
+            "commitMs": 1400
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 1362,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 394
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 3207,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 1093
+          },
+          "ScheduleView": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 842
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 582,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 17
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 3,
+            "commitMs": 325
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 189,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 97
+            }
+          }
+        },
+        {
+          "elapsedMs": 123,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 55
+            }
+          }
+        },
+        {
+          "elapsedMs": 122,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 65
+            }
+          }
+        },
+        {
+          "elapsedMs": 120,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 53
+            }
+          }
+        },
+        {
+          "elapsedMs": 105,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 61
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 2160,
+        "renders": {
+          "App": {
+            "renders": 8,
+            "commits": 3,
+            "commitMs": 113
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 6,
+            "commits": 3,
+            "commitMs": 48
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 46,
+          "serializeMs": 11,
+          "encryptMs": 307,
+          "localWriteMs": 20,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 36,
+          "serializeMs": 6,
+          "encryptMs": 368,
+          "localWriteMs": 20,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 39,
+          "serializeMs": 7,
+          "encryptMs": 346,
+          "localWriteMs": 16,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 34,
+          "serializeMs": 9,
+          "encryptMs": 375,
+          "localWriteMs": 16,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 39,
+          "serializeMs": 7,
+          "encryptMs": 363,
+          "localWriteMs": 15,
+          "jsonBytes": 2528275
+        }
+      ],
+      "batch": {
+        "updatedLessons": 200,
+        "samples": [
+          {
+            "previousMs": 26,
+            "optimizedMs": 2
+          },
+          {
+            "previousMs": 37,
+            "optimizedMs": 2
+          },
+          {
+            "previousMs": 39,
+            "optimizedMs": 4
+          },
+          {
+            "previousMs": 34,
+            "optimizedMs": 2
+          },
+          {
+            "previousMs": 23,
+            "optimizedMs": 1
+          }
+        ]
+      }
+    }
+  ],
+  "baselineFailures": [
+    {
+      "scale": {
+        "name": "large",
+        "students": 800,
+        "courses": 240,
+        "lessons": 3600
+      },
+      "stage": "before optimization",
+      "observations": "Course records button not visible after 30000ms; ScheduleView invoked 42 times with zero commits.",
+      "timeoutMs": 30000
+    },
+    {
+      "scale": {
+        "name": "exploratory",
+        "students": 800,
+        "courses": 240,
+        "lessons": 6000
+      },
+      "stage": "initial harness probe",
+      "observations": "Cloud load displayed failure. Likely local cache quota; no isolated reproduction, excluded from comparison."
+    }
+  ]
+}

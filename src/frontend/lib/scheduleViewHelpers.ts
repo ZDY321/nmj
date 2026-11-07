@@ -1,3 +1,5 @@
+import { attendanceStatusForLessonStatus } from "@/frontend/lib/lessonAttendance";
+export { attendanceStatusForLessonStatus } from "@/frontend/lib/lessonAttendance";
 import type { AiProviderConfig, AttendanceStatus, CourseGroup, DeletedLesson, Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import { aiEndpointUrlForProvider } from "@/shared/aiEndpoint";
 import { formatAppDateTime, getCourse, isSubstituteClassLesson, lessonBillableHoursForVault, substituteClassPresentCount, todayIso } from "@/frontend/lib/calculations";
@@ -32,7 +34,6 @@ import {
 import type { CourseTypeFilter, LessonScope, MakeupLessonFilter, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
 
 export { arrayValue, isPlainRecord, textValue } from "@/frontend/lib/typeGuards";
-export { timesOverlap } from "@/frontend/lib/time";
 
 export function offsetDate(offset: number): string {
   return addDays(todayIso(), offset);
@@ -102,13 +103,6 @@ export function isCompletedLessonStatus(status: string): boolean {
 
 export function isPendingLessonStatus(status: string): boolean {
   return status === "draft" || status === "scheduled" || status === "makeup_pending";
-}
-
-export function attendanceStatusForLessonStatus(status: Lesson["status"]): AttendanceStatus {
-  if (status === "cancelled") return "cancelled";
-  if (status === "makeup_pending") return "makeup_pending";
-  if (status === "makeup_completed") return "makeup_completed";
-  return "attended";
 }
 
 export function lessonStatusForAttendanceStatus(status: AttendanceStatus): Lesson["status"] {

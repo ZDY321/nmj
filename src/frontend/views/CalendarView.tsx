@@ -1,3 +1,4 @@
+import { attendanceForStudentIds } from "@/frontend/lib/lessonAttendance";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarDays, ChevronLeft, ChevronRight, MessageSquare, RefreshCw, Search, Table2 } from "lucide-react";
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { CourseGroup, Lesson, TeacherVault, WeekStart } from "@/shared/types";
+import type { Lesson, TeacherVault, WeekStart } from "@/shared/types";
 import {
   addDays,
   calendarDates,
@@ -39,7 +40,7 @@ import { MetricCard } from "@/frontend/components/MetricCard";
 import { CalendarDateDetailsButton } from "@/frontend/components/CalendarDateDetailsButton";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
 import { buildFeeSnapshot, getCourse, isClassBillingCourseType, todayIso } from "@/frontend/lib/calculations";
-import { attendanceStatusForLessonStatus, matchesCalendarLessonFilters } from "@/frontend/lib/scheduleViewHelpers";
+import { matchesCalendarLessonFilters } from "@/frontend/lib/scheduleViewHelpers";
 import type { CourseTypeFilter, MakeupLessonFilter } from "@/frontend/lib/scheduleViewTypes";
 import { timeToMinutes } from "@/frontend/lib/time";
 
@@ -250,25 +251,6 @@ export function CalendarView({
     selectCalendarDate(addDays(selectedDate, days));
   }
 
-  function attendanceFromCurrentCourse(lesson: Lesson, course: CourseGroup): Lesson["attendance"] {
-    const existingByStudent = new Map(lesson.attendance.map((entry) => [entry.studentId, entry]));
-    const fallbackStatus = attendanceStatusForLessonStatus(lesson.status);
-    return course.studentIds.map((studentId) => {
-      const existing = existingByStudent.get(studentId);
-      if (existing) {
-        return {
-          ...existing,
-          trial: existing.trial ?? Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
-        };
-      }
-      return {
-        studentId,
-        status: fallbackStatus,
-        trial: Boolean(vault.students.find((student) => student.id === studentId)?.temporaryTrial)
-      };
-    });
-  }
-
   function refreshLessonFromCurrentCourse(lesson: Lesson): Lesson | null {
     const course = getCourse(vault, lesson.courseGroupId);
     if (!course) return null;
@@ -277,7 +259,7 @@ export function CalendarView({
       campusId: course.defaultCampusId,
       type: course.type,
       expectedStudentIds: [...course.studentIds],
-      attendance: attendanceFromCurrentCourse(lesson, course),
+      attendance: attendanceForStudentIds(vault, lesson, course.studentIds),
       trialStudentCount: isClassBillingCourseType(course.type) ? lesson.trialStudentCount ?? 0 : 0,
       trialFee: isClassBillingCourseType(course.type) ? lesson.trialFee ?? 0 : 0
     };

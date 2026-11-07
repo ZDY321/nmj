@@ -1,0 +1,2416 @@
+{
+  "date": "2026-11-07",
+  "status": "completed-with-documented-limits",
+  "scope": "Approved optimization plan stages 0–8; no further expansion",
+  "verification": {
+    "quality": {
+      "passed": true,
+      "testFiles": 57,
+      "unitTests": 530,
+      "frontendModules": 2419,
+      "frontendBuildSeconds": 11.46,
+      "workerDryRun": {
+        "passed": true,
+        "kib": 89.34,
+        "gzipKib": 18.91,
+        "deployed": false
+      }
+    },
+    "browser": {
+      "passed": true,
+      "tests": 45,
+      "durationDisplay": "4.5m",
+      "label": "final-optimization",
+      "browser": "Edge 156.0.4314.58",
+      "mode": "Vite development + React StrictMode; synthetic data; local in-memory API",
+      "sourceStableDuringRun": true,
+      "remoteAccountsUsed": false
+    },
+    "dependencyAudit": {
+      "vulnerabilities": 0
+    },
+    "gitDiffWhitespaceCheck": {
+      "passed": true
+    },
+    "remoteCIExecuted": false
+  },
+  "coreFiles": [
+    {
+      "path": "src/frontend/App.tsx",
+      "before": {
+        "path": "src/frontend/App.tsx",
+        "lines": 2401,
+        "bytes": 99013,
+        "states": 40
+      },
+      "after": {
+        "path": "src/frontend/App.tsx",
+        "lines": 652,
+        "bytes": 31009,
+        "states": 15
+      }
+    },
+    {
+      "path": "src/frontend/views/ScheduleView.tsx",
+      "before": {
+        "path": "src/frontend/views/ScheduleView.tsx",
+        "lines": 3588,
+        "bytes": 167843,
+        "states": 112
+      },
+      "after": {
+        "path": "src/frontend/views/ScheduleView.tsx",
+        "lines": 1176,
+        "bytes": 53746,
+        "states": 15
+      }
+    },
+    {
+      "path": "src/frontend/views/StudentsView.tsx",
+      "before": {
+        "path": "src/frontend/views/StudentsView.tsx",
+        "lines": 2226,
+        "bytes": 102776,
+        "states": 76
+      },
+      "after": {
+        "path": "src/frontend/views/StudentsView.tsx",
+        "lines": 402,
+        "bytes": 20784,
+        "states": 0
+      }
+    },
+    {
+      "path": "src/frontend/lib/calculations.ts",
+      "before": {
+        "path": "src/frontend/lib/calculations.ts",
+        "lines": 1647,
+        "bytes": 71893,
+        "states": 0
+      },
+      "after": {
+        "path": "src/frontend/lib/calculations.ts",
+        "lines": 10,
+        "bytes": 2890,
+        "states": 0
+      }
+    },
+    {
+      "path": "src/frontend/lib/aiScheduleDraftApply.ts",
+      "before": {
+        "path": "src/frontend/lib/aiScheduleDraftApply.ts",
+        "lines": 1102,
+        "bytes": 52540,
+        "states": 0
+      },
+      "after": {
+        "path": "src/frontend/lib/aiScheduleDraftApply.ts",
+        "lines": 127,
+        "bytes": 5395,
+        "states": 0
+      }
+    },
+    {
+      "path": "src/worker/index.ts",
+      "before": {
+        "path": "src/worker/index.ts",
+        "lines": 2381,
+        "bytes": 82413,
+        "states": 0
+      },
+      "after": {
+        "path": "src/worker/index.ts",
+        "lines": 96,
+        "bytes": 3345,
+        "states": 0
+      }
+    }
+  ],
+  "sizeReport": {
+    "sourceFiles": 190,
+    "productionLines": 56159,
+    "sourceLineThreshold": 2000,
+    "chunkByteThreshold": 512000,
+    "sources": [
+      {
+        "file": "src/frontend/components/LessonFeedbackEditor.tsx",
+        "lines": 1916,
+        "bytes": 90379
+      },
+      {
+        "file": "src/frontend/lessonFeedback.css",
+        "lines": 1738,
+        "bytes": 39570
+      },
+      {
+        "file": "src/frontend/views/AdminView.tsx",
+        "lines": 1558,
+        "bytes": 73692
+      },
+      {
+        "file": "src/frontend/views/ProgressChecklistView.tsx",
+        "lines": 1404,
+        "bytes": 74222
+      },
+      {
+        "file": "src/frontend/views/ProgressView.tsx",
+        "lines": 1348,
+        "bytes": 62193
+      },
+      {
+        "file": "src/frontend/views/ScheduleView.tsx",
+        "lines": 1176,
+        "bytes": 53746
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportPanel.tsx",
+        "lines": 1120,
+        "bytes": 52461
+      },
+      {
+        "file": "src/frontend/lib/scheduleImport.ts",
+        "lines": 980,
+        "bytes": 43699
+      },
+      {
+        "file": "src/frontend/views/FeedbackView.tsx",
+        "lines": 959,
+        "bytes": 42421
+      },
+      {
+        "file": "src/frontend/lib/scheduleViewHelpers.ts",
+        "lines": 911,
+        "bytes": 37410
+      },
+      {
+        "file": "src/worker/aiProviders.ts",
+        "lines": 863,
+        "bytes": 37798
+      },
+      {
+        "file": "src/frontend/views/CalendarView.tsx",
+        "lines": 859,
+        "bytes": 47283
+      },
+      {
+        "file": "src/frontend/hooks/useVaultActions.ts",
+        "lines": 834,
+        "bytes": 30073
+      },
+      {
+        "file": "src/frontend/components/SchedulePlanningPanel.tsx",
+        "lines": 809,
+        "bytes": 39262
+      },
+      {
+        "file": "src/frontend/lib/helpers.ts",
+        "lines": 781,
+        "bytes": 30275
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleAttendance.ts",
+        "lines": 778,
+        "bytes": 34308
+      },
+      {
+        "file": "src/frontend/views/SalaryView.tsx",
+        "lines": 772,
+        "bytes": 41628
+      },
+      {
+        "file": "src/shared/types.ts",
+        "lines": 737,
+        "bytes": 16711
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportCourseMappingPanel.tsx",
+        "lines": 701,
+        "bytes": 37038
+      },
+      {
+        "file": "src/frontend/App.tsx",
+        "lines": 652,
+        "bytes": 31009
+      },
+      {
+        "file": "src/frontend/lib/lessonFeedbackExport.ts",
+        "lines": 639,
+        "bytes": 26519
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleBatchPlanning.ts",
+        "lines": 631,
+        "bytes": 27621
+      },
+      {
+        "file": "src/frontend/components/ScheduleLessonDetailPanel.tsx",
+        "lines": 629,
+        "bytes": 31794
+      },
+      {
+        "file": "src/frontend/views/GradesView.tsx",
+        "lines": 625,
+        "bytes": 29092
+      },
+      {
+        "file": "src/frontend/components/CampusCourseSettingsPanel.tsx",
+        "lines": 574,
+        "bytes": 30726
+      },
+      {
+        "file": "src/frontend/views/TodoView.tsx",
+        "lines": 560,
+        "bytes": 25184
+      },
+      {
+        "file": "src/frontend/components/ScheduleAdjustmentPanel.tsx",
+        "lines": 536,
+        "bytes": 29652
+      },
+      {
+        "file": "src/frontend/lib/vaultMutations.ts",
+        "lines": 509,
+        "bytes": 21922
+      },
+      {
+        "file": "src/frontend/components/StudentArchivePanel.tsx",
+        "lines": 498,
+        "bytes": 24987
+      },
+      {
+        "file": "src/frontend/components/ScheduleDayReusePanel.tsx",
+        "lines": 489,
+        "bytes": 21927
+      },
+      {
+        "file": "src/frontend/views/PayrollReviewView.tsx",
+        "lines": 487,
+        "bytes": 20999
+      },
+      {
+        "file": "src/frontend/components/ScheduleAiPanel.tsx",
+        "lines": 484,
+        "bytes": 26154
+      },
+      {
+        "file": "src/frontend/components/ScheduleStudentStatsPanel.tsx",
+        "lines": 482,
+        "bytes": 24607
+      },
+      {
+        "file": "src/frontend/views/MemoView.tsx",
+        "lines": 463,
+        "bytes": 20400
+      },
+      {
+        "file": "src/frontend/views/TodayView.tsx",
+        "lines": 463,
+        "bytes": 22655
+      },
+      {
+        "file": "src/frontend/components/LessonChecklistLinker.tsx",
+        "lines": 462,
+        "bytes": 21490
+      },
+      {
+        "file": "src/frontend/components/ScheduleLessonAttendancePanel.tsx",
+        "lines": 459,
+        "bytes": 24213
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewMatching.ts",
+        "lines": 452,
+        "bytes": 19544
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportReconciliationRow.tsx",
+        "lines": 440,
+        "bytes": 23818
+      },
+      {
+        "file": "src/frontend/lib/lessonFeedbackLayout.ts",
+        "lines": 434,
+        "bytes": 16172
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleNavigation.ts",
+        "lines": 424,
+        "bytes": 17198
+      },
+      {
+        "file": "src/frontend/lib/feeRules.ts",
+        "lines": 423,
+        "bytes": 18844
+      },
+      {
+        "file": "src/frontend/styles.css",
+        "lines": 414,
+        "bytes": 9779
+      },
+      {
+        "file": "src/frontend/hooks/useNavigationState.ts",
+        "lines": 408,
+        "bytes": 14313
+      },
+      {
+        "file": "src/frontend/lib/storage.ts",
+        "lines": 405,
+        "bytes": 11512
+      },
+      {
+        "file": "src/worker/admin.ts",
+        "lines": 405,
+        "bytes": 15352
+      },
+      {
+        "file": "src/frontend/lib/salaryGradeCalculations.ts",
+        "lines": 403,
+        "bytes": 17356
+      },
+      {
+        "file": "src/frontend/views/StudentsView.tsx",
+        "lines": 402,
+        "bytes": 20784
+      },
+      {
+        "file": "src/frontend/components/TeacherSalaryRulesPanel.tsx",
+        "lines": 397,
+        "bytes": 19320
+      },
+      {
+        "file": "src/frontend/lib/legacyLessonFeedback.ts",
+        "lines": 390,
+        "bytes": 15181
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewRecords.ts",
+        "lines": 389,
+        "bytes": 15957
+      },
+      {
+        "file": "src/frontend/components/CourseEditDialog.tsx",
+        "lines": 385,
+        "bytes": 21877
+      },
+      {
+        "file": "src/frontend/components/NewCourseFormPanel.tsx",
+        "lines": 366,
+        "bytes": 19448
+      },
+      {
+        "file": "src/frontend/components/ScheduleCalendarFollowupPanels.tsx",
+        "lines": 360,
+        "bytes": 19237
+      },
+      {
+        "file": "src/frontend/components/PayrollScheduleExportGuide.tsx",
+        "lines": 358,
+        "bytes": 15605
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewLessons.ts",
+        "lines": 358,
+        "bytes": 15746
+      },
+      {
+        "file": "src/frontend/hooks/useCloudSession.ts",
+        "lines": 344,
+        "bytes": 11708
+      },
+      {
+        "file": "src/frontend/components/WorkspaceViews.tsx",
+        "lines": 336,
+        "bytes": 16449
+      },
+      {
+        "file": "src/frontend/hooks/usePayrollReviewData.ts",
+        "lines": 333,
+        "bytes": 14332
+      },
+      {
+        "file": "src/frontend/components/ScheduleCalendarPanel.tsx",
+        "lines": 318,
+        "bytes": 15966
+      },
+      {
+        "file": "src/frontend/hooks/useVaultPersistence.ts",
+        "lines": 315,
+        "bytes": 11972
+      },
+      {
+        "file": "src/frontend/hooks/useCourseTypeSettings.ts",
+        "lines": 314,
+        "bytes": 15425
+      },
+      {
+        "file": "src/frontend/lib/cloud.ts",
+        "lines": 310,
+        "bytes": 11049
+      },
+      {
+        "file": "src/frontend/components/CourseArchiveListPanel.tsx",
+        "lines": 308,
+        "bytes": 14994
+      },
+      {
+        "file": "src/worker/router.ts",
+        "lines": 304,
+        "bytes": 11975
+      },
+      {
+        "file": "src/frontend/components/PayrollOverviewGrid.tsx",
+        "lines": 301,
+        "bytes": 15611
+      },
+      {
+        "file": "src/worker/auth.ts",
+        "lines": 293,
+        "bytes": 8918
+      },
+      {
+        "file": "src/frontend/components/LoginScreen.tsx",
+        "lines": 290,
+        "bytes": 13013
+      },
+      {
+        "file": "src/frontend/components/ScheduleCalendarSyncPanel.tsx",
+        "lines": 289,
+        "bytes": 16228
+      },
+      {
+        "file": "src/frontend/lib/lessonFeedback.ts",
+        "lines": 288,
+        "bytes": 9870
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleChecklist.ts",
+        "lines": 287,
+        "bytes": 11826
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleAi.ts",
+        "lines": 285,
+        "bytes": 12048
+      },
+      {
+        "file": "src/frontend/components/ScheduleRecordsListCard.tsx",
+        "lines": 273,
+        "bytes": 12205
+      },
+      {
+        "file": "src/frontend/lib/progressChecklist.ts",
+        "lines": 273,
+        "bytes": 10173
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleReuse.ts",
+        "lines": 271,
+        "bytes": 12238
+      },
+      {
+        "file": "src/frontend/lib/sampleData.ts",
+        "lines": 270,
+        "bytes": 8705
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportHeaderPanel.tsx",
+        "lines": 267,
+        "bytes": 14002
+      },
+      {
+        "file": "src/frontend/lib/aiDraftLessons.ts",
+        "lines": 265,
+        "bytes": 11793
+      },
+      {
+        "file": "src/frontend/lib/unlockSession.ts",
+        "lines": 262,
+        "bytes": 9387
+      },
+      {
+        "file": "src/frontend/components/ScheduleTrashPanel.tsx",
+        "lines": 249,
+        "bytes": 13347
+      },
+      {
+        "file": "src/frontend/hooks/useStudentCreation.ts",
+        "lines": 244,
+        "bytes": 9382
+      },
+      {
+        "file": "src/frontend/hooks/useNewCourseForm.ts",
+        "lines": 243,
+        "bytes": 10443
+      },
+      {
+        "file": "src/frontend/components/OnboardingGuide.tsx",
+        "lines": 242,
+        "bytes": 14416
+      },
+      {
+        "file": "src/frontend/lib/aiDraftFees.ts",
+        "lines": 239,
+        "bytes": 9760
+      },
+      {
+        "file": "src/frontend/components/PayrollLessonDetailsCard.tsx",
+        "lines": 238,
+        "bytes": 11658
+      },
+      {
+        "file": "src/frontend/lib/aiDraftArchives.ts",
+        "lines": 231,
+        "bytes": 11546
+      },
+      {
+        "file": "src/frontend/components/StudentCourseTransferPanel.tsx",
+        "lines": 229,
+        "bytes": 10922
+      },
+      {
+        "file": "src/frontend/components/TeacherProfilePanel.tsx",
+        "lines": 224,
+        "bytes": 10800
+      },
+      {
+        "file": "src/frontend/components/CampusSettingsCard.tsx",
+        "lines": 217,
+        "bytes": 8789
+      },
+      {
+        "file": "src/worker/runtime.ts",
+        "lines": 217,
+        "bytes": 6287
+      },
+      {
+        "file": "src/frontend/components/SubstituteClassLessonPanel.tsx",
+        "lines": 212,
+        "bytes": 9879
+      },
+      {
+        "file": "src/frontend/hooks/useStudentMaintenance.ts",
+        "lines": 210,
+        "bytes": 8412
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportCalendarPanel.tsx",
+        "lines": 205,
+        "bytes": 12080
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportStatusControls.tsx",
+        "lines": 204,
+        "bytes": 12291
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewRows.ts",
+        "lines": 204,
+        "bytes": 9163
+      },
+      {
+        "file": "src/frontend/lib/obligationCalculations.ts",
+        "lines": 199,
+        "bytes": 7464
+      },
+      {
+        "file": "src/frontend/components/TodoCalendar.tsx",
+        "lines": 191,
+        "bytes": 9922
+      },
+      {
+        "file": "src/worker/userDeletion.ts",
+        "lines": 187,
+        "bytes": 6100
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportRowDetails.tsx",
+        "lines": 183,
+        "bytes": 8522
+      },
+      {
+        "file": "src/frontend/components/SubjectSettingsCard.tsx",
+        "lines": 183,
+        "bytes": 7306
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleSubstitute.ts",
+        "lines": 181,
+        "bytes": 7751
+      },
+      {
+        "file": "src/frontend/lib/onboarding.ts",
+        "lines": 180,
+        "bytes": 8240
+      },
+      {
+        "file": "src/frontend/lib/aiDraftData.ts",
+        "lines": 178,
+        "bytes": 8379
+      },
+      {
+        "file": "src/frontend/components/StorageManagementCard.tsx",
+        "lines": 166,
+        "bytes": 7463
+      },
+      {
+        "file": "src/frontend/hooks/useArchiveSettings.ts",
+        "lines": 165,
+        "bytes": 6049
+      },
+      {
+        "file": "src/frontend/lib/lessonContent.ts",
+        "lines": 165,
+        "bytes": 6882
+      },
+      {
+        "file": "src/frontend/components/ScheduleCalendarDetailDialog.tsx",
+        "lines": 162,
+        "bytes": 7615
+      },
+      {
+        "file": "src/frontend/hooks/useCourseArchive.ts",
+        "lines": 158,
+        "bytes": 7931
+      },
+      {
+        "file": "src/frontend/lib/payrollCalculations.ts",
+        "lines": 158,
+        "bytes": 7129
+      },
+      {
+        "file": "src/frontend/hooks/useStudentCourseTransfer.ts",
+        "lines": 154,
+        "bytes": 6781
+      },
+      {
+        "file": "src/worker/vaultDocuments.ts",
+        "lines": 154,
+        "bytes": 5500
+      },
+      {
+        "file": "src/frontend/components/ConfirmDialog.tsx",
+        "lines": 153,
+        "bytes": 5365
+      },
+      {
+        "file": "src/frontend/lib/feeCalculations.ts",
+        "lines": 152,
+        "bytes": 9586
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewStorage.ts",
+        "lines": 148,
+        "bytes": 6157
+      },
+      {
+        "file": "src/frontend/lib/aiDraftLifecycle.ts",
+        "lines": 146,
+        "bytes": 8363
+      },
+      {
+        "file": "src/worker/types.ts",
+        "lines": 146,
+        "bytes": 3187
+      },
+      {
+        "file": "src/frontend/hooks/useCourseEditor.ts",
+        "lines": 145,
+        "bytes": 5481
+      },
+      {
+        "file": "src/frontend/lib/scheduleDayReuse.ts",
+        "lines": 142,
+        "bytes": 4885
+      },
+      {
+        "file": "src/frontend/components/ScheduleCalendarGrid.tsx",
+        "lines": 137,
+        "bytes": 7149
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportLinkedLessonsPanel.tsx",
+        "lines": 137,
+        "bytes": 6688
+      },
+      {
+        "file": "src/frontend/components/Sidebar.tsx",
+        "lines": 135,
+        "bytes": 5389
+      },
+      {
+        "file": "src/frontend/components/PayrollReviewFiltersCard.tsx",
+        "lines": 133,
+        "bytes": 5530
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewStatus.ts",
+        "lines": 133,
+        "bytes": 7579
+      },
+      {
+        "file": "src/frontend/lib/crypto.ts",
+        "lines": 132,
+        "bytes": 3450
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleStudentStats.ts",
+        "lines": 131,
+        "bytes": 6593
+      },
+      {
+        "file": "src/frontend/lib/scheduleBatch.ts",
+        "lines": 127,
+        "bytes": 5098
+      },
+      {
+        "file": "src/frontend/lib/aiScheduleDraftApply.ts",
+        "lines": 126,
+        "bytes": 5395
+      },
+      {
+        "file": "src/frontend/lib/storageRetention.ts",
+        "lines": 126,
+        "bytes": 4126
+      },
+      {
+        "file": "src/frontend/components/StudentEditDialog.tsx",
+        "lines": 122,
+        "bytes": 5484
+      },
+      {
+        "file": "src/frontend/lib/lessonFeedbackTextMetrics.ts",
+        "lines": 122,
+        "bytes": 4775
+      },
+      {
+        "file": "src/frontend/components/PayrollObligationDeductionCard.tsx",
+        "lines": 120,
+        "bytes": 6909
+      },
+      {
+        "file": "src/frontend/hooks/useScheduleTrash.ts",
+        "lines": 115,
+        "bytes": 5525
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewFilters.ts",
+        "lines": 115,
+        "bytes": 5423
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReview.ts",
+        "lines": 110,
+        "bytes": 3436
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportSavedReviewsPanel.tsx",
+        "lines": 109,
+        "bytes": 5449
+      },
+      {
+        "file": "src/frontend/lib/courseFormRules.ts",
+        "lines": 109,
+        "bytes": 4782
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportHistoryQuickBar.tsx",
+        "lines": 107,
+        "bytes": 4527
+      },
+      {
+        "file": "src/frontend/lib/payrollLessons.ts",
+        "lines": 105,
+        "bytes": 4726
+      },
+      {
+        "file": "src/frontend/components/MetricCard.tsx",
+        "lines": 101,
+        "bytes": 3130
+      },
+      {
+        "file": "src/frontend/lib/makeupCalculations.ts",
+        "lines": 100,
+        "bytes": 4694
+      },
+      {
+        "file": "src/worker/index.ts",
+        "lines": 96,
+        "bytes": 3345
+      },
+      {
+        "file": "src/frontend/lib/dateCalculations.ts",
+        "lines": 93,
+        "bytes": 2856
+      },
+      {
+        "file": "src/frontend/lib/todos.ts",
+        "lines": 87,
+        "bytes": 3186
+      },
+      {
+        "file": "src/frontend/hooks/useStudentFilters.ts",
+        "lines": 70,
+        "bytes": 3525
+      },
+      {
+        "file": "src/components/ui/time-text-input.tsx",
+        "lines": 67,
+        "bytes": 1937
+      },
+      {
+        "file": "src/frontend/lib/lessonFeedbackHitTest.ts",
+        "lines": 65,
+        "bytes": 2788
+      },
+      {
+        "file": "src/frontend/components/SyncCountdownBadge.tsx",
+        "lines": 59,
+        "bytes": 1614
+      },
+      {
+        "file": "src/components/ui/card.tsx",
+        "lines": 58,
+        "bytes": 1967
+      },
+      {
+        "file": "src/components/ui/button.tsx",
+        "lines": 55,
+        "bytes": 1946
+      },
+      {
+        "file": "src/frontend/lib/courseFeePresentation.ts",
+        "lines": 54,
+        "bytes": 4727
+      },
+      {
+        "file": "src/frontend/lib/scheduleViewTypes.ts",
+        "lines": 54,
+        "bytes": 1692
+      },
+      {
+        "file": "src/frontend/components/SchedulePanelTabs.tsx",
+        "lines": 52,
+        "bytes": 2100
+      },
+      {
+        "file": "src/frontend/lib/billingPrimitives.ts",
+        "lines": 52,
+        "bytes": 2130
+      },
+      {
+        "file": "src/frontend/lib/time.ts",
+        "lines": 50,
+        "bytes": 1874
+      },
+      {
+        "file": "src/frontend/lib/onboardingLayout.ts",
+        "lines": 49,
+        "bytes": 2875
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportArchive.ts",
+        "lines": 49,
+        "bytes": 1611
+      },
+      {
+        "file": "src/frontend/lib/lessonDetailSort.ts",
+        "lines": 46,
+        "bytes": 1706
+      },
+      {
+        "file": "src/frontend/components/ClassFeeTierFields.tsx",
+        "lines": 42,
+        "bytes": 1665
+      },
+      {
+        "file": "src/shared/aiEndpoint.ts",
+        "lines": 42,
+        "bytes": 1691
+      },
+      {
+        "file": "src/components/ui/badge.tsx",
+        "lines": 38,
+        "bytes": 1360
+      },
+      {
+        "file": "src/frontend/components/ScheduleImportIssueList.tsx",
+        "lines": 38,
+        "bytes": 2023
+      },
+      {
+        "file": "src/frontend/lib/courseTypeUsage.ts",
+        "lines": 32,
+        "bytes": 1446
+      },
+      {
+        "file": "src/components/ui/select.tsx",
+        "lines": 31,
+        "bytes": 1283
+      },
+      {
+        "file": "src/frontend/components/PayrollMetricSummaryCards.tsx",
+        "lines": 31,
+        "bytes": 1113
+      },
+      {
+        "file": "src/frontend/lib/archiveSearch.ts",
+        "lines": 31,
+        "bytes": 1211
+      },
+      {
+        "file": "src/worker/encryptedPayloads.ts",
+        "lines": 31,
+        "bytes": 765
+      },
+      {
+        "file": "src/frontend/hooks/useArchiveNavigation.ts",
+        "lines": 29,
+        "bytes": 1169
+      },
+      {
+        "file": "src/frontend/lib/aiDraftTypes.ts",
+        "lines": 28,
+        "bytes": 1391
+      },
+      {
+        "file": "src/frontend/lib/scheduleDraftValues.ts",
+        "lines": 28,
+        "bytes": 1233
+      },
+      {
+        "file": "src/frontend/lib/typeGuards.ts",
+        "lines": 27,
+        "bytes": 1030
+      },
+      {
+        "file": "src/frontend/lib/studentCourseIndex.ts",
+        "lines": 25,
+        "bytes": 1413
+      },
+      {
+        "file": "src/frontend/lib/lessonAttendance.ts",
+        "lines": 24,
+        "bytes": 1217
+      },
+      {
+        "file": "src/components/ui/input.tsx",
+        "lines": 23,
+        "bytes": 1077
+      },
+      {
+        "file": "src/frontend/lib/salaryDetailScope.ts",
+        "lines": 22,
+        "bytes": 916
+      },
+      {
+        "file": "src/components/ui/textarea.tsx",
+        "lines": 20,
+        "bytes": 907
+      },
+      {
+        "file": "src/frontend/components/CalendarDateDetailsButton.tsx",
+        "lines": 20,
+        "bytes": 833
+      },
+      {
+        "file": "src/frontend/components/SensitiveAmountField.tsx",
+        "lines": 20,
+        "bytes": 488
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewLocalState.ts",
+        "lines": 20,
+        "bytes": 770
+      },
+      {
+        "file": "src/worker/settings.ts",
+        "lines": 19,
+        "bytes": 664
+      },
+      {
+        "file": "src/frontend/lib/gradeEntryOptions.ts",
+        "lines": 18,
+        "bytes": 778
+      },
+      {
+        "file": "src/frontend/lib/scheduleImportReviewKey.ts",
+        "lines": 16,
+        "bytes": 528
+      },
+      {
+        "file": "src/frontend/components/TimeGreeting.tsx",
+        "lines": 15,
+        "bytes": 557
+      },
+      {
+        "file": "src/frontend/lib/progressStudentScope.ts",
+        "lines": 15,
+        "bytes": 610
+      },
+      {
+        "file": "src/frontend/hooks/useAppDate.ts",
+        "lines": 12,
+        "bytes": 443
+      },
+      {
+        "file": "src/frontend/hooks/useStableCallbacks.ts",
+        "lines": 12,
+        "bytes": 639
+      },
+      {
+        "file": "src/frontend/lib/calculations.ts",
+        "lines": 10,
+        "bytes": 2890
+      },
+      {
+        "file": "src/main.tsx",
+        "lines": 10,
+        "bytes": 259
+      },
+      {
+        "file": "src/frontend/lib/vaultLookups.ts",
+        "lines": 9,
+        "bytes": 239
+      },
+      {
+        "file": "src/frontend/lib/progressDateRange.ts",
+        "lines": 8,
+        "bytes": 206
+      },
+      {
+        "file": "src/lib/utils.ts",
+        "lines": 6,
+        "bytes": 169
+      }
+    ],
+    "chunks": [
+      {
+        "file": "dist/assets/xlsx-CKwrMZHi.js",
+        "bytes": 499549,
+        "gzipBytes": 162963
+      },
+      {
+        "file": "dist/assets/index-C_CwHB8n.js",
+        "bytes": 429414,
+        "gzipBytes": 135624
+      },
+      {
+        "file": "dist/assets/ScheduleView-7kGsO658.js",
+        "bytes": 266271,
+        "gzipBytes": 65650
+      },
+      {
+        "file": "dist/assets/PayrollReviewView-DjhP18l7.js",
+        "bytes": 201747,
+        "gzipBytes": 58830
+      },
+      {
+        "file": "dist/assets/ProgressView-Ck_H4bJp.js",
+        "bytes": 161084,
+        "gzipBytes": 47078
+      },
+      {
+        "file": "dist/assets/StudentsView-Xg7gX1oJ.js",
+        "bytes": 136505,
+        "gzipBytes": 35984
+      },
+      {
+        "file": "dist/assets/proxy-AOfNE5DJ.js",
+        "bytes": 122000,
+        "gzipBytes": 39825
+      },
+      {
+        "file": "dist/assets/index-DIJx5M9W.js",
+        "bytes": 114679,
+        "gzipBytes": 35238
+      },
+      {
+        "file": "dist/assets/index-DGA1TQel.css",
+        "bytes": 86726,
+        "gzipBytes": 14974
+      },
+      {
+        "file": "dist/assets/AdminView-XvpbPwzj.js",
+        "bytes": 53277,
+        "gzipBytes": 14131
+      },
+      {
+        "file": "dist/assets/TodayView-Br7QfHCC.js",
+        "bytes": 49953,
+        "gzipBytes": 13747
+      },
+      {
+        "file": "dist/assets/index-D8LC1KwM.js",
+        "bytes": 39240,
+        "gzipBytes": 11853
+      },
+      {
+        "file": "dist/assets/ProgressView-BjVsysn_.css",
+        "bytes": 29948,
+        "gzipBytes": 5555
+      },
+      {
+        "file": "dist/schoolpal-export-helper.user.js",
+        "bytes": 26612,
+        "gzipBytes": 7500
+      },
+      {
+        "file": "dist/assets/SalaryView-DmqdTi1Z.js",
+        "bytes": 24475,
+        "gzipBytes": 7116
+      },
+      {
+        "file": "dist/assets/CalendarView-DDySM1cm.js",
+        "bytes": 23985,
+        "gzipBytes": 7160
+      },
+      {
+        "file": "dist/assets/GradesView-DKVV9Yc4.js",
+        "bytes": 16239,
+        "gzipBytes": 5431
+      },
+      {
+        "file": "dist/assets/obligationCalculations-CbGsVrHZ.js",
+        "bytes": 4630,
+        "gzipBytes": 1832
+      },
+      {
+        "file": "dist/assets/index-CKvD-wbH.js",
+        "bytes": 4311,
+        "gzipBytes": 1895
+      },
+      {
+        "file": "dist/assets/index-oJrf-rSa.js",
+        "bytes": 3911,
+        "gzipBytes": 1861
+      },
+      {
+        "file": "dist/assets/lessonDetailSort-C1BgDri5.js",
+        "bytes": 3184,
+        "gzipBytes": 1389
+      },
+      {
+        "file": "dist/assets/MetricCard-BrBy0A_P.js",
+        "bytes": 2570,
+        "gzipBytes": 1220
+      },
+      {
+        "file": "dist/assets/wand-sparkles-DxLed_dI.js",
+        "bytes": 1230,
+        "gzipBytes": 524
+      },
+      {
+        "file": "dist/assets/select-DzYCcgF0.js",
+        "bytes": 956,
+        "gzipBytes": 602
+      },
+      {
+        "file": "dist/assets/corner-up-left-eTgOHZ43.js",
+        "bytes": 715,
+        "gzipBytes": 431
+      },
+      {
+        "file": "dist/assets/CalendarDateDetailsButton-B90bdHwU.js",
+        "bytes": 705,
+        "gzipBytes": 453
+      },
+      {
+        "file": "dist/assets/notebook-pen-BkzIA-0t.js",
+        "bytes": 598,
+        "gzipBytes": 341
+      },
+      {
+        "file": "dist/assets/file-text-DgiDKmsu.js",
+        "bytes": 530,
+        "gzipBytes": 302
+      },
+      {
+        "file": "dist/assets/history-DAPXJnvB.js",
+        "bytes": 444,
+        "gzipBytes": 300
+      },
+      {
+        "file": "dist/assets/salaryDetailScope-C_9-_Sm_.js",
+        "bytes": 415,
+        "gzipBytes": 313
+      },
+      {
+        "file": "dist/assets/trash-2-Db5oDfSE.js",
+        "bytes": 354,
+        "gzipBytes": 244
+      },
+      {
+        "file": "dist/assets/bot-BgqR4GtP.js",
+        "bytes": 325,
+        "gzipBytes": 226
+      },
+      {
+        "file": "dist/assets/save-KAafdNIH.js",
+        "bytes": 324,
+        "gzipBytes": 226
+      },
+      {
+        "file": "dist/assets/pencil-CDpmCSmA.js",
+        "bytes": 273,
+        "gzipBytes": 220
+      },
+      {
+        "file": "dist/assets/map-pin-7gImrSeV.js",
+        "bytes": 250,
+        "gzipBytes": 219
+      },
+      {
+        "file": "dist/assets/user-check-Covct8lg.js",
+        "bytes": 250,
+        "gzipBytes": 218
+      },
+      {
+        "file": "dist/assets/chart-column-B0dJQZXN.js",
+        "bytes": 247,
+        "gzipBytes": 190
+      },
+      {
+        "file": "dist/assets/external-link-CZSGX2lf.js",
+        "bytes": 247,
+        "gzipBytes": 195
+      },
+      {
+        "file": "dist/assets/banknote-C1Rt7-J6.js",
+        "bytes": 242,
+        "gzipBytes": 206
+      },
+      {
+        "file": "dist/assets/table-2-C73mLOdL.js",
+        "bytes": 212,
+        "gzipBytes": 181
+      },
+      {
+        "file": "dist/assets/clock-3-E0QvX8yN.js",
+        "bytes": 178,
+        "gzipBytes": 167
+      },
+      {
+        "file": "dist/assets/circle-check-CJeKT1fN.js",
+        "bytes": 169,
+        "gzipBytes": 163
+      },
+      {
+        "file": "dist/assets/search-BLjjDikP.js",
+        "bytes": 164,
+        "gzipBytes": 163
+      },
+      {
+        "file": "dist/assets/plus-BToTNdtV.js",
+        "bytes": 150,
+        "gzipBytes": 147
+      }
+    ],
+    "warnings": []
+  },
+  "dist": {
+    "files": 46,
+    "bytes": 2310315
+  },
+  "performance": [
+    {
+      "label": "final-optimization",
+      "scale": {
+        "name": "small",
+        "students": 40,
+        "courses": 12,
+        "lessons": 240
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 622,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 16
+          },
+          "ScheduleView": {
+            "renders": 12,
+            "commits": 4,
+            "commitMs": 347
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 221,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 70
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 244,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 93
+          },
+          "ScheduleView": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 112
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 491,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 2,
+            "commitMs": 27
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 3,
+            "commitMs": 386
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 101,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 45
+            }
+          }
+        },
+        {
+          "elapsedMs": 101,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 43
+            }
+          }
+        },
+        {
+          "elapsedMs": 76,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 37
+            }
+          }
+        },
+        {
+          "elapsedMs": 59,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 12
+            }
+          }
+        },
+        {
+          "elapsedMs": 76,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 15
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 968,
+        "renders": {
+          "App": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 30
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 12
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 132,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 135,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 0,
+          "encryptMs": 136,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 1,
+          "encryptMs": 146,
+          "localWriteMs": 0,
+          "jsonBytes": 162698
+        },
+        {
+          "cloneMs": 2,
+          "serializeMs": 0,
+          "encryptMs": 128,
+          "localWriteMs": 1,
+          "jsonBytes": 162698
+        }
+      ],
+      "batch": {
+        "updatedLessons": 200,
+        "samples": [
+          {
+            "previousMs": 4,
+            "optimizedMs": 0
+          },
+          {
+            "previousMs": 3,
+            "optimizedMs": 0
+          },
+          {
+            "previousMs": 2,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 4,
+            "optimizedMs": 0
+          },
+          {
+            "previousMs": 3,
+            "optimizedMs": 0
+          }
+        ]
+      }
+    },
+    {
+      "label": "final-optimization",
+      "scale": {
+        "name": "medium",
+        "students": 240,
+        "courses": 80,
+        "lessons": 1800
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 1309,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 28
+          },
+          "ScheduleView": {
+            "renders": 12,
+            "commits": 4,
+            "commitMs": 548
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 396,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 124
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 704,
+        "renders": {
+          "App": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 296
+          },
+          "ScheduleView": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 256
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 503,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 21
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 3,
+            "commitMs": 356
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 106,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 24
+            }
+          }
+        },
+        {
+          "elapsedMs": 100,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 42
+            }
+          }
+        },
+        {
+          "elapsedMs": 90,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 41
+            }
+          }
+        },
+        {
+          "elapsedMs": 94,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 41
+            }
+          }
+        },
+        {
+          "elapsedMs": 110,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 48
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 1061,
+        "renders": {
+          "App": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 34
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 11
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 17,
+          "serializeMs": 4,
+          "encryptMs": 175,
+          "localWriteMs": 7,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 19,
+          "serializeMs": 2,
+          "encryptMs": 172,
+          "localWriteMs": 8,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 19,
+          "serializeMs": 3,
+          "encryptMs": 170,
+          "localWriteMs": 8,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 18,
+          "serializeMs": 3,
+          "encryptMs": 169,
+          "localWriteMs": 7,
+          "jsonBytes": 1219408
+        },
+        {
+          "cloneMs": 18,
+          "serializeMs": 2,
+          "encryptMs": 174,
+          "localWriteMs": 8,
+          "jsonBytes": 1219408
+        }
+      ],
+      "batch": {
+        "updatedLessons": 200,
+        "samples": [
+          {
+            "previousMs": 15,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 17,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 14,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 14,
+            "optimizedMs": 2
+          },
+          {
+            "previousMs": 15,
+            "optimizedMs": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": "final-optimization",
+      "scale": {
+        "name": "large",
+        "students": 800,
+        "courses": 240,
+        "lessons": 3600
+      },
+      "browser": "156.0.4314.58",
+      "mode": "Vite development + React StrictMode; local in-memory API; synthetic data",
+      "scheduleOpen": {
+        "elapsedMs": 3178,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 18
+          },
+          "ScheduleView": {
+            "renders": 10,
+            "commits": 4,
+            "commitMs": 1385
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "schedulePanel": {
+        "elapsedMs": 1249,
+        "renders": {
+          "App": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "ScheduleView": {
+            "renders": 4,
+            "commits": 1,
+            "commitMs": 347
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "scheduleIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "attendance": {
+        "elapsedMs": 2946,
+        "renders": {
+          "App": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 1030
+          },
+          "ScheduleView": {
+            "renders": 6,
+            "commits": 2,
+            "commitMs": 772
+          },
+          "StudentsView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          }
+        }
+      },
+      "studentsOpen": {
+        "elapsedMs": 470,
+        "renders": {
+          "App": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 16
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 4,
+            "commits": 3,
+            "commitMs": 227
+          }
+        }
+      },
+      "studentFilter": [
+        {
+          "elapsedMs": 187,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 90
+            }
+          }
+        },
+        {
+          "elapsedMs": 87,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 44
+            }
+          }
+        },
+        {
+          "elapsedMs": 92,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 43
+            }
+          }
+        },
+        {
+          "elapsedMs": 90,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 43
+            }
+          }
+        },
+        {
+          "elapsedMs": 89,
+          "renders": {
+            "App": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "ScheduleView": {
+              "renders": 0,
+              "commits": 0,
+              "commitMs": 0
+            },
+            "StudentsView": {
+              "renders": 2,
+              "commits": 1,
+              "commitMs": 46
+            }
+          }
+        }
+      ],
+      "studentsIdle": {
+        "App": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "ScheduleView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        },
+        "StudentsView": {
+          "renders": 0,
+          "commits": 0,
+          "commitMs": 0
+        }
+      },
+      "save": {
+        "elapsedMs": 2126,
+        "renders": {
+          "App": {
+            "renders": 8,
+            "commits": 3,
+            "commitMs": 92
+          },
+          "ScheduleView": {
+            "renders": 0,
+            "commits": 0,
+            "commitMs": 0
+          },
+          "StudentsView": {
+            "renders": 2,
+            "commits": 1,
+            "commitMs": 13
+          }
+        }
+      },
+      "storage": [
+        {
+          "cloneMs": 33,
+          "serializeMs": 10,
+          "encryptMs": 320,
+          "localWriteMs": 14,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 36,
+          "serializeMs": 6,
+          "encryptMs": 364,
+          "localWriteMs": 16,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 34,
+          "serializeMs": 7,
+          "encryptMs": 303,
+          "localWriteMs": 13,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 75,
+          "serializeMs": 6,
+          "encryptMs": 320,
+          "localWriteMs": 14,
+          "jsonBytes": 2528275
+        },
+        {
+          "cloneMs": 34,
+          "serializeMs": 8,
+          "encryptMs": 358,
+          "localWriteMs": 15,
+          "jsonBytes": 2528275
+        }
+      ],
+      "batch": {
+        "updatedLessons": 200,
+        "samples": [
+          {
+            "previousMs": 49,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 29,
+            "optimizedMs": 2
+          },
+          {
+            "previousMs": 22,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 32,
+            "optimizedMs": 1
+          },
+          {
+            "previousMs": 32,
+            "optimizedMs": 1
+          }
+        ]
+      }
+    }
+  ],
+  "performanceSummary": [
+    {
+      "scale": {
+        "name": "small",
+        "students": 40,
+        "courses": 12,
+        "lessons": 240
+      },
+      "scheduleOpenMs": 622,
+      "schedulePanelMs": 221,
+      "attendanceMs": 244,
+      "studentsOpenMs": 491,
+      "filterMedianMs": 76,
+      "saveMs": 968,
+      "saveStudentsCommits": 1,
+      "batchOldMedianMs": 3,
+      "batchNewMedianMs": 0,
+      "cloneMedianMs": 2,
+      "serializeMedianMs": 1,
+      "encryptMedianMs": 135,
+      "cacheMedianMs": 1
+    },
+    {
+      "scale": {
+        "name": "medium",
+        "students": 240,
+        "courses": 80,
+        "lessons": 1800
+      },
+      "scheduleOpenMs": 1309,
+      "schedulePanelMs": 396,
+      "attendanceMs": 704,
+      "studentsOpenMs": 503,
+      "filterMedianMs": 100,
+      "saveMs": 1061,
+      "saveStudentsCommits": 1,
+      "batchOldMedianMs": 15,
+      "batchNewMedianMs": 1,
+      "cloneMedianMs": 18,
+      "serializeMedianMs": 3,
+      "encryptMedianMs": 172,
+      "cacheMedianMs": 8
+    },
+    {
+      "scale": {
+        "name": "large",
+        "students": 800,
+        "courses": 240,
+        "lessons": 3600
+      },
+      "scheduleOpenMs": 3178,
+      "schedulePanelMs": 1249,
+      "attendanceMs": 2946,
+      "studentsOpenMs": 470,
+      "filterMedianMs": 90,
+      "saveMs": 2126,
+      "saveStudentsCommits": 1,
+      "batchOldMedianMs": 32,
+      "batchNewMedianMs": 1,
+      "cloneMedianMs": 34,
+      "serializeMedianMs": 7,
+      "encryptMedianMs": 320,
+      "cacheMedianMs": 14
+    }
+  ],
+  "storage": {
+    "capacity": [
+      {
+        "lessons": 240,
+        "jsonBytes": 349375,
+        "encryptedBytes": 466021,
+        "uploadBytes": 466098,
+        "encryptMs": 144,
+        "writeMs": 0,
+        "capacityError": "",
+        "loopbackUploadMs": 39,
+        "receivedBytes": 466098
+      },
+      {
+        "lessons": 1800,
+        "jsonBytes": 1360545,
+        "encryptedBytes": 1814249,
+        "uploadBytes": 1814326,
+        "encryptMs": 199,
+        "writeMs": 6,
+        "capacityError": "",
+        "loopbackUploadMs": 111,
+        "receivedBytes": 1814326
+      },
+      {
+        "lessons": 3600,
+        "jsonBytes": 2528275,
+        "encryptedBytes": 3371221,
+        "uploadBytes": 3371298,
+        "encryptMs": 333,
+        "writeMs": 12,
+        "capacityError": "",
+        "loopbackUploadMs": 232,
+        "receivedBytes": 3371298
+      },
+      {
+        "lessons": 6000,
+        "jsonBytes": 4085175,
+        "encryptedBytes": 5447089,
+        "uploadBytes": 5447166,
+        "encryptMs": 453,
+        "writeMs": 2,
+        "capacityError": "QuotaExceededError",
+        "loopbackUploadMs": 392,
+        "receivedBytes": 5447166
+      }
+    ],
+    "continuousEditing": {
+      "edits": 6,
+      "uploads": 1,
+      "measures": [
+        {
+          "key": "teacher-salary-tracker:unlocked-session",
+          "ms": 2,
+          "size": 156929
+        },
+        {
+          "key": "teacher-salary-tracker:unlocked-session",
+          "ms": 1,
+          "size": 156929
+        },
+        {
+          "key": "teacher-salary-tracker:unlocked-session",
+          "ms": 2,
+          "size": 156929
+        },
+        {
+          "key": "teacher-salary-tracker:unlocked-session",
+          "ms": 2,
+          "size": 156929
+        },
+        {
+          "key": "teacher-salary-tracker:unlocked-session",
+          "ms": 1,
+          "size": 156929
+        },
+        {
+          "key": "teacher-salary-tracker:unlocked-session",
+          "ms": 1,
+          "size": 156929
+        },
+        {
+          "key": "teacher-salary-tracker:unlocked-session",
+          "ms": 1,
+          "size": 156929
+        }
+      ]
+    },
+    "trustedSession": {
+      "writeMs": 17,
+      "readMs": 10,
+      "kind": "trusted-device-session",
+      "plaintextLeaked": false,
+      "restoredName": "performance-test",
+      "trusted": true,
+      "fallbackName": "performance-test",
+      "fallbackTrusted": false,
+      "hasPersistentFallback": false,
+      "cleared": null
+    }
+  },
+  "limits": [
+    "No production/public-network latency or real multi-device end-to-end measurements.",
+    "6000-lesson synthetic fixture exceeds localStorage quota; storage formats and architecture preserved after evaluation.",
+    "Large workspace still has rendering/encryption costs; single development-run timings are not production performance guarantees.",
+    "GitHub Actions is configured and local checks pass, but remote execution requires a later commit/push.",
+    "Changes remain local and uncommitted; no deployment."
+  ]
+}

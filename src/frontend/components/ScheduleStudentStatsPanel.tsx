@@ -21,10 +21,9 @@ import {
   isStudentStatsDateRangeValid,
   isStudentStatsTimeRangeValid
 } from "@/frontend/lib/scheduleViewHelpers";
-import type { buildStudentStatsGroupedLessonRows, buildStudentStatsRows } from "@/frontend/lib/scheduleViewHelpers";
+import type { buildStudentStatsGroupedLessonRows } from "@/frontend/lib/scheduleViewHelpers";
 import type { CourseTypeFilter, StudentStatsMakeupFilter } from "@/frontend/lib/scheduleViewTypes";
 
-type StudentStatsRows = ReturnType<typeof buildStudentStatsRows>;
 type StudentStatsGroupedLessonRows = ReturnType<typeof buildStudentStatsGroupedLessonRows>;
 type StudentStatsStatusFilter = "all" | Lesson["status"];
 
@@ -47,7 +46,6 @@ type ScheduleStudentStatsPanelProps = {
   lessonCount: number;
   onOpenLesson: (lesson: Lesson) => void;
   onToggleGroup: (groupId: string) => void;
-  rows: StudentStatsRows;
   setCampusFilter: (value: string) => void;
   setCourseFilter: (value: string) => void;
   setCourseTypeFilter: (value: CourseTypeFilter) => void;
@@ -91,7 +89,6 @@ export function ScheduleStudentStatsPanel({
   lessonCount,
   onOpenLesson,
   onToggleGroup,
-  rows,
   setCampusFilter,
   setCourseFilter,
   setCourseTypeFilter,

@@ -1,3 +1,5 @@
+import { resolutionKey } from "@/frontend/lib/scheduleImportReviewKey";
+export { resolutionKey } from "@/frontend/lib/scheduleImportReviewKey";
 import type {
   ScheduleImportSavedRow,
   ScheduleImportRecheckOrigin,
@@ -214,18 +216,6 @@ function importRowLooksNoShow(row: Pick<ImportPreviewLesson, "presentCount" | "e
   if (row.warnings.includes("未开课/取消")) return false;
   if (/取消|停课|请假|未上|不上课|未开课|课消|无学生/.test(`${row.note ?? ""} ${row.rawText ?? ""}`)) return false;
   return true;
-}
-
-export function resolutionKey(row: ImportPreviewLesson): string {
-  return [
-    row.systemLessonId || row.id,
-    row.fileName,
-    row.date,
-    row.startTime,
-    row.endTime,
-    row.matchedCourseId ?? "",
-    row.title
-  ].join("|");
 }
 
 // v2 只保留会影响对账结论的字段。教师/助教/教室、云端备注、以及各类学生姓名列表

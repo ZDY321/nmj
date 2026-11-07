@@ -1,153 +1,50 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  Bell,
-  Compass,
-  Calendar,
-  GraduationCap,
-  LogOut,
-  Menu,
-  MessageSquare,
-  Eye,
-  EyeOff,
-  RefreshCw,
-  Send
-} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { useConfirmDialog } from "@/frontend/components/ConfirmDialog";
+import { LoginScreen } from "@/frontend/components/LoginScreen";
 import { OnboardingGuide } from "@/frontend/components/OnboardingGuide";
 import { Sidebar } from "@/frontend/components/Sidebar";
-import { applyAiScheduleDraftToVault } from "@/frontend/lib/aiScheduleDraftApply";
-import { currentAppHour, defaultFeeRuleForCourseType, defaultSalaryGradeRule, feeRuleForCourseType, formatAppDateLabel, formatAppDateTime, getCourse, isClassBillingCourseType, todayIso } from "@/frontend/lib/calculations";
-import { ApiError, cancelOwnDeletion, submitFeedback } from "@/frontend/lib/cloud";
+import { SyncCountdownBadge } from "@/frontend/components/SyncCountdownBadge";
+import { TimeGreeting } from "@/frontend/components/TimeGreeting";
+import { WorkspaceViews } from "@/frontend/components/WorkspaceViews";
+import { useAppDate } from "@/frontend/hooks/useAppDate";
+import { useCloudSession } from "@/frontend/hooks/useCloudSession";
+import { useNavigationState } from "@/frontend/hooks/useNavigationState";
+import { useStableCallbacks } from "@/frontend/hooks/useStableCallbacks";
+import { useVaultActions } from "@/frontend/hooks/useVaultActions";
+import { syncCheckIntervalSeconds } from "@/frontend/hooks/useVaultPersistence";
+import { formatAppDateLabel, formatAppDateTime, todayIso } from "@/frontend/lib/calculations";
+import { submitFeedback } from "@/frontend/lib/cloud";
 import {
-  cloneVault,
-  type ViewKey,
+  navItems,
   viewTitles,
-  navItems
+  type ViewKey
 } from "@/frontend/lib/helpers";
-import { generateBatchLessonsInVault, type BatchLessonGenerationResult } from "@/frontend/lib/scheduleBatch";
-import { getOnboardingTourStartIndex, getOnboardingTourStep, isOnboardingSetupComplete, normalizeOnboardingStepKeys, onboardingTourSteps, type OnboardingStepKey } from "@/frontend/lib/onboarding";
-import { clearStoredSession, clearVault, getCloudVaultMeta, loadCloudVaultWithVersion, loginAccount, logoutCloud, registerAccount, saveVault } from "@/frontend/lib/storage";
-import { makeId } from "@/frontend/lib/crypto";
-import { updateLessonContentFromFeedback } from "@/frontend/lib/lessonContent";
-import type { ProgressChecklistFocus } from "@/frontend/lib/progressChecklist";
-import type { ProgressSectionView } from "@/frontend/views/ProgressView";
-import { clearSavedScheduleImportLocalState } from "@/frontend/lib/scheduleImportReviewLocalState";
 import {
-  clearUnlockedSession,
-  readPersistentLoginPreference,
-  readUnlockedSession,
-  writePersistentLoginPreference,
-  writeUnlockedSession,
-  type UnlockedSession
+  readPersistentLoginPreference
 } from "@/frontend/lib/unlockSession";
-import {
-  cleanupResolvedMakeupLessons,
-  cloneFeeRule,
-  courseUpdateAffectsLessonDefaults,
-  materializeStudentTrialStatusOnLessons,
-  migrateLessonsFromCourseType,
-  moveLessonsToTrash,
-  normalizeCourseLessonSyncScope,
-  recalculateLinkedMakeupLessonFeeSnapshots,
-  recalculateLessonFeeSnapshot,
-  repairCourseStudentLinksFromLessons,
-  restoreLessonsFromTrash,
-  syncFutureLessonsWithStudentTrialStatus,
-  syncLessonsWithCourseDefaults,
-  syncOriginalLessonFromMakeupCompletion,
-  type CourseTypeMigrationMode,
-  type CourseTypeMigrationResult
-} from "@/frontend/lib/vaultMutations";
 import type {
-  CalendarDayNote,
-  Campus,
-  AiScheduleSession,
-  CourseGroup,
-  CourseType,
-  CustomCourseType,
-  CustomCourseTypeOption,
-  FeeRule,
-  GradeRecord,
-  Lesson,
-  MemoItem,
-  ProgressChecklistCompletion,
-  ProgressChecklistTemplate,
-  SalaryAdjustment,
-  Student,
-  StudentCourseTransition,
-  StudentProgressRecord,
-  TeacherVault,
-  TeacherProfile,
-  TimePreset,
-  TodoItem,
-  UserDeletionState,
-  UserRole,
-  WeekStart,
-  Weekday
+  AiScheduleSession
 } from "@/shared/types";
-
-const AdminView = lazy(() => import("@/frontend/views/AdminView").then((module) => ({ default: module.AdminView })));
-const CalendarView = lazy(() => import("@/frontend/views/CalendarView").then((module) => ({ default: module.CalendarView })));
-const PayrollReviewView = lazy(() => import("@/frontend/views/PayrollReviewView").then((module) => ({ default: module.PayrollReviewView })));
-const ProgressView = lazy(() => import("@/frontend/views/ProgressView").then((module) => ({ default: module.ProgressView })));
-const ScheduleView = lazy(() => import("@/frontend/views/ScheduleView").then((module) => ({ default: module.ScheduleView })));
-const SalaryView = lazy(() => import("@/frontend/views/SalaryView").then((module) => ({ default: module.SalaryView })));
-const StudentsView = lazy(() => import("@/frontend/views/StudentsView").then((module) => ({ default: module.StudentsView })));
-const TodayView = lazy(() => import("@/frontend/views/TodayView").then((module) => ({ default: module.TodayView })));
-
-type CalendarOverviewFocusState = {
-  selectedDate: string;
-  month: string;
-  overviewPage: "month" | "week";
-  weekCampusFilter: string;
-  weekCourseTypeFilter: "all" | CourseType;
-  weekGradeFilter: string;
-  weekSubjectFilter: string;
-  weekStudentFilter: string;
-  weekMakeupFilter: "all" | "any_makeup" | "regular_makeup" | "substitute_class";
-};
-
-type PayrollPanelFocus = "review" | "reconcile" | "mapping" | "guide";
-type StudentsPanelFocus = "profile" | "salaryRules" | "campuses" | "students" | "courses";
-
-type ScheduleCalendarFocus = {
-  date: string;
-  lessonId?: string;
-  targetPanel?: "calendar" | "schedule" | "records";
-  calendarMode?: "schedule" | "view";
-  scheduleDraft?: {
-    courseGroupId?: string;
-    startTime?: string;
-    endTime?: string;
-  };
-  nonce: number;
-  returnTarget?: {
-    kind: "view";
-    view: ViewKey;
-    label: string;
-    calendarFocus?: CalendarOverviewFocusState;
-    payrollPanel?: PayrollPanelFocus;
-  } | null;
-};
-
-// 这里只控制云端版本轮询；编辑后的保存仍使用下面的短防抖间隔。
-const syncCheckIntervalSeconds = 5 * 60;
-const saveDebounceMs = 500;
+import {
+  AlertTriangle,
+  Bell,
+  Calendar,
+  Compass,
+  Eye,
+  EyeOff,
+  GraduationCap,
+  LogOut,
+  Menu,
+  MessageSquare,
+  RefreshCw,
+  Send
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 export function App() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [token, setToken] = useState("");
-  const [role, setRole] = useState<UserRole>("teacher");
-  const [deletion, setDeletion] = useState<UserDeletionState | null>(null);
-  const [vault, setVault] = useState<TeacherVault | null>(null);
-  const [bootstrapped, setBootstrapped] = useState(false);
   const [view, setView] = useState<ViewKey>("today");
   const [collapsed, setCollapsed] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -159,1190 +56,134 @@ export function App() {
   const [feedbackError, setFeedbackError] = useState("");
   const [noticeReadVersion, setNoticeReadVersion] = useState("");
   const [onboardingVisible, setOnboardingVisible] = useState(false);
-  const [onboardingStepIndex, setOnboardingStepIndex] = useState(0);
-  const [onboardingCalendarDateSelected, setOnboardingCalendarDateSelected] = useState(false);
-  const onboardingAccountRef = useRef<string | null>(null);
-  const [onboardingVisitedSteps, setOnboardingVisitedSteps] = useState<OnboardingStepKey[]>([]);
   const [amountsVisible, setAmountsVisible] = useState(false);
-  const [persistLoginAfterClose, setPersistLoginAfterClose] = useState(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [cloudVersion, setCloudVersion] = useState("");
-  const [remoteCloudVersion, setRemoteCloudVersion] = useState("");
-  const [syncState, setSyncState] = useState<"idle" | "checking" | "syncing" | "outdated" | "conflict" | "error">("idle");
-  const [syncMessage, setSyncMessage] = useState("");
-  const [syncCountdownSeconds, setSyncCountdownSeconds] = useState(syncCheckIntervalSeconds);
   const [selectedDate, setSelectedDate] = useState(todayIso());
-  const [scheduleCalendarFocus, setScheduleCalendarFocus] = useState<ScheduleCalendarFocus | null>(null);
-  const [studentsPanelFocus, setStudentsPanelFocus] = useState<{ panel: StudentsPanelFocus; nonce: number } | null>(null);
-  const [progressChecklistFocus, setProgressChecklistFocus] = useState<ProgressChecklistFocus | null>(null);
-  const [progressSectionFocus, setProgressSectionFocus] = useState<{ section: ProgressSectionView; nonce: number } | null>(null);
-  const [calendarOverviewFocus, setCalendarOverviewFocus] = useState<(CalendarOverviewFocusState & { nonce: number }) | null>(null);
-  const [payrollReviewFocus, setPayrollReviewFocus] = useState<{ panel: PayrollPanelFocus; nonce: number } | null>(null);
-  const [lessonFeedbackFocus, setLessonFeedbackFocus] = useState<{ lessonId: string; nonce: number } | null>(null);
   const [lessonFeedbackSyncNonce, setLessonFeedbackSyncNonce] = useState(0);
   const [aiScheduleSession, setAiScheduleSession] = useState<AiScheduleSession | null>(null);
-  const [greetingTime, setGreetingTime] = useState(() => new Date());
-  const cloudVersionRef = useRef("");
-  const vaultRef = useRef<TeacherVault | null>(null);
-  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
-  const pendingPersistVaultRef = useRef<TeacherVault | null>(null);
-  const persistTimerRef = useRef<number | null>(null);
-  const pendingSaveCountRef = useRef(0);
-  const cloudCheckSeqRef = useRef(0);
-  const skipCloudCheckUntilRef = useRef(0);
+  const appDate = useAppDate();
   const { confirm, dialog } = useConfirmDialog();
 
-  function repairedVaultForCourseLinks(source: TeacherVault): TeacherVault {
-    const next = cloneVault(source);
-    return repairCourseStudentLinksFromLessons(next) > 0 ? next : source;
-  }
-
-  function rememberUnlockedSession(next?: Partial<UnlockedSession>) {
-    const session: UnlockedSession = {
-      username,
-      password,
-      token,
-      role,
-      deletion,
-      vault: vault!,
-      selectedDate,
-      cloudVersion,
-      persistAfterClose: persistLoginAfterClose,
-      ...next
-    };
-    if (!session.username || !session.password || !session.token || !session.vault) return;
-    void writeUnlockedSession(session);
-  }
-
-  async function login(nextUsername: string, nextPassword: string, nextPersistLoginAfterClose: boolean) {
-    const result = await loginAccount(nextUsername, nextPassword);
-    setUsername(result.account.username);
-    setPassword(nextPassword);
-    setToken(result.token);
-    setRole(result.account.role);
-    setDeletion(result.deletion);
-    const nextVault = repairedVaultForCourseLinks(result.vault);
-    setVault(nextVault);
-    setAmountsVisible(false);
-    setPersistLoginAfterClose(nextPersistLoginAfterClose);
-    writePersistentLoginPreference(result.account.username, nextPersistLoginAfterClose);
-    cloudVersionRef.current = result.cloudVersion;
-    setCloudVersion(result.cloudVersion);
-    setRemoteCloudVersion("");
-    setSyncState("idle");
-    setSyncMessage("");
-    rememberUnlockedSession({
-      username: result.account.username,
-      password: nextPassword,
-      token: result.token,
-      role: result.account.role,
-      deletion: result.deletion,
-      vault: nextVault,
-      cloudVersion: result.cloudVersion,
-      persistAfterClose: nextPersistLoginAfterClose
-    });
-    if (view === "admin" && result.account.role !== "admin") {
-      setView("today");
-    }
-  }
-
-  async function register(nextUsername: string, nextPassword: string, nextPersistLoginAfterClose: boolean): Promise<UserRole> {
-    const result = await registerAccount(nextUsername, nextPassword);
-    setUsername(result.account.username);
-    setPassword(nextPassword);
-    setToken(result.token);
-    setRole(result.account.role);
-    setDeletion(result.deletion);
-    const nextVault = repairedVaultForCourseLinks(result.vault);
-    setVault(nextVault);
-    setAmountsVisible(false);
-    setPersistLoginAfterClose(nextPersistLoginAfterClose);
-    writePersistentLoginPreference(result.account.username, nextPersistLoginAfterClose);
-    cloudVersionRef.current = result.cloudVersion;
-    setCloudVersion(result.cloudVersion);
-    setRemoteCloudVersion("");
-    setSyncState("idle");
-    setSyncMessage("");
-    rememberUnlockedSession({
-      username: result.account.username,
-      password: nextPassword,
-      token: result.token,
-      role: result.account.role,
-      deletion: result.deletion,
-      vault: nextVault,
-      cloudVersion: result.cloudVersion,
-      persistAfterClose: nextPersistLoginAfterClose
-    });
-    return result.account.role;
-  }
-
-  function updatePersistLoginAfterClose(nextPersistLoginAfterClose: boolean) {
-    setPersistLoginAfterClose(nextPersistLoginAfterClose);
-    if (username) {
-      writePersistentLoginPreference(username, nextPersistLoginAfterClose);
-    }
-    rememberUnlockedSession({ persistAfterClose: nextPersistLoginAfterClose });
-  }
-
-  function resetUnlockedWorkspaceState() {
-    if (persistTimerRef.current !== null) {
-      window.clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = null;
-    }
-    pendingPersistVaultRef.current = null;
-    vaultRef.current = null;
-    setUsername("");
-    setPassword("");
-    setToken("");
-    setRole("teacher");
-    setDeletion(null);
-    setVault(null);
-    setAmountsVisible(false);
-    setPersistLoginAfterClose(false);
-    setCloudVersion("");
-    setRemoteCloudVersion("");
-    cloudVersionRef.current = "";
-    setSyncState("idle");
-    setSyncMessage("");
-    setSyncCountdownSeconds(syncCheckIntervalSeconds);
-    setSaveState("idle");
-    setAiScheduleSession(null);
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setOnboardingVisible(false);
-    clearUnlockedSession();
-  }
-
-  function signOut() {
-    const currentToken = token;
-    void flushPendingPersist().finally(() => {
-      clearStoredSession();
-      if (currentToken) {
-        void logoutCloud(currentToken);
-      }
-      resetUnlockedWorkspaceState();
-    });
-  }
-
-  function clearCurrentLocalCache() {
-    const currentUsername = username;
-    const currentToken = token;
-    clearStoredSession();
-    if (currentToken) {
-      void logoutCloud(currentToken);
-    }
-    if (currentUsername) {
-      clearVault(currentUsername);
-      clearSavedScheduleImportLocalState(currentUsername);
-    }
-    resetUnlockedWorkspaceState();
-  }
-
-  async function persist(nextVault: TeacherVault, options: { force?: boolean } = {}) {
-    if (!username || !password) return;
-    if (pendingPersistVaultRef.current === nextVault) pendingPersistVaultRef.current = null;
-    vaultRef.current = nextVault;
-    setVault(nextVault);
-    if (token && !options.force && !cloudVersionRef.current) {
-      rememberUnlockedSession({ vault: nextVault });
-      setSaveState("error");
-      setSyncState("error");
-      setSyncMessage("云端版本尚未确认。当前修改已保存在本机页面，请先同步云端数据后再继续保存，避免覆盖其他设备的数据。");
-      return;
-    }
-    pendingSaveCountRef.current += 1;
-    cloudCheckSeqRef.current += 1;
-    setSaveState("saving");
-    const saveJob = saveChainRef.current.then(async () => {
-      let savedSuccessfully = false;
-      let nextCloudVersion = cloudVersionRef.current;
-      try {
-        const result = await saveVault(username, password, nextVault, {
-          token,
-          expectedUpdatedAt: options.force ? undefined : cloudVersionRef.current || undefined,
-          force: options.force
-        });
-        nextCloudVersion = result.updatedAt ?? cloudVersionRef.current;
-        if (nextCloudVersion) {
-          cloudVersionRef.current = nextCloudVersion;
-          setCloudVersion(nextCloudVersion);
-        }
-        rememberUnlockedSession({ vault: nextVault, cloudVersion: nextCloudVersion });
-        savedSuccessfully = true;
-      } catch (error) {
-        rememberUnlockedSession({ vault: nextVault });
-        if (error instanceof ApiError && error.status === 409) {
-          const currentUpdatedAt = typeof error.body?.currentUpdatedAt === "string" ? error.body.currentUpdatedAt : "";
-          setRemoteCloudVersion(currentUpdatedAt);
-          setSyncState("conflict");
-          setSyncMessage("云端已有其他设备更新。当前页面的修改只保存在本机，继续保存前请先同步云端，或明确覆盖云端。");
-        }
-        setSaveState("error");
-      } finally {
-        pendingSaveCountRef.current = Math.max(pendingSaveCountRef.current - 1, 0);
-        if (savedSuccessfully) {
-          skipCloudCheckUntilRef.current = Date.now() + 2500;
-          if (pendingSaveCountRef.current === 0 && !pendingPersistVaultRef.current) {
-            setRemoteCloudVersion("");
-            setSyncState("idle");
-            setSyncMessage("");
-            setSaveState("saved");
-            window.setTimeout(() => {
-              if (pendingSaveCountRef.current === 0) {
-                setSaveState("idle");
-              }
-            }, 900);
-          } else {
-            setSaveState("saving");
-          }
-        }
-      }
-    });
-    saveChainRef.current = saveJob.catch(() => undefined);
-    await saveJob;
-  }
-
-  function schedulePersist(nextVault: TeacherVault) {
-    vaultRef.current = nextVault;
-    pendingPersistVaultRef.current = nextVault;
-    setVault(nextVault);
-    rememberUnlockedSession({ vault: nextVault });
-    setSaveState("saving");
-    if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = window.setTimeout(() => {
-      persistTimerRef.current = null;
-      const pendingVault = pendingPersistVaultRef.current;
-      if (pendingVault) void persist(pendingVault);
-    }, saveDebounceMs);
-  }
-
-  function flushPendingPersist(): Promise<void> {
-    if (persistTimerRef.current !== null) {
-      window.clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = null;
-    }
-    const pendingVault = pendingPersistVaultRef.current;
-    if (!pendingVault) return Promise.resolve();
-    pendingPersistVaultRef.current = null;
-    return persist(pendingVault);
-  }
-
-  function updateVault(updater: (draft: TeacherVault) => void) {
-    const currentVault = vaultRef.current ?? vault;
-    if (!currentVault) return;
-    const next = cloneVault(currentVault);
-    updater(next);
-    schedulePersist(next);
-  }
-
-  async function syncLatestCloudVault() {
-    if (!username || !password || !token) return;
-    if (saveState === "saving" || pendingSaveCountRef.current > 0) {
-      await flushPendingPersist();
-      if (pendingSaveCountRef.current > 0) {
-        setSyncState("error");
-        setSyncMessage("正在保存当前修改，请保存完成后再同步云端数据。");
-        return;
-      }
-    }
-    cloudCheckSeqRef.current += 1;
-    setSyncState("syncing");
-    setSyncMessage("正在同步云端最新数据...");
-    try {
-      const cloud = await loadCloudVaultWithVersion(token, password, username, { allowLocalFallback: false });
-      const nextCloudVersion = cloud.updatedAt || cloudVersion;
-      const nextVault = repairedVaultForCourseLinks(cloud.vault);
-      setVault(nextVault);
-      cloudVersionRef.current = nextCloudVersion;
-      setCloudVersion(nextCloudVersion);
-      setRemoteCloudVersion("");
-      setSyncState("idle");
-      setSyncMessage("");
-      setSaveState("idle");
-      setSyncCountdownSeconds(syncCheckIntervalSeconds);
-      setLessonFeedbackSyncNonce((current) => current + 1);
-      rememberUnlockedSession({ vault: nextVault, cloudVersion: nextCloudVersion });
-    } catch (error) {
-      setSyncState("error");
-      setSyncMessage(error instanceof Error ? error.message : "云端同步失败，请稍后重试。");
-    }
-  }
-
-  async function checkCloudVersion(silent = true) {
-    const localCloudVersion = cloudVersionRef.current;
-    if (!token || !localCloudVersion || document.hidden) return;
-    if (saveState === "saving" || pendingSaveCountRef.current > 0 || Date.now() < skipCloudCheckUntilRef.current) return;
-    const checkSeq = ++cloudCheckSeqRef.current;
-    if (!silent) {
-      setSyncState("checking");
-      setSyncMessage("正在检查云端版本...");
-    }
-    try {
-      const meta = await getCloudVaultMeta(token);
-      if (checkSeq !== cloudCheckSeqRef.current) return;
-      if (pendingSaveCountRef.current > 0 || Date.now() < skipCloudCheckUntilRef.current) return;
-      const latestLocalCloudVersion = cloudVersionRef.current;
-      if (meta.updatedAt && meta.updatedAt !== latestLocalCloudVersion) {
-        setRemoteCloudVersion(meta.updatedAt);
-        setSyncState("outdated");
-        setSyncMessage("云端已有其他设备保存的新版本，建议先同步后继续编辑。");
-        setSyncCountdownSeconds(0);
-        return;
-      }
-      setRemoteCloudVersion("");
-      if (syncState === "checking" || syncState === "outdated") {
-        setSyncState("idle");
-        setSyncMessage("");
-      }
-      setSyncCountdownSeconds(syncCheckIntervalSeconds);
-    } catch (error) {
-      if (!silent) {
-        setSyncState("error");
-        setSyncMessage(error instanceof Error ? error.message : "云端版本检查失败。");
-      }
-    }
-  }
-
-  function forceOverwriteCloud() {
-    const currentVault = vaultRef.current ?? vault;
-    if (!currentVault) return;
-    if (persistTimerRef.current !== null) {
-      window.clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = null;
-    }
-    pendingPersistVaultRef.current = null;
-    void persist(currentVault, { force: true });
-  }
-
-  function confirmForceOverwriteCloud() {
-    confirm({
-      title: "确认用当前页面覆盖云端？",
-      description: "这会把当前页面里的整份档案保存为云端最新版本。其他设备稍后会提示云端已有更新；如果当前页面缺少其他设备刚改的数据，那些数据会被覆盖。",
-      confirmLabel: "覆盖云端",
-      cancelLabel: "先不同步",
-      tone: "danger",
-      onConfirm: forceOverwriteCloud
-    });
-  }
-
-  function updateWeekStart(weekStart: WeekStart) {
-    updateVault((draft) => {
-      draft.preferences = {
-        ...(draft.preferences ?? {}),
-        weekStartsOn: weekStart
-      };
-    });
-  }
-
-  function addGrade(grade: string) {
-    const normalized = grade.trim();
-    if (!normalized) return;
-    updateVault((draft) => {
-      const current = draft.preferences?.grades ?? ["初一", "初二", "初三"];
-      if (current.includes(normalized)) return;
-      draft.preferences = { ...(draft.preferences ?? { weekStartsOn: 0 }), grades: [...current, normalized] };
-    });
-  }
-
-  function updateGrade(previousGrade: string, nextGrade: string) {
-    const previous = previousGrade.trim();
-    const next = nextGrade.trim();
-    if (!previous || !next || previous === next) return;
-    updateVault((draft) => {
-      const current = draft.preferences?.grades ?? ["初一", "初二", "初三"];
-      if (current.some((grade) => grade !== previous && grade === next)) return;
-      draft.preferences = { ...(draft.preferences ?? { weekStartsOn: 0 }), grades: current.map((grade) => grade === previous ? next : grade) };
-      draft.students = draft.students.map((student) => student.grade === previous ? { ...student, grade: next } : student);
-    });
-  }
-
-  function deleteGrade(grade: string) {
-    const normalized = grade.trim();
-    if (!normalized) return;
-    updateVault((draft) => {
-      if (draft.students.some((student) => student.grade === normalized)) return;
-      const current = draft.preferences?.grades ?? ["初一", "初二", "初三"];
-      draft.preferences = { ...(draft.preferences ?? { weekStartsOn: 0 }), grades: current.filter((item) => item !== normalized) };
-    });
-  }
-
-  function addLesson(lesson: Lesson) {
-    updateVault((draft) => {
-      draft.lessons.push(lesson);
-    });
-  }
-
-  function addLessons(lessons: Lesson[], options: { replaceLessonIds?: string[] } = {}) {
-    if (lessons.length === 0) return;
-    updateVault((draft) => {
-      const replaceLessonIds = new Set(options.replaceLessonIds ?? []);
-      if (replaceLessonIds.size > 0) {
-        moveLessonsToTrash(
-          draft,
-          draft.lessons.filter((lesson) => replaceLessonIds.has(lesson.id)),
-          "sync_overwrite",
-          "复用排课覆盖旧课节"
-        );
-      }
-      draft.lessons.push(...lessons);
-    });
-  }
-
-  function addLessonAndUpdateLesson(lessonToAdd: Lesson, lessonToUpdate: Lesson) {
-    updateVault((draft) => {
-      draft.lessons.push(lessonToAdd);
-      draft.lessons = draft.lessons.map((item) => (item.id === lessonToUpdate.id ? lessonToUpdate : item));
-      const originalLessonId = lessonToAdd.linkedOriginalLessonId ?? (!lessonToUpdate.linkedOriginalLessonId ? lessonToUpdate.id : undefined);
-      if (originalLessonId) {
-        recalculateLinkedMakeupLessonFeeSnapshots(draft, originalLessonId);
-      }
-    });
-  }
-
-  function updateLesson(lesson: Lesson) {
-    updateVault((draft) => {
-      const previousLesson = draft.lessons.find((item) => item.id === lesson.id);
-      const affectedOriginalLessonIds = new Set<string>();
-      if (previousLesson?.linkedOriginalLessonId) affectedOriginalLessonIds.add(previousLesson.linkedOriginalLessonId);
-      if (lesson.linkedOriginalLessonId) affectedOriginalLessonIds.add(lesson.linkedOriginalLessonId);
-      if (!lesson.linkedOriginalLessonId) affectedOriginalLessonIds.add(lesson.id);
-      cleanupResolvedMakeupLessons(draft, lesson);
-      const nextLesson = syncOriginalLessonFromMakeupCompletion(draft, lesson);
-      draft.lessons = draft.lessons.map((item) => (item.id === nextLesson.id ? nextLesson : item));
-      affectedOriginalLessonIds.forEach((originalLessonId) => {
-        recalculateLinkedMakeupLessonFeeSnapshots(draft, originalLessonId);
-      });
-    });
-  }
-
-  function updateLessons(lessons: Lesson[]) {
-    if (lessons.length === 0) return;
-    updateVault((draft) => {
-      const affectedOriginalLessonIds = new Set<string>();
-      lessons.forEach((lesson) => {
-        const previousLesson = draft.lessons.find((item) => item.id === lesson.id);
-        if (previousLesson?.linkedOriginalLessonId) affectedOriginalLessonIds.add(previousLesson.linkedOriginalLessonId);
-        if (lesson.linkedOriginalLessonId) affectedOriginalLessonIds.add(lesson.linkedOriginalLessonId);
-        if (!lesson.linkedOriginalLessonId) affectedOriginalLessonIds.add(lesson.id);
-        cleanupResolvedMakeupLessons(draft, lesson);
-        const nextLesson = syncOriginalLessonFromMakeupCompletion(draft, lesson);
-        draft.lessons = draft.lessons.map((item) => (item.id === nextLesson.id ? nextLesson : item));
-      });
-      affectedOriginalLessonIds.forEach((originalLessonId) => {
-        recalculateLinkedMakeupLessonFeeSnapshots(draft, originalLessonId);
-      });
-    });
-  }
-
-  function updateCalendarDayNote(date: string, note: string) {
-    const normalizedDate = date.trim();
-    if (!normalizedDate) return;
-    const normalizedNote = note.replace(/\r\n/g, "\n");
-    updateVault((draft) => {
-      const existingNotes = draft.calendarDayNotes ?? [];
-      if (!normalizedNote.trim()) {
-        draft.calendarDayNotes = existingNotes.filter((item) => item.date !== normalizedDate);
-        return;
-      }
-      const updatedAt = new Date().toISOString();
-      const nextEntry: CalendarDayNote = {
-        date: normalizedDate,
-        note: normalizedNote,
-        updatedAt
-      };
-      draft.calendarDayNotes = existingNotes.some((item) => item.date === normalizedDate)
-        ? existingNotes.map((item) => (item.date === normalizedDate ? nextEntry : item))
-        : [...existingNotes, nextEntry].sort((left, right) => left.date.localeCompare(right.date));
-    });
-  }
-
-  function deleteLesson(lessonId: string) {
-    updateVault((draft) => {
-      const lesson = draft.lessons.find((item) => item.id === lessonId);
-      if (lesson) {
-        moveLessonsToTrash(draft, [lesson], "manual", "手动删除课节");
-      }
-    });
-  }
-
-  function restoreDeletedLessons(deletedLessonIds: string[]) {
-    if (deletedLessonIds.length === 0) return;
-    updateVault((draft) => {
-      restoreLessonsFromTrash(draft, deletedLessonIds);
-    });
-  }
-
-  function permanentlyDeleteDeletedLessons(deletedLessonIds: string[]) {
-    if (deletedLessonIds.length === 0) return;
-    updateVault((draft) => {
-      const idSet = new Set(deletedLessonIds);
-      const deletedLessons = draft.deletedLessons ?? [];
-      const deletingOriginalLessonIds = new Set(
-        deletedLessons
-          .filter((item) => idSet.has(item.id) && !item.lesson.linkedOriginalLessonId)
-          .map((item) => item.lesson.id)
-      );
-      draft.deletedLessons = deletedLessons.filter((item) =>
-        !idSet.has(item.id) &&
-        !(item.lesson.linkedOriginalLessonId && deletingOriginalLessonIds.has(item.lesson.linkedOriginalLessonId))
-      );
-    });
-  }
-
-  function updateCampus(campus: Campus) {
-    updateVault((draft) => {
-      draft.campuses = draft.campuses.map((item) => (item.id === campus.id ? campus : item));
-    });
-  }
-
-  function deleteCampus(campusId: string) {
-    updateVault((draft) => {
-      draft.campuses = draft.campuses.filter((campus) => campus.id !== campusId);
-    });
-  }
-
-  function updateStudent(student: Student) {
-    updateStudents([student]);
-  }
-
-  function updateStudents(students: Student[]) {
-    if (students.length === 0) return;
-    updateVault((draft) => {
-      const changedStudentIds = new Set<string>();
-      students.forEach((student) => {
-        const previousStudent = draft.students.find((item) => item.id === student.id);
-        if (!previousStudent) return;
-        const isRestoringStudent = previousStudent.status === "paused" && student.status !== "paused";
-        if (Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
-          materializeStudentTrialStatusOnLessons(draft, student.id, Boolean(previousStudent.temporaryTrial));
-        }
-        draft.students = draft.students.map((item) => (item.id === student.id ? student : item));
-        changedStudentIds.add(student.id);
-        if (isRestoringStudent) {
-          repairCourseStudentLinksFromLessons(draft, student.id);
-        }
-        if (Boolean(previousStudent.temporaryTrial) !== Boolean(student.temporaryTrial)) {
-          syncFutureLessonsWithStudentTrialStatus(draft, student.id, Boolean(student.temporaryTrial));
-        }
-      });
-      pauseCoursesWithoutActiveStudents(draft, changedStudentIds);
-    });
-  }
-
-  function updateProfile(profile: TeacherProfile) {
-    updateVault((draft) => {
-      draft.profile = profile;
-    });
-  }
-
-  function deleteStudent(studentId: string) {
-    deleteStudents([studentId]);
-  }
-
-  function deleteStudents(studentIds: string[]) {
-    if (studentIds.length === 0) return;
-    updateVault((draft) => {
-      const studentIdSet = new Set(studentIds);
-      draft.students = draft.students.filter((student) => !studentIdSet.has(student.id));
-    });
-  }
-
-  function addCourse(course: CourseGroup) {
-    updateVault((draft) => {
-      draft.courseGroups = draft.courseGroups.map((item) =>
-        shouldPauseSupersededClassCourse(draft, item, course) ? { ...item, status: "paused" } : item
-      );
-      draft.courseGroups.push(course);
-    });
-  }
-
-  function updateCourse(course: CourseGroup) {
-    updateVault((draft) => {
-      const previousCourse = draft.courseGroups.find((item) => item.id === course.id);
-      draft.courseGroups = draft.courseGroups.map((item) => (item.id === course.id ? course : item));
-      if (previousCourse && courseUpdateAffectsLessonDefaults(previousCourse, course)) {
-        syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
-      }
-    });
-  }
-
-  function updateCourses(courses: CourseGroup[]) {
-    if (courses.length === 0) return;
-    updateVault((draft) => {
-      const nextCoursesById = new Map(courses.map((course) => [course.id, course]));
-      const previousCoursesById = new Map(draft.courseGroups.map((course) => [course.id, course]));
-      draft.courseGroups = draft.courseGroups.map((course) => nextCoursesById.get(course.id) ?? course);
-      courses.forEach((course) => {
-        const previousCourse = previousCoursesById.get(course.id);
-        if (previousCourse && courseUpdateAffectsLessonDefaults(previousCourse, course)) {
-          syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
-        }
-      });
-    });
-  }
-
-  function syncCoursesToLessons(courseIds: string[]) {
-    const courseIdSet = new Set(courseIds);
-    if (courseIdSet.size === 0) return;
-    updateVault((draft) => {
-      draft.courseGroups
-        .filter((course) => courseIdSet.has(course.id))
-        .forEach((course) => {
-          syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
-        });
-    });
-  }
-
-  function deleteCourse(courseId: string) {
-    updateVault((draft) => {
-      draft.courseGroups = draft.courseGroups.filter((course) => course.id !== courseId);
-    });
-  }
-
-  function transferStudentCourse(transition: StudentCourseTransition) {
-    updateVault((draft) => {
-      const targetSubject =
-        transition.subject ??
-        transition.newCourse?.subject ??
-        draft.courseGroups.find((course) => course.id === transition.targetCourseId)?.subject;
-
-      if (transition.endExisting) {
-        draft.courseGroups = draft.courseGroups.map((course) => {
-          if (!course.studentIds.includes(transition.studentId)) return course;
-          if (transition.targetCourseId && course.id === transition.targetCourseId) {
-            return { ...course, status: "active" };
-          }
-          if (targetSubject && course.subject !== targetSubject) return course;
-
-          const nextStudentIds = course.studentIds.filter((id) => id !== transition.studentId);
-          return {
-            ...course,
-            studentIds: nextStudentIds,
-            status: nextStudentIds.length === 0 ? "paused" : course.status
-          };
-        });
-      }
-
-      if (transition.targetCourseId) {
-        draft.courseGroups = draft.courseGroups.map((course) =>
-          course.id === transition.targetCourseId
-            ? {
-                ...course,
-                status: "active",
-                studentIds: course.studentIds.includes(transition.studentId)
-                  ? course.studentIds
-                  : [...course.studentIds, transition.studentId]
-              }
-            : course
-        );
-      }
-
-      if (transition.newCourse) {
-        draft.courseGroups.push(transition.newCourse);
-      }
-    });
-  }
-
-  function addCustomTimePreset(preset: TimePreset) {
-    updateVault((draft) => {
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        customTimePresets: [...(draft.preferences?.customTimePresets ?? []), preset]
-      };
-    });
-  }
-
-  function deleteCustomTimePreset(presetId: string) {
-    updateVault((draft) => {
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        customTimePresets: (draft.preferences?.customTimePresets ?? []).filter((preset) => preset.id !== presetId)
-      };
-    });
-  }
-
-  function addCustomCourseType(courseType: CustomCourseTypeOption, feeRule?: FeeRule) {
-    updateVault((draft) => {
-      const current = draft.preferences?.customCourseTypes ?? [];
-      const normalizedLabel = courseType.label.trim();
-      if (!normalizedLabel || current.some((item) => item.id === courseType.id || item.label.trim() === normalizedLabel)) return;
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        customCourseTypes: [...current, { ...courseType, label: normalizedLabel }],
-        courseTypeFeeRules: {
-          ...(draft.preferences?.courseTypeFeeRules ?? {}),
-          [courseType.id]: feeRule ?? draft.preferences?.courseTypeFeeRules?.[courseType.id] ?? defaultFeeRuleForCourseType(courseType.id)
-        }
-      };
-    });
-  }
-
-  function updateCustomCourseType(courseType: CustomCourseTypeOption) {
-    updateVault((draft) => {
-      const current = draft.preferences?.customCourseTypes ?? [];
-      const normalizedLabel = courseType.label.trim();
-      if (!normalizedLabel || current.some((item) => item.id !== courseType.id && item.label.trim() === normalizedLabel)) return;
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        customCourseTypes: current.map((item) => (item.id === courseType.id ? { ...item, label: normalizedLabel } : item))
-      };
-    });
-  }
-
-  function updateCourseTypeLabel(courseType: CourseType, label: string) {
-    updateVault((draft) => {
-      const normalizedLabel = label.trim();
-      if (!normalizedLabel) return;
-      if (courseType.startsWith("custom_")) {
-        const current = draft.preferences?.customCourseTypes ?? [];
-        if (current.some((item) => item.id !== courseType && item.label.trim() === normalizedLabel)) return;
-        draft.preferences = {
-          ...(draft.preferences ?? { weekStartsOn: 0 }),
-          customCourseTypes: current.map((item) => (item.id === courseType ? { ...item, label: normalizedLabel } : item))
-        };
-        return;
-      }
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        courseTypeLabels: {
-          ...(draft.preferences?.courseTypeLabels ?? {}),
-          [courseType]: normalizedLabel
-        }
-      };
-    });
-  }
-
-  function deleteCourseType(courseType: CourseType) {
-    updateVault((draft) => {
-      const courseTypeLabels = { ...(draft.preferences?.courseTypeLabels ?? {}) };
-      const courseTypeFeeRules = { ...(draft.preferences?.courseTypeFeeRules ?? {}) };
-      delete courseTypeLabels[courseType];
-      delete courseTypeFeeRules[courseType];
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        disabledCourseTypes: Array.from(new Set([...(draft.preferences?.disabledCourseTypes ?? []), courseType])),
-        courseTypeLabels,
-        courseTypeFeeRules
-      };
-    });
-  }
-
-  function updateCourseTypeFeeRule(courseType: CourseType, feeRule: FeeRule) {
-    updateVault((draft) => {
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        courseTypeFeeRules: {
-          ...(draft.preferences?.courseTypeFeeRules ?? {}),
-          [courseType]: feeRule
-        }
-      };
-    });
-  }
-
-  function syncCourseTypeFeeRuleToCourses(courseType: CourseType) {
-    updateVault((draft) => {
-      const defaultSalaryFeeRule: FeeRule = {
-        mode: "salary_grade",
-        salaryGradeSource: "teacher_default",
-        salaryGradeId: draft.profile.defaultSalaryGradeId ?? defaultSalaryGradeRule(draft).id
-      };
-      draft.courseGroups = draft.courseGroups.map((course) => {
-        if (course.type !== courseType) return course;
-        if (course.type === "trial") return course;
-        return {
-          ...course,
-          feeRule: cloneFeeRule(defaultSalaryFeeRule)
-        };
-      });
-      draft.courseGroups
-        .filter((course) => course.type === courseType)
-        .forEach((course) => {
-          syncLessonsWithCourseDefaults(draft, course, "future_scheduled");
-        });
-    });
-  }
-
-  function migrateCourseTypeLessons(
-    fromType: CourseType,
-    orphanTargetType: CourseType,
-    mode: CourseTypeMigrationMode
-  ): CourseTypeMigrationResult {
-    let result: CourseTypeMigrationResult = { total: 0, byCourse: 0, substitute: 0, orphan: 0, refreshed: 0, skipped: 0 };
-    updateVault((draft) => {
-      result = migrateLessonsFromCourseType(draft, fromType, orphanTargetType, mode);
-    });
-    return result;
-  }
-
-  function updateAiScheduleSession(session: AiScheduleSession | null) {
-    setAiScheduleSession(session);
-  }
-
-  function applyAiScheduleDraft(session: AiScheduleSession | null): { ok: boolean; message: string } {
-    const result = applyAiScheduleDraftToVault({
-      vault,
-      session,
-      makeId,
-      recalculateLessonFeeSnapshot,
-      moveLessonsToTrash,
-      courseUpdateAffectsLessonDefaults,
-      normalizeCourseLessonSyncScope,
-      syncLessonsWithCourseDefaults,
-      materializeStudentTrialStatusOnLessons,
-      syncFutureLessonsWithStudentTrialStatus
-    });
-    if (result.ok) {
-      void persist(result.vault);
-    }
-    return { ok: result.ok, message: result.message };
-  } 
-
-  function addSubject(subject: string) {
-    const normalizedSubject = subject.trim();
-    if (!normalizedSubject) return;
-    updateVault((draft) => {
-      const subjects = draft.preferences?.subjects ?? [];
-      if (subjects.some((item) => item.trim() === normalizedSubject)) return;
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        subjects: [...subjects, normalizedSubject]
-      };
-    });
-  }
-
-  function updateSubject(previousSubject: string, nextSubject: string) {
-    const normalizedPrevious = previousSubject.trim();
-    const normalizedNext = nextSubject.trim();
-    if (!normalizedPrevious || !normalizedNext) return;
-    updateVault((draft) => {
-      const subjects = draft.preferences?.subjects ?? [];
-      const nextSubjects = subjects
-        .map((item) => (item.trim() === normalizedPrevious ? normalizedNext : item.trim()))
-        .filter(Boolean);
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        subjects: Array.from(new Set(nextSubjects))
-      };
-      draft.courseGroups = draft.courseGroups.map((course) =>
-        course.subject.trim() === normalizedPrevious ? { ...course, subject: normalizedNext } : course
-      );
-    });
-  }
-
-  function deleteSubject(subject: string) {
-    const normalizedSubject = subject.trim();
-    if (!normalizedSubject) return;
-    updateVault((draft) => {
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        subjects: (draft.preferences?.subjects ?? []).filter((item) => item.trim() !== normalizedSubject)
-      };
-    });
-  }
-
-  function deleteCustomCourseType(courseTypeId: CustomCourseType) {
-    updateVault((draft) => {
-      const inUse =
-        draft.courseGroups.some((course) => course.type === courseTypeId) ||
-        draft.lessons.some((lesson) => lesson.type === courseTypeId);
-      if (inUse) return;
-      const courseTypeFeeRules = { ...(draft.preferences?.courseTypeFeeRules ?? {}) };
-      const courseTypeLabels = { ...(draft.preferences?.courseTypeLabels ?? {}) };
-      delete courseTypeFeeRules[courseTypeId];
-      delete courseTypeLabels[courseTypeId];
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        customCourseTypes: (draft.preferences?.customCourseTypes ?? []).filter((item) => item.id !== courseTypeId),
-        disabledCourseTypes: (draft.preferences?.disabledCourseTypes ?? []).filter((type) => type !== courseTypeId),
-        courseTypeLabels,
-        courseTypeFeeRules
-      };
-    });
-  }
-
-  function addSalaryAdjustment(adjustment: SalaryAdjustment) {
-    updateVault((draft) => {
-      draft.salaryAdjustments.push(adjustment);
-    });
-  }
-
-  function deleteSalaryAdjustment(adjustmentId: string) {
-    updateVault((draft) => {
-      draft.salaryAdjustments = draft.salaryAdjustments.filter((adjustment) => adjustment.id !== adjustmentId);
-    });
-  }
-
-  function addTodo(todo: TodoItem) {
-    updateVault((draft) => {
-      draft.todoItems = [todo, ...(draft.todoItems ?? [])];
-    });
-  }
-
-  function updateTodo(todo: TodoItem) {
-    updateVault((draft) => {
-      draft.todoItems = (draft.todoItems ?? []).map((item) => (item.id === todo.id ? todo : item));
-    });
-  }
-
-  function deleteTodo(todoId: string) {
-    updateVault((draft) => {
-      draft.todoItems = (draft.todoItems ?? []).filter((todo) => todo.id !== todoId);
-    });
-  }
-
-  function mergeTodosIntoMemo(todoIds: string[], memo: MemoItem) {
-    if (todoIds.length === 0) return;
-    const todoIdSet = new Set(todoIds);
-    const archivedAt = new Date().toISOString();
-    updateVault((draft) => {
-      draft.memoItems = [memo, ...(draft.memoItems ?? []).filter((item) => item.id !== memo.id)];
-      draft.todoItems = (draft.todoItems ?? []).map((todo) =>
-        todoIdSet.has(todo.id) && todo.status === "open"
-          ? { ...todo, status: "archived", archivedAt, archivedMemoId: memo.id }
-          : todo
-      );
-    });
-  }
-
-  function saveMemo(memo: MemoItem) {
-    updateVault((draft) => {
-      const memos = draft.memoItems ?? [];
-      const exists = memos.some((item) => item.id === memo.id);
-      draft.memoItems = exists
-        ? memos.map((item) => (item.id === memo.id ? memo : item))
-        : [memo, ...memos];
-    });
-  }
-
-  function deleteMemo(memoId: string) {
-    updateVault((draft) => {
-      draft.memoItems = (draft.memoItems ?? []).filter((memo) => memo.id !== memoId);
-    });
-  }
-
-  function saveStudentProgressRecord(record: StudentProgressRecord) {
-    updateVault((draft) => {
-      const records = draft.studentProgressRecords ?? [];
-      const exists = records.some((item) => item.id === record.id);
-      draft.studentProgressRecords = exists
-        ? records.map((item) => (item.id === record.id ? record : item))
-        : [record, ...records];
-    });
-  }
-
-  function saveStudentProgressRecords(recordsToSave: StudentProgressRecord[]) {
-    if (recordsToSave.length === 0) return;
-    updateVault((draft) => {
-      const incomingIds = new Set(recordsToSave.map((record) => record.id));
-      draft.studentProgressRecords = [
-        ...recordsToSave,
-        ...(draft.studentProgressRecords ?? []).filter((record) => !incomingIds.has(record.id))
-      ];
-    });
-  }
-
-  function deleteStudentProgressRecord(recordId: string) {
-    updateVault((draft) => {
-      draft.studentProgressRecords = (draft.studentProgressRecords ?? []).filter((record) => record.id !== recordId);
-    });
-  }
-
-  function saveProgressChecklistTemplate(template: ProgressChecklistTemplate) {
-    updateVault((draft) => {
-      const templates = draft.progressChecklistTemplates ?? [];
-      const exists = templates.some((item) => item.id === template.id);
-      draft.progressChecklistTemplates = exists
-        ? templates.map((item) => (item.id === template.id ? template : item))
-        : [template, ...templates];
-
-      const validItemIds = new Set(template.items.map((item) => item.id));
-      draft.progressChecklistCompletions = (draft.progressChecklistCompletions ?? []).filter(
-        (completion) => completion.templateId !== template.id || validItemIds.has(completion.itemId)
-      );
-    });
-  }
-
-  function deleteProgressChecklistTemplate(templateId: string) {
-    updateVault((draft) => {
-      draft.progressChecklistTemplates = (draft.progressChecklistTemplates ?? []).filter((template) => template.id !== templateId);
-      draft.progressChecklistCompletions = (draft.progressChecklistCompletions ?? []).filter((completion) => completion.templateId !== templateId);
-    });
-  }
-
-  function saveExternalPromptTemplate(template: string) {
-    updateVault((draft) => {
-      draft.preferences = {
-        ...(draft.preferences ?? { weekStartsOn: 0 }),
-        checklistPromptTemplate: template
-      };
-    });
-  }
-
-  function saveProgressChecklistCompletion(completion: ProgressChecklistCompletion) {
-    saveProgressChecklistCompletions([completion]);
-  }
-
-  function updateProgressChecklistCompletions(completionsToSave: ProgressChecklistCompletion[], completionIdsToDelete: string[]) {
-    if (completionsToSave.length === 0 && completionIdsToDelete.length === 0) return;
-    updateVault((draft) => {
-      const incomingIds = new Set(completionsToSave.map((completion) => completion.id));
-      const deletedIds = new Set(completionIdsToDelete);
-      draft.progressChecklistCompletions = [
-        ...completionsToSave,
-        ...(draft.progressChecklistCompletions ?? []).filter((completion) =>
-          !incomingIds.has(completion.id) && !deletedIds.has(completion.id)
-        )
-      ];
-    });
-  }
-
-  function saveProgressChecklistCompletions(completionsToSave: ProgressChecklistCompletion[]) {
-    updateProgressChecklistCompletions(completionsToSave, []);
-  }
-
-  function deleteProgressChecklistCompletion(completionId: string) {
-    deleteProgressChecklistCompletions([completionId]);
-  }
-
-  function deleteProgressChecklistCompletions(completionIds: string[]) {
-    updateProgressChecklistCompletions([], completionIds);
-  }
-
-  function addGradeRecord(record: GradeRecord) {
-    updateVault((draft) => {
-      draft.gradeRecords = [record, ...(draft.gradeRecords ?? [])];
-    });
-  }
-
-  function deleteGradeRecord(recordId: string) {
-    updateVault((draft) => {
-      draft.gradeRecords = (draft.gradeRecords ?? []).filter((record) => record.id !== recordId);
-    });
-  }
-
-  function generateDrafts(
-    startDate: string,
-    endDate: string,
-    weekdays: Weekday[],
-    courseGroupId: string,
-    startTime: string,
-    endTime: string,
-    manualBillingHours?: number
-  ): BatchLessonGenerationResult {
-    let result: BatchLessonGenerationResult = { candidateCount: 0, createdCount: 0, conflictCount: 0, existingCount: 0 };
-    updateVault((draft) => {
-      result = generateBatchLessonsInVault(draft, {
-        startDate,
-        endDate,
-        weekdays,
-        courseGroupId,
-        startTime,
-        endTime,
-        manualBillingHours
-      });
-    });
-    return result;
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function restoreUnlockedSession() {
-      try {
-        const session = await readUnlockedSession();
-        if (!session || cancelled) return;
-        if (!session.username || !session.password || !session.token || !session.vault) {
-          clearUnlockedSession();
-        } else {
-          const today = todayIso();
-          const cachedCloudVersion = session.cloudVersion ?? "";
-          const restoredPersistLoginAfterClose = Boolean(session.persistAfterClose);
-          setUsername(session.username);
-          setPassword(session.password);
-          setToken(session.token);
-          setRole(session.role);
-          setDeletion(session.deletion);
-          const restoredVault = repairedVaultForCourseLinks(session.vault);
-          setVault(restoredVault);
-          setCloudVersion(cachedCloudVersion);
-          setSelectedDate(today);
-          setPersistLoginAfterClose(restoredPersistLoginAfterClose);
-          writePersistentLoginPreference(session.username, restoredPersistLoginAfterClose);
-          void writeUnlockedSession({
-            ...session,
-            selectedDate: today,
-            cloudVersion: cachedCloudVersion,
-            persistAfterClose: restoredPersistLoginAfterClose
-          });
-          void loadCloudVaultWithVersion(session.token, session.password, session.username, { allowLocalFallback: false })
-            .then((cloud) => {
-              const nextCloudVersion = cloud.updatedAt || cachedCloudVersion;
-              const nextVault = repairedVaultForCourseLinks(cloud.vault);
-              setVault(nextVault);
-              setCloudVersion(nextCloudVersion);
-              setRemoteCloudVersion("");
-              setSyncState("idle");
-              setSyncMessage("");
-              if (cancelled) return;
-              void writeUnlockedSession({
-                ...session,
-                vault: nextVault,
-                selectedDate: today,
-                cloudVersion: nextCloudVersion,
-                persistAfterClose: restoredPersistLoginAfterClose
-              });
-            })
-            .catch((error) => {
-              if (cancelled) return;
-              if (isSessionRejected(error)) {
-                clearVault(session.username);
-                clearSavedScheduleImportLocalState(session.username);
-                clearStoredSession();
-                resetUnlockedWorkspaceState();
-                return;
-              }
-              setSyncState("error");
-              setSyncMessage("云端数据读取失败，当前显示本机缓存。");
-            });
-        }
-      } catch {
-        clearUnlockedSession();
-      } finally {
-        if (!cancelled) setBootstrapped(true);
-      }
-    }
-
-    void restoreUnlockedSession();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setGreetingTime(new Date()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    cloudVersionRef.current = cloudVersion;
-  }, [cloudVersion]);
-
-  useEffect(() => {
-    vaultRef.current = vault;
-  }, [vault]);
-
-  useEffect(() => {
-    const flushWhenHidden = () => {
-      if (document.hidden) void flushPendingPersist();
-    };
-    document.addEventListener("visibilitychange", flushWhenHidden);
-    return () => document.removeEventListener("visibilitychange", flushWhenHidden);
-  }, [username, password]);
-
-  useEffect(() => {
-    if (!vault || vault.scheduleRules.length === 0 || !username || !password) return;
-    void persist({ ...vault, scheduleRules: [] });
-  }, [vault?.scheduleRules.length, username, password]);
+  const {
+    username,
+    password,
+    token,
+    role,
+    deletion,
+    vault,
+    bootstrapped,
+    persistLoginAfterClose,
+    saveState,
+    cloudVersion,
+    remoteCloudVersion,
+    syncState,
+    syncMessage,
+    syncCountdownResetKey,
+    login,
+    register,
+    updatePersistLoginAfterClose,
+    signOut,
+    clearCurrentLocalCache,
+    persist,
+    updateVault,
+    syncLatestCloudVault,
+    confirmForceOverwriteCloud,
+    cancelDeletionRequest
+  } = useCloudSession({ view, setView, selectedDate, setSelectedDate, setAmountsVisible, setAiScheduleSession, setNoticeModalOpen, setFeedbackModalOpen, setOnboardingVisible, setLessonFeedbackSyncNonce, confirm });
+
+  const {
+    onboardingStepIndex,
+    setOnboardingCalendarDateSelected,
+    scheduleCalendarFocus,
+    studentsPanelFocus,
+    progressChecklistFocus,
+    progressSectionFocus,
+    calendarOverviewFocus,
+    payrollReviewFocus,
+    lessonFeedbackFocus,
+    activeOnboardingStep,
+    isCalendarOnboarding,
+    guideNeedsAttention,
+    dismissOnboarding,
+    openOnboardingManually,
+    changeOnboardingStep,
+    completeOnboarding,
+    changeView,
+    openLessonInCalendar,
+    openTodayLessonInScheduleRecords,
+    openCalendarLessonInScheduleRecords,
+    openCalendarDateInScheduleRecords,
+    openProgressLessonInScheduleRecords,
+    openLessonInProgressChecklist,
+    openLessonInFeedback,
+    openPayrollReviewLessonInScheduleRecords,
+    openPayrollReconcileLessonInScheduleRecords,
+    openPayrollSuggestedScheduleInCalendar,
+    returnToViewFromSchedule
+  } = useNavigationState({ vault, username, view, setView, onboardingVisible, setOnboardingVisible, setNoticeModalOpen, setFeedbackModalOpen, setMobileNavOpen });
+
+  const {
+    updateWeekStart,
+    addGrade,
+    updateGrade,
+    deleteGrade,
+    addLesson,
+    addLessons,
+    addLessonAndUpdateLesson,
+    updateLesson,
+    updateLessons,
+    updateCalendarDayNote,
+    deleteLesson,
+    restoreDeletedLessons,
+    permanentlyDeleteDeletedLessons,
+    updateCampus,
+    deleteCampus,
+    updateStudent,
+    updateStudents,
+    updateProfile,
+    deleteStudent,
+    deleteStudents,
+    addCourse,
+    updateCourse,
+    updateCourses,
+    syncCoursesToLessons,
+    deleteCourse,
+    transferStudentCourse,
+    addCustomTimePreset,
+    deleteCustomTimePreset,
+    addCustomCourseType,
+    updateCourseTypeLabel,
+    deleteCourseType,
+    updateCourseTypeFeeRule,
+    syncCourseTypeFeeRuleToCourses,
+    migrateCourseTypeLessons,
+    updateAiScheduleSession,
+    applyAiScheduleDraft,
+    addSubject,
+    updateSubject,
+    deleteSubject,
+    deleteCustomCourseType,
+    addSalaryAdjustment,
+    deleteSalaryAdjustment,
+    addTodo,
+    updateTodo,
+    deleteTodo,
+    mergeTodosIntoMemo,
+    saveMemo,
+    deleteMemo,
+    saveStudentProgressRecord,
+    saveStudentProgressRecords,
+    deleteStudentProgressRecord,
+    saveProgressChecklistTemplate,
+    deleteProgressChecklistTemplate,
+    saveExternalPromptTemplate,
+    saveProgressChecklistCompletion,
+    updateProgressChecklistCompletions,
+    saveProgressChecklistCompletions,
+    deleteProgressChecklistCompletion,
+    addGradeRecord,
+    deleteGradeRecord,
+    generateDrafts
+  } = useVaultActions({ vault, updateVault, persist, setAiScheduleSession });
 
   useEffect(() => {
     if (!vault || !username || !vault.notice.enabled) return;
@@ -1350,76 +191,6 @@ export function App() {
     setNoticeReadVersion(storedVersion ?? "");
     setNoticeModalOpen(storedVersion !== vault.notice.updatedAt);
   }, [username, vault?.notice.enabled, vault?.notice.updatedAt]);
-
-  useEffect(() => {
-    if (!username) {
-      setOnboardingVisitedSteps([]);
-      return;
-    }
-    setOnboardingVisitedSteps(readOnboardingVisitedSteps(username));
-  }, [username]);
-
-  useEffect(() => {
-    if (!vault || !username) {
-      onboardingAccountRef.current = null;
-      setOnboardingVisible(false);
-      return;
-    }
-    // Initialize once per login so editing a highlighted form cannot restart or close the tour.
-    if (onboardingAccountRef.current === username) return;
-    onboardingAccountRef.current = username;
-    const dismissed = localStorage.getItem(onboardingDismissedKey(username)) === "true";
-    if (!dismissed && shouldShowOnboarding(vault)) {
-      openOnboardingStep(getOnboardingTourStartIndex(localStorage.getItem(onboardingCurrentStepKey(username)), readOnboardingVisitedSteps(username)));
-    }
-  }, [username, vault]);
-
-  useEffect(() => {
-    if (!vault) return;
-    rememberUnlockedSession({ selectedDate });
-  }, [selectedDate]);
-
-  useEffect(() => {
-    if (!token || !cloudVersion) return;
-    if (syncState === "outdated" || syncState === "conflict") return;
-    const timer = window.setInterval(() => {
-      if (document.hidden || saveState === "saving") return;
-      setSyncCountdownSeconds((current) => Math.max(current - 1, 0));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [token, cloudVersion, syncState, saveState]);
-
-  useEffect(() => {
-    if (!token || !cloudVersion) return;
-    const checkWhenVisible = () => {
-      if (!document.hidden) {
-        void checkCloudVersion(true);
-      }
-    };
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        void checkCloudVersion(true);
-      }
-    };
-    checkWhenVisible();
-    window.addEventListener("focus", checkWhenVisible);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    const timer = window.setInterval(() => {
-      if (!document.hidden && syncState !== "outdated" && syncState !== "conflict") {
-        void checkCloudVersion(true);
-        setLessonFeedbackSyncNonce((current) => current + 1);
-      }
-    }, syncCheckIntervalSeconds * 1000);
-    return () => {
-      window.removeEventListener("focus", checkWhenVisible);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(timer);
-    };
-  }, [token, cloudVersion, syncState, saveState]);
-
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [view]);
 
   function acknowledgeNotice() {
     if (!vault || !username) return;
@@ -1448,11 +219,8 @@ export function App() {
     }
   }
 
-  async function cancelDeletionRequest() {
-    if (!token) return;
-    await cancelOwnDeletion(token);
-    setDeletion(null);
-  }
+  const workspaceState = useMemo(() => ({ appDate, view, amountsVisible, selectedDate, lessonFeedbackSyncNonce, aiScheduleSession, username, password, token, role, vault, persistLoginAfterClose, scheduleCalendarFocus, studentsPanelFocus, progressChecklistFocus, progressSectionFocus, calendarOverviewFocus, payrollReviewFocus, lessonFeedbackFocus, isCalendarOnboarding }), [appDate, view, amountsVisible, selectedDate, lessonFeedbackSyncNonce, aiScheduleSession, username, password, token, role, vault, persistLoginAfterClose, scheduleCalendarFocus, studentsPanelFocus, progressChecklistFocus, progressSectionFocus, calendarOverviewFocus, payrollReviewFocus, lessonFeedbackFocus, isCalendarOnboarding]);
+  const workspaceCallbacks = useStableCallbacks({ updatePersistLoginAfterClose, clearCurrentLocalCache, updateVault, setOnboardingCalendarDateSelected, changeView, openLessonInCalendar, openTodayLessonInScheduleRecords, openCalendarLessonInScheduleRecords, openCalendarDateInScheduleRecords, openProgressLessonInScheduleRecords, openLessonInProgressChecklist, openLessonInFeedback, openPayrollReviewLessonInScheduleRecords, openPayrollReconcileLessonInScheduleRecords, openPayrollSuggestedScheduleInCalendar, returnToViewFromSchedule, updateWeekStart, addGrade, updateGrade, deleteGrade, addLesson, addLessons, addLessonAndUpdateLesson, updateLesson, updateLessons, updateCalendarDayNote, deleteLesson, restoreDeletedLessons, permanentlyDeleteDeletedLessons, updateCampus, deleteCampus, updateStudent, updateStudents, updateProfile, deleteStudent, deleteStudents, addCourse, updateCourse, updateCourses, syncCoursesToLessons, deleteCourse, transferStudentCourse, addCustomTimePreset, deleteCustomTimePreset, addCustomCourseType, updateCourseTypeLabel, deleteCourseType, updateCourseTypeFeeRule, syncCourseTypeFeeRuleToCourses, migrateCourseTypeLessons, updateAiScheduleSession, applyAiScheduleDraft, addSubject, updateSubject, deleteSubject, deleteCustomCourseType, addSalaryAdjustment, deleteSalaryAdjustment, addTodo, updateTodo, deleteTodo, mergeTodosIntoMemo, saveMemo, deleteMemo, saveStudentProgressRecord, saveStudentProgressRecords, deleteStudentProgressRecord, saveProgressChecklistTemplate, deleteProgressChecklistTemplate, saveExternalPromptTemplate, saveProgressChecklistCompletion, updateProgressChecklistCompletions, saveProgressChecklistCompletions, deleteProgressChecklistCompletion, addGradeRecord, deleteGradeRecord, generateDrafts });
 
   if (!bootstrapped) {
     return (
@@ -1477,8 +245,6 @@ export function App() {
   }
 
   const activeTitle = viewTitles[view];
-  const activeOnboardingStep = getOnboardingTourStep(onboardingStepIndex, view, onboardingCalendarDateSelected);
-  const isCalendarOnboarding = onboardingVisible && activeOnboardingStep.id === "calendar-records";
   const selectedDateLabel = formatAppDateLabel(selectedDate, {
     year: "numeric",
     month: "short",
@@ -1498,253 +264,7 @@ export function App() {
     saveState === "saving" ? "同步中..." : saveState === "saved" ? "已加密同步" : saveState === "error" ? "云端同步失败" : "云端加密";
   const syncButtonLabel =
     syncState === "checking" ? "检查中" : syncState === "syncing" ? "同步中" : remoteCloudVersion ? "有更新" : "同步";
-  const syncCountdownTone =
-    syncState === "outdated" || syncState === "conflict" || remoteCloudVersion
-      ? "bg-[#ef4444] text-white"
-      : syncCountdownSeconds <= 15
-        ? "bg-[#fee2e2] text-[#b91c1c]"
-        : syncCountdownSeconds <= 45
-          ? "bg-[#ffedd5] text-[#9a3412]"
-          : "bg-[#dcfce7] text-[#166534]";
   const showSyncAlert = Boolean(syncMessage) && (syncState === "outdated" || syncState === "conflict" || syncState === "error");
-  const greeting = greetingFor(greetingTime);
-  const guideNeedsAttention = !isOnboardingSetupComplete(vault, onboardingVisitedSteps);
-
-  function dismissOnboarding() {
-    if (username) {
-      localStorage.setItem(onboardingDismissedKey(username), "true");
-    }
-    setNoticeModalOpen(false);
-    setOnboardingVisible(false);
-  }
-
-  function openOnboardingManually() {
-    openOnboardingStep(getOnboardingTourStartIndex(localStorage.getItem(onboardingCurrentStepKey(username)), onboardingVisitedSteps));
-  }
-
-  function recordOnboardingStep(stepKey: OnboardingStepKey) {
-    if (!username) return;
-    setOnboardingVisitedSteps((current) => {
-      const stored = readOnboardingVisitedSteps(username);
-      const next = Array.from(new Set([...stored, ...current, stepKey]));
-      if (next.length === current.length && current.includes(stepKey)) return current;
-      localStorage.setItem(onboardingProgressKey(username), JSON.stringify(next));
-      return next;
-    });
-  }
-
-  function openOnboardingStep(index: number) {
-    const step = onboardingTourSteps[index];
-    if (!step) return;
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setMobileNavOpen(false);
-    setOnboardingStepIndex(index);
-    setOnboardingVisible(true);
-    if (username) localStorage.setItem(onboardingCurrentStepKey(username), step.id);
-    const nonce = Date.now();
-    if (step.id === "calendar-records") {
-      const date = todayIso();
-      setOnboardingCalendarDateSelected(false);
-      setCalendarOverviewFocus({
-        selectedDate: date,
-        month: date.slice(0, 7),
-        overviewPage: "month",
-        weekCampusFilter: "all",
-        weekCourseTypeFilter: "all",
-        weekGradeFilter: "all",
-        weekSubjectFilter: "all",
-        weekStudentFilter: "",
-        weekMakeupFilter: "all",
-        nonce
-      });
-    }
-    if (step.studentsPanel) {
-      setStudentsPanelFocus({ panel: step.studentsPanel, nonce });
-    }
-    if (step.schedulePanel) {
-      setScheduleCalendarFocus({ date: todayIso(), targetPanel: step.schedulePanel, calendarMode: "view", nonce });
-    }
-    if (step.group === "payroll") setPayrollReviewFocus({ panel: "review", nonce });
-    if (step.group === "grades") {
-      setLessonFeedbackFocus(null);
-      setProgressChecklistFocus(null);
-      setProgressSectionFocus({ section: "grades", nonce });
-    }
-    setView(step.view);
-  }
-
-  function changeOnboardingStep(index: number) {
-    const current = onboardingTourSteps[onboardingStepIndex];
-    const next = onboardingTourSteps[index];
-    if (!next) return;
-    if (index === onboardingStepIndex + 1 && next.group !== current.group) {
-      recordOnboardingStep(current.group);
-    }
-    openOnboardingStep(index);
-  }
-
-  function completeOnboarding() {
-    recordOnboardingStep(onboardingTourSteps[onboardingStepIndex].group);
-    if (username) localStorage.removeItem(onboardingCurrentStepKey(username));
-    dismissOnboarding();
-  }
-
-  function changeView(nextView: ViewKey) {
-    if (onboardingVisible) {
-      dismissOnboarding();
-    }
-    if (nextView === "schedule") {
-      setScheduleCalendarFocus({
-        date: todayIso(),
-        targetPanel: "calendar",
-        calendarMode: "view",
-        nonce: Date.now()
-      });
-    }
-    if (nextView === "progress") {
-      setProgressSectionFocus(null);
-    }
-    if (nextView !== "progress") {
-      setLessonFeedbackFocus(null);
-    }
-    setView(nextView);
-  }
-
-  function openLessonInCalendar(lesson: Lesson) {
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setMobileNavOpen(false);
-    setOnboardingVisible(false);
-    setScheduleCalendarFocus({ date: lesson.date, lessonId: lesson.id, targetPanel: "calendar", nonce: Date.now() });
-    setView("schedule");
-  }
-
-  function openLessonInScheduleRecords(lesson: Lesson, returnTarget?: ScheduleCalendarFocus["returnTarget"]) {
-    openDateInScheduleRecords(lesson.date, returnTarget, lesson.id);
-  }
-
-  function openDateInScheduleRecords(date: string, returnTarget?: ScheduleCalendarFocus["returnTarget"], lessonId?: string) {
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setMobileNavOpen(false);
-    setOnboardingVisible(isCalendarOnboarding && returnTarget?.view === "calendar");
-    setScheduleCalendarFocus({ date, lessonId, targetPanel: "records", returnTarget: returnTarget ?? null, nonce: Date.now() });
-    setView("schedule");
-  }
-
-  function openTodayLessonInScheduleRecords(lesson: Lesson) {
-    openLessonInScheduleRecords(lesson, { kind: "view", view: "today", label: "返回今日提醒" });
-  }
-
-  function openCalendarLessonInScheduleRecords(lesson: Lesson, calendarFocus: CalendarOverviewFocusState) {
-    openLessonInScheduleRecords(lesson, {
-      kind: "view",
-      view: "calendar",
-      label: "返回日历总览",
-      calendarFocus
-    });
-  }
-
-  function openCalendarDateInScheduleRecords(date: string, calendarFocus: CalendarOverviewFocusState) {
-    openDateInScheduleRecords(date, {
-      kind: "view",
-      view: "calendar",
-      label: "返回日历总览",
-      calendarFocus
-    });
-  }
-
-  function openProgressLessonInScheduleRecords(lesson: Lesson) {
-    openLessonInScheduleRecords(lesson, { kind: "view", view: "progress", label: "返回学情与作业" });
-  }
-
-  function openLessonInProgressChecklist(lesson: Lesson) {
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setMobileNavOpen(false);
-    setOnboardingVisible(false);
-    setLessonFeedbackFocus(null);
-    setProgressSectionFocus(null);
-    setProgressChecklistFocus({
-      courseGroupId: lesson.courseGroupId,
-      templateId: lesson.content.checklistTemplateId,
-      lessonId: lesson.id,
-      date: lesson.date,
-      nonce: Date.now()
-    });
-    setProgressSectionFocus(null);
-    setView("progress");
-  }
-
-  function openLessonInFeedback(lesson: Lesson) {
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setMobileNavOpen(false);
-    setOnboardingVisible(false);
-    setProgressChecklistFocus(null);
-    setLessonFeedbackFocus({ lessonId: lesson.id, nonce: Date.now() });
-    setProgressSectionFocus(null);
-    // 课后反馈已并入“学情与作业”，跳转落到该页的反馈子页。
-    setView("progress");
-  }
-
-  function openPayrollReviewLessonInScheduleRecords(lesson: Lesson) {
-    openLessonInScheduleRecords(lesson, {
-      kind: "view",
-      view: "payroll",
-      label: "返回工资核对",
-      payrollPanel: "review"
-    });
-  }
-
-  function openPayrollReconcileLessonInScheduleRecords(lesson: Lesson) {
-    openLessonInScheduleRecords(lesson, {
-      kind: "view",
-      view: "payroll",
-      label: "返回教务课表对账",
-      payrollPanel: "reconcile"
-    });
-  }
-
-  function openPayrollSuggestedScheduleInCalendar(request: { date: string; startTime: string; endTime: string; courseGroupId?: string }) {
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setMobileNavOpen(false);
-    setOnboardingVisible(false);
-    setScheduleCalendarFocus({
-      date: request.date,
-      targetPanel: "calendar",
-      calendarMode: "schedule",
-      scheduleDraft: {
-        courseGroupId: request.courseGroupId,
-        startTime: request.startTime,
-        endTime: request.endTime
-      },
-      returnTarget: {
-        kind: "view",
-        view: "payroll",
-        label: "返回教务课表对账",
-        payrollPanel: "reconcile"
-      },
-      nonce: Date.now()
-    });
-    setView("schedule");
-  }
-
-  function returnToViewFromSchedule(target: NonNullable<ScheduleCalendarFocus["returnTarget"]>) {
-    setNoticeModalOpen(false);
-    setFeedbackModalOpen(false);
-    setMobileNavOpen(false);
-    setOnboardingVisible(isCalendarOnboarding && target.view === "calendar");
-    if (target.view === "calendar" && target.calendarFocus) {
-      setCalendarOverviewFocus({ ...target.calendarFocus, nonce: Date.now() });
-    }
-    if (target.view === "payroll" && target.payrollPanel) {
-      setPayrollReviewFocus({ panel: target.payrollPanel, nonce: Date.now() });
-    }
-    setView(target.view);
-  }
 
   return (
     <div className="dashboard-shell flex min-h-screen">
@@ -1816,7 +336,7 @@ export function App() {
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <h1 className="break-words text-[28px] font-extrabold leading-tight text-[#050b18] sm:text-[38px]">
-                  {greeting}
+                  <TimeGreeting />
                 </h1>
               </div>
             </div>
@@ -1911,9 +431,14 @@ export function App() {
                 {(remoteCloudVersion || syncState === "conflict") && (
                   <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-[#ef4444] ring-2 ring-white" />
                 )}
-                <span className={`absolute -bottom-1 -right-1 min-w-7 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold leading-none ring-2 ring-white ${syncCountdownTone}`}>
-                  {syncState === "checking" || syncState === "syncing" ? "..." : `${syncCountdownSeconds}s`}
-                </span>
+                <SyncCountdownBadge
+                  intervalSeconds={syncCheckIntervalSeconds}
+                  enabled={Boolean(token && cloudVersion)}
+                  syncState={syncState}
+                  saving={saveState === "saving"}
+                  hasRemoteVersion={Boolean(remoteCloudVersion)}
+                  resetKey={syncCountdownResetKey}
+                />
               </button>
 
               <label className="flex h-14 min-w-0 items-center gap-2 rounded-[16px] border border-[#dbe4ef] bg-white px-3 shadow-[0_12px_28px_rgba(15,35,66,0.08)] sm:h-[58px] sm:gap-3 sm:px-4">
@@ -2111,198 +636,7 @@ export function App() {
             onDismiss={dismissOnboarding}
           />
         )}
-        <div key={view} className="app-fade-up">
-              <Suspense fallback={<ViewLoading />}>
-                {view === "today" && (
-                  <TodayView
-                    vault={vault}
-                    selectedDate={selectedDate}
-                    amountsVisible={amountsVisible}
-                    onUpdateLesson={updateLesson}
-                    onAddTodo={addTodo}
-                    onUpdateTodo={updateTodo}
-                    onDeleteTodo={deleteTodo}
-                    onMergeTodosToMemo={mergeTodosIntoMemo}
-                    onSaveMemo={saveMemo}
-                    onDeleteMemo={deleteMemo}
-                    onOpenLessonInRecords={openTodayLessonInScheduleRecords}
-                    onOpenLessonFeedback={openLessonInFeedback}
-                  />
-                )}
-                {view === "calendar" && (
-                  <CalendarView
-                    vault={vault}
-                    amountsVisible={amountsVisible}
-                    onUpdateLessons={updateLessons}
-                    onWeekStartChange={updateWeekStart}
-                    onOpenLessonInRecords={openCalendarLessonInScheduleRecords}
-                    onOpenDateInRecords={openCalendarDateInScheduleRecords}
-                    onSelectDate={isCalendarOnboarding ? () => setOnboardingCalendarDateSelected(true) : undefined}
-                    focusRequest={calendarOverviewFocus}
-                  />
-                )}
-                {view === "schedule" && (
-                  <ScheduleView
-                    vault={vault}
-                    amountsVisible={amountsVisible}
-                    onAddLesson={addLesson}
-                    onAddLessons={addLessons}
-                    onAddLessonAndUpdateLesson={addLessonAndUpdateLesson}
-                    onUpdateLesson={updateLesson}
-                    onUpdateLessons={updateLessons}
-                    onUpdateCalendarDayNote={updateCalendarDayNote}
-                    onDeleteLesson={deleteLesson}
-                    onRestoreDeletedLessons={restoreDeletedLessons}
-                    onPermanentlyDeleteDeletedLessons={permanentlyDeleteDeletedLessons}
-                    onAddCustomTimePreset={addCustomTimePreset}
-                    onDeleteCustomTimePreset={deleteCustomTimePreset}
-                    onGenerateDrafts={generateDrafts}
-                    onWeekStartChange={updateWeekStart}
-                    role={role}
-                    token={token}
-                    calendarFocus={scheduleCalendarFocus}
-                    aiSession={aiScheduleSession}
-                    onAiSessionChange={updateAiScheduleSession}
-                    onApplyAiDraft={applyAiScheduleDraft}
-                    onReturnToView={returnToViewFromSchedule}
-                    onSaveChecklistCompletions={saveProgressChecklistCompletions}
-                    onUpdateChecklistCompletions={updateProgressChecklistCompletions}
-                    onOpenProgressChecklist={openLessonInProgressChecklist}
-                    onOpenLessonFeedback={openLessonInFeedback}
-                  />
-                )}
-                {view === "progress" && (
-                  <ProgressView
-                    vault={vault}
-                    token={token}
-                    password={password}
-                    role={role}
-                    checklistFocus={progressChecklistFocus}
-                    lessonFeedbackFocus={lessonFeedbackFocus}
-                    lessonFeedbackSyncNonce={lessonFeedbackSyncNonce}
-                    sectionFocus={progressSectionFocus}
-                    onSaveProgressRecord={saveStudentProgressRecord}
-                    onSaveProgressRecords={saveStudentProgressRecords}
-                    onDeleteProgressRecord={deleteStudentProgressRecord}
-                    onSaveChecklistTemplate={saveProgressChecklistTemplate}
-                    onDeleteChecklistTemplate={deleteProgressChecklistTemplate}
-                    onSaveChecklistCompletion={saveProgressChecklistCompletion}
-                    onDeleteChecklistCompletion={deleteProgressChecklistCompletion}
-                    onSaveExternalPromptTemplate={saveExternalPromptTemplate}
-                    onAddGradeRecord={addGradeRecord}
-                    onDeleteGradeRecord={deleteGradeRecord}
-                    onOpenLessonInRecords={openProgressLessonInScheduleRecords}
-                    onUpdateLessonContent={(lessonId, patch) => {
-                      const lesson = vault.lessons.find((item) => item.id === lessonId);
-                      if (lesson) updateLesson({
-                        ...lesson,
-                        content: updateLessonContentFromFeedback(lesson.content, vault.progressChecklistTemplates ?? [], patch)
-                      });
-                    }}
-                  />
-                )}
-                {view === "students" && (
-                  <StudentsView
-                    vault={vault}
-                    amountsVisible={amountsVisible}
-                    focusRequest={studentsPanelFocus}
-                    onAddCampus={(campus) =>
-                      updateVault((draft) => {
-                        draft.campuses.push(campus);
-                      })
-                    }
-                    onUpdateCampus={updateCampus}
-                    onDeleteCampus={deleteCampus}
-                    onAddStudent={(student) =>
-                      updateVault((draft) => {
-                        draft.students.push(student);
-                      })
-                    }
-                    onAddStudents={(students) =>
-                      updateVault((draft) => {
-                        draft.students.push(...students);
-                      })
-                    }
-                    onUpdateStudent={updateStudent}
-                    onUpdateStudents={updateStudents}
-                    onDeleteStudent={deleteStudent}
-                    onDeleteStudents={deleteStudents}
-                    onUpdateProfile={updateProfile}
-                    onAddGrade={addGrade}
-                    onUpdateGrade={updateGrade}
-                    onDeleteGrade={deleteGrade}
-                    onAddCourse={addCourse}
-
-                    onUpdateCourse={updateCourse}
-                    onUpdateCourses={updateCourses}
-                    onSyncCoursesToLessons={syncCoursesToLessons}
-                    onDeleteCourse={deleteCourse}
-                    onAddCustomCourseType={addCustomCourseType}
-                    onUpdateCustomCourseType={updateCustomCourseType}
-                    onDeleteCustomCourseType={deleteCustomCourseType}
-                    onUpdateCourseTypeLabel={updateCourseTypeLabel}
-                    onDeleteCourseType={deleteCourseType}
-                    onUpdateCourseTypeFeeRule={updateCourseTypeFeeRule}
-                    onSyncCourseTypeFeeRuleToCourses={syncCourseTypeFeeRuleToCourses}
-                    onMigrateCourseTypeLessons={migrateCourseTypeLessons}
-                    onAddSubject={addSubject}
-                    onUpdateSubject={updateSubject}
-                    onDeleteSubject={deleteSubject}
-                    onTransferStudentCourse={transferStudentCourse}
-                    onOpenSchedule={() => changeView("schedule")}
-                  />
-                )}
-                {view === "payroll" && (
-                  <PayrollReviewView
-                    vault={vault}
-                    amountsVisible={amountsVisible}
-                    token={token}
-                    isAdmin={role === "admin"}
-                    password={password}
-                    panelFocus={payrollReviewFocus}
-                    storageScope={username}
-                    onSaveScheduleImport={(state) =>
-                      updateVault((draft) => {
-                        draft.scheduleImport = state;
-                      })
-                    }
-                    onOpenReviewLessonInCalendar={openPayrollReviewLessonInScheduleRecords}
-                    onOpenReconcileLessonInCalendar={openPayrollReconcileLessonInScheduleRecords}
-                    onSuggestSchedule={openPayrollSuggestedScheduleInCalendar}
-                  />
-                )}
-                {view === "salary" && (
-                  <SalaryView
-                    vault={vault}
-                    amountsVisible={amountsVisible}
-                    onAddAdjustment={addSalaryAdjustment}
-                    onDeleteAdjustment={deleteSalaryAdjustment}
-                    onOpenLessonInCalendar={openLessonInCalendar}
-                  />
-                )}
-                {view === "admin" && role === "admin" && (
-                  <AdminView
-                    vault={vault}
-                    token={token}
-                    adminUsername={username}
-                    persistLoginAfterClose={persistLoginAfterClose}
-                    onPersistLoginAfterCloseChange={updatePersistLoginAfterClose}
-                    onNoticeChange={(notice) =>
-                      updateVault((draft) => {
-                        draft.notice = notice;
-                      })
-                    }
-                    onUpdateProfile={(patch) =>
-                      updateVault((draft) => {
-                        draft.profile = { ...draft.profile, ...patch };
-                      })
-                    }
-                    onPermanentlyDeleteDeletedLessons={permanentlyDeleteDeletedLessons}
-                    onClearData={clearCurrentLocalCache}
-                  />
-                )}
-              </Suspense>
-        </div>
+        <WorkspaceViews state={workspaceState} callbacks={workspaceCallbacks} />
         </div>
       </main>
     </div>
@@ -2313,89 +647,6 @@ const viewTitlesList: Array<{ key: ViewKey; label: string }> = [
   ...navItems.map((item) => ({ key: item.key, label: item.label }))
 ];
 
-function ViewLoading() {
-  return (
-    <div className="flex min-h-[360px] items-center justify-center rounded-[16px] border border-[#dbe4ef] bg-white text-sm font-bold text-[#64748b]">
-      正在加载...
-    </div>
-  );
-}
-
 function noticeReadKey(username: string): string {
   return `teacher-salary-tracker:notice-read:${username}`;
-}
-
-function onboardingDismissedKey(username: string): string {
-  return `teacher-salary-tracker:onboarding-dismissed:${username}`;
-}
-
-function onboardingProgressKey(username: string): string {
-  return `teacher-salary-tracker:onboarding-progress:${username}`;
-}
-
-function onboardingCurrentStepKey(username: string): string {
-  return `teacher-salary-tracker:onboarding-current-step:${username}`;
-}
-
-function readOnboardingVisitedSteps(username: string): OnboardingStepKey[] {
-  try {
-    return normalizeOnboardingStepKeys(JSON.parse(localStorage.getItem(onboardingProgressKey(username)) ?? "[]"));
-  } catch {
-    return [];
-  }
-}
-
-function pauseCoursesWithoutActiveStudents(vault: TeacherVault, studentIds: Set<string>) {
-  if (studentIds.size === 0) return;
-  vault.courseGroups = vault.courseGroups.map((course) => {
-    if (course.status === "paused" || !course.studentIds.some((studentId) => studentIds.has(studentId))) return course;
-    return courseHasActiveStudentLocal(vault, course) ? course : { ...course, status: "paused" };
-  });
-}
-
-function courseHasActiveStudentLocal(vault: TeacherVault, course: CourseGroup): boolean {
-  return course.studentIds.some((studentId) => vault.students.find((student) => student.id === studentId)?.status === "active");
-}
-function shouldPauseSupersededClassCourse(vault: TeacherVault, existingCourse: CourseGroup, newCourse: CourseGroup): boolean {
-  if (existingCourse.status !== "active") return false;
-  if (existingCourse.type !== newCourse.type) return false;
-  if (!isClassBillingCourseType(existingCourse.type)) return false;
-  if (existingCourse.subject.trim() !== newCourse.subject.trim()) return false;
-  if ((existingCourse.defaultCampusId ?? "") !== (newCourse.defaultCampusId ?? "")) return false;
-
-  const existingStudents = existingCourse.studentIds
-    .map((studentId) => vault.students.find((student) => student.id === studentId))
-    .filter(Boolean);
-  const hasStoppedStudent = existingStudents.some((student) => student?.status === "transition" || student?.status === "paused");
-  if (!hasStoppedStudent) return false;
-
-  const existingActiveStudentIds = existingStudents
-    .filter((student) => student?.status === "active")
-    .map((student) => student!.id);
-  if (existingActiveStudentIds.length === 0) return true;
-
-  const newStudentIds = new Set(newCourse.studentIds);
-  return existingActiveStudentIds.every((studentId) => newStudentIds.has(studentId));
-}
-function shouldShowOnboarding(vault: TeacherVault): boolean {
-  return (
-    vault.campuses.length === 0 &&
-    vault.students.length === 0 &&
-    vault.courseGroups.length === 0 &&
-    vault.lessons.length === 0 &&
-    (vault.gradeRecords ?? []).length === 0 &&
-    vault.salaryAdjustments.length === 0
-  );
-}
-
-function isSessionRejected(error: unknown): boolean {
-  return error instanceof ApiError && (error.status === 401 || error.status === 403);
-}
-
-function greetingFor(date: Date): string {
-  const hour = currentAppHour(date);
-  if (hour >= 5 && hour < 11) return "早上好";
-  if (hour >= 11 && hour < 14) return "中午好";
-  if (hour >= 14 && hour < 18) return "下午好";
-  return "晚上好";
 }

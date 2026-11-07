@@ -1,3 +1,4 @@
+import { timesOverlap } from "@/frontend/lib/time";
 import { useMemo, useState } from "react";
 import { ArrowRight, CalendarRange, CheckSquare, Clock3, MoveRight, Search, Shuffle, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -28,8 +29,7 @@ import {
   datesBetweenLocal,
   filterStudentStatsLessons,
   isOrderedDateRange,
-  isOrderedTimeRange,
-  timesOverlap
+  isOrderedTimeRange
 } from "@/frontend/lib/scheduleViewHelpers";
 import type { CourseTypeFilter } from "@/frontend/lib/scheduleViewTypes";
 

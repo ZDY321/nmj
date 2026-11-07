@@ -729,7 +729,7 @@ export function ScheduleImportPanel({
       setMessage("这条保存的对账没有可恢复的教务 Excel 课节，无法继续编辑。");
       return;
     }
-    const { nextRawLessons, nextMapping, nextPreviewMapping, nextFileCampusOverrides, nextRows, merge } = comparison;
+    const { nextRawLessons, nextMapping, nextPreviewMapping, nextFileCampusOverrides, merge } = comparison;
     if (!workspaceBeforeHistoryRef.current) {
       workspaceBeforeHistoryRef.current = {
         rawLessons: [...rawLessons],

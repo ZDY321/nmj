@@ -5,8 +5,6 @@ import {
   CalendarCheck,
   CalendarDays,
   ChartNoAxesCombined,
-  MessageSquare,
-  ShieldCheck,
   Users
 } from "lucide-react";
 import { SUBSTITUTE_CLASS_COURSE_GROUP_ID } from "@/shared/types";
@@ -24,12 +22,11 @@ import type {
   SalaryGradeStage,
   Student,
   TeacherVault,
-  UserRole,
   WeekStart,
   Weekday
 } from "@/shared/types";
-import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, classHeadcountBaseStudentCountForRule, courseUsesStandardBillingHours, feeRuleForCourseType, getCourse, isClassBillingCourseType, isSubstituteClassLesson, monthOf, salaryBreakdown, todayIso } from "@/frontend/lib/calculations";
-import { durationHours, timesOverlap as timeRangesOverlap } from "@/frontend/lib/time";
+import { billableHoursForCourseLesson, buildFeeSnapshot, buildSubstituteClassFeeSnapshot, classHeadcountBaseStudentCountForRule, courseUsesStandardBillingHours, feeRuleForCourseType, getCourse, isClassBillingCourseType, isSubstituteClassLesson, todayIso } from "@/frontend/lib/calculations";
+import { durationHours, timesOverlap } from "@/frontend/lib/time";
 import { makeId } from "@/frontend/lib/crypto";
 
 export type ViewKey = "today" | "calendar" | "schedule" | "progress" | "students" | "payroll" | "salary" | "admin";
@@ -433,7 +430,7 @@ export function courseTimeRangeBillingLabel(vault: TeacherVault, lesson: Pick<Le
     return lessonTimeRangeLabel(lesson);
   }
   const hasSnapshotHours = lesson.feeSnapshot && Number.isFinite(lesson.feeSnapshot.hours);
-  const hours = hasSnapshotHours ? Math.max(lesson.feeSnapshot?.hours ?? 0, 0) : billableHoursForCourseLesson(course, lesson, vault);
+  const hours = hasSnapshotHours ? Math.max(lesson.feeSnapshot?.hours ?? 0, 0) : billableHoursForCourseLesson(course, lesson);
   const billingLabel = lesson.feeSnapshot?.manualHours ? "手动计费课时" : "计费课时";
   return `${lesson.startTime}-${lesson.endTime} · 实际时长 ${lessonDurationText(lesson)} · ${billingLabel} ${formatDurationHours(hours)}`;
 }
@@ -446,7 +443,7 @@ export function lessonBillingSummary(vault: TeacherVault, lesson: Pick<Lesson, "
   const course = getCourse(vault, lesson.courseGroupId);
   if (!course || !courseUsesStandardBillingHours(course)) return undefined;
   const hasSnapshotHours = lesson.feeSnapshot && Number.isFinite(lesson.feeSnapshot.hours);
-  const hours = hasSnapshotHours ? Math.max(lesson.feeSnapshot?.hours ?? 0, 0) : billableHoursForCourseLesson(course, lesson, vault);
+  const hours = hasSnapshotHours ? Math.max(lesson.feeSnapshot?.hours ?? 0, 0) : billableHoursForCourseLesson(course, lesson);
   return `${lesson.feeSnapshot?.manualHours ? "手动计费课时" : "计费课时"} ${formatDurationHours(hours)}`;
 }
 
@@ -653,10 +650,6 @@ export function createSubstituteClassLesson(
   return lesson;
 }
 
-function lessonTimesOverlap(firstStart: string, firstEnd: string, secondStart: string, secondEnd: string): boolean {
-  return timeRangesOverlap(firstStart, firstEnd, secondStart, secondEnd);
-}
-
 export function buildScheduleSyncLessonsForDate(
   vault: TeacherVault,
   sourceLessons: Lesson[],
@@ -679,7 +672,7 @@ export function buildScheduleSyncLessonsForDate(
       (existingLesson) =>
         existingLesson.date === targetDate &&
         existingLesson.status !== "cancelled" &&
-        lessonTimesOverlap(existingLesson.startTime, existingLesson.endTime, sourceLesson.startTime, sourceLesson.endTime)
+        timesOverlap(existingLesson.startTime, existingLesson.endTime, sourceLesson.startTime, sourceLesson.endTime)
     );
     if (targetTimeConflicts.some((existingLesson) => existingLesson.courseGroupId !== sourceLesson.courseGroupId)) {
       conflictSkippedCount += 1;
@@ -779,4 +772,10 @@ export function monthShift(month: string, offset: number): string {
   const date = dateOnlyUtc(`${month}-01`);
   date.setUTCMonth(date.getUTCMonth() + offset);
   return formatMonthIso(date);
+}
+
+export function matchesGradeFilter(grade: string | undefined, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "__unset") return !grade;
+  return grade === filter;
 }

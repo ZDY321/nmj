@@ -1,3 +1,5 @@
+import type { CustomCourseTypeTemplate } from "@/frontend/hooks/useCourseTypeSettings";
+import { courseTypeUsageCounts } from "@/frontend/lib/courseTypeUsage";
 import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { GraduationCap, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,8 +10,8 @@ import { Select } from "@/components/ui/select";
 import { CampusSettingsCard } from "@/frontend/components/CampusSettingsCard";
 import { SensitiveAmountField } from "@/frontend/components/SensitiveAmountField";
 import { SubjectSettingsCard } from "@/frontend/components/SubjectSettingsCard";
-import type { Campus, ClassFeeTier, CourseType, SalaryGradeStage, SalaryGradeStageRateConfig, TeacherVault } from "@/shared/types";
-import { backupFeeRuleForCourseType, billableStudentCapForCourseType, billableStudentCapForRule, classHeadcountStageRateForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, overflowHeadcountFee, overflowHeadcountThreshold, salaryGradeStageLabels, salaryGradeStageOrder, todayIso } from "@/frontend/lib/calculations";
+import type { Campus, ClassFeeTier, CourseType, TeacherVault } from "@/shared/types";
+import { backupFeeRuleForCourseType, billableStudentCapForCourseType, billableStudentCapForRule, feeRuleForCourseType, fixedFeeForRule, normalizedClassFeeTiers, overflowHeadcountFee, overflowHeadcountThreshold, todayIso } from "@/frontend/lib/calculations";
 
 type ConfirmRequest = {
   title: string;
@@ -25,8 +27,6 @@ type CourseTypeOption = {
   label: string;
 };
 
-type CustomCourseTypeTemplate = "class" | "non_class";
-
 type CampusCourseSettingsPanelProps = {
   amountsVisible: boolean;
   archiveRowClass: (panel: "campuses", id: string) => string;
@@ -38,10 +38,7 @@ type CampusCourseSettingsPanelProps = {
   confirm: (request: ConfirmRequest) => void;
   courseTypeInUse: (type: CourseType) => boolean;
   courseTypeMessage: string;
-  customCourseTypeBaseFee: number;
   customCourseTypeInput: string;
-  customCourseTypeMinStudents: number;
-  customCourseTypePerStudentFee: number;
   customCourseTypeTemplate: CustomCourseTypeTemplate;
   editingCampus: Campus | null;
   editingCustomCourseTypeId: CourseType | "";
@@ -81,17 +78,13 @@ type CampusCourseSettingsPanelProps = {
   onUpdateCampus: (campus: Campus) => void;
   onUpdateCourseTypeClassFeeTier: (type: CourseType, tierId: string, patch: Partial<ClassFeeTier>) => void;
   onUpdateCourseTypeBillableCap: (type: CourseType, cap: number | undefined) => void;
-  onUpdateCourseTypeStageRate: (type: CourseType, stage: SalaryGradeStage, patch: Partial<SalaryGradeStageRateConfig>) => void;
   onUpdateCourseTypeFixedRule: (type: CourseType, fixedFee: number) => void;
   onUpdateCourseTypeHourlyRule: (type: CourseType, hourlyRate: number) => void;
   setCampusAddressInput: Dispatch<SetStateAction<string>>;
   setCampusNameInput: Dispatch<SetStateAction<string>>;
   setCampusNoteInput: Dispatch<SetStateAction<string>>;
   setCourseTypeMessage: Dispatch<SetStateAction<string>>;
-  setCustomCourseTypeBaseFee: Dispatch<SetStateAction<number>>;
   setCustomCourseTypeInput: Dispatch<SetStateAction<string>>;
-  setCustomCourseTypeMinStudents: Dispatch<SetStateAction<number>>;
-  setCustomCourseTypePerStudentFee: Dispatch<SetStateAction<number>>;
   setCustomCourseTypeTemplate: Dispatch<SetStateAction<CustomCourseTypeTemplate>>;
   setEditingCampus: Dispatch<SetStateAction<Campus | null>>;
   setEditingCustomCourseTypeLabel: Dispatch<SetStateAction<string>>;
@@ -118,10 +111,7 @@ export function CampusCourseSettingsPanel({
   confirm,
   courseTypeInUse,
   courseTypeMessage,
-  customCourseTypeBaseFee,
   customCourseTypeInput,
-  customCourseTypeMinStudents,
-  customCourseTypePerStudentFee,
   customCourseTypeTemplate,
   editingCampus,
   editingCustomCourseTypeId,
@@ -161,17 +151,13 @@ export function CampusCourseSettingsPanel({
   onUpdateCampus,
   onUpdateCourseTypeClassFeeTier,
   onUpdateCourseTypeBillableCap,
-  onUpdateCourseTypeStageRate,
   onUpdateCourseTypeFixedRule,
   onUpdateCourseTypeHourlyRule,
   setCampusAddressInput,
   setCampusNameInput,
   setCampusNoteInput,
   setCourseTypeMessage,
-  setCustomCourseTypeBaseFee,
   setCustomCourseTypeInput,
-  setCustomCourseTypeMinStudents,
-  setCustomCourseTypePerStudentFee,
   setCustomCourseTypeTemplate,
   setEditingCampus,
   setEditingCustomCourseTypeLabel,
@@ -304,7 +290,6 @@ export function CampusCourseSettingsPanel({
                 onChange={(event) => {
                   const nextTemplate = event.target.value as CustomCourseTypeTemplate;
                   setCustomCourseTypeTemplate(nextTemplate);
-                  setCustomCourseTypeMinStudents(nextTemplate === "class" ? 5 : 1);
                 }}
                 className="h-10 border-[#fdba74] bg-white text-[#7c2d12]"
                 aria-label="选择自定义班型计费规则"
@@ -346,22 +331,9 @@ export function CampusCourseSettingsPanel({
             const isEditingType = editingCustomCourseTypeId === type;
             const used = courseTypeInUse(type);
             const isClassType = tier.minStudents > 1;
-            const backupMinStudentsLabel = isClassType ? "班课起算人数" : "非班课起算人数";
-            const backupBaseFeeLabel = isClassType ? "班课底费" : "一对一基础费";
             const billableStudentCap = billableStudentCapForRule(type, rule);
             const backupHint = classBillingHintText(isClassType, billableStudentCap);
-            const juniorStageRate = classHeadcountStageRateForRule(rule, type, "junior_3");
-            const juniorBaseValue = isClassType ? juniorStageRate.classBaseFee : juniorStageRate.oneOnOneFee;
-            const linkedCourseIds = new Set(vault.courseGroups.filter((course) => course.type === type).map((course) => course.id));
-            const linkedCourseCount = linkedCourseIds.size;
-            const linkedLessonCount = vault.lessons.filter((lesson) => lesson.type === type || linkedCourseIds.has(lesson.courseGroupId)).length;
-            const legacyLessonCount = vault.lessons.filter((lesson) => lesson.type === type && !linkedCourseIds.has(lesson.courseGroupId)).length;
-            const futureSyncLessonCount = vault.lessons.filter((lesson) =>
-              linkedCourseIds.has(lesson.courseGroupId) &&
-              !lesson.linkedOriginalLessonId &&
-              (lesson.status === "scheduled" || lesson.status === "draft") &&
-              lesson.date >= today
-            ).length;
+            const { courseCount: linkedCourseCount, lessonCount: linkedLessonCount, legacyLessonCount, futureLessonCount: futureSyncLessonCount } = courseTypeUsageCounts(vault, type, today);
             const deleteBlockedReason = linkedCourseCount > 0
               ? `还有 ${linkedCourseCount} 个课程档案引用这个班型`
               : linkedLessonCount > 0
