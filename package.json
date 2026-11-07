@@ -18,7 +18,7 @@
     "quality": "npm run check && npm test && npm run build && npm run check:worker && npm run check:size"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^5.0.4",
+    "@vitejs/plugin-react": "^6.2.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
